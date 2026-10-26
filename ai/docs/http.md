@@ -662,7 +662,7 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   server first, so probes and metrics answer through the drain.
 - **Clients and tests.** A typed client reaches a listener's routes given its origin:
   `brewer<App>(app.listeners.get('admin')!.address!.origin)`. A test injects with
-  `app.listeners.get('admin')!.fetch('/jobs')`; `app.fetch(...)` reaches the application's own server only. Each
+  `app.listeners.get('admin')!.request('/jobs')`; `app.request(...)` reaches the application's own server only. Each
   listener is an `IServer`, as the application is for its own server.
 - **OpenAPI.** `@caffeinejs/openapi` documents the server it is registered on, so routes bound to a listener are
   left out of the main document.
@@ -696,7 +696,7 @@ await client.pets.post({ body: { name: 'Rex' } })
 - The routes are the ones the application declares. An application served under a `.basePath(...)` puts the base
   in the URL — `brewer<App>('https://gateway.example/api')` — which the path is joined onto, never resolved
   against.
-- Given the application instead of a URL, requests go through its own `fetch` and never reach a socket — which is
+- Given the application instead of a URL, requests go through its own `request` and never reach a socket — which is
   how to test one. Both the routes and the transport come from the argument, so neither the type argument nor the
   URL is written. The application must be `bootstrap()` first, or every call rejects with `ErrApplicationNotReady`:
 
@@ -708,7 +708,7 @@ await client.pets.post({ body: { name: 'Rex' } })
   brewer<typeof petsRouter>(app) // one router's surface, driven through the application
   ```
 
-  The target is structural — anything with a matching `fetch` works, a stub included — and `options.fetch` still
+  The target is structural — anything with a matching `request` works, a stub included — and `options.fetch` still
   wins over it.
 
 - Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a

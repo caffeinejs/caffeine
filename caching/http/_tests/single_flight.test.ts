@@ -66,9 +66,9 @@ describe('concurrent misses for one key', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const leader = app.fetch('/sf-once/data')
+    const leader = app.request('/sf-once/data')
     await g.seen
-    const followers = Array.from({ length: 4 }, () => app.fetch('/sf-once/data'))
+    const followers = Array.from({ length: 4 }, () => app.request('/sf-once/data'))
     await store.reads.reached(5)
     await turn()
     g.open()
@@ -148,9 +148,9 @@ describe('concurrent misses for one key', () => {
 
     for (const [path, g] of Object.entries(gates)) {
       const reads = store.reads.count
-      const leader = app.fetch(`/sf-nothing/${path}`)
+      const leader = app.request(`/sf-nothing/${path}`)
       await g.seen
-      const follower = app.fetch(`/sf-nothing/${path}`)
+      const follower = app.request(`/sf-nothing/${path}`)
       await store.reads.reached(reads + 2)
       await turn()
       g.open()
@@ -207,9 +207,9 @@ describe('concurrent misses for one key', () => {
     await app.bootstrap()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const leader = app.fetch('/sf-hung/data')
+    const leader = app.request('/sf-hung/data')
     await g.seen
-    const follower = app.fetch('/sf-hung/data')
+    const follower = app.request('/sf-hung/data')
     await store.reads.reached(2)
     await turn()
     g.open()
@@ -246,9 +246,9 @@ describe('concurrent misses for one key', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const leader = app.fetch('/sf-oic/data')
+    const leader = app.request('/sf-oic/data')
     await g.seen
-    const impatient = await app.fetch('/sf-oic/data', { headers: { 'cache-control': 'only-if-cached' } })
+    const impatient = await app.request('/sf-oic/data', { headers: { 'cache-control': 'only-if-cached' } })
     expect(impatient.status).toBe(504)
 
     g.open()
@@ -287,9 +287,9 @@ describe('concurrent misses for one key', () => {
     await app.bootstrap()
 
     for (const path of ['unlocked', 'unstored'] as const) {
-      const leader = app.fetch(`/sf-off/${path}`)
+      const leader = app.request(`/sf-off/${path}`)
       await gates[path].seen
-      const follower = app.fetch(`/sf-off/${path}`)
+      const follower = app.request(`/sf-off/${path}`)
       // The second request is in the handler while the first is still held there.
       await runs[path].reached(2)
       gates[path].open()
@@ -328,9 +328,9 @@ describe('concurrent misses for one key', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const leader = app.fetch('/sf-down/data')
+    const leader = app.request('/sf-down/data')
     await g.seen
-    const follower = app.fetch('/sf-down/data')
+    const follower = app.request('/sf-down/data')
     // The second request is in the handler while the first is still held there.
     await runs.reached(2)
     g.open()
@@ -369,9 +369,9 @@ describe('concurrent misses for one key', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const leader = app.fetch('/sf-gone/data')
+    const leader = app.request('/sf-gone/data')
     await g.seen
-    const follower = app.fetch('/sf-gone/data')
+    const follower = app.request('/sf-gone/data')
     await store.reads.reached(2)
     await turn()
     g.open()
@@ -407,9 +407,9 @@ describe('concurrent misses for one key', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const leader = app.fetch('/sf-fresh/data')
+    const leader = app.request('/sf-fresh/data')
     await g.seen
-    const follower = app.fetch('/sf-fresh/data', { headers: { 'cache-control': 'min-fresh=120' } })
+    const follower = app.request('/sf-fresh/data', { headers: { 'cache-control': 'min-fresh=120' } })
     await store.reads.reached(2)
     await turn()
     g.open()
@@ -467,9 +467,9 @@ describe('concurrent misses for one key', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const leader = app.fetch('/sf-reread/data')
+    const leader = app.request('/sf-reread/data')
     await g.seen
-    const follower = app.fetch('/sf-reread/data')
+    const follower = app.request('/sf-reread/data')
     await store.reads.reached(2)
     await turn()
     g.open()
@@ -517,9 +517,9 @@ describe('a HEAD and the flight', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const head = app.fetch('/sf-head-leads/data', { method: 'HEAD' })
+    const head = app.request('/sf-head-leads/data', { method: 'HEAD' })
     await g.seen
-    const get = app.fetch('/sf-head-leads/data')
+    const get = app.request('/sf-head-leads/data')
     // The GET is in the handler while the HEAD is still held there.
     await runs.reached(2)
     g.open()
@@ -549,9 +549,9 @@ describe('a HEAD and the flight', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const leader = app.fetch('/sf-head-follows/data')
+    const leader = app.request('/sf-head-follows/data')
     await g.seen
-    const head = app.fetch('/sf-head-follows/data', { method: 'HEAD' })
+    const head = app.request('/sf-head-follows/data', { method: 'HEAD' })
     await store.reads.reached(2)
     await turn()
     g.open()
@@ -586,8 +586,8 @@ describe('a HEAD and the flight', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/sf-own-head/data', { method: 'HEAD' })
-    await app.fetch('/sf-own-head/data', { method: 'HEAD' })
+    await app.request('/sf-own-head/data', { method: 'HEAD' })
+    await app.request('/sf-own-head/data', { method: 'HEAD' })
 
     expect(heads).toBe(2)
   })

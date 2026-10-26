@@ -35,7 +35,7 @@ import { authentication, createWebApplication, csrf, newRouter } from '../../../
 /**
  * The `csrf()` plugin on a server: what it refuses, what it lets through, and what leaves a route out of it.
  *
- * The header sets are what a browser sends, so a vector that fails here would fail for a real page. `app.fetch`
+ * The header sets are what a browser sends, so a vector that fails here would fail for a real page. `app.request`
  * arrives at `localhost`, which is what a same-origin `Origin` names.
  */
 
@@ -76,12 +76,12 @@ const ok = () => ({ ok: true })
 /** `GET` and `POST /echo`. */
 const echo = () => newRouter('/echo').get('/', ok).post('/', ok)
 
-interface Fetching {
-  fetch(url: string, init?: RequestInit): Promise<Response>
+interface Requesting {
+  request(url: string, init?: RequestInit): Promise<Response>
 }
 
-function post(app: Fetching, path: string, headers: Record<string, string> = {}): Promise<Response> {
-  return app.fetch(path, { method: 'POST', headers })
+function post(app: Requesting, path: string, headers: Record<string, string> = {}): Promise<Response> {
+  return app.request(path, { method: 'POST', headers })
 }
 
 /** The standard envelope a refusal renders, which carries no header value. */
@@ -246,9 +246,9 @@ describe('csrf()', () => {
     it('never refuses a safe method', async () => {
       const app = await ready(createWebApplication().with(csrf()).mount(echo()))
 
-      expect((await app.fetch('/echo', { headers: CROSS_SITE })).status).toBe(200)
-      expect((await app.fetch('/echo', { method: 'HEAD', headers: CROSS_SITE })).status).toBe(200)
-      expect((await app.fetch('/echo', { method: 'OPTIONS', headers: CROSS_SITE })).status).not.toBe(403)
+      expect((await app.request('/echo', { headers: CROSS_SITE })).status).toBe(200)
+      expect((await app.request('/echo', { method: 'HEAD', headers: CROSS_SITE })).status).toBe(200)
+      expect((await app.request('/echo', { method: 'OPTIONS', headers: CROSS_SITE })).status).not.toBe(403)
     })
 
     // A URL nothing matched is not a route: there is nothing to protect, and it answers as it always did.
@@ -577,7 +577,7 @@ describe('csrf()', () => {
       )
 
       expect((await post(app, '/echo', SAME_ORIGIN)).status).toBe(200)
-      expect((await app.fetch('/echo', { headers: CROSS_SITE })).status).toBe(200)
+      expect((await app.request('/echo', { headers: CROSS_SITE })).status).toBe(200)
       expect((await post(app, '/hooks', CROSS_SITE)).status).toBe(200)
       expect((await post(app, '/excluded', CROSS_SITE)).status).toBe(200)
       expect((await post(app, '/echo', from('https://admin.example'))).status).toBe(200)

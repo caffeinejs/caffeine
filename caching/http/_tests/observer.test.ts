@@ -82,7 +82,7 @@ describe('bypass events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    const res = await app.fetch('/obs-method/data', { method: 'POST' })
+    const res = await app.request('/obs-method/data', { method: 'POST' })
 
     expect(res.headers.get('x-cache')).toBeNull()
     expect(observer.bypasses.map(e => e.reason)).toEqual(['method'])
@@ -108,8 +108,8 @@ describe('bypass events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-private/implicit', { headers: { authorization: 'Bearer t' } })
-    await app.fetch('/obs-private/declared')
+    await app.request('/obs-private/implicit', { headers: { authorization: 'Bearer t' } })
+    await app.request('/obs-private/declared')
 
     expect(observer.bypasses.map(e => e.reason)).toEqual(['authorization', 'private'])
   })
@@ -128,7 +128,7 @@ describe('bypass events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-vary-any/data')
+    await app.request('/obs-vary-any/data')
 
     expect(observer.bypasses.map(e => e.reason)).toEqual(['vary-any'])
   })
@@ -147,11 +147,11 @@ describe('bypass events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-directive/data', { headers: { 'cache-control': 'no-cache' } })
-    await app.fetch('/obs-directive/data', { headers: { 'cache-control': 'no-store' } })
-    await app.fetch('/obs-directive/data', { headers: { 'cache-control': 'max-age=0' } })
-    await app.fetch('/obs-directive/data', { headers: { pragma: 'no-cache' } })
-    await app.fetch('/obs-directive/data', { headers: { 'cache-control': 'no-cache, max-age=0' } })
+    await app.request('/obs-directive/data', { headers: { 'cache-control': 'no-cache' } })
+    await app.request('/obs-directive/data', { headers: { 'cache-control': 'no-store' } })
+    await app.request('/obs-directive/data', { headers: { 'cache-control': 'max-age=0' } })
+    await app.request('/obs-directive/data', { headers: { pragma: 'no-cache' } })
+    await app.request('/obs-directive/data', { headers: { 'cache-control': 'no-cache, max-age=0' } })
 
     expect(observer.bypasses.map(e => e.reason)).toEqual([
       'no-cache',
@@ -176,7 +176,7 @@ describe('bypass events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-disabled/data')
+    await app.request('/obs-disabled/data')
 
     expect(observer.bypasses.map(e => e.reason)).toEqual(['disabled'])
     expect(observer.stores).toEqual([])
@@ -199,7 +199,7 @@ describe('miss events', () => {
     const store = new MemoryHTTPCacheStore()
     const app = await start(observer, { store })
 
-    await app.fetch('/obs-cold/data')
+    await app.request('/obs-cold/data')
 
     expect(observer.misses).toEqual([
       {
@@ -228,7 +228,7 @@ describe('miss events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    const res = await app.fetch('/obs-only-if-cached/data', { headers: { 'cache-control': 'only-if-cached' } })
+    const res = await app.request('/obs-only-if-cached/data', { headers: { 'cache-control': 'only-if-cached' } })
 
     expect(res.status).toBe(504)
     expect(observer.misses.map(e => e.reason)).toEqual(['only-if-cached'])
@@ -263,7 +263,7 @@ describe('miss events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer, { store: new AgedStore() })
 
-    const res = await app.fetch('/obs-stale/data', { headers: { 'cache-control': 'max-age=1' } })
+    const res = await app.request('/obs-stale/data', { headers: { 'cache-control': 'max-age=1' } })
 
     expect(res.headers.get('x-cache')).toBe('MISS')
     expect(observer.misses.map(e => e.reason)).toEqual(['stale-for-request'])
@@ -287,9 +287,9 @@ describe('hit events', () => {
     const app = await start(observer)
     vi.useFakeTimers({ toFake: ['Date'] })
 
-    await app.fetch('/obs-hit/data')
+    await app.request('/obs-hit/data')
     vi.setSystemTime(Date.now() + 2000)
-    await app.fetch('/obs-hit/data')
+    await app.request('/obs-hit/data')
 
     expect(observer.hits).toHaveLength(1)
     expect(observer.hits[0]).toMatchObject({ key: observer.misses[0].key, revalidated: false, age: 2 * Second })
@@ -315,11 +315,11 @@ describe('hit events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    const etag = (await app.fetch('/obs-revalidate/etag')).headers.get('etag')!
-    const byETag = await app.fetch('/obs-revalidate/etag', { headers: { 'if-none-match': etag } })
+    const etag = (await app.request('/obs-revalidate/etag')).headers.get('etag')!
+    const byETag = await app.request('/obs-revalidate/etag', { headers: { 'if-none-match': etag } })
 
-    const lastModified = (await app.fetch('/obs-revalidate/modified')).headers.get('last-modified')!
-    const byDate = await app.fetch('/obs-revalidate/modified', { headers: { 'if-modified-since': lastModified } })
+    const lastModified = (await app.request('/obs-revalidate/modified')).headers.get('last-modified')!
+    const byDate = await app.request('/obs-revalidate/modified', { headers: { 'if-modified-since': lastModified } })
 
     expect(byETag.status).toBe(304)
     expect(byDate.status).toBe(304)
@@ -348,8 +348,8 @@ describe('store events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    const body = await (await app.fetch('/obs-store/minute')).text()
-    await app.fetch('/obs-store/brief')
+    const body = await (await app.request('/obs-store/minute')).text()
+    await app.request('/obs-store/brief')
 
     expect(observer.stores.map(e => [e.size, e.ttl])).toEqual([
       [Buffer.byteLength(body), 60 * Second],
@@ -372,7 +372,7 @@ describe('store events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-uncacheable/data')
+    await app.request('/obs-uncacheable/data')
 
     expect(observer.misses).toHaveLength(1)
     expect(observer.stores).toEqual([])
@@ -402,7 +402,7 @@ describe('store events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer, { store: new FailingStore() })
 
-    const res = await app.fetch('/obs-store-fails/data')
+    const res = await app.request('/obs-store-fails/data')
 
     // The write failed, the response did not: the handler's answer still goes out.
     expect(res.status).toBe(200)
@@ -433,8 +433,8 @@ describe('invalidate events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-invalidate/ok', { method: 'POST' })
-    await app.fetch('/obs-invalidate/rejected', { method: 'POST' })
+    await app.request('/obs-invalidate/ok', { method: 'POST' })
+    await app.request('/obs-invalidate/rejected', { method: 'POST' })
 
     expect(observer.invalidations).toEqual([
       {
@@ -460,8 +460,8 @@ describe('route identity', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-tags/data')
-    await app.fetch('/obs-tags/data')
+    await app.request('/obs-tags/data')
+    await app.request('/obs-tags/data')
 
     expect(observer.stores.map(e => e.tags)).toEqual([['pets']])
     expect(observer.hits).toHaveLength(1)
@@ -483,10 +483,10 @@ describe('route identity', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-identity/data')
-    await app.fetch('/obs-identity/data')
-    await app.fetch('/obs-identity/data')
-    await app.fetch('/obs-identity/data')
+    await app.request('/obs-identity/data')
+    await app.request('/obs-identity/data')
+    await app.request('/obs-identity/data')
+    await app.request('/obs-identity/data')
 
     const [first, second, third] = observer.hits.map(e => e.route)
 
@@ -512,8 +512,8 @@ describe('route identity', () => {
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-head/data')
-    await app.fetch('/obs-head/data', { method: 'HEAD' })
+    await app.request('/obs-head/data')
+    await app.request('/obs-head/data', { method: 'HEAD' })
 
     expect(observer.misses[0].route).toMatchObject({ method: 'GET', url: '/obs-head/data' })
     expect(observer.hits[0].route).toMatchObject({ method: 'HEAD', url: '/obs-head/data' })
@@ -542,9 +542,9 @@ describe('a throwing observer', () => {
       { logger: new RecordingLogger() },
     )
 
-    const miss = await app.fetch('/obs-throws/data')
-    const hit = await app.fetch('/obs-throws/data')
-    const bypass = await app.fetch('/obs-throws/data', { headers: { 'cache-control': 'no-cache' } })
+    const miss = await app.request('/obs-throws/data')
+    const hit = await app.request('/obs-throws/data')
+    const bypass = await app.request('/obs-throws/data', { headers: { 'cache-control': 'no-cache' } })
 
     expect([miss.status, miss.headers.get('x-cache')]).toEqual([200, 'MISS'])
     expect([hit.status, hit.headers.get('x-cache')]).toEqual([200, 'HIT'])
@@ -575,9 +575,9 @@ describe('a throwing observer', () => {
       { logger },
     )
 
-    await app.fetch('/obs-throws-logged/data')
-    await app.fetch('/obs-throws-logged/data')
-    await app.fetch('/obs-throws-logged/data')
+    await app.request('/obs-throws-logged/data')
+    await app.request('/obs-throws-logged/data')
+    await app.request('/obs-throws-logged/data')
 
     const reports = logger.written.filter(w => w.severity === 'error')
 

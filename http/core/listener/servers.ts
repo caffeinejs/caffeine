@@ -16,6 +16,6 @@ function serverView<T extends IAdapterTypes>(server: IAdapterServer<T>): IServer
     get address() {
       return server.address
     },
-    fetch: (request, options) => server.fetch(request, options),
+    request: (request, options) => server.request(request, options),
   }
 }

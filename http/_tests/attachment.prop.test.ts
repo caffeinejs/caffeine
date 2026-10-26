@@ -256,7 +256,7 @@ describe('Attachment() over any name (property)', () => {
   it.prop([anyName], { numRuns: 300 })(
     'writes a header of visible ASCII naming one plain file, or no file when nothing could be named',
     async name => {
-      const res = await app.fetch(`/prop/named/${caseOf({ name })}`)
+      const res = await app.request(`/prop/named/${caseOf({ name })}`)
       const disposition = res.headers.get('content-disposition')!
       const saved = savedName(name)
 
@@ -278,7 +278,7 @@ describe('Attachment() over any range (property)', () => {
   it.prop([fc.nat({ max: 3000 }), fc.constantFrom('blob', 'bytes'), rangeHeader], { numRuns: 400 })(
     'answers with exactly what RFC 9110 has a server answer, and never with bytes its headers do not describe',
     async (nextSize, nextKind, range) => {
-      const res = await app.fetch(`/prop/sized/${caseOf({ size: nextSize, kind: nextKind })}`, { headers: { range } })
+      const res = await app.request(`/prop/sized/${caseOf({ size: nextSize, kind: nextKind })}`, { headers: { range } })
 
       expect(res.headers.get('accept-ranges')).toBe('bytes')
       // RFC 9110 §5.5: a field value arrives without the whitespace around it.
@@ -343,7 +343,7 @@ describe('Attachment() over any combination of preconditions (property)', () => 
   it.prop([content, conditional], { numRuns: 400 })(
     'answers what RFC 9110 §13.2.2 has an origin server answer, taking its steps in order',
     async (content, request) => {
-      const res = await app.fetch(`/prop/conditional/${caseOf({ content })}`, {
+      const res = await app.request(`/prop/conditional/${caseOf({ content })}`, {
         method: request.method,
         headers: headersOf(request),
       })

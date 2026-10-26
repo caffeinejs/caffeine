@@ -106,7 +106,7 @@ async function start(
   return app
 }
 
-const probe = (app: WebApplication, url: string) => app.fetch(url)
+const probe = (app: WebApplication, url: string) => app.request(url)
 
 describe('health probes', () => {
   it('mounts the three probes with kubernetes paths', async () => {
@@ -273,7 +273,7 @@ describe('health probes', () => {
     const app = await start()
 
     try {
-      const response = await app.fetch('/readyz', { method: 'HEAD' })
+      const response = await app.request('/readyz', { method: 'HEAD' })
 
       expect(response.status).toBe(200)
       expect(await response.text()).toBe('')

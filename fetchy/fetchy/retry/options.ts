@@ -10,8 +10,19 @@ export interface RetryOptions {
    * coded error itself.
    */
   errorCodes: string[]
-  /** The wait between attempts. */
+  /** The minimum wait between attempts. The configured retry header can extend it. */
   delay: Duration
+  /**
+   * Response header carrying the server's retry wait, defaulting to `retry-after`.
+   * Names are case-insensitive; values must be whole seconds or an HTTP date, including for custom headers.
+   */
+  retryAfterHeader: string
+  /**
+   * The largest server-requested wait from `retryAfterHeader` to accept. A larger value ends retries with
+   * the current response, without consuming its body. Unset, only a wait longer than a timer can hold
+   * (about 24.8 days) ends retries. This does not cap `delay` or the total time spent retrying.
+   */
+  maxRetryAfter?: Duration
 }
 
 export const DEFAULT_RETRY_OPTIONS: RetryOptions = {
@@ -29,4 +40,5 @@ export const DEFAULT_RETRY_OPTIONS: RetryOptions = {
     'UND_ERR_HEADERS_TIMEOUT',
   ],
   delay: 500 * Millisecond,
+  retryAfterHeader: 'retry-after',
 }

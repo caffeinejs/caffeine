@@ -10,8 +10,8 @@ import { Params } from '../decorators/params.js'
 import { Field } from '../decorators/params/field.js'
 import { Part } from '../decorators/params/part.js'
 import { RawResponse } from '../decorators/raw_response.js'
-import { Retry } from '../decorators/retry.js'
 import { POST } from '../decorators/verbs.js'
+import { Retry } from '../retry/index.js'
 
 /**
  * An operation may be declared as a field as well as a method, and every decorator that accepts a member has

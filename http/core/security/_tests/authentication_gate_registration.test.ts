@@ -119,12 +119,12 @@ describe('gate registration', () => {
       await app.bootstrap()
 
       // The root gate's territory: challenged once, by the application default.
-      const root = await app.fetch('/multi-root')
+      const root = await app.request('/multi-root')
       expect(root.status).toBe(401)
       expect(root.headers.get('x-challenged-by')).toBe('A')
 
       // The scoped gate's territory: the root gate stands down, so one challenge, by the gate's own default.
-      const scoped = await app.fetch('/multi-admin')
+      const scoped = await app.request('/multi-admin')
       expect(scoped.status).toBe(401)
       expect(scoped.headers.get('x-challenged-by')).toBe('B')
 
@@ -132,7 +132,7 @@ describe('gate registration', () => {
       expect(b.challenges).toBe(1)
 
       // The scoped default also authenticates: a B credential passes where the application default is A.
-      expect((await app.fetch('/multi-admin', { headers: { 'x-b': 'admin-user' } })).status).toBe(200)
+      expect((await app.request('/multi-admin', { headers: { 'x-b': 'admin-user' } })).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -156,9 +156,9 @@ describe('gate registration', () => {
     try {
       await app.bootstrap()
 
-      expect((await app.fetch('/scoped-only-open')).status).toBe(200)
-      expect((await app.fetch('/scoped-only-gated')).status).toBe(401)
-      expect((await app.fetch('/scoped-only-gated', { headers: { 'x-a': 'user' } })).status).toBe(200)
+      expect((await app.request('/scoped-only-open')).status).toBe(200)
+      expect((await app.request('/scoped-only-gated')).status).toBe(401)
+      expect((await app.request('/scoped-only-gated', { headers: { 'x-a': 'user' } })).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -177,7 +177,7 @@ describe('gate registration', () => {
       await app.bootstrap()
 
       expect(app.instance.$hasFeature('auth')).toBe(true)
-      expect((await app.fetch('/feature-no-gate')).status).toBe(200)
+      expect((await app.request('/feature-no-gate')).status).toBe(200)
     } finally {
       await app.close()
     }

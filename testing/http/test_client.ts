@@ -1,4 +1,4 @@
-import { brewer, type BrewClient, type BrewOptions, type Fetchable } from '@caffeinejs/brewer'
+import { brewer, type BrewClient, type BrewOptions, type Requestable } from '@caffeinejs/brewer'
 import type { Container } from '@caffeinejs/di'
 import { Router, type AnyRouter, type DepsOf } from '@caffeinejs/http'
 
@@ -119,14 +119,14 @@ export type TestClient<T> = BrewClient<T> & TestClientControls
  * @throws ErrTestClientTarget - The target is neither an application nor at least one router.
  * @throws ErrTestClientAlreadyReady - `inject` or `bind` was given for an application that is already ready.
  */
-export function testClient<T extends Fetchable>(app: T, options?: AppTestClientOptions<DepsOf<T>>): TestClient<T>
+export function testClient<T extends Requestable>(app: T, options?: AppTestClientOptions<DepsOf<T>>): TestClient<T>
 export function testClient<R extends AnyRouter>(router: R, options?: TestClientOptions<DepsOf<R>>): TestClient<R>
 export function testClient<const RS extends readonly AnyRouter[]>(
   routers: RS,
   options?: TestClientOptions<DepsOf<RS[number]>>,
 ): TestClient<RS[number]>
 export function testClient(
-  target: Fetchable | AnyRouter | readonly AnyRouter[],
+  target: Requestable | AnyRouter | readonly AnyRouter[],
   options: TestClientOptions<Record<string, unknown>> = {},
 ): unknown {
   const harness = harnessFor(target, options)
@@ -136,7 +136,7 @@ export function testClient(
 }
 
 function harnessFor(
-  target: Fetchable | AnyRouter | readonly AnyRouter[],
+  target: Requestable | AnyRouter | readonly AnyRouter[],
   options: TestClientOptions<Record<string, unknown>>,
 ): Harness {
   const init = {
@@ -158,7 +158,7 @@ function harnessFor(
     return Harness.own([target], init)
   }
 
-  if (typeof (target as Fetchable).fetch !== 'function') {
+  if (typeof (target as Requestable).request !== 'function') {
     throw new ErrTestClientTarget('the target is neither an application nor a router')
   }
 
@@ -191,7 +191,7 @@ function controls(client: object, harness: Harness): unknown {
   const own: Record<string | symbol, unknown> = {
     $app: harness.app,
     $container: harness.app.container,
-    $fetch: (input: Request | string | URL, init?: RequestInit) => harness.fetch(input, init),
+    $fetch: (input: Request | string | URL, init?: RequestInit) => harness.request(input, init),
     $ready: () => harness.bootstrap(),
     $close: () => harness.close(),
     [Symbol.asyncDispose]: () => harness.close(),

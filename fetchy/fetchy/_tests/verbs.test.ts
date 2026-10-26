@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { API } from '../decorators/api.js'
 import { Callback } from '../decorators/callback.js'
 import { HeaderMap } from '../decorators/header_map.js'
-import { NoRetry } from '../decorators/no_retry.js'
 import { Params } from '../decorators/params.js'
 import { Param } from '../decorators/params/param.js'
 import { RawResponse } from '../decorators/raw_response.js'
@@ -11,6 +10,7 @@ import { getClassBuilder, getMethodBuilders } from '../decorators/registrar/regi
 import { DELETE, GET, HEAD, HTTP, OPTIONS, PATCH, POST, PUT } from '../decorators/verbs.js'
 import { ErrFetchyInvalidDecoratorTarget, ErrFetchyInvalidRoute } from '../errors.js'
 import { noop } from '../noop.js'
+import { NoRetry } from '../retry/index.js'
 import { captureMetadata } from './capture_metadata.js'
 
 describe('verb decorators', () => {

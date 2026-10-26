@@ -102,7 +102,7 @@ describe('HTTP caching configuration', () => {
     const { app, errors } = await start({ storeTimeout: '50ms' }, { store: new HungStore() })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const pending = app.fetch('/cfg/data')
+    const pending = app.request('/cfg/data')
     await vi.advanceTimersByTimeAsync(60_000)
     const res = await pending
 
@@ -133,9 +133,9 @@ describe('HTTP caching configuration', () => {
     )
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const leader = app.fetch('/cfg/data')
+    const leader = app.request('/cfg/data')
     await leading
-    const follower = app.fetch('/cfg/data')
+    const follower = app.request('/cfg/data')
     await vi.advanceTimersByTimeAsync(50)
 
     expect((await follower).headers.get('x-cache')).toBe('MISS')
@@ -148,7 +148,7 @@ describe('HTTP caching configuration', () => {
   it('names the status header after the tree', async () => {
     const { app } = await start({ statusHeader: 'X-From-Config' })
 
-    const res = await app.fetch('/cfg/data')
+    const res = await app.request('/cfg/data')
 
     expect(res.headers.get('x-from-config')).toBe('MISS')
     expect(res.headers.get('x-cache')).toBeNull()
@@ -158,7 +158,7 @@ describe('HTTP caching configuration', () => {
   it('lets a fluent method win over the same setting in the tree', async () => {
     const { app } = await start({ statusHeader: 'X-From-Config' }, { fluent: b => b.statusHeader('X-Fluent') })
 
-    const res = await app.fetch('/cfg/data')
+    const res = await app.request('/cfg/data')
 
     expect(res.headers.get('x-fluent')).toBe('MISS')
     expect(res.headers.get('x-from-config')).toBeNull()
@@ -168,17 +168,17 @@ describe('HTTP caching configuration', () => {
   it('keys entries on the query parameters the environment lists, and on no other', async () => {
     const { app } = await start({}, { env: { APP__CACHING__VARY_BY_QUERY: 'page,sort' } })
 
-    expect((await app.fetch('/cfg/data?page=1&utm=a')).headers.get('x-cache')).toBe('MISS')
-    expect((await app.fetch('/cfg/data?utm=b&page=1')).headers.get('x-cache')).toBe('HIT')
-    expect((await app.fetch('/cfg/data?page=1&sort=name')).headers.get('x-cache')).toBe('MISS')
+    expect((await app.request('/cfg/data?page=1&utm=a')).headers.get('x-cache')).toBe('MISS')
+    expect((await app.request('/cfg/data?utm=b&page=1')).headers.get('x-cache')).toBe('HIT')
+    expect((await app.request('/cfg/data?page=1&sort=name')).headers.get('x-cache')).toBe('MISS')
   })
 
   it('keeps a body larger than the maxEntrySize the tree sets out of the store', async () => {
     const { app } = await start({ maxEntrySize: '16b' }, { body: 'x'.repeat(20) })
 
-    await app.fetch('/cfg/data')
+    await app.request('/cfg/data')
 
-    expect((await app.fetch('/cfg/data')).headers.get('x-cache')).toBe('MISS')
+    expect((await app.request('/cfg/data')).headers.get('x-cache')).toBe('MISS')
   })
 
   // Every unit is binary, so '1kb' is 1024 bytes, and a bare amount is bytes, given as text or as a number.
@@ -193,9 +193,9 @@ describe('HTTP caching configuration', () => {
     async (maxEntrySize, length, status) => {
       const { app } = await start({ maxEntrySize }, { body: 'x'.repeat(length) })
 
-      await app.fetch('/cfg/data')
+      await app.request('/cfg/data')
 
-      expect((await app.fetch('/cfg/data')).headers.get('x-cache')).toBe(status)
+      expect((await app.request('/cfg/data')).headers.get('x-cache')).toBe(status)
     },
   )
 

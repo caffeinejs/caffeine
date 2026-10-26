@@ -3,7 +3,7 @@ import { normalizePath } from '../../internal/path_util.js'
 import type { RequestBodyConverter } from '../../request_body_converter.js'
 import type { ResponseConverter } from '../../response_converter.js'
 import type { ResponseHandler } from '../../response_handler.js'
-import type { RetryOptions } from '../../retry_options.js'
+import type { RetryOptions } from '../../retry/options.js'
 import type { ClassSpec, MethodSpec } from './builders.definition.js'
 
 export class ClassBuilder {

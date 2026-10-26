@@ -42,11 +42,11 @@ describe('route constraints', () => {
       .mount(dish)
     await app.bootstrap()
 
-    const spicy = await app.fetch('/dish', { headers: { 'x-flavor': 'spicy' } })
+    const spicy = await app.request('/dish', { headers: { 'x-flavor': 'spicy' } })
     expect(await spicy.json()).toEqual({ flavor: 'spicy' })
     expect(spicy.headers.get('vary')).toContain('X-Flavor')
 
-    expect(await (await app.fetch('/dish', { headers: { 'x-flavor': 'mild' } })).json()).toEqual({ flavor: 'mild' })
+    expect(await (await app.request('/dish', { headers: { 'x-flavor': 'mild' } })).json()).toEqual({ flavor: 'mild' })
 
     await app.close()
   })
@@ -100,7 +100,7 @@ describe('route constraints', () => {
       .mount(r)
     await app.bootstrap()
 
-    const res = await app.fetch('/c', { headers: { 'accept-version': '1.x', host: 'api.example' } })
+    const res = await app.request('/c', { headers: { 'accept-version': '1.x', host: 'api.example' } })
     expect(await res.json()).toEqual({ ok: true })
 
     await app.close()
@@ -136,7 +136,7 @@ describe('constraint Vary header', () => {
       })
     await app.bootstrap()
 
-    const res = await app.fetch('/late', { headers: { 'x-flavor': 'spicy' } })
+    const res = await app.request('/late', { headers: { 'x-flavor': 'spicy' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('vary')).toContain('X-Flavor')
@@ -154,7 +154,7 @@ describe('constraint Vary header', () => {
       .mount(plain)
     await app.bootstrap()
 
-    const res = await app.fetch('/plain')
+    const res = await app.request('/plain')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('vary')).toBeNull()

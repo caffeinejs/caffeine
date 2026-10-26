@@ -88,7 +88,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/up1/upload', {
+    const res = await app.request('/up1/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
@@ -123,7 +123,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/up2/upload', {
+    const res = await app.request('/up2/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([
@@ -156,7 +156,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/up3/upload', {
+    const res = await app.request('/up3/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([{ name: 'other', filename: 'other.txt', content: 'data' }]),
@@ -187,7 +187,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/up4/upload', {
+    const res = await app.request('/up4/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([{ name: 'file', filename: 'data.txt', content, mime: 'text/plain' }]),
@@ -219,7 +219,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/up5/upload?userID=user-42', {
+    const res = await app.request('/up5/upload?userID=user-42', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([{ name: 'avatar', filename: 'pic.png', content: 'png', mime: 'image/png' }]),
@@ -249,7 +249,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/up6/upload', {
+    const res = await app.request('/up6/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([
@@ -283,7 +283,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/up7/upload', {
+    const res = await app.request('/up7/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([
@@ -319,7 +319,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/wf1/upload', {
+    const res = await app.request('/wf1/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
@@ -351,7 +351,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/wf1b/upload', {
+    const res = await app.request('/wf1b/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
@@ -382,7 +382,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/wf2/upload', {
+    const res = await app.request('/wf2/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([
@@ -416,7 +416,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/wf3/upload', {
+    const res = await app.request('/wf3/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([{ name: 'other', filename: 'other.txt', content: 'data' }]),
@@ -445,7 +445,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/wf4/upload', {
+    const res = await app.request('/wf4/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([
@@ -480,7 +480,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/wf5/upload', {
+    const res = await app.request('/wf5/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([
@@ -519,7 +519,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/nf1/upload', {
+    const res = await app.request('/nf1/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
@@ -554,7 +554,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/nf2/upload', {
+    const res = await app.request('/nf2/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([
@@ -593,7 +593,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/nf3/upload', {
+    const res = await app.request('/nf3/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([
@@ -635,7 +635,7 @@ describe('Multipart file upload', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/nf4/upload', {
+    const res = await app.request('/nf4/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([

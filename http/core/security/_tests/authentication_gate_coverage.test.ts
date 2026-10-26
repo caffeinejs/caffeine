@@ -135,10 +135,10 @@ describe('routes no authentication gate covers', () => {
     try {
       await app.bootstrap()
 
-      expect((await app.fetch('/early-child')).status).toBe(401)
-      expect((await app.fetch('/early-child', signedIn)).status).toBe(200)
-      expect((await app.fetch('/early-root')).status).toBe(401)
-      expect((await app.fetch('/early-root', signedIn)).status).toBe(200)
+      expect((await app.request('/early-child')).status).toBe(401)
+      expect((await app.request('/early-child', signedIn)).status).toBe(200)
+      expect((await app.request('/early-root')).status).toBe(401)
+      expect((await app.request('/early-root', signedIn)).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -155,8 +155,8 @@ describe('routes no authentication gate covers', () => {
     try {
       await app.bootstrap()
 
-      expect((await app.fetch('/anonymous')).status).toBe(200)
-      expect((await app.fetch('/exempt')).status).toBe(200)
+      expect((await app.request('/anonymous')).status).toBe(200)
+      expect((await app.request('/exempt')).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -194,8 +194,8 @@ describe('routes no authentication gate covers', () => {
     try {
       await app.bootstrap()
 
-      expect((await app.fetch('/stripped')).status).toBe(401)
-      expect((await app.fetch('/stripped', signedIn)).status).toBe(200)
+      expect((await app.request('/stripped')).status).toBe(401)
+      expect((await app.request('/stripped', signedIn)).status).toBe(200)
     } finally {
       await app.close()
     }

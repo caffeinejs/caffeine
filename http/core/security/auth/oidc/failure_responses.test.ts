@@ -73,7 +73,7 @@ describe('a sign-in that cannot go ahead', () => {
     const app = application()
     await app.bootstrap()
 
-    const res = await app.fetch('/account', { headers: { 'sec-fetch-mode': 'navigate' } })
+    const res = await app.request('/account', { headers: { 'sec-fetch-mode': 'navigate' } })
     const text = await res.text()
 
     expect(res.status).toBe(502)
@@ -93,7 +93,7 @@ describe('a sign-in that cannot go ahead', () => {
     const app = application()
     await app.bootstrap()
 
-    const res = await app.fetch('/sign-out')
+    const res = await app.request('/sign-out')
     const text = await res.text()
 
     expect(res.status).toBe(502)
@@ -118,7 +118,7 @@ describe('a sign-in that cannot go ahead', () => {
       )
     await app.bootstrap()
 
-    const res = await app.fetch('/finish')
+    const res = await app.request('/finish')
     const text = await res.text()
 
     expect(res.status).toBe(400)
@@ -141,7 +141,7 @@ describe('a sign-in that cannot go ahead', () => {
     )
     await app.bootstrap()
 
-    const res = await app.fetch('/broken')
+    const res = await app.request('/broken')
 
     expect(res.status).toBe(418)
     expect(await res.json()).toMatchObject({ message: 'teapot' })
@@ -162,7 +162,7 @@ describe('a callback that fails', () => {
     }, logged)
     await app.bootstrap()
 
-    const res = await app.fetch('/oidc/callback?error=access_denied&state=abc')
+    const res = await app.request('/oidc/callback?error=access_denied&state=abc')
 
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/sign-in?failed=1')
@@ -193,7 +193,7 @@ describe('a callback that fails', () => {
     }).with(() => fp(slowSend, { name: 'slow-send' }))
     await app.bootstrap()
 
-    const res = await app.fetch('/oidc/callback?error=access_denied&state=abc')
+    const res = await app.request('/oidc/callback?error=access_denied&state=abc')
 
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/sign-in?failed=1')
@@ -208,7 +208,7 @@ describe('a callback that fails', () => {
     const app = application(ctx => void ctx.status(302).header('location', '/sign-in?failed=1'))
     await app.bootstrap()
 
-    const res = await app.fetch('/oidc/callback?error=access_denied&state=abc')
+    const res = await app.request('/oidc/callback?error=access_denied&state=abc')
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('/sign-in?failed=1')
@@ -225,7 +225,7 @@ describe('a callback that fails', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/oidc/callback?error=access_denied&state=abc')
+    const res = await app.request('/oidc/callback?error=access_denied&state=abc')
     const text = await res.text()
 
     expect(res.status).toBe(400)
@@ -240,7 +240,7 @@ describe('a callback that fails', () => {
     const app = application(onFail)
     await app.bootstrap()
 
-    const res = await app.fetch('/oidc/callback?error=access_denied&error_description=jane%40example.com&state=abc')
+    const res = await app.request('/oidc/callback?error=access_denied&error_description=jane%40example.com&state=abc')
     const text = await res.text()
 
     expect(res.status).toBe(400)

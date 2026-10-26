@@ -66,7 +66,7 @@ describe('a handler that answered the request itself', () => {
       .mount(newRouter('/sync').get('/', ctx => void ctx.redirect('/foo')))
     await app.bootstrap()
 
-    const res = await app.fetch('/sync')
+    const res = await app.request('/sync')
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('/foo')
@@ -87,7 +87,7 @@ describe('a handler that answered the request itself', () => {
       )
     await app.bootstrap()
 
-    const res = await app.fetch('/async', { method: 'GET' })
+    const res = await app.request('/async', { method: 'GET' })
 
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/')
@@ -109,7 +109,7 @@ describe('a handler that answered the request itself', () => {
       )
     await app.bootstrap()
 
-    const res = await app.fetch('/gone')
+    const res = await app.request('/gone')
 
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ statusCode: 404, code: 'ERR_HTTP_NOT_FOUND' })
@@ -124,7 +124,7 @@ describe('a handler that answered the request itself', () => {
     )
     await app.bootstrap()
 
-    const res = await app.fetch('/prepared')
+    const res = await app.request('/prepared')
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('/x')
@@ -143,15 +143,15 @@ describe('a handler that answered the request itself', () => {
     )
     await app.bootstrap()
 
-    const sync = await app.fetch('/quiet/sync')
+    const sync = await app.request('/quiet/sync')
     expect(sync.status).toBe(200)
     expect(await sync.text()).toBe('')
 
-    const async_ = await app.fetch('/quiet/async')
+    const async_ = await app.request('/quiet/async')
     expect(async_.status).toBe(200)
     expect(await async_.text()).toBe('')
 
-    const value = await app.fetch('/quiet/value')
+    const value = await app.request('/quiet/value')
     expect(await value.json()).toEqual({ ok: true })
 
     await app.close()
@@ -178,7 +178,7 @@ describe('under an onSend hook that awaits', () => {
         )
       await app.bootstrap()
 
-      const res = await app.fetch('/held')
+      const res = await app.request('/held')
 
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ ok: true })
@@ -198,7 +198,7 @@ describe('under an onSend hook that awaits', () => {
         .mount(newRouter('/held-sync').get('/', ctx => void ctx.body({ ok: true })))
       await app.bootstrap()
 
-      const res = await app.fetch('/held-sync')
+      const res = await app.request('/held-sync')
 
       expect(await res.json()).toEqual({ ok: true })
 
@@ -223,7 +223,7 @@ describe('under an onSend hook that awaits', () => {
         )
       await app.bootstrap()
 
-      const res = await app.fetch('/held-empty')
+      const res = await app.request('/held-empty')
 
       expect(res.status).toBe(200)
       expect(await res.text()).toBe('')
@@ -251,7 +251,7 @@ describe('under an onSend hook that awaits', () => {
         )
       await app.bootstrap()
 
-      const res = await app.fetch('/held-value')
+      const res = await app.request('/held-value')
 
       expect(res.status).toBe(303)
       expect(res.headers.get('location')).toBe('/x')
@@ -277,7 +277,7 @@ describe('under an onSend hook that awaits', () => {
         )
       await app.bootstrap()
 
-      const res = await app.fetch('/held-sync-value')
+      const res = await app.request('/held-sync-value')
 
       expect(await res.text()).toBe('first')
 
@@ -310,7 +310,7 @@ describe('under an onSend hook that awaits', () => {
         )
       await app.bootstrap()
 
-      const res = await app.fetch('/held-responder')
+      const res = await app.request('/held-responder')
 
       expect(await res.text()).toBe('first')
 
@@ -337,7 +337,7 @@ describe('under an onSend hook that awaits', () => {
         .mount(newRouter('/held-async-responder').get('/', () => new Rendered()))
       await app.bootstrap()
 
-      const res = await app.fetch('/held-async-responder')
+      const res = await app.request('/held-async-responder')
 
       expect(await res.text()).toBe('rendered')
 
@@ -362,7 +362,7 @@ describe('under an onSend hook that awaits', () => {
       )
     await app.bootstrap()
 
-    await app.fetch('/record')
+    await app.request('/record')
 
     expect(seen).toEqual([true, false])
 

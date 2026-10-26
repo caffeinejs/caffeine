@@ -29,7 +29,7 @@ describe('CORS', () => {
       const app = corsApp({ origin: '*' })
       await app.bootstrap()
 
-      const res = await app.fetch('/cors-global/resource', { headers: { origin: 'https://example.com' } })
+      const res = await app.request('/cors-global/resource', { headers: { origin: 'https://example.com' } })
 
       expect(res.status).toBe(200)
       expect(res.headers.get('access-control-allow-origin')).toBe('*')
@@ -48,7 +48,7 @@ describe('CORS', () => {
       const app = corsApp({ origin: 'https://allowed.com', methods: ['GET', 'POST'] })
       await app.bootstrap()
 
-      const res = await app.fetch('/cors-preflight/endpoint', {
+      const res = await app.request('/cors-preflight/endpoint', {
         method: 'OPTIONS',
         headers: {
           origin: 'https://allowed.com',
@@ -74,7 +74,7 @@ describe('CORS', () => {
       const app = createWebApplication({})
       await app.bootstrap()
 
-      const res = await app.fetch('/no-cors/resource', { headers: { origin: 'https://example.com' } })
+      const res = await app.request('/no-cors/resource', { headers: { origin: 'https://example.com' } })
 
       expect(res.status).toBe(200)
       expect(res.headers.get('access-control-allow-origin')).toBeNull()
@@ -109,9 +109,9 @@ describe('CORS', () => {
       const app = corsApp({ origin: 'https://global.com' })
       await app.bootstrap()
 
-      const resSpecific = await app.fetch('/cors-specific/data', { headers: { origin: 'https://trusted.com' } })
+      const resSpecific = await app.request('/cors-specific/data', { headers: { origin: 'https://trusted.com' } })
 
-      const resDefault = await app.fetch('/cors-default/data', { headers: { origin: 'https://trusted.com' } })
+      const resDefault = await app.request('/cors-default/data', { headers: { origin: 'https://trusted.com' } })
 
       // @CORS({ origin: 'https://trusted.com' }) overrides the global origin for this controller
       expect(resSpecific.headers.get('access-control-allow-origin')).toBe('https://trusted.com')
@@ -142,9 +142,9 @@ describe('CORS', () => {
       const app = corsApp({ origin: '*' })
       await app.bootstrap()
 
-      const resDisabled = await app.fetch('/cors-disabled/resource', { headers: { origin: 'https://example.com' } })
+      const resDisabled = await app.request('/cors-disabled/resource', { headers: { origin: 'https://example.com' } })
 
-      const resEnabled = await app.fetch('/cors-enabled/resource', { headers: { origin: 'https://example.com' } })
+      const resEnabled = await app.request('/cors-enabled/resource', { headers: { origin: 'https://example.com' } })
 
       expect(resDisabled.headers.get('access-control-allow-origin')).toBeNull()
       expect(resEnabled.headers.get('access-control-allow-origin')).toBe('*')
@@ -176,9 +176,9 @@ describe('CORS', () => {
       const app = corsApp({ origin: '*' })
       await app.bootstrap()
 
-      const resOff = await app.fetch('/cors-off-actual/endpoint', { headers: { origin: 'https://example.com' } })
+      const resOff = await app.request('/cors-off-actual/endpoint', { headers: { origin: 'https://example.com' } })
 
-      const resOn = await app.fetch('/cors-on-actual/endpoint', { headers: { origin: 'https://example.com' } })
+      const resOn = await app.request('/cors-on-actual/endpoint', { headers: { origin: 'https://example.com' } })
 
       expect(resOff.headers.get('access-control-allow-origin')).toBeNull()
       expect(resOn.headers.get('access-control-allow-origin')).toBe('*')
@@ -216,10 +216,10 @@ describe('CORS', () => {
       const app = corsApp({ origin: 'https://global.com' }).mount(specific, fallback)
       await app.bootstrap()
 
-      const resSpecific = await app.fetch('/cors-fluent-specific/data', {
+      const resSpecific = await app.request('/cors-fluent-specific/data', {
         headers: { origin: 'https://trusted.com' },
       })
-      const resDefault = await app.fetch('/cors-fluent-default/data', {
+      const resDefault = await app.request('/cors-fluent-default/data', {
         headers: { origin: 'https://trusted.com' },
       })
 

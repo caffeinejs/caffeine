@@ -145,7 +145,7 @@ describe('error handler dispatch', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/pets/42')
+    const res = await app.request('/pets/42')
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'Pet "42" not found', via: 'handled' })
@@ -155,7 +155,7 @@ describe('error handler dispatch', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/boom')
+    const res = await app.request('/boom')
 
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ caught: 'kaboom' })
@@ -269,7 +269,7 @@ describe('per-controller error handler', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/shop/9')
+    const res = await app.request('/shop/9')
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ scoped: true, error: 'item 9' })
@@ -284,7 +284,7 @@ describe('per-controller error handler', () => {
     const app = buildApp().use('/shop', closed)
     await app.bootstrap()
 
-    const res = await app.fetch('/shop/9')
+    const res = await app.request('/shop/9')
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'closed for stocktaking', via: 'handled' })
@@ -294,7 +294,7 @@ describe('per-controller error handler', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/widgets/conflict')
+    const res = await app.request('/widgets/conflict')
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ http: 'dup' })
@@ -304,7 +304,7 @@ describe('per-controller error handler', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/mixed/other')
+    const res = await app.request('/mixed/other')
 
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ caught: 'plain' })
@@ -314,7 +314,7 @@ describe('per-controller error handler', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/scoped/boom')
+    const res = await app.request('/scoped/boom')
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ marker: 'touched' })
@@ -324,7 +324,7 @@ describe('per-controller error handler', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/tx/boom')
+    const res = await app.request('/tx/boom')
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ marker: 'touched' })
@@ -334,7 +334,7 @@ describe('per-controller error handler', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/validated', {
+    const res = await app.request('/validated', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
@@ -516,8 +516,8 @@ describe('@Catch with multiple error types', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const alpha = await app.fetch('/multi/alpha')
-    const gamma = await app.fetch('/multi/gamma')
+    const alpha = await app.request('/multi/alpha')
+    const gamma = await app.request('/multi/gamma')
 
     expect(alpha.status).toBe(500)
     expect(await alpha.json()).toEqual({ by: 'global', error: 'alpha' })
@@ -529,7 +529,7 @@ describe('@Catch with multiple error types', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/multi/beta')
+    const res = await app.request('/multi/beta')
 
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ by: 'global', error: 'beta' })
@@ -541,7 +541,7 @@ describe('@CatchWith', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/cb-shop/alpha')
+    const res = await app.request('/cb-shop/alpha')
 
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ by: 'controller', via: 'marked', error: 'shop alpha' })
@@ -551,7 +551,7 @@ describe('@CatchWith', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/cb-shop/override')
+    const res = await app.request('/cb-shop/override')
 
     expect(res.status).toBe(402)
     expect(await res.json()).toEqual({ by: 'route', error: 'shop override' })
@@ -561,7 +561,7 @@ describe('@CatchWith', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/cb-shop/gamma')
+    const res = await app.request('/cb-shop/gamma')
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ by: 'method', error: 'shop gamma' })
@@ -571,7 +571,7 @@ describe('@CatchWith', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/cb-priority/alpha')
+    const res = await app.request('/cb-priority/alpha')
 
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ by: 'controller', via: 'marked', error: 'priority alpha' })
@@ -581,7 +581,7 @@ describe('@CatchWith', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/cb-validated', {
+    const res = await app.request('/cb-validated', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
@@ -595,7 +595,7 @@ describe('@CatchWith', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/cb-named/delta')
+    const res = await app.request('/cb-named/delta')
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ by: 'primary' })
@@ -607,7 +607,7 @@ describe('@CatchWith', () => {
 
     // ErrDelta is served only by handlers nobody enrolled. A controller that does not name them cannot
     // reach them: the lookup falls through to the enrolled @Catch(Error) catch-all.
-    const res = await app.fetch('/cb-orphan/delta')
+    const res = await app.request('/cb-orphan/delta')
 
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ caught: 'orphan delta' })

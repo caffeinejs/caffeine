@@ -11,7 +11,6 @@ import { Body } from '../decorators/params/body.js'
 import { Header } from '../decorators/params/header.js'
 import { Part } from '../decorators/params/part.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
-import { Retry } from '../decorators/retry.js'
 import { POST, PUT } from '../decorators/verbs.js'
 import { ErrFetchyInvalidMultipartBody } from '../errors.js'
 import { noop } from '../noop.js'
@@ -21,9 +20,9 @@ import {
   MultipartRequestBodyConverter,
   type RequestBodyConverter,
 } from '../request_body_converter.js'
-import { RetryInterceptor } from '../retry/index.js'
+import { Retry, RetryInterceptor } from '../retry/index.js'
+import { fakeJSONResponse, TestTransportFactory } from '../test_transport_factory.testkit.js'
 import { OtherFile } from './other_form_data.js'
-import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 /**
  * A multipart body is only as good as what a server parses back out of it, so these tests read each request as `fetch`

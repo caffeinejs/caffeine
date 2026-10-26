@@ -106,7 +106,7 @@ describe('per-route authentication schemes', () => {
     app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/docs-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
+    const res = await app.request('/docs-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
 
     expect(res.status).toBe(200)
     expect(((await res.json()) as Record<string, unknown>).sub).toBe('admin')
@@ -126,7 +126,7 @@ describe('per-route authentication schemes', () => {
     app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/docs-challenge')
+    const res = await app.request('/docs-challenge')
 
     expect(res.status).toBe(401)
     expect(res.headers.get('www-authenticate')).toContain('Docs')
@@ -150,7 +150,7 @@ describe('per-route authentication schemes', () => {
     app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/docs-downgrade', { headers: { 'x-default-user': 'mallory' } })
+    const res = await app.request('/docs-downgrade', { headers: { 'x-default-user': 'mallory' } })
 
     expect(res.status).toBe(401)
   })
@@ -170,12 +170,12 @@ describe('per-route authentication schemes', () => {
     app = buildApp()
     await app.bootstrap()
 
-    const viaBasic = await app.fetch('/multi', { headers: { authorization: basicHeader('admin', 'admin123') } })
+    const viaBasic = await app.request('/multi', { headers: { authorization: basicHeader('admin', 'admin123') } })
     expect(viaBasic.status).toBe(200)
     expect(((await viaBasic.json()) as Record<string, unknown>).sub).toBe('admin')
 
     // The second scheme still authenticates when the first cannot.
-    const viaDefault = await app.fetch('/multi', { headers: { 'x-default-user': 'dana' } })
+    const viaDefault = await app.request('/multi', { headers: { 'x-default-user': 'dana' } })
     expect(viaDefault.status).toBe(200)
     expect(((await viaDefault.json()) as Record<string, unknown>).sub).toBe('dana')
   })
@@ -195,11 +195,11 @@ describe('per-route authentication schemes', () => {
     app = buildApp()
     await app.bootstrap()
 
-    const authenticated = await app.fetch('/plain', { headers: { 'x-default-user': 'dana' } })
+    const authenticated = await app.request('/plain', { headers: { 'x-default-user': 'dana' } })
     expect(authenticated.status).toBe(200)
     expect(((await authenticated.json()) as Record<string, unknown>).sub).toBe('dana')
 
-    expect((await app.fetch('/plain')).status).toBe(401)
+    expect((await app.request('/plain')).status).toBe(401)
   })
 
   it('does not clobber the principal on an allowAnonymous route that names schemes', async () => {
@@ -220,7 +220,7 @@ describe('per-route authentication schemes', () => {
 
     // The handler still sees whoever the default scheme authenticated, because the route is not gated and
     // taking that away would break an optional-identity handler.
-    const res = await app.fetch('/anon', { headers: { 'x-default-user': 'dana' } })
+    const res = await app.request('/anon', { headers: { 'x-default-user': 'dana' } })
 
     expect(res.status).toBe(200)
     expect(((await res.json()) as Record<string, unknown>).sub).toBe('dana')
@@ -244,10 +244,12 @@ describe('per-route authentication schemes', () => {
     app = buildApp()
     await app.bootstrap()
 
-    const viaBasic = await app.fetch('/class-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
+    const viaBasic = await app.request('/class-scheme', {
+      headers: { authorization: basicHeader('admin', 'admin123') },
+    })
     expect(viaBasic.status).toBe(200)
 
-    const viaDefault = await app.fetch('/class-scheme', { headers: { 'x-default-user': 'mallory' } })
+    const viaDefault = await app.request('/class-scheme', { headers: { 'x-default-user': 'mallory' } })
     expect(viaDefault.status).toBe(401)
   })
 
@@ -268,7 +270,7 @@ describe('per-route authentication schemes', () => {
     app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/both-schemes', {
+    const res = await app.request('/both-schemes', {
       headers: {
         'x-default-user': 'mallory',
         authorization: basicHeader('admin', 'admin123'),
@@ -295,7 +297,7 @@ describe('per-route authentication schemes', () => {
     app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/either-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
+    const res = await app.request('/either-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
     expect(res.status).toBe(200)
     expect(((await res.json()) as { types: string[] }).types).toEqual(['Basic'])
   })
@@ -325,14 +327,14 @@ describe('per-route authentication schemes', () => {
 
     const withDefault = { headers: { 'x-default-user': 'mallory' } }
 
-    expect((await app.fetch('/narrowed/either', withDefault)).status).toBe(200)
+    expect((await app.request('/narrowed/either', withDefault)).status).toBe(200)
 
-    const refused = await app.fetch('/narrowed/basic-only', withDefault)
+    const refused = await app.request('/narrowed/basic-only', withDefault)
     expect(refused.status).toBe(401)
     expect(refused.headers.get('www-authenticate')).toBe('Basic realm="Docs", charset="UTF-8"')
 
     const withBasic = { headers: { authorization: basicHeader('admin', 'admin123') } }
-    expect((await app.fetch('/narrowed/basic-only', withBasic)).status).toBe(200)
+    expect((await app.request('/narrowed/basic-only', withBasic)).status).toBe(200)
   })
 
   it('refuses to start when a route names a scheme that was never registered', async () => {

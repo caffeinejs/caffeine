@@ -4,7 +4,7 @@ import { createWebApplication } from '@caffeinejs/http/fastify'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import type { Authenticator } from '../authenticator.js'
-import { brewer, type Fetchable } from '../brewer.js'
+import { brewer, type Requestable } from '../brewer.js'
 import type { RouteContract } from '../contract.js'
 import type { FormDataOf } from '../form.js'
 import type { Interceptor } from '../interceptor.js'
@@ -863,9 +863,9 @@ describe('what the client can be typed from', () => {
     })
   })
 
-  it('takes anything with a matching fetch, not only an application', () => {
+  it('takes anything with a matching request, not only an application', () => {
     typeOnly(async () => {
-      const stub: Fetchable = { fetch: async () => new Response(null) }
+      const stub: Requestable = { request: async () => new Response(null) }
       const client = brewer<App>(stub)
 
       expectTypeOf(await (await client.pets({ id: 1 }).get()).json()).toEqualTypeOf<Pet>()

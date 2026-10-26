@@ -72,7 +72,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/auth-class-401')
+    const res = await app.request('/auth-class-401')
     expect(res.status).toBe(401)
   })
 
@@ -97,7 +97,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/auth-class-200')
+    const res = await app.request('/auth-class-200')
     expect(res.status).toBe(200)
   })
 
@@ -122,7 +122,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/auth-class-fail')
+    const res = await app.request('/auth-class-fail')
     expect(res.status).toBe(401)
   })
 
@@ -154,8 +154,8 @@ describe('auth configurer (fake handler)', () => {
     await app.bootstrap()
 
     const [protectedRes, publicRes] = await Promise.all([
-      app.fetch('/auth-anon-method/protected'),
-      app.fetch('/auth-anon-method/public'),
+      app.request('/auth-anon-method/protected'),
+      app.request('/auth-anon-method/public'),
     ])
 
     expect(protectedRes.status).toBe(401)
@@ -183,7 +183,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/auth-anon-class')
+    const res = await app.request('/auth-anon-class')
     expect(res.status).toBe(200)
   })
 
@@ -214,8 +214,8 @@ describe('auth configurer (fake handler)', () => {
     await app.bootstrap()
 
     const [openRes, securedRes] = await Promise.all([
-      app.fetch('/auth-method-only/open'),
-      app.fetch('/auth-method-only/secured'),
+      app.request('/auth-method-only/open'),
+      app.request('/auth-method-only/secured'),
     ])
 
     expect(openRes.status).toBe(200)
@@ -243,7 +243,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/auth-role-ok')
+    const res = await app.request('/auth-role-ok')
     expect(res.status).toBe(200)
   })
 
@@ -268,7 +268,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/auth-role-403')
+    const res = await app.request('/auth-role-403')
     expect(res.status).toBe(403)
   })
 
@@ -293,7 +293,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/roles-ok')
+    const res = await app.request('/roles-ok')
     expect(res.status).toBe(200)
   })
 
@@ -318,7 +318,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/roles-403')
+    const res = await app.request('/roles-403')
     expect(res.status).toBe(403)
   })
 
@@ -354,7 +354,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/auth-custom-challenge')
+    const res = await app.request('/auth-custom-challenge')
     expect(res.status).toBe(401)
     expect(res.headers.get('x-auth-realm')).toBe('my-realm')
   })
@@ -391,7 +391,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/auth-custom-forbid')
+    const res = await app.request('/auth-custom-forbid')
     expect(res.status).toBe(403)
     expect(res.headers.get('x-forbidden-reason')).toBe('insufficient-role')
   })
@@ -418,7 +418,7 @@ describe('auth configurer (fake handler)', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/auth-ctx-user')
+    const res = await app.request('/auth-ctx-user')
     expect(res.status).toBe(200)
     const body = (await res.json()) as Record<string, unknown>
     expect(body.sub).toBe('alice')
@@ -454,7 +454,7 @@ describe('authorization policies', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/authz-schemes-only')
+    const res = await app.request('/authz-schemes-only')
     expect(res.status).toBe(401)
   })
 
@@ -479,7 +479,7 @@ describe('authorization policies', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/authz-schemes-only-ok')
+    const res = await app.request('/authz-schemes-only-ok')
     expect(res.status).toBe(200)
   })
 
@@ -505,7 +505,7 @@ describe('authorization policies', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/authz-named-policy')
+    const res = await app.request('/authz-named-policy')
     expect(res.status).toBe(200)
   })
 
@@ -536,7 +536,7 @@ describe('authorization policies', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/authz-named-policy-deny')
+    const res = await app.request('/authz-named-policy-deny')
     expect(res.status).toBe(403)
   })
 
@@ -568,7 +568,7 @@ describe('authorization policies', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/authz-require-auth')
+    const res = await app.request('/authz-require-auth')
     expect(res.status).toBe(401)
   })
 
@@ -600,7 +600,7 @@ describe('authorization policies', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/authz-claim-ok')
+    const res = await app.request('/authz-claim-ok')
     expect(res.status).toBe(200)
   })
 })

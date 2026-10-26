@@ -55,13 +55,13 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
 
     const app = await start()
 
-    await app.fetch('/inv-tag/items?a=1&b=2')
-    await app.fetch('/inv-tag/items?b=2&a=1')
+    await app.request('/inv-tag/items?a=1&b=2')
+    await app.request('/inv-tag/items?b=2&a=1')
     expect(count).toBe(1)
 
-    await app.fetch('/inv-tag/mutate', { method: 'POST' })
+    await app.request('/inv-tag/mutate', { method: 'POST' })
 
-    await app.fetch('/inv-tag/items?a=1&b=2')
+    await app.request('/inv-tag/items?a=1&b=2')
     expect(count).toBe(2)
   })
 
@@ -95,17 +95,17 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
     const en = { headers: { 'accept-language': 'en' } }
     const pt = { headers: { 'accept-language': 'pt' } }
 
-    await app.fetch('/inv-variants/products', en)
-    await app.fetch('/inv-variants/products', pt)
-    await app.fetch('/inv-variants/other')
+    await app.request('/inv-variants/products', en)
+    await app.request('/inv-variants/products', pt)
+    await app.request('/inv-variants/other')
     expect(varied).toBe(2)
     expect(elsewhere).toBe(1)
 
-    await app.fetch('/inv-variants/products', { method: 'POST' })
+    await app.request('/inv-variants/products', { method: 'POST' })
 
-    await app.fetch('/inv-variants/products', en)
-    await app.fetch('/inv-variants/products', pt)
-    await app.fetch('/inv-variants/other')
+    await app.request('/inv-variants/products', en)
+    await app.request('/inv-variants/products', pt)
+    await app.request('/inv-variants/other')
     expect(varied).toBe(4)
     expect(elsewhere).toBe(1)
   })
@@ -144,18 +144,18 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
 
     const app = await start()
 
-    await app.fetch('/inv-many')
-    await app.fetch('/inv-many/1')
+    await app.request('/inv-many')
+    await app.request('/inv-many/1')
     expect([list, one]).toEqual([1, 1])
 
-    await app.fetch('/inv-many/reorder', { method: 'PUT' })
-    await app.fetch('/inv-many')
-    await app.fetch('/inv-many/1')
+    await app.request('/inv-many/reorder', { method: 'PUT' })
+    await app.request('/inv-many')
+    await app.request('/inv-many/1')
     expect([list, one]).toEqual([2, 1])
 
-    await app.fetch('/inv-many/1', { method: 'PUT' })
-    await app.fetch('/inv-many')
-    await app.fetch('/inv-many/1')
+    await app.request('/inv-many/1', { method: 'PUT' })
+    await app.request('/inv-many')
+    await app.request('/inv-many/1')
     expect([list, one]).toEqual([3, 2])
   })
 
@@ -200,12 +200,12 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/inv-service/report')
-    expect((await app.fetch('/inv-service/report')).headers.get('x-cache')).toBe('HIT')
+    await app.request('/inv-service/report')
+    expect((await app.request('/inv-service/report')).headers.get('x-cache')).toBe('HIT')
 
     await app.container.get(ReportsConsumer).onReportChanged()
 
-    expect((await app.fetch('/inv-service/report')).headers.get('x-cache')).toBe('MISS')
+    expect((await app.request('/inv-service/report')).headers.get('x-cache')).toBe('MISS')
     expect(count).toBe(2)
   })
 })
@@ -253,13 +253,13 @@ describe('@CacheInvalidate and the status of the mutation', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/inv-status/items')
-    expect((await app.fetch('/inv-status/conflict', { method: 'POST' })).status).toBe(409)
-    expect((await app.fetch('/inv-status/items')).headers.get('x-cache')).toBe('HIT')
+    await app.request('/inv-status/items')
+    expect((await app.request('/inv-status/conflict', { method: 'POST' })).status).toBe(409)
+    expect((await app.request('/inv-status/items')).headers.get('x-cache')).toBe('HIT')
 
-    expect((await app.fetch('/inv-status/items', { method: 'POST', redirect: 'manual' })).status).toBe(303)
+    expect((await app.request('/inv-status/items', { method: 'POST', redirect: 'manual' })).status).toBe(303)
 
-    expect(await (await app.fetch('/inv-status/items')).json()).toEqual({ count: 2 })
+    expect(await (await app.request('/inv-status/items')).json()).toEqual({ count: 2 })
   })
 })
 
@@ -301,7 +301,7 @@ describe('the request a key function is handed', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/key-request/1')
+    await app.request('/key-request/1')
     expect(seen.map(item => item.by)).toEqual(['cache key', 'get handler'])
     expect(seen[0].req).toBe(seen[1].req)
   })

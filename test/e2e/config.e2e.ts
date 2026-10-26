@@ -150,7 +150,7 @@ describe.skipIf(!up)('a web application configured from a config server and five
   let store: ConfigStore<AppConfig>
 
   async function json(path: string): Promise<Record<string, unknown>> {
-    return (await (await app.fetch(path)).json()) as Record<string, unknown>
+    return (await (await app.request(path)).json()) as Record<string, unknown>
   }
 
   async function waitForRPS(rps: number): Promise<void> {

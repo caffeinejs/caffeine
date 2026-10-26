@@ -8,7 +8,7 @@ import { Router, bodyAsStream, type IContext, type WebApplication } from '../../
 import { createWebApplication } from './index.js'
 
 /**
- * A server's `fetch` is a pass-through: the request reaches the server as its `(input, init)` describes it, and the
+ * A server's `request` is a pass-through: the request reaches the server as its `(input, init)` describes it, and the
  * answer comes back as the server wrote it, so a client in the same process, or a runtime handing over the requests
  * it received, sees what a socket would carry.
  */
@@ -29,7 +29,7 @@ async function serve(router: Router): Promise<WebApplication> {
   return app
 }
 
-describe('a server fetch', () => {
+describe('a server request', () => {
   // `fetch` builds `new Request(input, init)` whatever the input: a client holding a `Request` overrides it the same
   // way.
   it('sends a Request under the init it is given, as fetch does', async () => {
@@ -40,7 +40,7 @@ describe('a server fetch', () => {
       .handler(ctx => ({ method: 'POST', probe: ctx.req.header('x-probe') ?? null, body: ctx.req.body() }))
     const server = await serve(router)
 
-    const res = await server.fetch(new Request('http://localhost/echo', { headers: { 'x-probe': 'request' } }), {
+    const res = await server.request(new Request('http://localhost/echo', { headers: { 'x-probe': 'request' } }), {
       method: 'POST',
       headers: { 'x-probe': 'init', 'content-type': 'text/plain' },
       body: 'from init',
@@ -61,7 +61,7 @@ describe('a server fetch', () => {
       body: 'hello',
     })
 
-    expect(await (await server.fetch(request)).json()).toEqual({ body: 'hello' })
+    expect(await (await server.request(request)).json()).toEqual({ body: 'hello' })
     expect(request.headers.get('content-length')).toBe('5')
   })
 
@@ -71,7 +71,7 @@ describe('a server fetch', () => {
     router.get('/').handler(ctx => ({ host: ctx.req.host }))
     const server = await serve(router)
     const hostOf = async (input: string, init?: RequestInit) =>
-      ((await (await server.fetch(input, init)).json()) as { host: string }).host
+      ((await (await server.request(input, init)).json()) as { host: string }).host
 
     expect(await hostOf('/host')).toBe('localhost')
     expect(await hostOf('http://api.example/host')).toBe('api.example')
@@ -91,7 +91,7 @@ describe('a server fetch', () => {
       })
       const server = await serve(router)
 
-      const res = await server.fetch('/moved', redirect === undefined ? {} : { redirect })
+      const res = await server.request('/moved', redirect === undefined ? {} : { redirect })
 
       expect(res.status).toBe(302)
       expect(res.headers.get('location')).toBe('/elsewhere')
@@ -118,7 +118,7 @@ function serveBoth(path: string, handler: (ctx: IContext) => unknown): Promise<W
   return serve(router)
 }
 
-describe.each(sends)('a server fetch hung up on, %s', (_, sent) => {
+describe.each(sends)('a server request hung up on, %s', (_, sent) => {
   // An aborted call is refused before anything is sent, as `fetch` refuses it.
   it('rejects with the reason of a signal aborted before the call, and never sends the request', async () => {
     let handled = 0
@@ -128,12 +128,12 @@ describe.each(sends)('a server fetch hung up on, %s', (_, sent) => {
     })
     const reason = new Error('the caller left')
 
-    await expect(server.fetch('/aborted', { ...sent, signal: AbortSignal.abort(reason) })).rejects.toBe(reason)
+    await expect(server.request('/aborted', { ...sent, signal: AbortSignal.abort(reason) })).rejects.toBe(reason)
     await expect(
-      server.fetch(new Request('http://localhost/aborted', { ...sent, signal: AbortSignal.abort(reason) })),
+      server.request(new Request('http://localhost/aborted', { ...sent, signal: AbortSignal.abort(reason) })),
     ).rejects.toBe(reason)
     // The request sent after them is the first the handler sees.
-    expect(await (await server.fetch('/aborted', sent)).json()).toEqual({ ok: true })
+    expect(await (await server.request('/aborted', sent)).json()).toEqual({ ok: true })
     expect(handled).toBe(1)
   })
 
@@ -150,7 +150,7 @@ describe.each(sends)('a server fetch hung up on, %s', (_, sent) => {
     const reason = new Error('the caller left')
 
     try {
-      const call = server.fetch('/slow', { ...sent, signal: controller.signal })
+      const call = server.request('/slow', { ...sent, signal: controller.signal })
       const signal = await started.promise
       const closed = once(signal, 'abort')
       controller.abort(reason)
@@ -179,7 +179,7 @@ describe.each(sends)('a server fetch hung up on, %s', (_, sent) => {
     const controller = new AbortController()
     const reason = new Error('the caller left')
 
-    const res = await server.fetch('/feed', { ...sent, signal: controller.signal })
+    const res = await server.request('/feed', { ...sent, signal: controller.signal })
     const reader = res.body!.getReader()
     expect(decoder.decode((await reader.read()).value)).toBe('part one')
 
@@ -203,14 +203,14 @@ describe.each(sends)('a server fetch hung up on, %s', (_, sent) => {
         ),
     )
 
-    const res = await server.fetch('/ticks', sent)
+    const res = await server.request('/ticks', sent)
     await res.body!.cancel()
 
     await cancelled.promise
   })
 })
 
-describe('a server fetch streaming', () => {
+describe('a server request streaming', () => {
   // An event stream never ends on its own: the answer has to be handed over as the server starts writing it, and each
   // event as it comes. Fastify writes the headers with the first chunk, over a socket too.
   it('answers as the server starts writing, and hands over the body as it is written', async () => {
@@ -221,7 +221,7 @@ describe('a server fetch streaming', () => {
     const server = await serve(router)
 
     feed.enqueue(encoder.encode('data: 1\n\n'))
-    const res = await server.fetch('/events')
+    const res = await server.request('/events')
     const reader = res.body!.getReader()
 
     expect(res.headers.get('content-type')).toBe('text/event-stream')
@@ -238,7 +238,7 @@ describe('a server fetch streaming', () => {
     router.get('/').handler(() => new Response('data'))
     const server = await serve(router)
 
-    const { value } = await (await server.fetch('/bytes')).body!.getReader().read()
+    const { value } = await (await server.request('/bytes')).body!.getReader().read()
 
     expect(value!.constructor).toBe(Uint8Array)
     expect(value!.buffer.byteLength).toBe(4)
@@ -267,7 +267,7 @@ describe('a server fetch streaming', () => {
     const body = new ReadableStream<Uint8Array>({ start: controller => void (source = controller) })
 
     source.enqueue(encoder.encode('one,'))
-    const call = server.fetch('/upload', {
+    const call = server.request('/upload', {
       method: 'POST',
       headers: { 'content-type': 'application/octet-stream', 'transfer-encoding': 'chunked' },
       body,
@@ -299,7 +299,7 @@ describe('a server fetch streaming', () => {
     const controller = new AbortController()
     const reason = new Error('the caller left')
 
-    const call = server.fetch('/whole', {
+    const call = server.request('/whole', {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
       body,
@@ -332,7 +332,7 @@ describe('a server fetch streaming', () => {
       cancel: () => cancelled.resolve(),
     })
 
-    const res = await server.fetch('/limited', {
+    const res = await server.request('/limited', {
       method: 'POST',
       headers: { 'content-type': 'text/plain', 'content-length': String(64 * MiB) },
       body,
@@ -348,7 +348,7 @@ describe('a server fetch streaming', () => {
 
 // A body is sent as its Content-Length says, or not at all: `fetch` refuses a body its header does not describe, and
 // the server never reads past the length it was told.
-describe('a server fetch framing a request body at its Content-Length', () => {
+describe('a server request framing a request body at its Content-Length', () => {
   // A route that reads the body it is handed, tells `onRead` what it holds after each chunk, and records what it held
   // when the read ended.
   async function serveReader(
@@ -403,7 +403,7 @@ describe('a server fetch framing a request body at its Content-Length', () => {
   ])('rejects with a TypeError for %s', async (_, length, body, message) => {
     const { server } = await serveReader()
 
-    const call = server.fetch('/upload', { method: 'POST', headers: { ...octets, 'content-length': length }, body })
+    const call = server.request('/upload', { method: 'POST', headers: { ...octets, 'content-length': length }, body })
 
     await expect(call).rejects.toThrow(TypeError)
     await expect(call).rejects.toThrow(message)
@@ -432,7 +432,7 @@ describe('a server fetch framing a request body at its Content-Length', () => {
     })
 
     await expect(
-      server.fetch('/upload', {
+      server.request('/upload', {
         method: 'POST',
         headers: { ...octets, 'content-length': '8' },
         body,
@@ -461,7 +461,7 @@ describe('a server fetch framing a request body at its Content-Length', () => {
       cancel: () => cancelled.resolve(),
     })
 
-    const res = await server.fetch('/first', {
+    const res = await server.request('/first', {
       method: 'POST',
       headers: { ...octets, 'content-length': '10' },
       body,
@@ -486,12 +486,12 @@ describe('a server fetch framing a request body at its Content-Length', () => {
   ])('rejects with a TypeError for %s, and sends nothing', async (_, headers, message) => {
     const { server, handled } = await serveReader()
 
-    const call = server.fetch('/upload', { method: 'POST', headers, body: 'ok' })
+    const call = server.request('/upload', { method: 'POST', headers, body: 'ok' })
 
     await expect(call).rejects.toThrow(TypeError)
     await expect(call).rejects.toThrow(message)
     // The request sent after it is the first the route sees.
-    expect(await (await server.fetch('/upload', { method: 'POST', headers: octets, body: 'ok' })).json()).toEqual({
+    expect(await (await server.request('/upload', { method: 'POST', headers: octets, body: 'ok' })).json()).toEqual({
       received: 'ok',
     })
     expect(handled()).toBe(1)
@@ -506,7 +506,7 @@ describe('a server fetch framing a request body at its Content-Length', () => {
     const failure = new Error('the disk went away')
     const body = new ReadableStream<Uint8Array>({ pull: controller => controller.error(failure) })
 
-    const call = server.fetch('/upload', { method: 'POST', headers, body, duplex: 'half' } as RequestInit)
+    const call = server.request('/upload', { method: 'POST', headers, body, duplex: 'half' } as RequestInit)
 
     await expect(call).rejects.toThrow(TypeError)
     await expect(call).rejects.toThrow('Cannot send the request body: its stream failed')
@@ -514,7 +514,7 @@ describe('a server fetch framing a request body at its Content-Length', () => {
   })
 })
 
-describe('a server fetch answering', () => {
+describe('a server request answering', () => {
   // No connection carries the answer, so nothing in it may describe one: forwarded, a chunked label on bytes that are
   // already the payload would be a message no client can read.
   it('leaves out the fields that describe a connection', async () => {
@@ -533,7 +533,7 @@ describe('a server fetch answering', () => {
     )
     const server = await serve(router)
 
-    const res = await server.fetch('/chunks')
+    const res = await server.request('/chunks')
 
     expect(res.headers.get('transfer-encoding')).toBe(null)
     expect(res.headers.get('connection')).toBe(null)
@@ -547,14 +547,14 @@ describe('a server fetch answering', () => {
     router.get('/').handler(() => new Response(encoded, { headers: { 'content-encoding': 'gzip' } }))
     const server = await serve(router)
 
-    const res = await server.fetch('/gzip')
+    const res = await server.request('/gzip')
 
     expect(res.headers.get('content-encoding')).toBe('gzip')
     expect(Buffer.from(await res.arrayBuffer())).toEqual(encoded)
   })
 })
 
-describe('a server fetch sending an empty body', () => {
+describe('a server request sending an empty body', () => {
   async function serveLengths(): Promise<WebApplication> {
     const router = new Router('/length')
     const length = (ctx: IContext) => ({ length: ctx.req.header('content-length') ?? null })
@@ -574,7 +574,7 @@ describe('a server fetch sending an empty body', () => {
   ])('sends %s under a Content-Length of 0', async (_, body) => {
     const server = await serveLengths()
 
-    expect(await (await server.fetch('/length', { method: 'POST', body })).json()).toEqual({ length: '0' })
+    expect(await (await server.request('/length', { method: 'POST', body })).json()).toEqual({ length: '0' })
   })
 
   // `fetch` measures a request with no body itself, whatever length it declares: `0` for a method that expects a body,
@@ -595,6 +595,6 @@ describe('a server fetch sending an empty body', () => {
   ])('sends %s with no body under the Content-Length fetch writes', async (_, init, length) => {
     const server = await serveLengths()
 
-    expect(await (await server.fetch('/length', init)).json()).toEqual({ length })
+    expect(await (await server.request('/length', init)).json()).toEqual({ length })
   })
 })

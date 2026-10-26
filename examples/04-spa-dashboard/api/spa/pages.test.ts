@@ -33,7 +33,7 @@ describe('the single-page application', () => {
     member = await signIn(app, 'user', 'user123')
     admin = await signIn(app, 'admin', 'admin123')
 
-    const shell = await (await app.fetch('/', { headers: NAVIGATION })).text()
+    const shell = await (await app.request('/', { headers: NAVIGATION })).text()
     bundle = /src="([^"]+\.js)"/.exec(shell)?.[1] ?? ''
     expect(bundle, 'the shell must reference a hashed bundle').toMatch(/^\/assets\/.+\.js$/)
   })
@@ -43,7 +43,7 @@ describe('the single-page application', () => {
   describe('public client routes', () => {
     it('serves the shell anonymously, under authenticate-by-default', async () => {
       for (const path of ['/', '/index.html', '/about', '/login', '/forbidden', '/pricing']) {
-        const res = await app.fetch(path, { headers: NAVIGATION })
+        const res = await app.request(path, { headers: NAVIGATION })
 
         expect(res.status, path).toBe(200)
         expect(await res.text(), path).toContain('<div id="root">')
@@ -54,39 +54,39 @@ describe('the single-page application', () => {
     // a 403 that redirects to a page that redirects.
     it('never redirects the sign-in or access-denied pages', async () => {
       for (const path of ['/login', '/forbidden']) {
-        expect((await app.fetch(path, { headers: NAVIGATION })).status, path).toBe(200)
+        expect((await app.request(path, { headers: NAVIGATION })).status, path).toBe(200)
       }
     })
 
     // A path the application declared answers any client — which is what a load balancer probe needs.
     it('answers a declared path to a client that is not a browser', async () => {
       for (const headers of [CURL, PROBE]) {
-        expect((await app.fetch('/', { headers })).status).toBe(200)
-        expect((await app.fetch('/index.html', { headers })).status).toBe(200)
+        expect((await app.request('/', { headers })).status).toBe(200)
+        expect((await app.request('/index.html', { headers })).status).toBe(200)
       }
     })
 
     // A wildcard is a fallback, so it answers only a document request.
     it('does not answer a wildcard client route to a client that is not a browser', async () => {
-      await expectNotFoundJSON(await app.fetch('/pricing', { headers: CURL }))
+      await expectNotFoundJSON(await app.request('/pricing', { headers: CURL }))
     })
 
     it('never answers a non-GET with a document', async () => {
-      const res = await app.fetch('/pricing', { method: 'DELETE', headers: NAVIGATION })
+      const res = await app.request('/pricing', { method: 'DELETE', headers: NAVIGATION })
       expect(res.status).not.toBe(200)
     })
   })
 
   describe('protected client routes', () => {
     it('redirects an anonymous navigation to sign in, carrying the return path', async () => {
-      const res = await app.fetch('/dashboard/deep', { headers: NAVIGATION })
+      const res = await app.request('/dashboard/deep', { headers: NAVIGATION })
 
       expect(res.status).toBe(302)
       expect(decodeURIComponent(res.headers.get('location') ?? '')).toBe('/login?returnUrl=/dashboard/deep')
     })
 
     it('answers an anonymous fetch of a protected route with 401, never a document', async () => {
-      const res = await app.fetch('/dashboard', { headers: XHR })
+      const res = await app.request('/dashboard', { headers: XHR })
 
       expect(res.status).toBe(401)
       expect(res.headers.get('content-type') ?? '').not.toMatch(/text\/html/)
@@ -94,7 +94,7 @@ describe('the single-page application', () => {
 
     it('serves the shell to a signed-in member across a subtree', async () => {
       for (const path of ['/dashboard', '/dashboard/settings', '/projects', '/projects/brew']) {
-        const res = await app.fetch(path, { headers: { ...NAVIGATION, cookie: member.cookie } })
+        const res = await app.request(path, { headers: { ...NAVIGATION, cookie: member.cookie } })
 
         expect(res.status, path).toBe(200)
         expect(await res.text(), path).toContain('<div id="root">')
@@ -102,15 +102,15 @@ describe('the single-page application', () => {
     })
 
     it('keeps the declared-versus-wildcard rule inside a protected tier', async () => {
-      const declared = await app.fetch('/dashboard', { headers: { ...CURL, cookie: member.cookie } })
+      const declared = await app.request('/dashboard', { headers: { ...CURL, cookie: member.cookie } })
       expect(declared.status).toBe(200)
 
-      await expectNotFoundJSON(await app.fetch('/dashboard/deep', { headers: { ...CURL, cookie: member.cookie } }))
+      await expectNotFoundJSON(await app.request('/dashboard/deep', { headers: { ...CURL, cookie: member.cookie } }))
     })
 
     // It matches `/*`, not `/dashboard`: an unknown client route is not a protected one.
     it('answers an unknown route near a protected one with the public shell', async () => {
-      expect((await app.fetch('/dashboard-typo', { headers: NAVIGATION })).status).toBe(200)
+      expect((await app.request('/dashboard-typo', { headers: NAVIGATION })).status).toBe(200)
     })
   })
 
@@ -118,7 +118,7 @@ describe('the single-page application', () => {
   describe('a role-gated page', () => {
     it('sends a signed-in member to the access-denied page rather than the page they asked for', async () => {
       for (const path of ['/admin', '/admin/users']) {
-        const res = await app.fetch(path, { headers: { ...NAVIGATION, cookie: member.cookie } })
+        const res = await app.request(path, { headers: { ...NAVIGATION, cookie: member.cookie } })
 
         expect(res.status, path).toBe(302)
         expect(res.headers.get('location'), path).toBe('/forbidden')
@@ -127,7 +127,7 @@ describe('the single-page application', () => {
 
     it('serves the page to an administrator', async () => {
       for (const path of ['/admin', '/admin/users']) {
-        const res = await app.fetch(path, { headers: { ...NAVIGATION, cookie: admin.cookie } })
+        const res = await app.request(path, { headers: { ...NAVIGATION, cookie: admin.cookie } })
 
         expect(res.status, path).toBe(200)
         expect(await res.text(), path).toContain('<div id="root">')
@@ -139,7 +139,7 @@ describe('the single-page application', () => {
     // One bundle serves the public and the protected routes alike, and the sign-in page needs it. This is
     // what `{ anonymous: true }` on the mount buys, and forgetting it renders the page while every script 401s.
     it('serves the assets anonymously even though client routes are gated', async () => {
-      const res = await app.fetch(bundle, { headers: SCRIPT })
+      const res = await app.request(bundle, { headers: SCRIPT })
 
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
@@ -147,13 +147,13 @@ describe('the single-page application', () => {
 
     // Same mount, different caching: the shell must be revalidated or a deploy never reaches anyone.
     it('does not pin the shell the way it pins the hashed assets', async () => {
-      const res = await app.fetch('/', { headers: NAVIGATION })
+      const res = await app.request('/', { headers: NAVIGATION })
 
       expect(res.headers.get('cache-control') ?? '').not.toContain('immutable')
     })
 
     it('keeps a missing asset a JSON 404 rather than a page', async () => {
-      await expectNotFoundJSON(await app.fetch('/assets/missing-AAAAAAAA.js', { headers: NAVIGATION }))
+      await expectNotFoundJSON(await app.request('/assets/missing-AAAAAAAA.js', { headers: NAVIGATION }))
     })
 
     // Each of these is its own route under `wildcard: false`; listing them by hand in the gate's `except`
@@ -166,14 +166,14 @@ describe('the single-page application', () => {
         '/sitemap.xml',
         '/manifest.webmanifest',
       ]) {
-        expect((await app.fetch(path, { headers: SCRIPT })).status, path).toBe(200)
+        expect((await app.request(path, { headers: SCRIPT })).status, path).toBe(200)
       }
     })
   })
 
   describe('pre-compressed assets', () => {
     it('serves brotli to a client that accepts it', async () => {
-      const res = await app.fetch(bundle, { headers: { ...SCRIPT, 'accept-encoding': 'br' } })
+      const res = await app.request(bundle, { headers: { ...SCRIPT, 'accept-encoding': 'br' } })
 
       expect(res.status).toBe(200)
       expect(res.headers.get('content-encoding')).toBe('br')
@@ -182,17 +182,17 @@ describe('the single-page application', () => {
     })
 
     it('falls back to gzip, and to the identity bytes', async () => {
-      const gzip = await app.fetch(bundle, { headers: { ...SCRIPT, 'accept-encoding': 'gzip' } })
+      const gzip = await app.request(bundle, { headers: { ...SCRIPT, 'accept-encoding': 'gzip' } })
       expect(gzip.headers.get('content-encoding')).toBe('gzip')
 
-      const plain = await app.fetch(bundle, { headers: SCRIPT })
+      const plain = await app.request(bundle, { headers: SCRIPT })
       expect(plain.headers.get('content-encoding')).toBeNull()
     })
 
     // `sendFile` reads `preCompressed` off the plugin's registration closure, so a compiled route serving the
     // shell gets it without asking for it.
     it('compresses the shell served from a compiled route', async () => {
-      const res = await app.fetch('/', { headers: { ...NAVIGATION, 'accept-encoding': 'br' } })
+      const res = await app.request('/', { headers: { ...NAVIGATION, 'accept-encoding': 'br' } })
 
       expect(res.status).toBe(200)
       expect(res.headers.get('content-encoding')).toBe('br')
@@ -203,14 +203,14 @@ describe('the single-page application', () => {
     // application/octet-stream and no content-encoding.
     it('does not expose the compressed siblings as URLs of their own', async () => {
       for (const suffix of ['.br', '.gz']) {
-        await expectNotFoundJSON(await app.fetch(`${bundle}${suffix}`, { headers: NAVIGATION }))
+        await expectNotFoundJSON(await app.request(`${bundle}${suffix}`, { headers: NAVIGATION }))
       }
     })
   })
 
   describe('security headers', () => {
     it('sets a content security policy the bundle loads under', async () => {
-      const res = await app.fetch('/', { headers: NAVIGATION })
+      const res = await app.request('/', { headers: NAVIGATION })
       const csp = res.headers.get('content-security-policy') ?? ''
 
       expect(csp).toContain("default-src 'self'")
@@ -223,7 +223,7 @@ describe('the single-page application', () => {
 
     // Registered before the authentication gate, which is the only reason they reach a rejected request.
     it('sets them on a challenge as well as on a page', async () => {
-      const res = await app.fetch('/api/profile', { headers: XHR })
+      const res = await app.request('/api/profile', { headers: XHR })
 
       expect(res.status).toBe(401)
       expect(res.headers.get('content-security-policy') ?? '').toContain("default-src 'self'")
@@ -232,7 +232,7 @@ describe('the single-page application', () => {
 
   describe('the OpenAPI document', () => {
     it('describes the API and not the client routes', async () => {
-      const res = await app.fetch('/openapi.json', { headers: { ...XHR, cookie: admin.cookie } })
+      const res = await app.request('/openapi.json', { headers: { ...XHR, cookie: admin.cookie } })
       expect(res.status).toBe(200)
 
       const paths = Object.keys(((await res.json()) as { paths: Record<string, unknown> }).paths)

@@ -45,7 +45,7 @@ describe('openapi from a programmatic router', () => {
 
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
     const get = operationAt(document, '/documented-pets/{id}')
     expect(get?.operationId).toBe('getDocumentedPet')
@@ -81,7 +81,7 @@ describe('openapi from a programmatic router', () => {
 
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
     const list = operationAt(document, '/programmatic-pets')
     expect(list?.operationId).toBe('ProgrammaticPets_list')
@@ -106,7 +106,7 @@ describe('openapi from a programmatic router', () => {
 
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
     const near = operationAt(document, '/geo/near/{lat}-{lng}')
 
     expect(near?.operationId).toBe('Geo_get_near_lat-lng')
@@ -128,7 +128,7 @@ describe('openapi from a programmatic router', () => {
 
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
     const list = operationAt(document, '/versioned-pets')
 
     expect(list?.parameters).toContainEqual(

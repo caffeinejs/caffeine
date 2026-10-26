@@ -73,14 +73,14 @@ describe('a cached route that serves ranges', () => {
   it('serves a range of a body it holds whole from the handler, not as the whole it holds', async () => {
     const app = await start()
 
-    const first = await app.fetch('/cached-downloads/bytes')
+    const first = await app.request('/cached-downloads/bytes')
     expect(first.headers.get('x-cache')).toBe('MISS')
 
-    const second = await app.fetch('/cached-downloads/bytes')
+    const second = await app.request('/cached-downloads/bytes')
     expect(second.headers.get('x-cache')).toBe('HIT')
     expect(await bytesOf(second)).toEqual(REPORT)
 
-    const part = await app.fetch('/cached-downloads/bytes', { headers: { range: 'bytes=0-99', 'if-range': ETAG } })
+    const part = await app.request('/cached-downloads/bytes', { headers: { range: 'bytes=0-99', 'if-range': ETAG } })
     expect(part.status).toBe(206)
     expect(part.headers.get('content-range')).toBe('bytes 0-99/4096')
     expect(part.headers.get('x-cache')).toBe('BYPASS')
@@ -90,11 +90,11 @@ describe('a cached route that serves ranges', () => {
   it('never replays a part as the whole: the next full request gets every byte', async () => {
     const app = await start()
 
-    const part = await app.fetch('/cached-downloads/bytes', { headers: { range: 'bytes=0-99' } })
+    const part = await app.request('/cached-downloads/bytes', { headers: { range: 'bytes=0-99' } })
     expect(part.status).toBe(206)
 
     for (let i = 0; i < 2; i++) {
-      const whole = await app.fetch('/cached-downloads/bytes')
+      const whole = await app.request('/cached-downloads/bytes')
 
       expect(whole.status).toBe(200)
       expect(whole.headers.get('content-range')).toBeNull()
@@ -105,10 +105,10 @@ describe('a cached route that serves ranges', () => {
   it('never stores a part, even on a route that lists 206 among the statuses it keeps', async () => {
     const app = await start()
 
-    const part = await app.fetch('/cached-downloads/parts-listed', { headers: { range: 'bytes=0-99' } })
+    const part = await app.request('/cached-downloads/parts-listed', { headers: { range: 'bytes=0-99' } })
     expect(part.status).toBe(206)
 
-    const whole = await app.fetch('/cached-downloads/parts-listed')
+    const whole = await app.request('/cached-downloads/parts-listed')
     expect(whole.status).toBe(200)
     expect(whole.headers.get('x-cache')).toBe('MISS')
     expect(await bytesOf(whole)).toEqual(REPORT)
@@ -118,8 +118,8 @@ describe('a cached route that serves ranges', () => {
   it('keeps no Blob it streamed, so a second full request is a miss again', async () => {
     const app = await start()
 
-    await (await app.fetch('/cached-downloads/blob')).arrayBuffer()
-    const second = await app.fetch('/cached-downloads/blob')
+    await (await app.request('/cached-downloads/blob')).arrayBuffer()
+    const second = await app.request('/cached-downloads/blob')
 
     expect(second.headers.get('x-cache')).toBe('MISS')
     expect(await bytesOf(second)).toEqual(REPORT)
@@ -129,7 +129,7 @@ describe('a cached route that serves ranges', () => {
     const bypasses: CacheBypassEvent[] = []
     const app = await start({ onBypass: event => void bypasses.push(event) })
 
-    await app.fetch('/cached-downloads/bytes', { headers: { range: 'bytes=0-99' } })
+    await app.request('/cached-downloads/bytes', { headers: { range: 'bytes=0-99' } })
 
     expect(bypasses.map(event => event.reason)).toEqual(['range'])
   })
@@ -137,7 +137,7 @@ describe('a cached route that serves ranges', () => {
   it("keeps the handler's ETag on a part, so a client can resume against it", async () => {
     const app = await start()
 
-    const part = await app.fetch('/cached-downloads/blob', { headers: { range: 'bytes=100-199' } })
+    const part = await app.request('/cached-downloads/blob', { headers: { range: 'bytes=100-199' } })
 
     expect(part.status).toBe(206)
     expect(part.headers.get('etag')).toBe(ETAG)
@@ -146,7 +146,7 @@ describe('a cached route that serves ranges', () => {
   it("answers 304 to a client revalidating a download it holds whole, against the handler's ETag", async () => {
     const app = await start()
 
-    const res = await app.fetch('/cached-downloads/blob', { headers: { 'if-none-match': ETAG } })
+    const res = await app.request('/cached-downloads/blob', { headers: { 'if-none-match': ETAG } })
 
     expect(res.status).toBe(304)
     expect(await res.text()).toBe('')
@@ -157,13 +157,13 @@ describe('a cached route that serves ranges', () => {
   it('fills the store from a revalidation that reaches it first, and answers that one 304 under the route policy', async () => {
     const app = await start()
 
-    const revalidated = await app.fetch('/cached-downloads/bytes', { headers: { 'if-none-match': ETAG } })
+    const revalidated = await app.request('/cached-downloads/bytes', { headers: { 'if-none-match': ETAG } })
     expect(revalidated.status).toBe(304)
     expect(revalidated.headers.get('x-cache')).toBe('MISS')
     expect(revalidated.headers.get('cache-control')).toContain('max-age=60')
     expect(await revalidated.text()).toBe('')
 
-    const next = await app.fetch('/cached-downloads/bytes')
+    const next = await app.request('/cached-downloads/bytes')
     expect(next.headers.get('x-cache')).toBe('HIT')
     expect(await bytesOf(next)).toEqual(REPORT)
   })
@@ -172,11 +172,11 @@ describe('a cached route that serves ranges', () => {
     const app = await start()
     const headers = { range: 'bytes=0-99', 'cache-control': 'only-if-cached' }
 
-    const cold = await app.fetch('/cached-downloads/bytes', { headers })
+    const cold = await app.request('/cached-downloads/bytes', { headers })
     expect(cold.status).toBe(504)
 
-    await (await app.fetch('/cached-downloads/bytes')).arrayBuffer()
-    const warm = await app.fetch('/cached-downloads/bytes', { headers })
+    await (await app.request('/cached-downloads/bytes')).arrayBuffer()
+    const warm = await app.request('/cached-downloads/bytes', { headers })
     expect(warm.status).toBe(200)
     expect(warm.headers.get('x-cache')).toBe('HIT')
     expect(await bytesOf(warm)).toEqual(REPORT)
@@ -185,13 +185,13 @@ describe('a cached route that serves ranges', () => {
   it('sends several ranges past the store as one multipart answer, and keeps none of it', async () => {
     const app = await start()
 
-    const parts = await app.fetch('/cached-downloads/bytes', { headers: { range: 'bytes=0-9,100-109' } })
+    const parts = await app.request('/cached-downloads/bytes', { headers: { range: 'bytes=0-9,100-109' } })
     expect(parts.status).toBe(206)
     expect(parts.headers.get('content-type')).toMatch(/^multipart\/byteranges; boundary=/)
     expect(parts.headers.get('x-cache')).toBe('BYPASS')
     await parts.arrayBuffer()
 
-    const whole = await app.fetch('/cached-downloads/bytes')
+    const whole = await app.request('/cached-downloads/bytes')
     expect(whole.headers.get('x-cache')).toBe('MISS')
     expect(await bytesOf(whole)).toEqual(REPORT)
   })
@@ -201,18 +201,18 @@ describe('a cached route that serves ranges', () => {
   it('takes a request carrying a precondition past the store, so a stale one is refused even while it holds the content', async () => {
     const bypasses: CacheBypassEvent[] = []
     const app = await start({ onBypass: event => void bypasses.push(event) })
-    await (await app.fetch('/cached-downloads/bytes')).arrayBuffer()
-    expect((await app.fetch('/cached-downloads/bytes')).headers.get('x-cache')).toBe('HIT')
+    await (await app.request('/cached-downloads/bytes')).arrayBuffer()
+    expect((await app.request('/cached-downloads/bytes')).headers.get('x-cache')).toBe('HIT')
 
-    const stale = await app.fetch('/cached-downloads/bytes', { headers: { 'if-match': '"report-v0"' } })
+    const stale = await app.request('/cached-downloads/bytes', { headers: { 'if-match': '"report-v0"' } })
     expect(stale.status).toBe(412)
     expect(stale.headers.get('x-cache')).toBe('BYPASS')
 
-    const current = await app.fetch('/cached-downloads/bytes', { headers: { 'if-match': ETAG } })
+    const current = await app.request('/cached-downloads/bytes', { headers: { 'if-match': ETAG } })
     expect(current.status).toBe(200)
     expect(await bytesOf(current)).toEqual(REPORT)
 
-    const unmodified = await app.fetch('/cached-downloads/bytes', {
+    const unmodified = await app.request('/cached-downloads/bytes', {
       headers: { 'if-unmodified-since': new Date().toUTCString() },
     })
     expect(unmodified.headers.get('x-cache')).toBe('BYPASS')
@@ -226,11 +226,11 @@ describe('a cached route that serves ranges', () => {
     const misses: CacheMissEvent[] = []
     const app = await start({ onMiss: event => void misses.push(event) })
     const storeAlone = (headers: Record<string, string>) =>
-      app.fetch('/cached-downloads/bytes', { headers: { ...headers, 'cache-control': 'only-if-cached' } })
+      app.request('/cached-downloads/bytes', { headers: { ...headers, 'cache-control': 'only-if-cached' } })
 
     expect((await storeAlone({ 'if-match': ETAG })).status).toBe(504)
 
-    await (await app.fetch('/cached-downloads/bytes')).arrayBuffer()
+    await (await app.request('/cached-downloads/bytes')).arrayBuffer()
     expect((await storeAlone({})).headers.get('x-cache')).toBe('HIT')
 
     const preconditions: Array<Record<string, string>> = [
@@ -251,9 +251,9 @@ describe('a cached route that serves ranges', () => {
   it('stores nothing from a request it refused with 412', async () => {
     const app = await start()
 
-    expect((await app.fetch('/cached-downloads/bytes', { headers: { 'if-match': '"report-v0"' } })).status).toBe(412)
+    expect((await app.request('/cached-downloads/bytes', { headers: { 'if-match': '"report-v0"' } })).status).toBe(412)
 
-    const whole = await app.fetch('/cached-downloads/bytes')
+    const whole = await app.request('/cached-downloads/bytes')
     expect(whole.headers.get('x-cache')).toBe('MISS')
     expect(await bytesOf(whole)).toEqual(REPORT)
   })
@@ -261,7 +261,7 @@ describe('a cached route that serves ranges', () => {
   it("sends the Cache-Control a returned Response carries rather than the route's", async () => {
     const app = await start()
 
-    const res = await app.fetch('/cached-downloads/own-policy')
+    const res = await app.request('/cached-downloads/own-policy')
 
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(await res.text()).toBe('fresh')

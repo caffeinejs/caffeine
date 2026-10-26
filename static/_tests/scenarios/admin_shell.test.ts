@@ -70,11 +70,11 @@ describe('role-gated administration site', () => {
     app = adminSite(false)
     await app.bootstrap()
 
-    const page = await app.fetch('/', { headers: { ...NAVIGATION, ...caller } })
+    const page = await app.request('/', { headers: { ...NAVIGATION, ...caller } })
     expect(page.status).toBe(status)
     expect(page.headers.get('content-type') ?? '').not.toMatch(/text\/html/)
 
-    const report = await app.fetch('/api/report', { headers: { ...XHR, ...caller } })
+    const report = await app.request('/api/report', { headers: { ...XHR, ...caller } })
     expect(report.status).toBe(status)
   })
 
@@ -82,11 +82,11 @@ describe('role-gated administration site', () => {
     app = adminSite(false)
     await app.bootstrap()
 
-    const page = await app.fetch('/', { headers: { ...NAVIGATION, ...ann } })
+    const page = await app.request('/', { headers: { ...NAVIGATION, ...ann } })
     expect(page.status).toBe(200)
     expect(await page.text()).toContain('<div id="root">')
 
-    expect((await app.fetch('/api/report', { headers: { ...XHR, ...ann } })).status).toBe(200)
+    expect((await app.request('/api/report', { headers: { ...XHR, ...ann } })).status).toBe(200)
   })
 
   // The whole point of serving the files from a compiled route: the bundle is as gated as the page it loads,
@@ -98,7 +98,7 @@ describe('role-gated administration site', () => {
     app = adminSite(false)
     await app.bootstrap()
 
-    const res = await app.fetch('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...caller } })
+    const res = await app.request('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...caller } })
     expect(res.status).toBe(status)
   })
 
@@ -106,7 +106,7 @@ describe('role-gated administration site', () => {
     app = adminSite(false)
     await app.bootstrap()
 
-    const res = await app.fetch('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...ann } })
+    const res = await app.request('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...ann } })
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('spa bundle')
   })
@@ -115,15 +115,15 @@ describe('role-gated administration site', () => {
     app = adminSite(false)
     await app.bootstrap()
 
-    await expectNotFoundJSON(await app.fetch('/assets/missing.js', { headers: { ...SCRIPT, ...ann } }))
+    await expectNotFoundJSON(await app.request('/assets/missing.js', { headers: { ...SCRIPT, ...ann } }))
   })
 
   it('stays gated under authenticate-by-default', async () => {
     app = adminSite(true)
     await app.bootstrap()
 
-    expect((await app.fetch('/assets/app-eZr2sdaR.js', { headers: SCRIPT })).status).toBe(401)
-    expect((await app.fetch('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...bob } })).status).toBe(403)
-    expect((await app.fetch('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...ann } })).status).toBe(200)
+    expect((await app.request('/assets/app-eZr2sdaR.js', { headers: SCRIPT })).status).toBe(401)
+    expect((await app.request('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...bob } })).status).toBe(403)
+    expect((await app.request('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...ann } })).status).toBe(200)
   })
 })

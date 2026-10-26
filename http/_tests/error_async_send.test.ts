@@ -56,8 +56,8 @@ describe('the global error handler under an asynchronous onSend hook', () => {
       close = () => app.close()
       await app.bootstrap()
 
-      const first = app.fetch('/err-async-send/boom')
-      const second = app.fetch('/err-async-send/boom')
+      const first = app.request('/err-async-send/boom')
+      const second = app.request('/err-async-send/boom')
       while (entered < 2) {
         await sleep(1)
       }
@@ -115,7 +115,7 @@ describe('the global error handler under an asynchronous onSend hook', () => {
       close = () => app.close()
       await app.bootstrap()
 
-      const res = await app.fetch('/err-async-redirect/boom')
+      const res = await app.request('/err-async-redirect/boom')
 
       expect(res.status).toBe(303)
       expect(res.headers.get('location')).toBe('/oops')

@@ -28,7 +28,7 @@ describe('ctx.req.host and ctx.req.protocol', () => {
   it('answers the Host header and the socket scheme, ignoring the forwarding headers of a proxy nobody trusts', async () => {
     const app = await ready(createWebApplication().mount(whoami()))
 
-    expect(await (await app.fetch('/whoami', { headers: FORWARDED })).json()).toEqual({
+    expect(await (await app.request('/whoami', { headers: FORWARDED })).json()).toEqual({
       host: 'app.example',
       protocol: 'http',
     })
@@ -41,7 +41,7 @@ describe('ctx.req.host and ctx.req.protocol', () => {
         .mount(whoami()),
     )
 
-    expect(await (await app.fetch('/whoami', { headers: FORWARDED })).json()).toEqual({
+    expect(await (await app.request('/whoami', { headers: FORWARDED })).json()).toEqual({
       host: 'proxied.example',
       protocol: 'https',
     })
@@ -56,6 +56,6 @@ describe('ctx.req.host and ctx.req.protocol', () => {
     )
     const headers = { ...FORWARDED, 'x-forwarded-proto': 'HTTPS' }
 
-    expect(await (await app.fetch('/whoami', { headers })).json()).toMatchObject({ protocol: 'https' })
+    expect(await (await app.request('/whoami', { headers })).json()).toMatchObject({ protocol: 'https' })
   })
 })

@@ -104,7 +104,7 @@ describe('brewer (property)', () => {
       const client = brewer(app, {
         fetch: (input, init) => {
           sent.push(String(input))
-          return app.fetch(input as string, init)
+          return app.request(input as string, init)
         },
       })
 

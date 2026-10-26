@@ -593,7 +593,7 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
     return { host: bound.address, port: bound.port, path: '', origin: originOf(scheme, bound.address, bound.port) }
   }
 
-  fetch(input: string | URL | Request, options?: RequestInit): Promise<Response> {
+  request(input: string | URL | Request, options?: RequestInit): Promise<Response> {
     return fetchInProcess(this.#fastify, input, options)
   }
 }
