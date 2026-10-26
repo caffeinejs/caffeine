@@ -209,6 +209,23 @@ export class ErrIllegalScopeState extends CaffeineIoCError {
 }
 
 /**
+ * ErrNotRefreshable is thrown when a binding handed to `refresher.refresh(binding)` is not refresh-scoped: a refresh
+ * never reaches it.
+ */
+export class ErrNotRefreshable extends CaffeineIoCError {
+  constructor(name: string) {
+    super(
+      errMessage(`Cannot refresh "${name}": it is not refresh-scoped`)
+        .solutions(`Give it the refresh scope: ".lifetime(Scopes.REFRESH)" or "@Lifetime(Scopes.REFRESH)"`)
+        .reference('@caffeinejs/di', ErrNotRefreshable)
+        .build(),
+      'ERR_NOT_REFRESHABLE',
+    )
+    this.name = 'ErrNotRefreshable'
+  }
+}
+
+/**
  * ErrOutOfScope is an error that is thrown when a scope is out of scope.
  * Normally this error is thrown when a {@link RequestScope} is used outside of a run() call.
  */

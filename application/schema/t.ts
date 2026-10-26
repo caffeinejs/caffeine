@@ -9,6 +9,7 @@ import {
   type TString,
   type TTransform,
   type TUnion,
+  CloneType,
   Type,
   JavaScriptTypeBuilder,
 } from '@sinclair/typebox'
@@ -26,6 +27,11 @@ type LiteralsOf<T extends readonly TLiteralValue[]> = {
  */
 export function isFileSchema(schema: unknown): boolean {
   return typeof schema === 'object' && schema !== null && (schema as Record<string, unknown>).format === 'binary'
+}
+
+/** Whether a schema node is marked with {@link caffeineT.Secret}. */
+export function isSecretSchema(schema: unknown): boolean {
+  return typeof schema === 'object' && schema !== null && (schema as Record<string, unknown>).writeOnly === true
 }
 
 /**
@@ -161,6 +167,19 @@ const caffeineT = {
    * still validate.
    */
   File: (options: SchemaOptions = {}) => Type.Unsafe<File>({ ...options, type: 'string', format: 'binary' }),
+
+  /**
+   * A value nothing may show: a password, a key, a token. It validates and decodes as `schema` does; what reads the
+   * configuration for display, such as the devtools, shows it masked.
+   *
+   * Marked with JSON Schema's own `writeOnly` keyword, so the generated JSON Schema keeps the mark and a validator
+   * reads the schema unchanged.
+   *
+   * ```ts
+   * $t.Object({ db: $t.Object({ url: $t.String(), password: $t.Secret($t.String()) }) })
+   * ```
+   */
+  Secret: <T extends TSchema>(schema: T): T => CloneType(schema, { writeOnly: true }),
 
   /** Several uploaded files sent under one field name. See {@link caffeineT.File}. */
   Files: (options: SchemaOptions = {}) =>
