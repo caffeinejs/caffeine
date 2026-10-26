@@ -3,11 +3,22 @@ import { request } from 'node:http'
 import { newConfiguration } from '@caffeinejs/application'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { DevTool, type DevToolOperation } from '@caffeinejs/application/devtools'
+import { down, HealthIndicator, type HealthReport } from '@caffeinejs/application/health'
 import { $t } from '@caffeinejs/application/schema'
 import { DevTools } from '@caffeinejs/devtools'
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
-import type { WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import {
+  AuthenticateResult,
+  Authentication,
+  AuthenticationTicket,
+  BaseAuthenticationHandler,
+  Claim,
+  Identity,
+  Principal,
+  type IContext,
+  type WebApplication,
+} from '@caffeinejs/http'
+import { authentication, createWebApplication, csrf, healthProbes, newRouter } from '@caffeinejs/http/fastify'
 import { testClient, type TestClient } from '@caffeinejs/testing/http'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -43,6 +54,20 @@ class QueueTool extends DevTool {
   ]
 }
 
+class Mailer extends HealthIndicator {
+  get name(): string {
+    return 'mailer'
+  }
+
+  override get critical(): boolean {
+    return false
+  }
+
+  async check(): Promise<HealthReport> {
+    return down('smtp unreachable')
+  }
+}
+
 const listener = { host: '127.0.0.1', port: 0 }
 
 describe('devtools UI', () => {
@@ -61,7 +86,8 @@ describe('devtools UI', () => {
       .install(DevTools(d => d.port(0).showConfigValues())) as WebApplication
     target.container.bind(Repository, t => t.toSelf())
     target.container.bind(PetService, t => t.toSelf([Repository]))
-    target.container.bind(Rates, t => t.toSelf().lifetime(Scopes.REFRESH))
+    target.container.bind(Rates, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('rates')))
+    target.container.bind(Mailer, t => t.toSelf().extends(HealthIndicator))
     target.container.bind(QueueTool, t => t.toSelf().extends(DevTool))
     // A key that reads as DOT: the graph must draw it as a label, not as a node attribute.
     target.container.bind(token<string>('x" URL="javascript:alert(1)'), t => t.toValue('crafted'))
@@ -176,6 +202,48 @@ describe('devtools UI', () => {
     expect(target.container.get(Rates).at).not.toBe(before)
   })
 
+  it('refreshes by label from the form, and comes back naming what it refreshed', async () => {
+    const before = target.container.get(Rates).at
+    expect(await html(client.refreshables.get())).toContain('<option value="rates">')
+
+    // Posted as the browser posts the form.
+    const res = await client.$fetch('/refreshables/refreshes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'label=rates',
+    })
+
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/refreshables?refreshed=Rates')
+    expect(target.container.get(Rates).at).not.toBe(before)
+  })
+
+  it('opens one value with every layer that set it, masked as the devtools masked it', async () => {
+    const page = await html(client.config({ path: 'db.pass' }).get())
+
+    expect(page).toMatch(/<td>inline<\/td>\s*<td>inline<\/td>/)
+    expect(page).toContain('******')
+    expect(page).not.toContain('hunter2')
+  })
+
+  it('answers 404 for a tool the devtools do not serve', async () => {
+    const res = await client.contributions({ id: 'nope' }).get()
+
+    expect(res.status).toBe(404)
+    expect(await res.text()).toContain('The devtools serve no tool &#34;nope&#34;')
+  })
+
+  it('draws no graph for a filter that keeps no binding', async () => {
+    expect(await html(client.di.get({ query: { q: 'no-such-binding' } }))).toContain('No bindings to draw.')
+  })
+
+  it('shows a failing indicator that does not fail the probe for what it is', async () => {
+    const page = await html(client.health.get())
+
+    expect(page).toContain('mailer (not critical)')
+    expect(page).toContain('smtp unreachable')
+  })
+
   it('refuses a refresh posted from another site', async () => {
     // Sent as a form would be, which the typed client never does.
     const res = await client.$fetch('/refreshables/refreshes', {
@@ -234,5 +302,102 @@ describe('devtools UI without devtools to read', () => {
     expect(page).toContain('Cannot reach the devtools at http://127.0.0.1:1/devtools')
     expect(page).toContain('CAFFEINE_DEVTOOLS_TARGET__URL')
     vi.unstubAllEnvs()
+  })
+})
+
+/** Authenticates `Bearer <user>:<role>` as that user, holding that role. */
+class BearerScheme extends BaseAuthenticationHandler<object> {
+  constructor() {
+    super({})
+  }
+
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
+    const [user, role = ''] = (ctx.req.header('authorization') ?? '').replace(/^Bearer /, '').split(':')
+
+    return user === undefined || user === ''
+      ? AuthenticateResult.none()
+      : AuthenticateResult.success(
+          new AuthenticationTicket(
+            new Principal(true, [
+              new Identity('Bearer', true, [new Claim('sub', user, ''), new Claim('roles', role, '')]),
+            ]),
+            'Bearer',
+          ),
+        )
+  }
+}
+
+describe('devtools UI over devtools that require credentials', () => {
+  let target: WebApplication
+
+  beforeAll(async () => {
+    target = createWebApplication({ logger: false })
+      .server(() => ({ listener }))
+      .install(Authentication(a => a.addStrategy('Bearer', new BearerScheme())))
+      .install(DevTools(d => d.port(0).authorize({ roles: ['ops'] })))
+      .with(authentication())
+      .with(csrf())
+      // Raw routes, exempt from authentication.
+      .with(healthProbes(h => h.enabled(true)))
+      .mount(
+        newRouter('/pets')
+          .authorize({ roles: ['keeper'] })
+          .get('/', () => [])
+          .post('/', () => ({})),
+      ) as WebApplication
+    await target.run()
+  })
+
+  afterAll(async () => {
+    vi.unstubAllEnvs()
+    await target?.close()
+  })
+
+  function ui(authorization?: string, path = '/devtools') {
+    vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__URL', `${target.listeners.get('devtools')!.address!.origin}${path}`)
+    if (authorization === undefined) {
+      vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__AUTHORIZATION', undefined)
+    } else {
+      vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__AUTHORIZATION', authorization)
+    }
+
+    return testClient(buildApp({ logger: false }))
+  }
+
+  it('names the variable that sends credentials when the devtools refuse the UI', async () => {
+    await using client = ui()
+
+    const res = await client.get()
+    const page = await res.text()
+
+    expect(res.status).toBe(502)
+    expect(page).toContain('The devtools answered 401')
+    expect(page).toContain('CAFFEINE_DEVTOOLS_TARGET__AUTHORIZATION')
+  })
+
+  it('sends the credentials it is given, and shows what protects each route', async () => {
+    await using client = ui('Bearer ann:ops')
+
+    const res = await client.routes.get({ query: { server: '' } })
+    const page = await res.text()
+
+    expect(res.status).toBe(200)
+    expect(page).toContain('role keeper')
+    expect(page).toMatch(/<code>\/livez<\/code> <span class="badge badge-muted">raw<\/span>/)
+    expect(page).toContain('exempt')
+    expect(page).toContain('default: Bearer')
+    expect(page).toMatch(/protected/)
+    expect(page).toContain('Schemes: Bearer')
+  })
+
+  it('names the path to check when the devtools are not where it looks', async () => {
+    await using client = ui('Bearer ann:ops', '/nowhere')
+
+    const res = await client.get()
+    const page = await res.text()
+
+    expect(res.status).toBe(404)
+    expect(page).toContain('The devtools answered 404')
+    expect(page).toContain('names the devtools path')
   })
 })

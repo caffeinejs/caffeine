@@ -20,10 +20,10 @@ export interface DevToolOperation {
   /** The status of a success: `200` by default, `204` when the handler returns `undefined`. */
   readonly status?: number
   /**
-   * Answers with a value sent as JSON. Throws {@link ErrDevToolNotFound} for a resource that does not exist and
-   * {@link ErrDevToolInvalid} for input it refuses.
+   * Answers with a value sent as JSON, or a promise of one. Throws {@link ErrDevToolNotFound} for a resource that
+   * does not exist and {@link ErrDevToolInvalid} for input it refuses.
    */
-  handle(input: DevToolInput): unknown | Promise<unknown>
+  handle(input: DevToolInput): unknown
 }
 
 /**

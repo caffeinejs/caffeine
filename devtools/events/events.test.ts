@@ -1,5 +1,5 @@
 import { brewer } from '@caffeinejs/brewer'
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, mod, token } from '@caffeinejs/di'
 import type { WebApplication } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { testClient } from '@caffeinejs/testing/http'
@@ -80,6 +80,41 @@ describe('eventsRouter', () => {
 
     const failed = (await list(events)).find(event => event.kind === 'binding-initialization-failed')
     expect(failed?.error).toBe('Cannot connect to postgres://app:******@db/pets')
+  })
+
+  it('records the modules registered and the one that failed, with its message', async () => {
+    const { container, events } = observe()
+    await using _ = events
+    container.addModules(
+      mod('orders', () => {}),
+      mod('billing', () => {
+        throw new Error('no ledger')
+      }),
+    )
+
+    await expect(container.init()).rejects.toThrow('no ledger')
+
+    const modules = (await list(events)).filter(event => event.kind.startsWith('module-'))
+    expect(modules.map(({ kind, subject, error }) => ({ kind, subject, error }))).toEqual([
+      { kind: 'module-registered', subject: 'orders', error: undefined },
+      { kind: 'module-registration-failed', subject: 'billing', error: 'no ledger' },
+    ])
+  })
+
+  it('keeps the last 500 events, dropping the oldest first', async () => {
+    const { container, events } = observe()
+    await using _ = events
+    for (let at = 0; at < 300; at++) {
+      container.bind(token<number>(`flag-${at}`), t => t.toValue(at))
+    }
+    // Each binding is registered and initialized: 600 events in all.
+    await container.init()
+
+    const kept = await list(events)
+
+    expect(kept).toHaveLength(500)
+    expect(kept.at(-1)!.seq - kept[0]!.seq).toBe(499)
+    expect(kept[0]!.seq).toBeGreaterThan(1)
   })
 
   it('answers the events after a sequence number, and the last few', async () => {

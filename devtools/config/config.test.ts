@@ -101,6 +101,15 @@ describe('configRouter', () => {
     expect(byPath['mail.hosts']).toMatchObject({ value: ['smtp://mailer:******@mx1', 'smtp://mx2'] })
   })
 
+  it('masks everything under a path a "**" pattern names, at any depth', async () => {
+    await using config = await client({ showValues: true, redact: ['mail.**'] })
+
+    const byPath = Object.fromEntries((await properties(config)).map(entry => [entry.path, entry]))
+
+    expect(byPath['mail.hosts']).toMatchObject({ value: '******', secret: true })
+    expect(byPath['catalog.pageSize']).toMatchObject({ value: 25, secret: false })
+  })
+
   it('masks a secret inside an array of objects, a record of secrets, and every URL password in a value', async () => {
     const leaky = $t.Object({
       users: $t.Array($t.Object({ name: $t.String(), pin: $t.Secret($t.String()), password: $t.String() })),

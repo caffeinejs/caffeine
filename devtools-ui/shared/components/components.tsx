@@ -40,7 +40,7 @@ export function display(value: unknown): string {
     return value.length === 0 ? '—' : value.map(display).join(', ')
   }
 
-  return typeof value === 'object' ? JSON.stringify(value) : String(value)
+  return typeof value === 'object' ? JSON.stringify(value) : String(value as string | number | boolean | bigint)
 }
 
 /** A byte count as text a person reads: `12.3 MiB`. */

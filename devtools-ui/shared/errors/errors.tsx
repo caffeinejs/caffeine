@@ -11,12 +11,7 @@ import { ErrDevToolsAnswered } from './answered.js'
  * changes it. Nothing it renders comes from the response body: a page must not show what a server sent unasked.
  */
 export function TargetErrorPage(props: { target: string; status: number | undefined; reason: string }): JSX.Element {
-  const hint =
-    props.status === 401 || props.status === 403
-      ? `The devtools require credentials: set ${TARGET_AUTHORIZATION_VARIABLE}, such as "Bearer <token>".`
-      : props.status === undefined
-        ? `Start the application with .install(DevTools()), or point ${TARGET_URL_VARIABLE} at where its devtools are served.`
-        : `Check that ${TARGET_URL_VARIABLE} names the devtools path, such as http://127.0.0.1:9090/devtools.`
+  const hint = hintFor(props.status)
 
   return Layout({
     title: 'Cannot read the devtools',
@@ -103,13 +98,24 @@ function isNetworkFailure(err: Error): boolean {
 
 /** The innermost cause's message: what `fetch` puts under its own `fetch failed`. */
 function causeOf(err: Error): string {
-  let at: unknown = err
+  let at = err
 
-  while (at instanceof Error && at.cause instanceof Error) {
+  while (at.cause instanceof Error) {
     at = at.cause
   }
 
   const code = (at as { code?: unknown }).code
 
-  return typeof code === 'string' ? code : at instanceof Error ? at.message : String(at)
+  return typeof code === 'string' ? code : at.message
+}
+
+/** What to do about a status the devtools answered, or about reaching nothing when there is none. */
+function hintFor(status: number | undefined): string {
+  if (status === 401 || status === 403) {
+    return `The devtools require credentials: set ${TARGET_AUTHORIZATION_VARIABLE}, such as "Bearer <token>".`
+  }
+
+  return status === undefined
+    ? `Start the application with .install(DevTools()), or point ${TARGET_URL_VARIABLE} at where its devtools are served.`
+    : `Check that ${TARGET_URL_VARIABLE} names the devtools path, such as http://127.0.0.1:9090/devtools.`
 }

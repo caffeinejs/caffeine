@@ -15,15 +15,18 @@ import { fallbackFor, gateCovering, type RegisteredRoute } from '../security/sec
  * Read once every route has registered, so what a later `onRoute` hook stamped (a gate's ownership, an exemption) is
  * in. A GET route's automatic HEAD twin, registered with the same handler under the same path, is folded into it.
  */
-export function routeRecordsOf(container: Container, registered: readonly RegisteredRoute[]): RouteRecord[] {
-  const fallback = fallbackFor(container)
-  const gates = container.getOptional(AuthenticationGates)?.installed ?? []
-  const defaultScheme = container.getOptional(AuthenticationSchemeProvider)?.defaultAuthenticateScheme
+export function routeRecordsOf(container: Container, routes: readonly RegisteredRoute[]): RouteRecord[] {
+  const scope: SecurityScope = {
+    fallback: fallbackFor(container),
+    gates: container.getOptional(AuthenticationGates)?.installed ?? [],
+    defaultScheme: container.getOptional(AuthenticationSchemeProvider)?.defaultAuthenticateScheme,
+  }
   const records: RouteRecord[] = []
   // The record a handler registered under a path, so its HEAD twin joins it.
   const byHandler = new Map<unknown, Map<string, { methods: string[] }>>()
 
-  for (const { route, url, method, context } of registered) {
+  for (const registered of routes) {
+    const { route, url, method } = registered
     const methods = [method].flat()
     const twin = methods.length === 1 && methods[0] === 'HEAD' ? byHandler.get(route.handler)?.get(url) : undefined
 
@@ -32,38 +35,7 @@ export function routeRecordsOf(container: Container, registered: readonly Regist
       continue
     }
 
-    const meta = route.config?.$caffeine
-    const compiled = meta?.compiled
-    const authz = compiled?.route.authorization
-    const gated = meta?.auth ?? fallback?.forPath(url)
-    // A compiled route that declared nothing had the fallback policy compiled in; a raw one is handed it per path.
-    const usesFallback =
-      authz === undefined ? meta?.auth === undefined && gated !== undefined : authz.options === undefined
-    const covering = gateCovering(gates, context, meta?.gateOwner)
-    const skipped = meta?.skipAuthentication === true
-    const declared = compiled?.route.authorization.schemes ?? meta?.auth?.schemes ?? []
-    // A raw route that named no scheme is authenticated by the default one, as a compiled route's already says.
-    const schemes = skipped ? [] : declared.length > 0 || defaultScheme === undefined ? [...declared] : [defaultScheme]
-
-    const security: RouteSecurityRecord = {
-      authentication: {
-        skipped,
-        schemes,
-        allowAnonymous: gated?.allowAnonymous === true,
-        gate: covering?.label,
-      },
-      authorization: {
-        protected: !skipped && gated?.allowAnonymous !== true && gated?.authorizer != null,
-        fallback: usesFallback && gated?.authorizer != null,
-        policies: [...(authz?.options?.policies ?? [])],
-        roleGroups: (authz?.options?.roleGroups ?? []).map(roles => [...roles]),
-        defaultPolicy: authz?.options?.defaultPolicy === true,
-      },
-      guards: (compiled?.route.guards ?? []).map(guard => guard.name),
-      csrf: csrfOf(methods, url, route.config, context),
-    }
-
-    const schema = route.schema ?? {}
+    const compiled = route.config?.$caffeine?.compiled
     const record = {
       methods: [...methods],
       url,
@@ -75,14 +47,8 @@ export function routeRecordsOf(container: Container, registered: readonly Regist
       status: compiled?.hasStatus === true ? compiled.status : undefined,
       timeout: compiled?.route.timeout,
       bodyLimit: route.bodyLimit,
-      schema: {
-        params: schema.params !== undefined,
-        querystring: schema.querystring !== undefined,
-        headers: schema.headers !== undefined,
-        body: schema.body !== undefined,
-        response: schema.response !== undefined,
-      },
-      security,
+      schema: schemaOf(route.schema ?? {}),
+      security: securityOf(scope, registered),
     } satisfies RouteRecord
 
     records.push(record)
@@ -93,6 +59,61 @@ export function routeRecordsOf(container: Container, registered: readonly Regist
   }
 
   return records
+}
+
+/** What the server knows of every route's protection: the fallback policy, its gates and the default scheme. */
+interface SecurityScope {
+  readonly fallback: ReturnType<typeof fallbackFor>
+  readonly gates: Parameters<typeof gateCovering>[0]
+  readonly defaultScheme: string | undefined
+}
+
+function securityOf(scope: SecurityScope, { route, url, method, context }: RegisteredRoute): RouteSecurityRecord {
+  const meta = route.config?.$caffeine
+  const compiled = meta?.compiled
+  const authz = compiled?.route.authorization
+  const gated = meta?.auth ?? scope.fallback?.forPath(url)
+  // A compiled route that declared nothing had the fallback policy compiled in; a raw one is handed it per path.
+  const usesFallback =
+    authz === undefined ? meta?.auth === undefined && gated !== undefined : authz.options === undefined
+  const skipped = meta?.skipAuthentication === true
+
+  return {
+    authentication: {
+      skipped,
+      schemes: skipped ? [] : schemesOf(compiled?.route.authorization.schemes ?? meta?.auth?.schemes ?? [], scope),
+      allowAnonymous: gated?.allowAnonymous === true,
+      gate: gateCovering(scope.gates, context, meta?.gateOwner)?.label,
+    },
+    authorization: {
+      protected: !skipped && gated?.allowAnonymous !== true && gated?.authorizer != null,
+      fallback: usesFallback && gated?.authorizer != null,
+      policies: [...(authz?.options?.policies ?? [])],
+      roleGroups: (authz?.options?.roleGroups ?? []).map(roles => [...roles]),
+      defaultPolicy: authz?.options?.defaultPolicy === true,
+    },
+    guards: (compiled?.route.guards ?? []).map(guard => guard.name),
+    csrf: csrfOf([method].flat(), url, route.config, context),
+  }
+}
+
+/** A raw route that named no scheme is authenticated by the default one, as a compiled route's already says. */
+function schemesOf(declared: readonly string[], scope: SecurityScope): string[] {
+  if (declared.length > 0 || scope.defaultScheme === undefined) {
+    return [...declared]
+  }
+
+  return [scope.defaultScheme]
+}
+
+function schemaOf(schema: Partial<Record<keyof RouteRecord['schema'], unknown>>): RouteRecord['schema'] {
+  return {
+    params: schema.params !== undefined,
+    querystring: schema.querystring !== undefined,
+    headers: schema.headers !== undefined,
+    body: schema.body !== undefined,
+    response: schema.response !== undefined,
+  }
 }
 
 function csrfOf(

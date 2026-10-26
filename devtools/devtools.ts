@@ -91,7 +91,7 @@ export class DevToolsPluginBuilder {
   #path: string | undefined
   #authorize: RouteAuthzOptions | undefined
   #showConfigValues = false
-  #redact: string[] = []
+  readonly #redact: string[] = []
   #allowProduction = false
 
   /** Where the devtools are served, `/devtools` by default. Every tool is under it: `/devtools/routes`. */

@@ -1,6 +1,10 @@
 import { request } from 'node:http'
 
+import { newConfiguration } from '@caffeinejs/application'
+import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { DevTool, ErrDevToolInvalid, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
+import { newConsoleLogger } from '@caffeinejs/application/logger/console'
+import { $t } from '@caffeinejs/application/schema'
 import { brewer, type BrewOptions } from '@caffeinejs/brewer'
 import {
   AuthenticateResult,
@@ -79,8 +83,24 @@ class QueueTool extends DevTool {
       },
     },
     { method: 'DELETE', path: '/jobs/:id', handle: ({ params }) => void this.jobs.delete(params.id) },
+    {
+      method: 'GET',
+      path: '/search',
+      handle: ({ query, signal }) => ({ state: query.state ?? null, aborted: signal.aborted }),
+    },
+    {
+      method: 'GET',
+      path: '/broken',
+      handle: () => {
+        throw new Error('the queue is gone')
+      },
+    },
   ]
 }
+
+const conf = newConfiguration($t.Object({ app: $t.Object({ region: $t.String(), pool: $t.Integer() }) }))
+  .source(new InlineConfigSource({ app: { region: 'eu-west-1', pool: 4 } }))
+  .build().config
 
 describe('devtools', () => {
   let app: WebApplication | undefined
@@ -103,9 +123,15 @@ describe('devtools', () => {
    */
   async function serve(
     configure: (d: DevToolsBuilder) => unknown = () => {},
-    options: { path?: string; listener?: string; brew?: BrewOptions; prepare?: (a: WebApplication) => void } = {},
+    options: {
+      path?: string
+      listener?: string
+      brew?: BrewOptions
+      prepare?: (a: WebApplication) => void
+      logger?: ReturnType<typeof newConsoleLogger>
+    } = {},
   ) {
-    app = createWebApplication({ logger: false })
+    app = createWebApplication({ config: conf, logger: options.logger ?? false })
       .server(() => ({ listener: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
       .install(
@@ -176,6 +202,33 @@ describe('devtools', () => {
       expect(await statusFor(Number(port), `evil.example:${port}`)).toBe(421)
       expect(await statusFor(Number(port), `127.0.0.1:${port}`)).toBe(200)
       expect(await statusFor(Number(port), `localhost:${port}`)).toBe(200)
+      // A name no URL can hold is no loopback name either.
+      expect(await statusFor(Number(port), '[')).toBe(421)
+    })
+
+    it('warns at start-up when it listens beyond this machine with nothing required of a caller', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+      try {
+        await serve(d => d.host('0.0.0.0'), { logger: newConsoleLogger({ level: 'warn' }) })
+
+        expect(warn.mock.calls.map(([line]) => String(line))).toContainEqual(
+          expect.stringContaining('Devtools answer anyone who reaches this address'),
+        )
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('shows configuration values once told to, masking what redact(...) names', async () => {
+      const devtools = await serve(d => d.showConfigValues().redact('app.region'))
+
+      const listed = await (await devtools.config.properties.get()).json()
+
+      expect(listed.filter(property => property.path.startsWith('app.'))).toEqual([
+        { path: 'app.region', origin: 'inline', secret: true, value: '******' },
+        { path: 'app.pool', origin: 'inline', secret: false, value: 4 },
+      ])
     })
 
     it('serves under the path it is given', async () => {
@@ -263,6 +316,19 @@ describe('devtools', () => {
       expect((await res.json()).runtime.pid).toBe(process.pid)
     })
 
+    it('takes what to show and mask, as DevTools() does', async () => {
+      app = createWebApplication({ config: conf, logger: false })
+        .server(() => ({ listener: loopback }))
+        .with(devTools(d => d.showConfigValues().redact('app.pool'))) as WebApplication
+      await app.run()
+      const devtools = brewer<DevToolsRoutes>(`${app.address!.origin}/devtools`)
+
+      const listed = await (await devtools.config.properties.get()).json()
+
+      expect(listed.find(property => property.path === 'app.region')?.value).toBe('eu-west-1')
+      expect(listed.find(property => property.path === 'app.pool')?.value).toBe('******')
+    })
+
     it('refuses to start where NODE_ENV is production, pointing at a server of their own', async () => {
       vi.stubEnv('NODE_ENV', 'production')
       app = createWebApplication().with(devTools()) as WebApplication
@@ -295,6 +361,8 @@ describe('devtools', () => {
           { method: 'GET', href: '/devtools/queue/jobs/:id' },
           { method: 'POST', href: '/devtools/queue/jobs' },
           { method: 'DELETE', href: '/devtools/queue/jobs/:id' },
+          { method: 'GET', href: '/devtools/queue/search' },
+          { method: 'GET', href: '/devtools/queue/broken' },
         ],
       })
       expect(await (await app!.request('/devtools/queue/jobs/7')).json()).toEqual({ id: '7', state: 'pending' })
@@ -313,6 +381,23 @@ describe('devtools', () => {
       expect(missing.status).toBe(404)
       expect(((await missing.json()) as { message: string }).message).toBe('No job "8"')
       expect(refused.status).toBe(400)
+    })
+
+    it('hands an operation its query, the first value of a repeated parameter, and the request signal', async () => {
+      await boot()
+
+      const res = await app!.request('/devtools/queue/search?state=pending&state=done')
+
+      expect(await res.json()).toEqual({ state: 'pending', aborted: false })
+    })
+
+    it('answers 500 for what an operation throws besides a refusal, keeping the message out', async () => {
+      await boot()
+
+      const res = await app!.request('/devtools/queue/broken')
+
+      expect(res.status).toBe(500)
+      expect(await res.text()).not.toContain('the queue is gone')
     })
 
     it("answers with the operation's status, and 204 when it returns nothing", async () => {

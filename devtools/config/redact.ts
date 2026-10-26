@@ -125,51 +125,57 @@ export function secretPaths(schema: unknown, at = ''): string[] {
     return []
   }
 
-  const node = schema as {
-    writeOnly?: unknown
-    properties?: unknown
-    patternProperties?: unknown
-    additionalProperties?: unknown
-    items?: unknown
-    anyOf?: unknown
-    allOf?: unknown
-  }
+  const node = schema as SchemaNode
 
   if (node.writeOnly === true && at !== '') {
     return [at]
   }
 
+  return [...childPaths(node, at), ...memberPaths(node, at)]
+}
+
+type SchemaNode = {
+  writeOnly?: unknown
+  properties?: unknown
+  patternProperties?: unknown
+  additionalProperties?: unknown
+  items?: unknown
+  anyOf?: unknown
+  allOf?: unknown
+}
+
+/** The secret paths under a node's properties, items and entries. */
+function childPaths(node: SchemaNode, at: string): string[] {
+  const under = (segment: string): string => (at === '' ? segment : `${at}.${segment}`)
   const found: string[] = []
 
-  if (typeof node.properties === 'object' && node.properties !== null) {
-    for (const [key, child] of Object.entries(node.properties)) {
-      found.push(...secretPaths(child, at === '' ? key : `${at}.${key}`))
-    }
+  for (const [key, child] of Object.entries(objectOf(node.properties))) {
+    found.push(...secretPaths(child, under(key)))
   }
 
-  // An array item and a record entry sit one segment down, under any name; a tuple's member under its index.
-  const any = at === '' ? '*' : `${at}.*`
+  // A tuple's member sits under its index; an array item and a record entry one segment down, under any name.
   if (Array.isArray(node.items)) {
-    node.items.forEach((member, index) => found.push(...secretPaths(member, at === '' ? `${index}` : `${at}.${index}`)))
+    node.items.forEach((member, index) => found.push(...secretPaths(member, under(String(index)))))
   } else {
-    found.push(...secretPaths(node.items, any))
-  }
-  found.push(...secretPaths(node.additionalProperties, any))
-  if (typeof node.patternProperties === 'object' && node.patternProperties !== null) {
-    for (const child of Object.values(node.patternProperties)) {
-      found.push(...secretPaths(child, any))
-    }
+    found.push(...secretPaths(node.items, under('*')))
   }
 
-  for (const members of [node.anyOf, node.allOf]) {
-    if (Array.isArray(members)) {
-      for (const member of members) {
-        found.push(...secretPaths(member, at))
-      }
-    }
+  for (const child of [node.additionalProperties, ...Object.values(objectOf(node.patternProperties))]) {
+    found.push(...secretPaths(child, under('*')))
   }
 
   return found
+}
+
+/** The secret paths a node's `anyOf` and `allOf` members mark at its own path. */
+function memberPaths(node: SchemaNode, at: string): string[] {
+  return [node.anyOf, node.allOf].flatMap(members =>
+    Array.isArray(members) ? members.flatMap(member => secretPaths(member, at)) : [],
+  )
+}
+
+function objectOf(value: unknown): object {
+  return typeof value === 'object' && value !== null ? value : {}
 }
 
 function assertPattern(pattern: string): string {
@@ -191,13 +197,22 @@ function assertPattern(pattern: string): string {
 function compile(pattern: string): RegExp {
   const body = pattern
     .split('.')
-    .map(segment => (segment === '**' ? '.+' : segment === '*' ? '[^.]+' : escape(segment)))
-    .join('\\.')
+    .map(segmentPattern)
+    .join(String.raw`\.`)
 
   // A path names its subtree too: `db` masks `db.url`.
-  return new RegExp(`^${body}(\\..+)?$`)
+  return new RegExp(String.raw`^${body}(\..+)?$`)
+}
+
+/** A segment of a redact pattern as a regular expression: `**` any segments, `*` one, anything else as written. */
+function segmentPattern(segment: string): string {
+  if (segment === '**') {
+    return '.+'
+  }
+
+  return segment === '*' ? '[^.]+' : escape(segment)
 }
 
 function escape(text: string): string {
-  return text.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
+  return text.replace(/[\\^$.*+?()[\]{}|]/g, String.raw`\$&`)
 }

@@ -1,3 +1,5 @@
+import { inspect } from 'node:util'
+
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Container, InjectionToken } from '@caffeinejs/di'
 import { Router } from '@caffeinejs/http'
@@ -102,9 +104,7 @@ export class EventsTool {
       kind,
       subject,
       at: new Date().toISOString(),
-      ...(error === undefined
-        ? {}
-        : { error: maskCredentials(error instanceof Error ? error.message : String(error)) }),
+      ...(error === undefined ? {} : { error: maskCredentials(messageOf(error)) }),
     })
 
     if (this.#events.length > CAPACITY) {
@@ -122,6 +122,11 @@ export class EventsTool {
     // `slice(-0)` is `slice(0)`: every event.
     return last === 0 ? [] : found.slice(-last)
   }
+}
+
+/** A failure's message: an `Error`'s own, or what was thrown, written out. */
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : inspect(error)
 }
 
 function keyText(key: InjectionToken): string {

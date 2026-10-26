@@ -5,6 +5,9 @@ import { kConfig } from '../app.config.js'
 import { Badge, KeyValue, display } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
 
+/** How an indicator's status reads on its badge. */
+const STATUS_TONE = { up: 'good', degraded: 'warn', down: 'bad' } as const
+
 /** Whether the application is live and ready, and every health indicator with its details. */
 export const healthRouter = new Router('/health')
   .inject({ api: DevToolsAPI, config: kConfig })
@@ -46,10 +49,7 @@ export const healthRouter = new Router('/health')
                     <tr>
                       <td safe>{`${outcome.name}${outcome.critical ? '' : ' (not critical)'}`}</td>
                       <td>
-                        <Badge
-                          tone={outcome.status === 'up' ? 'good' : outcome.status === 'degraded' ? 'warn' : 'bad'}
-                          text={outcome.status}
-                        />
+                        <Badge tone={STATUS_TONE[outcome.status]} text={outcome.status} />
                       </td>
                       <td safe>{display(outcome.detail)}</td>
                       <td>

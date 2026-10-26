@@ -15,12 +15,7 @@ export class RefreshScope extends SingletonScope {
   }
 
   async refresh(target?: symbol | Binding): Promise<void> {
-    const targets =
-      target === undefined
-        ? this.managedBindings
-        : typeof target === 'symbol'
-          ? this.managedBindings.filter(b => b.labels.includes(target))
-          : this.managedBindings.filter(b => b.id === target.id)
+    const targets = this.#targets(target)
 
     await Promise.all(
       targets.map(b => {
@@ -44,5 +39,16 @@ export class RefreshScope extends SingletonScope {
 
   bindings(): Binding[] {
     return this.managedBindings
+  }
+
+  /** What a refresh reaches: every binding, those carrying a label, or one. */
+  #targets(target: symbol | Binding | undefined): Binding[] {
+    if (target === undefined) {
+      return this.managedBindings
+    }
+
+    return typeof target === 'symbol'
+      ? this.managedBindings.filter(b => b.labels.includes(target))
+      : this.managedBindings.filter(b => b.id === target.id)
   }
 }

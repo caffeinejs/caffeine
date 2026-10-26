@@ -10,6 +10,9 @@ const EVERY_SERVER = '*'
 
 type RouteRecord = ServerRoutesRecord['routes'][number]
 
+/** How cross-origin protection on a route reads on its badge: a route nothing covers is what a reviewer looks for. */
+const CSRF_TONE = { protected: 'good', safe: 'good', uncovered: 'warn', exempt: 'muted', excluded: 'muted' } as const
+
 /**
  * Every route of every server and what each requires, with what protects the application as a whole above it. A
  * route nothing authenticates, authorizes or guards is marked, since that is what a reviewer looks for.
@@ -59,7 +62,7 @@ export const routesRouter = new Router('/routes')
             <>
               <h2 safe>{server.server === '' ? "The application's own server" : `Listener ${server.server}`}</h2>
               <p class="muted" safe>
-                {`Gates: ${display(security.gates.find(gate => gate.server === server.server)?.gates)}${server.basePath === '' ? '' : ` · base path ${server.basePath}`}`}
+                {`Gates: ${display(security.gates.find(gate => gate.server === server.server)?.gates)}${basePathOf(server)}`}
               </p>
               <table>
                 <thead>
@@ -85,16 +88,7 @@ export const routesRouter = new Router('/routes')
                       <td>{authorization(route)}</td>
                       <td safe>{display(route.security.guards)}</td>
                       <td>
-                        <Badge
-                          tone={
-                            route.security.csrf === 'protected' || route.security.csrf === 'safe'
-                              ? 'good'
-                              : route.security.csrf === 'uncovered'
-                                ? 'warn'
-                                : 'muted'
-                          }
-                          text={route.security.csrf}
-                        />
+                        <Badge tone={CSRF_TONE[route.security.csrf]} text={route.security.csrf} />
                       </td>
                     </tr>
                   ))}
@@ -106,6 +100,10 @@ export const routesRouter = new Router('/routes')
       ),
     })
   })
+
+function basePathOf(server: ServerRoutesRecord): string {
+  return server.basePath === '' ? '' : ` · base path ${server.basePath}`
+}
 
 function authentication(route: RouteRecord): JSX.Element {
   const auth = route.security.authentication
