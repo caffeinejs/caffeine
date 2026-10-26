@@ -4,9 +4,10 @@ import { errMessage } from '@caffeinejs/std/err'
 import { exponential } from '../backoff.js'
 import { settled } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { ErrCallRefused, ErrInvalidOption, ErrResilience } from '../errors.js'
+import { described, ErrCallRefused, ErrInvalidOption, ErrResilience } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
-import { clampDelay, sleep } from '../timers.js'
+import { clampDelay } from '../timers.js'
+import { sleep } from './_sleep.js'
 
 /**
  * Every attempt returned a result the retry was told to retry, and the retry was told to fail rather than hand the
@@ -49,9 +50,8 @@ export interface RetryOptions {
    * Whether an error is worth another attempt. Defaults to every error.
    *
    * A refusal ({@link ErrCallRefused}: an open circuit breaker, a full bulkhead, a spent rate limit) and a failure
-   * after the caller aborted are never retried, whatever this returns: the first never ran the operation, and the
-   * second has nobody waiting for it. It must return a boolean; anything else rejects the call with
-   * {@link ErrInvalidOption}.
+   * after the caller aborted are never retried, whatever this returns. It must return a boolean; anything else
+   * rejects the call with {@link ErrInvalidOption}.
    */
   retryOn?: (error: unknown, attempt: number) => boolean
   /**
@@ -97,19 +97,6 @@ export interface RetryEvents {
    * `retryOnResult` or `backoff` threw, in which case `error` is what it threw.
    */
   ignored: { readonly name: string; readonly attempts: number; readonly error: unknown }
-}
-
-// What a predicate returned instead of a boolean, for the error that says so.
-function described(value: unknown): string {
-  if (value === undefined || value === null) {
-    return String(value)
-  }
-  if (typeof (value as { then?: unknown }).then === 'function') {
-    return 'a promise'
-  }
-
-  const type = typeof value
-  return type === 'object' ? 'an object' : `a ${type}`
 }
 
 // One per call that needs a second attempt. It carries the resolvers of the promise the caller holds, so a later

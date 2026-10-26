@@ -1,6 +1,11 @@
 import { compose, runWith } from '@caffeinejs/resilience'
+import { bulkhead } from '@caffeinejs/resilience/bulkhead'
 import { circuitBreaker } from '@caffeinejs/resilience/circuitbreaker'
+import { fallback } from '@caffeinejs/resilience/fallback'
+import { rateLimiter } from '@caffeinejs/resilience/ratelimiter'
 import { retry } from '@caffeinejs/resilience/retry'
+import { timeLimiter } from '@caffeinejs/resilience/timelimiter'
+import { Hour, Second } from '@caffeinejs/std/duration'
 import {
   circuitBreaker as cockatielBreaker,
   ConsecutiveBreaker,
@@ -149,6 +154,39 @@ group('breaker, with a success listener', () => {
     })
     bench('listener: compose(breaker), one success listener', async () => {
       await listened(op)
+    })
+  })
+})
+
+// One strategy at a time, then the recommended chain, so a change to one strategy's `run` shows in its own line.
+group('time limiter, bulkhead, rate limiter and fallback, success path', () => {
+  summary(() => {
+    const limited = compose(timeLimiter({ name: 'bench', timeoutDuration: 1 * Second }))
+    const pooled = compose(bulkhead({ name: 'bench', maxConcurrentCalls: 1_000 }))
+    const quota = compose(rateLimiter({ name: 'bench', limitForPeriod: 1e12, limitRefreshPeriod: 1 * Hour }))
+    const stale = fallback({ name: 'bench' })
+    const chain = compose(
+      caffeineRetry(),
+      caffeineBreaker(),
+      rateLimiter({ name: 'bench', limitForPeriod: 1e12, limitRefreshPeriod: 1 * Hour }),
+      timeLimiter({ name: 'bench', timeoutDuration: 1 * Second }),
+      bulkhead({ name: 'bench', maxConcurrentCalls: 1_000 }),
+    )
+
+    bench('new: compose(timeLimiter)', async () => {
+      await limited(op)
+    })
+    bench('new: compose(bulkhead)', async () => {
+      await pooled(op)
+    })
+    bench('new: compose(rateLimiter)', async () => {
+      await quota(op)
+    })
+    bench('new: fallback.recover(op())', async () => {
+      await stale.recover(op(), ignore)
+    })
+    bench('new: compose(retry, breaker, rateLimiter, timeLimiter, bulkhead)', async () => {
+      await chain(op)
     })
   })
 })

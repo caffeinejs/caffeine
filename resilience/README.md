@@ -1,11 +1,22 @@
 # @caffeinejs/resilience
 
-Circuit breaker and retry for any JavaScript runtime, composed as plain functions. Its one dependency is
-`@caffeinejs/std`, which has none; the OpenTelemetry binding is an optional subpath.
+Circuit breaker, retry, time limiter, bulkhead, rate limiter and fallback for any JavaScript runtime, composed as
+plain functions. Its one dependency is `@caffeinejs/std`, which has none; every integration is an optional subpath.
 
 ```sh
 npm install @caffeinejs/resilience
 ```
+
+| Import from                             | What                                                                   |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| `@caffeinejs/resilience`                | `compose`, `runWith`, `exponential`, the strategy types, shared errors |
+| `@caffeinejs/resilience/circuitbreaker` | `circuitBreaker`, `ErrCallNotPermitted`                                |
+| `@caffeinejs/resilience/retry`          | `retry`, `ErrMaxRetriesExceeded`                                       |
+| `@caffeinejs/resilience/timelimiter`    | `timeLimiter`, `ErrTimeLimitExceeded`                                  |
+| `@caffeinejs/resilience/bulkhead`       | `bulkhead`, `ErrBulkheadFull`                                          |
+| `@caffeinejs/resilience/ratelimiter`    | `rateLimiter`, `ErrRateLimitExceeded`                                  |
+| `@caffeinejs/resilience/fallback`       | `fallback`                                                             |
+| `@caffeinejs/resilience/otel`           | OpenTelemetry instruments, with `@opentelemetry/api` installed         |
 
 ## Quick start
 
@@ -54,7 +65,22 @@ await runWith(op, retries, breaker)
 await runWith(op, breaker, retries)
 ```
 
-The first is the usual choice.
+The first is the usual choice. With every strategy, the recommended order is:
+
+```ts
+import { compose } from '@caffeinejs/resilience'
+
+const inventory = compose(retries, breaker, quota, deadline, pool)
+// retry( circuitBreaker( rateLimiter( timeLimiter( bulkhead( operation )))))
+```
+
+- The retry repeats the whole inner chain; an open breaker, a full bulkhead or a spent quota fails the call at once.
+- The breaker records each attempt, a timeout included.
+- The rate limiter counts attempts against the quota.
+- The time limiter bounds each attempt, and the time it spends waiting for a bulkhead slot.
+- The bulkhead holds a slot while the operation runs.
+
+A fallback answers for the whole call, outside the chain: see [Fallback](#fallback).
 
 ## Cancellation
 
@@ -79,28 +105,51 @@ listeners. Prefer a signal per request.
 
 ## Fallback
 
-The promise settles after the whole chain, with the final error: the last attempt's error after retries, or
-`ErrCallNotPermitted` when a breaker refused the call. A fallback is a `.catch()`:
+The promise settles after the whole chain, with the final error: the last attempt's error after retries, or a
+refusal such as `ErrCallNotPermitted`. A fallback answers it with something else, such as a cached value.
 
 ```ts
-import { ErrCallNotPermitted } from '@caffeinejs/resilience/circuitbreaker'
+import { compose, ErrCallRefused } from '@caffeinejs/resilience'
+import { fallback } from '@caffeinejs/resilience/fallback'
 
-// any failure
-const stock = await runWith(() => fetchStock(id), retries, breaker).catch(() => cachedStock(id))
-
-// only when the breaker refuses the call
-const stock = await runWith(() => fetchStock(id), retries, breaker).catch(error => {
-  if (error instanceof ErrCallNotPermitted) {
-    return cachedStock(id)
-  }
-  throw error
+// module scope
+const inventory = compose(retries, breaker, deadline)
+const staleStock = fallback({
+  name: 'inventory',
+  fallbackOn: error => error instanceof ErrCallRefused, // only calls that certainly never ran
 })
+
+// per call: Promise<Stock | CachedStock>
+export const getStock = (id: string, signal?: AbortSignal) =>
+  staleStock.recover(
+    inventory(ctx => fetchStock(id, ctx.signal), signal),
+    error => cachedStock(id),
+    signal,
+  )
 ```
 
-`ErrCallNotPermitted.retryAfter` tells an HTTP layer what to put in `Retry-After`, which counts seconds:
+| Option       | Default     | Meaning                                   |
+| ------------ | ----------- | ----------------------------------------- |
+| `name`       | required    | Names the fallback in events and metrics  |
+| `fallbackOn` | every error | Whether an error is handed to the handler |
+
+`recover(call, handler, signal?)` returns the call's value, or the handler's for an error `fallbackOn` accepts. The
+handler is given per call because a useful fallback needs the call's own data, such as the id to look up.
+
+- An error `fallbackOn` declines passes through unchanged, so a bug is not hidden as an outage.
+- Once `signal` has aborted, the handler never runs: nobody is waiting for the value.
+- A handler that throws rejects the call with what it threw.
+- A `fallbackOn` that returns anything but a boolean rejects the call with `ErrInvalidOption`.
+
+A timeout leaves the outcome unknown: the call may have gone through. Limiting a fallback to `ErrCallRefused`
+answers only the calls that never ran, which matters for writes such as payments.
+
+`.catch()` still works for a one-off; `fallback()` adds a shared filter, abort awareness, events and metrics.
+
+`ErrCallRefused.retryAfter` tells an HTTP layer what to put in `Retry-After`, which counts seconds:
 
 ```ts
-if (error instanceof ErrCallNotPermitted && error.retryAfter !== undefined) {
+if (error instanceof ErrCallRefused && error.retryAfter !== undefined) {
   reply.header('retry-after', Math.ceil(error.retryAfter / Second)).code(503)
 }
 ```
@@ -139,22 +188,22 @@ const breaker = circuitBreaker({
 })
 ```
 
-| Option                                  | Default                        | Meaning                                                                                                       |
-| --------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `name`                                  | required                       | Names the breaker in errors, events and metrics                                                               |
-| `failureRateThreshold`                  | `50`                           | Failure rate, in percent, at or above which the breaker opens                                                 |
-| `slowCallRateThreshold`                 | `100`                          | Slow-call rate, in percent, at or above which the breaker opens                                               |
-| `slowCallDurationThreshold`             | `1 * Minute`                   | A call longer than this is slow                                                                               |
-| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', duration }` for the calls of the last `duration`, in whole seconds |
-| `minimumNumberOfCalls`                  | `100`                          | Calls needed before a rate is computed; capped at a count window's size                                       |
-| `waitDurationInOpenState`               | `1 * Minute`                   | Time spent open; a function of how many times in a row it opened, such as `exponential()`                     |
-| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open                                                                       |
-| `maxWaitDurationInHalfOpenState`        | `0` (forever)                  | Re-opens a half-open breaker whose trial calls never settle                                                   |
-| `automaticTransitionFromOpenToHalfOpen` | `false`                        | Moves to half open when the wait elapses, not on the next call                                                |
-| `recordError`                           | every error                    | Whether an error is a failure; `false` counts it as a success                                                 |
-| `ignoreError`                           | none                           | Errors that neither count nor affect the state; checked first                                                 |
-| `recordResult`                          | none                           | Whether a returned value is a failure                                                                         |
-| `captureStackTrace`                     | `false`                        | Whether a refusal's `ErrCallNotPermitted` captures a stack trace                                              |
+| Option                                  | Default                        | Meaning                                                                                                          |
+| --------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `name`                                  | required                       | Names the breaker in errors, events and metrics                                                                  |
+| `failureRateThreshold`                  | `50`                           | Failure rate, in percent, at or above which the breaker opens                                                    |
+| `slowCallRateThreshold`                 | `100`                          | Slow-call rate, in percent, at or above which the breaker opens                                                  |
+| `slowCallDurationThreshold`             | `1 * Minute`                   | A call longer than this is slow                                                                                  |
+| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', duration }` for the calls of the last `duration`, in whole seconds    |
+| `minimumNumberOfCalls`                  | `100`                          | Calls needed before a rate is computed; capped at a count window's size                                          |
+| `waitDurationInOpenState`               | `1 * Minute`                   | Time spent open; a function of how many times in a row it opened, such as `exponential()`                        |
+| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open                                                                          |
+| `maxWaitDurationInHalfOpenState`        | `0` (forever)                  | Re-opens a half-open breaker whose trial calls never settle                                                      |
+| `automaticTransitionFromOpenToHalfOpen` | `false`                        | Moves to half open when the wait elapses, not on the next call                                                   |
+| `recordError`                           | every error                    | Whether an error is a failure; `false` counts it as a success                                                    |
+| `ignoreError`                           | none                           | Errors that neither count nor affect the state; checked first. Refusals from inside and aborted calls always are |
+| `recordResult`                          | none                           | Whether a returned value is a failure                                                                            |
+| `captureStackTrace`                     | `false`                        | Whether a refusal's `ErrCallNotPermitted` captures a stack trace                                                 |
 
 How it moves:
 
@@ -219,6 +268,109 @@ is not a finite number rejects the call with `ErrInvalidOption`.
 `retries.metrics()` counts each call once: `successfulCallsWithoutRetry`, `successfulCallsWithRetry`,
 `failedCallsWithoutRetry`, `failedCallsWithRetry`.
 
+## Time limiter
+
+```ts
+import { timeLimiter } from '@caffeinejs/resilience/timelimiter'
+
+const deadline = timeLimiter({ name: 'inventory', timeoutDuration: 2 * Second })
+
+await runWith(({ signal }) => fetchStock(id, signal), retries, breaker, deadline)
+```
+
+| Option            | Default  | Meaning                                                             |
+| ----------------- | -------- | ------------------------------------------------------------------- |
+| `name`            | required | Names the time limiter in errors, events and metrics                |
+| `timeoutDuration` | required | How long the rest of the chain may run; finite and greater than `0` |
+
+The rest of the chain gets a signal of its own, linked to the caller's. When the limit passes, that signal aborts
+with an `ErrTimeLimitExceeded` and the call rejects with it at once, even when the operation ignores its signal and
+never settles. When the caller aborts first, the call rejects with the caller's reason and no timeout is counted.
+
+A timeout cannot undo work: an operation that ignores its signal keeps running after the call rejected, and a
+retried write can overlap the one still in flight. Pass the signal to every I/O call, and make writes idempotent.
+
+Where it sits decides what it bounds:
+
+```ts
+// per attempt: each of the 3 attempts gets 2 s; the breaker records each timeout
+await runWith(op, retries, breaker, deadline)
+
+// total: 5 s for every attempt and every wait between them
+const total = timeLimiter({ name: 'inventory-total', timeoutDuration: 5 * Second })
+await runWith(op, total, retries, breaker, deadline)
+```
+
+`deadline.metrics()` counts `successfulCalls`, `failedCalls` and `timedOutCalls`. The timer keeps the process
+alive: it is what settles a call whose operation ignores its signal.
+
+## Bulkhead
+
+```ts
+import { bulkhead } from '@caffeinejs/resilience/bulkhead'
+
+const pool = bulkhead({
+  name: 'payments',
+  maxConcurrentCalls: 10,
+  maxWaitDuration: 200 * Millisecond,
+  maxQueuedCalls: 50,
+})
+```
+
+| Option               | Default              | Meaning                                                              |
+| -------------------- | -------------------- | -------------------------------------------------------------------- |
+| `name`               | required             | Names the bulkhead in errors, events and metrics                     |
+| `maxConcurrentCalls` | `25`                 | Calls allowed to run at once                                         |
+| `maxWaitDuration`    | `0`                  | How long a call may wait for a slot; `0` refuses at once             |
+| `maxQueuedCalls`     | `maxConcurrentCalls` | How many calls may wait at once, when `maxWaitDuration` is above `0` |
+| `captureStackTrace`  | `false`              | Whether a refusal's `ErrBulkheadFull` captures a stack trace         |
+
+A slow dependency can use up every request a process serves before enough calls settle for a breaker to open. A
+bulkhead caps the calls in flight: past the cap, a call waits in line, first come first served, for at most
+`maxWaitDuration` with at most `maxQueuedCalls` waiting, or is refused with `ErrBulkheadFull`. A waiting call whose
+signal aborts leaves the line.
+
+A slot is given back when the rest of the chain settles, never earlier. A time limiter outside the bulkhead that gave
+up on a call does not free its slot while the operation is still running: the bulkhead counts work really in flight.
+
+`pool.metrics()` reports `availableConcurrentCalls`, `maxAllowedConcurrentCalls`, `queuedCalls` and
+`rejectedCalls`.
+
+## Rate limiter
+
+```ts
+import { rateLimiter } from '@caffeinejs/resilience/ratelimiter'
+
+const quota = rateLimiter({
+  name: 'partner-api',
+  limitForPeriod: 100,
+  limitRefreshPeriod: 1 * Second,
+  maxWaitDuration: 500 * Millisecond,
+})
+```
+
+| Option               | Default  | Meaning                                                              |
+| -------------------- | -------- | -------------------------------------------------------------------- |
+| `name`               | required | Names the rate limiter in errors, events and metrics                 |
+| `limitForPeriod`     | required | Calls that may start in each period                                  |
+| `limitRefreshPeriod` | required | The length of a period                                               |
+| `maxWaitDuration`    | `0`      | How long a call may wait for a permit of a later period; `0` refuses |
+| `captureStackTrace`  | `false`  | Whether a refusal's `ErrRateLimitExceeded` captures a stack trace    |
+
+At most `limitForPeriod` calls start in each period, periods counted from when the rate limiter was created. A call
+that finds no permit left reserves one of a later period when it would get it within `maxWaitDuration`, and starts
+then; calls are served in the order they reserved. Otherwise it is refused with `ErrRateLimitExceeded`, whose
+`retryAfter` says when its permit would have come. A waiting call whose signal aborts leaves the line; its permit is
+spent, unless it was the last in line, which gives its permit back. No timer runs while nobody waits.
+
+Permits are counted per period reserved: on an event loop too busy to start a waiting call in its period, the call
+starts later on the permit it reserved, ahead of any call that arrived after it.
+
+The limit holds in this process only. Ten replicas that each allow 100 calls a second allow 1,000 between them:
+divide a partner's quota by the replica count, or enforce it where the calls leave your network.
+
+`quota.metrics()` reports `availablePermissions`, `waitingCalls` and `rejectedCalls`.
+
 ## Backoff
 
 `exponential({ initialDelay = 500 * Millisecond, multiplier = 2, maxDelay = 30 * Second, jitter = 0.5 })` returns
@@ -232,16 +384,20 @@ is not a finite number rejects the call with `ErrInvalidOption`.
 | Error                   | From              | `code`                     | When                                                                                      |
 | ----------------------- | ----------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
 | `ErrCallNotPermitted`   | `/circuitbreaker` | `ERR_CALL_NOT_PERMITTED`   | A breaker refused the call. `breaker`, `state`, and `retryAfter` when `state` is `open`   |
+| `ErrBulkheadFull`       | `/bulkhead`       | `ERR_BULKHEAD_FULL`        | No slot, and no room or time to wait for one. `bulkhead`                                  |
+| `ErrRateLimitExceeded`  | `/ratelimiter`    | `ERR_RATE_LIMIT_EXCEEDED`  | No permit within `maxWaitDuration`. `rateLimiter`, `retryAfter`                           |
+| `ErrTimeLimitExceeded`  | `/timelimiter`    | `ERR_TIME_LIMIT_EXCEEDED`  | The rest of the chain ran past the limit. `timeLimiter`, `timeoutDuration`                |
 | `ErrMaxRetriesExceeded` | `/retry`          | `ERR_MAX_RETRIES_EXCEEDED` | `failAfterMaxAttempts` and the last value was still retryable. `attempts`, `result`       |
 | `ErrInvalidOption`      | root              | `ERR_INVALID_OPTION`       | A factory, `compose()` or `runWith()` got a bad argument; or a computed delay is unusable |
 
 All extend `ErrResilience`. A refusal, a call a strategy turned away without running it, extends `ErrCallRefused`,
 which carries `retryAfter` when the strategy knows how long to wait: catch `ErrCallRefused` to handle every kind of
-refusal at once.
+refusal at once. `ErrCallNotPermitted`, `ErrBulkheadFull` and `ErrRateLimitExceeded` are refusals;
+`ErrTimeLimitExceeded` is not, because the operation ran.
 
-`ErrCallNotPermitted` carries no stack trace by default: refusals arrive in bulk while a dependency is down, capturing
-a stack costs several times the rest of the refusal, and `breaker` and `state` already say why the call failed. Pass
-`captureStackTrace: true` to the breaker to get one.
+Refusals carry no stack trace by default: they arrive in bulk while a dependency is down, capturing a stack costs
+several times the rest of the refusal, and their fields already say why the call failed. Pass
+`captureStackTrace: true` to the strategy to get one.
 
 ## Events
 
@@ -255,6 +411,10 @@ off()
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | circuit breaker | `success`, `failure`, `ignored`, `notPermitted`, `stateChange`, `reset`, `failureRateExceeded`, `slowCallRateExceeded`                     |
 | retry           | `retry` (before each wait), `success`, `failure` (every attempt used), `ignored` (not retryable, aborted, or a predicate or backoff threw) |
+| time limiter    | `success`, `failure`, `timeout`                                                                                                            |
+| bulkhead        | `permitted` (with how long it waited), `rejected`, `finished` (a call gave its slot back)                                                  |
+| rate limiter    | `permitted` (with how long it waited), `rejected` (with `retryAfter`)                                                                      |
+| fallback        | `recovered`, `failure` (the handler or `fallbackOn` threw), `ignored` (not handled, or the caller aborted)                                 |
 
 Every payload carries the strategy's `name`. Listeners run synchronously. A listener that throws, or returns a
 promise that rejects, never changes the outcome of the call; its error is rethrown on the next microtask, where
@@ -322,15 +482,17 @@ await runWith(op, retries, timing, breaker) // times each attempt, inside the re
 `.then()` or `.finally()` on it is safe.
 
 To hand the rest of the chain a different signal, derive the context with `ctx.with()`; a context built any other
-way cannot reach the operation.
+way cannot reach the operation. This one also aborts the work when the process starts shutting down:
 
 ```ts
-const deadline: Strategy = (ctx, next) => {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 5_000)
-  return next(ctx.with({ signal: controller.signal })).finally(() => clearTimeout(timer))
-}
+const untilShutdown: Strategy = (ctx, next) =>
+  next(
+    ctx.with({ signal: ctx.signal === undefined ? shutdown.signal : AbortSignal.any([ctx.signal, shutdown.signal]) }),
+  )
 ```
+
+For a deadline, use `timeLimiter()`: it also rejects when the operation ignores its signal, links the caller's
+signal and leaves no timer or listener behind.
 
 A strategy with state is an object with a `run` method, called with the object as `this`:
 

@@ -1,10 +1,13 @@
-import { Millisecond } from '@caffeinejs/std/duration'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ErrBulkheadFull } from '../bulkhead/bulkhead.js'
 import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
 import { runWith } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
+import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import type { ExecutionContext, Next, Strategy } from '../strategy.js'
+import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
 import { ErrMaxRetriesExceeded, retry, type RetryEvents, type RetryOptions } from './retry.js'
 
 beforeEach(() => {
@@ -141,6 +144,8 @@ describe('retry', () => {
   // a spent quota into a retry storm: a refusal means the operation never ran, and retrying it at once adds load.
   it.each([
     ['an open circuit breaker', new ErrCallNotPermitted('inventory', 'open', 1_000)],
+    ['a full bulkhead', new ErrBulkheadFull('inventory', 2, 0)],
+    ['a spent rate limit', new ErrRateLimitExceeded('inventory', 100, 1 * Second, 400 * Millisecond)],
     ['any other refusal', new ErrCallRefused('Cannot call "inventory": queue is full', 'ERR_QUEUE_FULL', undefined)],
   ])('never retries %s, whatever retryOn says', async (_, refusal) => {
     const retryOn = vi.fn(() => true)
@@ -167,6 +172,22 @@ describe('retry', () => {
     await expect(runWith(operation, retries, controller.signal)).rejects.toThrow('cancelled')
     expect(operation).toHaveBeenCalledTimes(1)
     expect(retryOn).not.toHaveBeenCalled()
+  })
+
+  // A timeout is the dependency being slow, not a refusal: the next attempt may well be fast.
+  it('retries a time limit by default', async () => {
+    const retries = retryOf()
+    let attempt = 0
+    const operation = vi.fn(() => {
+      attempt++
+      if (attempt === 1) {
+        throw new ErrTimeLimitExceeded('inventory', 100 * Millisecond)
+      }
+      return 'ok'
+    })
+
+    await expect(runWith(operation, retries)).resolves.toBe('ok')
+    expect(operation).toHaveBeenCalledTimes(2)
   })
 
   it('asks retryOn about every other error, the last attempt included', async () => {

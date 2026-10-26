@@ -1,7 +1,7 @@
 {
   "name": "@caffeinejs/resilience",
   "version": "0.0.0",
-  "description": "Circuit breaker and retry for CaffeineJS",
+  "description": "Circuit breaker, retry, time limiter, bulkhead, rate limiter and fallback for CaffeineJS",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -19,6 +19,22 @@
     "./retry": {
       "types": "./dist/retry/index.d.ts",
       "default": "./dist/retry/index.js"
+    },
+    "./timelimiter": {
+      "types": "./dist/timelimiter/index.d.ts",
+      "default": "./dist/timelimiter/index.js"
+    },
+    "./bulkhead": {
+      "types": "./dist/bulkhead/index.d.ts",
+      "default": "./dist/bulkhead/index.js"
+    },
+    "./ratelimiter": {
+      "types": "./dist/ratelimiter/index.d.ts",
+      "default": "./dist/ratelimiter/index.js"
+    },
+    "./fallback": {
+      "types": "./dist/fallback/index.d.ts",
+      "default": "./dist/fallback/index.js"
     },
     "./otel": {
       "types": "./dist/otel/index.d.ts",

@@ -25,7 +25,7 @@ export class ErrInvalidOption extends ErrResilience {
  * A strategy refused the call; the operation did not run. `retryAfter` is how long until the strategy would let a
  * call through again, when it knows.
  *
- * Retry never retries a refusal, whatever its `retryOn` says.
+ * Retry never retries a refusal, whatever its `retryOn` says, and a circuit breaker never records one.
  */
 export class ErrCallRefused extends ErrResilience {
   readonly retryAfter: Duration | undefined
@@ -50,4 +50,17 @@ export function suppressStacks(): number | undefined {
 
 export function restoreStacks(limit: number | undefined): void {
   errorClass.stackTraceLimit = limit
+}
+
+// What a predicate returned instead of a boolean, for the error that says so.
+export function described(value: unknown): string {
+  if (value === undefined || value === null) {
+    return String(value)
+  }
+  if (typeof (value as { then?: unknown }).then === 'function') {
+    return 'a promise'
+  }
+
+  const type = typeof value
+  return type === 'object' ? 'an object' : `a ${type}`
 }

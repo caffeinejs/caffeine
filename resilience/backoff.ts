@@ -15,8 +15,8 @@ export interface ExponentialOptions {
   maxDelay?: Duration
   /**
    * Randomization factor in `[0, 1)`: a delay `d` becomes a value in `[d·(1−jitter), d·(1+jitter)]`, cut at
-   * `maxDelay`. A delay that reached the cap is spread over `[maxDelay·(1−jitter), maxDelay]`. Defaults to 0.5, so
-   * clients that back off together do not come back together; `0` waits exactly.
+   * `maxDelay`. A delay that reached the cap is spread over `[maxDelay·(1−jitter), maxDelay]`. Defaults to 0.5;
+   * `0` waits exactly.
    */
   jitter?: number
 }

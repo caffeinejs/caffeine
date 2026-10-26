@@ -91,7 +91,8 @@ export interface CircuitBreakerOptions {
   recordError?: (error: unknown) => boolean
   /**
    * Errors the breaker neither counts nor lets affect its state. Checked before `recordError`. A failure after
-   * the caller's signal aborted is always ignored.
+   * the caller's signal aborted is always ignored, and so is a refusal ({@link ErrCallRefused}) from a strategy
+   * inside the breaker, such as a spent rate limit or a full bulkhead.
    */
   ignoreError?: (error: unknown) => boolean
   /** Whether a returned value counts as a failure, such as a response with status 503. */
@@ -132,7 +133,8 @@ export interface CircuitBreakerEvents {
     readonly name: string
     readonly duration: Duration
     readonly error: unknown
-    readonly reason: 'ignored' | 'aborted'
+    /** `refused` when a strategy inside the breaker refused the call. */
+    readonly reason: 'ignored' | 'aborted' | 'refused'
   }
   notPermitted: { readonly name: string; readonly state: NotPermittedState }
   stateChange: { readonly name: string; readonly from: CircuitBreakerState; readonly to: CircuitBreakerState }
@@ -531,11 +533,14 @@ export class CircuitBreaker implements StrategyObject {
     const now = clock.now()
     const duration = now - start
 
-    let reason: 'ignored' | 'aborted' | undefined
+    let reason: 'ignored' | 'aborted' | 'refused' | undefined
     let failed: boolean
     try {
       if (ctx.signal !== undefined && ctx.signal.aborted) {
         reason = 'aborted'
+      } else if (error instanceof ErrCallRefused) {
+        // This process turned the call away; the dependency never saw it.
+        reason = 'refused'
       } else if (this.#ignoreError !== undefined && this.#ignoreError(error)) {
         reason = 'ignored'
       }
