@@ -13,7 +13,9 @@ Strategies hold state (a circuit breaker remembers recent calls), so create each
 dependency and share it. A breaker created per call never sees a second call and never opens.
 
 ```ts
-import { circuitBreaker, exponential, retry, runWith } from '@caffeinejs/resilience'
+import { exponential, runWith } from '@caffeinejs/resilience'
+import { circuitBreaker } from '@caffeinejs/resilience/circuitbreaker'
+import { retry } from '@caffeinejs/resilience/retry'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 
 // module scope
@@ -81,7 +83,7 @@ The promise settles after the whole chain, with the final error: the last attemp
 `ErrCallNotPermitted` when a breaker refused the call. A fallback is a `.catch()`:
 
 ```ts
-import { ErrCallNotPermitted } from '@caffeinejs/resilience'
+import { ErrCallNotPermitted } from '@caffeinejs/resilience/circuitbreaker'
 
 // any failure
 const stock = await runWith(() => fetchStock(id), retries, breaker).catch(() => cachedStock(id))

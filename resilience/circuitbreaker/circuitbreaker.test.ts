@@ -2,7 +2,7 @@ import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { compose, runWith } from '../compose.js'
-import { ErrCallNotPermitted, ErrInvalidOption } from '../errors.js'
+import { ErrInvalidOption } from '../errors.js'
 import { useFakeClock } from '../fake_clock.testkit.js'
 import type { ExecutionContext, Next, Strategy } from '../strategy.js'
 import {
@@ -10,7 +10,8 @@ import {
   type CircuitBreaker,
   type CircuitBreakerEvents,
   type CircuitBreakerOptions,
-} from './circuit_breaker.js'
+  ErrCallNotPermitted,
+} from './circuitbreaker.js'
 
 beforeEach(() => {
   useFakeClock()

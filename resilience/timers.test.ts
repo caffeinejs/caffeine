@@ -2,7 +2,7 @@ import { getEventListeners } from 'node:events'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { sleep } from './_sleep.js'
+import { sleep } from './timers.js'
 
 beforeEach(() => {
   vi.useFakeTimers()

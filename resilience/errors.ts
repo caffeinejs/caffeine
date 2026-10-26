@@ -1,6 +1,3 @@
-import type { Duration } from '@caffeinejs/std/duration'
-import { errMessage } from '@caffeinejs/std/err'
-
 export class ErrResilience extends Error {
   readonly code: string
 
@@ -8,62 +5,6 @@ export class ErrResilience extends Error {
     super(message)
     this.name = 'ErrResilience'
     this.code = code
-  }
-}
-
-/** The circuit breaker states in which a call can be refused. */
-export type NotPermittedState = 'open' | 'forced_open' | 'half_open'
-
-const refusals: Record<NotPermittedState, string> = {
-  open: 'circuit breaker is open',
-  forced_open: 'circuit breaker is forced open',
-  half_open: 'circuit breaker is half open and every trial call is in use',
-}
-
-/**
- * A circuit breaker refused the call; the operation did not run.
- *
- * `retryAfter` is the time left before the breaker lets trial calls through again. It is set only when `state`
- * is `open`: a forced-open breaker stays open until someone resets it, and a half-open one frees a trial slot when
- * a trial call settles.
- */
-export class ErrCallNotPermitted extends ErrResilience {
-  // Built once rather than per refusal: refusals come in bulk while a dependency is down, and the footer is the same
-  // for every one of them.
-  static readonly #footer = errMessage('').reference('@caffeinejs/resilience', ErrCallNotPermitted).build()
-
-  /** The name of the circuit breaker that refused the call. */
-  readonly breaker: string
-  readonly state: NotPermittedState
-  readonly retryAfter: Duration | undefined
-
-  constructor(breaker: string, state: NotPermittedState, retryAfter: Duration | undefined) {
-    super(`Cannot call "${breaker}": ${refusals[state]}${ErrCallNotPermitted.#footer}`, 'ERR_CALL_NOT_PERMITTED')
-    this.name = 'ErrCallNotPermitted'
-    this.breaker = breaker
-    this.state = state
-    this.retryAfter = retryAfter
-  }
-}
-
-/**
- * Every attempt returned a result the retry was told to retry, and the retry was told to fail rather than hand the
- * last one back. The last result is in `result`.
- */
-export class ErrMaxRetriesExceeded extends ErrResilience {
-  readonly attempts: number
-  readonly result: unknown
-
-  constructor(retry: string, attempts: number, result: unknown) {
-    super(
-      errMessage(`Cannot complete "${retry}": result still retryable after ${attempts} attempts`)
-        .reference('@caffeinejs/resilience', ErrMaxRetriesExceeded)
-        .build(),
-      'ERR_MAX_RETRIES_EXCEEDED',
-    )
-    this.name = 'ErrMaxRetriesExceeded'
-    this.attempts = attempts
-    this.result = result
   }
 }
 

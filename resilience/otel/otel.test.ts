@@ -3,7 +3,7 @@ import { diag, DiagLogLevel, metrics, type DiagLogger, type MeterProvider } from
 import { DataPointType, type Histogram } from '@opentelemetry/sdk-metrics'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { circuitBreaker, type CircuitBreaker, type CircuitBreakerOptions } from '../circuit_breaker/circuit_breaker.js'
+import { circuitBreaker, type CircuitBreaker, type CircuitBreakerOptions } from '../circuitbreaker/circuitbreaker.js'
 import { runWith } from '../compose.js'
 import { useFakeClock } from '../fake_clock.testkit.js'
 import { retry } from '../retry/retry.js'

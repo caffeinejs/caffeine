@@ -8,7 +8,7 @@ import {
   type ObservableResult,
 } from '@opentelemetry/api'
 
-import { CIRCUIT_BREAKER_STATES, type CircuitBreaker } from '../circuit_breaker/circuit_breaker.js'
+import { CIRCUIT_BREAKER_STATES, type CircuitBreaker } from '../circuitbreaker/circuitbreaker.js'
 import type { Retry } from '../retry/retry.js'
 import { errorType } from './_error_type.js'
 

@@ -12,6 +12,14 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./circuitbreaker": {
+      "types": "./dist/circuitbreaker/index.d.ts",
+      "default": "./dist/circuitbreaker/index.js"
+    },
+    "./retry": {
+      "types": "./dist/retry/index.d.ts",
+      "default": "./dist/retry/index.js"
+    },
     "./otel": {
       "types": "./dist/otel/index.d.ts",
       "default": "./dist/otel/index.js"

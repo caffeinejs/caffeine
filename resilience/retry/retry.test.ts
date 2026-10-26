@@ -1,10 +1,11 @@
 import { Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
 import { runWith } from '../compose.js'
-import { ErrCallNotPermitted, ErrInvalidOption, ErrMaxRetriesExceeded } from '../errors.js'
+import { ErrInvalidOption } from '../errors.js'
 import type { ExecutionContext, Next, Strategy } from '../strategy.js'
-import { retry, type RetryEvents, type RetryOptions } from './retry.js'
+import { ErrMaxRetriesExceeded, retry, type RetryEvents, type RetryOptions } from './retry.js'
 
 beforeEach(() => {
   vi.useFakeTimers()

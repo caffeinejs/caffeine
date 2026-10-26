@@ -1,4 +1,6 @@
-import { circuitBreaker, compose, retry, runWith } from '@caffeinejs/resilience'
+import { compose, runWith } from '@caffeinejs/resilience'
+import { circuitBreaker } from '@caffeinejs/resilience/circuitbreaker'
+import { retry } from '@caffeinejs/resilience/retry'
 import {
   circuitBreaker as cockatielBreaker,
   ConsecutiveBreaker,

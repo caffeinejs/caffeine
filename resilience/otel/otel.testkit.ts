@@ -8,7 +8,7 @@ import {
   type ResourceMetrics,
 } from '@opentelemetry/sdk-metrics'
 
-import { circuitBreaker, type CircuitBreaker } from '../circuit_breaker/circuit_breaker.js'
+import { circuitBreaker, type CircuitBreaker } from '../circuitbreaker/circuitbreaker.js'
 import { runWith } from '../compose.js'
 import { retry, type Retry } from '../retry/retry.js'
 

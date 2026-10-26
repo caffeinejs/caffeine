@@ -4,11 +4,46 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { Backoff } from '../backoff.js'
 import { settled } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { ErrCallNotPermitted, ErrInvalidOption, type NotPermittedState } from '../errors.js'
+import { ErrInvalidOption, ErrResilience } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
 import { clampDelay, clock, scheduleUnref, type TimerHandle } from '../timers.js'
 import { CountWindow, type Window } from './_count_window.js'
 import { TimeWindow } from './_time_window.js'
+
+/** The circuit breaker states in which a call can be refused. */
+export type NotPermittedState = 'open' | 'forced_open' | 'half_open'
+
+const refusals: Record<NotPermittedState, string> = {
+  open: 'circuit breaker is open',
+  forced_open: 'circuit breaker is forced open',
+  half_open: 'circuit breaker is half open and every trial call is in use',
+}
+
+/**
+ * A circuit breaker refused the call; the operation did not run.
+ *
+ * `retryAfter` is the time left before the breaker lets trial calls through again. It is set only when `state`
+ * is `open`: a forced-open breaker stays open until someone resets it, and a half-open one frees a trial slot when
+ * a trial call settles.
+ */
+export class ErrCallNotPermitted extends ErrResilience {
+  // Built once rather than per refusal: refusals come in bulk while a dependency is down, and the footer is the same
+  // for every one of them.
+  static readonly #footer = errMessage('').reference('@caffeinejs/resilience', ErrCallNotPermitted).build()
+
+  /** The name of the circuit breaker that refused the call. */
+  readonly breaker: string
+  readonly state: NotPermittedState
+  readonly retryAfter: Duration | undefined
+
+  constructor(breaker: string, state: NotPermittedState, retryAfter: Duration | undefined) {
+    super(`Cannot call "${breaker}": ${refusals[state]}${ErrCallNotPermitted.#footer}`, 'ERR_CALL_NOT_PERMITTED')
+    this.name = 'ErrCallNotPermitted'
+    this.breaker = breaker
+    this.state = state
+    this.retryAfter = retryAfter
+  }
+}
 
 export type CircuitBreakerState = 'closed' | 'open' | 'half_open' | 'forced_open' | 'disabled' | 'metrics_only'
 

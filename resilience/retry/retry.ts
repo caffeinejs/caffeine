@@ -1,12 +1,33 @@
 import { type Duration, formatDuration, Millisecond } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
+import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
 import { settled } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { ErrCallNotPermitted, ErrInvalidOption, ErrMaxRetriesExceeded } from '../errors.js'
+import { ErrInvalidOption, ErrResilience } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
-import { clampDelay } from '../timers.js'
-import { sleep } from './_sleep.js'
+import { clampDelay, sleep } from '../timers.js'
+
+/**
+ * Every attempt returned a result the retry was told to retry, and the retry was told to fail rather than hand the
+ * last one back. The last result is in `result`.
+ */
+export class ErrMaxRetriesExceeded extends ErrResilience {
+  readonly attempts: number
+  readonly result: unknown
+
+  constructor(retry: string, attempts: number, result: unknown) {
+    super(
+      errMessage(`Cannot complete "${retry}": result still retryable after ${attempts} attempts`)
+        .reference('@caffeinejs/resilience', ErrMaxRetriesExceeded)
+        .build(),
+      'ERR_MAX_RETRIES_EXCEEDED',
+    )
+    this.name = 'ErrMaxRetriesExceeded'
+    this.attempts = attempts
+    this.result = result
+  }
+}
 
 /**
  * The delay before the next attempt. `attempt` is the attempt that just failed, starting at 1; `error` is what it

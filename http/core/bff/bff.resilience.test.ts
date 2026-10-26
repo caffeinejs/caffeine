@@ -1,4 +1,6 @@
-import { circuitBreaker, ErrCallNotPermitted, retry, runWith } from '@caffeinejs/resilience'
+import { runWith } from '@caffeinejs/resilience'
+import { circuitBreaker, ErrCallNotPermitted } from '@caffeinejs/resilience/circuitbreaker'
+import { retry } from '@caffeinejs/resilience/retry'
 import { describe, expect, it } from 'vitest'
 
 import { join, optional, required } from './index.js'
