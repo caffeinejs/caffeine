@@ -192,27 +192,36 @@ const retries = retry({
 })
 ```
 
-| Option                 | Default                                  | Meaning                                                                               |
-| ---------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
-| `name`                 | required                                 | Names the retry in errors, events and metrics                                         |
-| `maxAttempts`          | `3`                                      | Attempts in total, the first call included                                            |
-| `backoff`              | `500 * Millisecond`                      | The wait between attempts, or `(attempt, error, result) => Duration`                  |
-| `retryOn`              | every error except `ErrCallNotPermitted` | Whether an error is worth another attempt; a function given here replaces the default |
-| `retryOnResult`        | none                                     | Whether a returned value is worth another attempt                                     |
-| `failAfterMaxAttempts` | `false`                                  | Reject with `ErrMaxRetriesExceeded` instead of returning the last retryable value     |
+| Option                 | Default         | Meaning                                                                           |
+| ---------------------- | --------------- | --------------------------------------------------------------------------------- |
+| `name`                 | required        | Names the retry in errors, events and metrics                                     |
+| `maxAttempts`          | `3`             | Attempts in total, the first call included                                        |
+| `backoff`              | `exponential()` | The wait between attempts, or `(attempt, error, result) => Duration`              |
+| `retryOn`              | every error     | Whether an error is worth another attempt; refusals and aborted calls never are   |
+| `retryOnResult`        | none            | Whether a returned value is worth another attempt                                 |
+| `failAfterMaxAttempts` | `false`         | Reject with `ErrMaxRetriesExceeded` instead of returning the last retryable value |
+
+A refusal, any `ErrCallRefused` such as an open breaker's `ErrCallNotPermitted`, is never retried, and neither is a
+failure after the caller aborted, whatever `retryOn` returns: a refusal means the operation never ran, and retrying
+it at once only adds load to what is already refusing. `retryOn` narrows what is retried; it cannot widen it.
+
+The default backoff waits 500 ms, doubling per attempt up to 30 s, each wait spread by half of it either way, so
+callers that failed together do not come back together. Pass `backoff: exponential({ jitter: 0 })`, or a fixed
+`Duration`, to wait exactly.
 
 Once every attempt is used, the caller gets the last error unchanged. A call that used every attempt on a
 retryable result counts as failed and emits `failure`, whether or not `failAfterMaxAttempts` is set. A `retryOn`,
-`retryOnResult` or `backoff` that throws rejects the call with what it threw, and the call counts as failed. Delays
-are clamped to what timers can hold (about 24.8 days); a delay that is not a finite number rejects the call with
-`ErrInvalidOption`.
+`retryOnResult` or `backoff` that throws rejects the call with what it threw, and the call counts as failed. A
+`retryOn` or `retryOnResult` that returns anything but a boolean, such as the promise an `async` predicate returns,
+rejects the call with `ErrInvalidOption`. Delays are clamped to what timers can hold (about 24.8 days); a delay that
+is not a finite number rejects the call with `ErrInvalidOption`.
 
 `retries.metrics()` counts each call once: `successfulCallsWithoutRetry`, `successfulCallsWithRetry`,
 `failedCallsWithoutRetry`, `failedCallsWithRetry`.
 
 ## Backoff
 
-`exponential({ initialDelay = 500 * Millisecond, multiplier = 2, maxDelay = 30 * Second, jitter = 0 })` returns
+`exponential({ initialDelay = 500 * Millisecond, multiplier = 2, maxDelay = 30 * Second, jitter = 0.5 })` returns
 `attempt => delay`: `initialDelay · multiplier^(attempt−1)`, capped at `maxDelay`, then randomized to within
 `±jitter` of itself for `jitter` in `[0, 1)` without passing the cap. A delay that reached the cap is spread over
 `[maxDelay·(1−jitter), maxDelay]`, so clients that back off for long still wait different times. It fits both
@@ -220,13 +229,15 @@ are clamped to what timers can hold (about 24.8 days); a delay that is not a fin
 
 ## Errors
 
-| Error                   | `code`                     | When                                                                                      |
-| ----------------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
-| `ErrCallNotPermitted`   | `ERR_CALL_NOT_PERMITTED`   | A breaker refused the call. `breaker`, `state`, and `retryAfter` when `state` is `open`   |
-| `ErrMaxRetriesExceeded` | `ERR_MAX_RETRIES_EXCEEDED` | `failAfterMaxAttempts` and the last value was still retryable. `attempts`, `result`       |
-| `ErrInvalidOption`      | `ERR_INVALID_OPTION`       | A factory, `compose()` or `runWith()` got a bad argument; or a computed delay is unusable |
+| Error                   | From              | `code`                     | When                                                                                      |
+| ----------------------- | ----------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
+| `ErrCallNotPermitted`   | `/circuitbreaker` | `ERR_CALL_NOT_PERMITTED`   | A breaker refused the call. `breaker`, `state`, and `retryAfter` when `state` is `open`   |
+| `ErrMaxRetriesExceeded` | `/retry`          | `ERR_MAX_RETRIES_EXCEEDED` | `failAfterMaxAttempts` and the last value was still retryable. `attempts`, `result`       |
+| `ErrInvalidOption`      | root              | `ERR_INVALID_OPTION`       | A factory, `compose()` or `runWith()` got a bad argument; or a computed delay is unusable |
 
-All extend `ErrResilience`.
+All extend `ErrResilience`. A refusal, a call a strategy turned away without running it, extends `ErrCallRefused`,
+which carries `retryAfter` when the strategy knows how long to wait: catch `ErrCallRefused` to handle every kind of
+refusal at once.
 
 `ErrCallNotPermitted` carries no stack trace by default: refusals arrive in bulk while a dependency is down, capturing
 a stack costs several times the rest of the refusal, and `breaker` and `state` already say why the call failed. Pass

@@ -15,7 +15,8 @@ export interface ExponentialOptions {
   maxDelay?: Duration
   /**
    * Randomization factor in `[0, 1)`: a delay `d` becomes a value in `[d·(1−jitter), d·(1+jitter)]`, cut at
-   * `maxDelay`. A delay that reached the cap is spread over `[maxDelay·(1−jitter), maxDelay]`. Defaults to 0.
+   * `maxDelay`. A delay that reached the cap is spread over `[maxDelay·(1−jitter), maxDelay]`. Defaults to 0.5, so
+   * clients that back off together do not come back together; `0` waits exactly.
    */
   jitter?: number
 }
@@ -35,7 +36,7 @@ function invalid(reason: string): ErrInvalidOption {
  * @throws {@link ErrInvalidOption} when an option is out of range.
  */
 export function exponential(options: ExponentialOptions = {}): Backoff {
-  const { initialDelay = 500 * Millisecond, multiplier = 2, maxDelay = 30 * Second, jitter = 0 } = options
+  const { initialDelay = 500 * Millisecond, multiplier = 2, maxDelay = 30 * Second, jitter = 0.5 } = options
 
   if (!Number.isFinite(initialDelay) || initialDelay < 0) {
     throw invalid(`initialDelay must be a finite Duration of at least 0s, got ${formatDuration(initialDelay)}`)

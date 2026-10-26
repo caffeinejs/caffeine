@@ -4,7 +4,7 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { Backoff } from '../backoff.js'
 import { settled } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { ErrInvalidOption, ErrResilience } from '../errors.js'
+import { ErrCallRefused, ErrInvalidOption, restoreStacks, suppressStacks } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
 import { clampDelay, clock, scheduleUnref, type TimerHandle } from '../timers.js'
 import { CountWindow, type Window } from './_count_window.js'
@@ -26,7 +26,7 @@ const refusals: Record<NotPermittedState, string> = {
  * is `open`: a forced-open breaker stays open until someone resets it, and a half-open one frees a trial slot when
  * a trial call settles.
  */
-export class ErrCallNotPermitted extends ErrResilience {
+export class ErrCallNotPermitted extends ErrCallRefused {
   // Built once rather than per refusal: refusals come in bulk while a dependency is down, and the footer is the same
   // for every one of them.
   static readonly #footer = errMessage('').reference('@caffeinejs/resilience', ErrCallNotPermitted).build()
@@ -34,14 +34,16 @@ export class ErrCallNotPermitted extends ErrResilience {
   /** The name of the circuit breaker that refused the call. */
   readonly breaker: string
   readonly state: NotPermittedState
-  readonly retryAfter: Duration | undefined
 
   constructor(breaker: string, state: NotPermittedState, retryAfter: Duration | undefined) {
-    super(`Cannot call "${breaker}": ${refusals[state]}${ErrCallNotPermitted.#footer}`, 'ERR_CALL_NOT_PERMITTED')
+    super(
+      `Cannot call "${breaker}": ${refusals[state]}${ErrCallNotPermitted.#footer}`,
+      'ERR_CALL_NOT_PERMITTED',
+      retryAfter,
+    )
     this.name = 'ErrCallNotPermitted'
     this.breaker = breaker
     this.state = state
-    this.retryAfter = retryAfter
   }
 }
 
@@ -171,20 +173,17 @@ interface Refusal {
 const FORCED_OPEN_REFUSAL: Refusal = { state: 'forced_open', retryAfter: undefined }
 const HALF_OPEN_REFUSAL: Refusal = { state: 'half_open', retryAfter: undefined }
 
-const errorClass = Error as { stackTraceLimit?: number }
-
-// A refusal without a stack trace. The limit is process-wide, so it is restored before anything else can throw.
+// A refusal without a stack trace.
 function stacklessRefusal(
   breaker: string,
   state: NotPermittedState,
   retryAfter: Duration | undefined,
 ): ErrCallNotPermitted {
-  const limit = errorClass.stackTraceLimit
-  errorClass.stackTraceLimit = 0
+  const limit = suppressStacks()
   try {
     return new ErrCallNotPermitted(breaker, state, retryAfter)
   } finally {
-    errorClass.stackTraceLimit = limit
+    restoreStacks(limit)
   }
 }
 

@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 export class ErrResilience extends Error {
   readonly code: string
 
@@ -17,4 +19,35 @@ export class ErrInvalidOption extends ErrResilience {
     super(message, 'ERR_INVALID_OPTION')
     this.name = 'ErrInvalidOption'
   }
+}
+
+/**
+ * A strategy refused the call; the operation did not run. `retryAfter` is how long until the strategy would let a
+ * call through again, when it knows.
+ *
+ * Retry never retries a refusal, whatever its `retryOn` says.
+ */
+export class ErrCallRefused extends ErrResilience {
+  readonly retryAfter: Duration | undefined
+
+  constructor(message: string, code: string, retryAfter: Duration | undefined) {
+    super(message, code)
+    this.name = 'ErrCallRefused'
+    this.retryAfter = retryAfter
+  }
+}
+
+const errorClass = Error as { stackTraceLimit?: number }
+
+// Refusals come in bulk while a dependency is down, and capturing a stack costs several times the rest of a refusal.
+// The limit is process-wide, so it is restored in a `finally` before anything else can throw:
+// `const limit = suppressStacks(); try { return new ErrX(...) } finally { restoreStacks(limit) }`.
+export function suppressStacks(): number | undefined {
+  const limit = errorClass.stackTraceLimit
+  errorClass.stackTraceLimit = 0
+  return limit
+}
+
+export function restoreStacks(limit: number | undefined): void {
+  errorClass.stackTraceLimit = limit
 }

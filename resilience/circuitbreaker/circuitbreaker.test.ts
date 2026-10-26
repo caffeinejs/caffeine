@@ -2,7 +2,7 @@ import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { compose, runWith } from '../compose.js'
-import { ErrInvalidOption } from '../errors.js'
+import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
 import { useFakeClock } from '../fake_clock.testkit.js'
 import type { ExecutionContext, Next, Strategy } from '../strategy.js'
 import {
@@ -314,6 +314,8 @@ describe('circuitBreaker, open', () => {
 
     expect(operation).not.toHaveBeenCalled()
     expect(refused).toBeInstanceOf(ErrCallNotPermitted)
+    // The kind every refusal shares, which retry never retries and an HTTP layer answers with 503.
+    expect(refused).toBeInstanceOf(ErrCallRefused)
     expect(refused).toMatchObject({
       breaker: 'inventory',
       state: 'open',

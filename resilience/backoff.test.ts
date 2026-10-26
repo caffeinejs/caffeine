@@ -1,31 +1,50 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { exponential } from './backoff.js'
 import { ErrInvalidOption } from './errors.js'
 
-describe('exponential', () => {
-  it('doubles from 500 ms by default', () => {
-    const backoff = exponential()
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
-    expect([1, 2, 3, 4].map(backoff)).toEqual([500, 1_000, 2_000, 4_000])
-  })
+describe('exponential', () => {
+  // Clients that back off in lockstep reach a recovering dependency together, so the default spreads every delay.
+  it.each([
+    [0, [250, 500, 1_000, 2_000]],
+    [1, [750, 1_500, 3_000, 6_000]],
+  ])(
+    'doubles from 500 ms by default, each delay spread by half of it: Math.random() = %d gives %o',
+    (random, delays) => {
+      vi.spyOn(Math, 'random').mockReturnValue(random)
+
+      expect([1, 2, 3, 4].map(exponential())).toEqual(delays)
+    },
+  )
 
   // An unbounded default would reach delays no caller wants and, eventually, values setTimeout cannot honour.
-  it('caps at 30 s by default', () => {
+  it('caps at 30 s by default, spreading capped delays over [15 s, 30 s]', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0)
     const backoff = exponential()
 
-    expect(backoff(7)).toBe(30_000)
-    expect(backoff(1_000)).toBe(30_000)
+    expect([backoff(7), backoff(1_000)]).toEqual([15_000, 15_000])
+    random.mockReturnValue(1)
+    expect([backoff(7), backoff(1_000)]).toEqual([30_000, 30_000])
+  })
+
+  it('waits exactly with jitter 0', () => {
+    const backoff = exponential({ jitter: 0 })
+
+    expect([1, 2, 3, 4, 1_000].map(backoff)).toEqual([500, 1_000, 2_000, 4_000, 30_000])
   })
 
   it('applies initial delay, multiplier and cap as given', () => {
-    const backoff = exponential({ initialDelay: 100, multiplier: 3, maxDelay: 1_000 })
+    const backoff = exponential({ initialDelay: 100, multiplier: 3, maxDelay: 1_000, jitter: 0 })
 
     expect([1, 2, 3, 4].map(backoff)).toEqual([100, 300, 900, 1_000])
   })
 
   it('allows an infinite cap', () => {
-    expect(exponential({ maxDelay: Infinity })(12)).toBe(500 * 2 ** 11)
+    expect(exponential({ maxDelay: Infinity, jitter: 0 })(12)).toBe(500 * 2 ** 11)
   })
 
   // Clients that all wait exactly the cap reach a recovering dependency together.
