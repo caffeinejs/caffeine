@@ -97,8 +97,8 @@ export class ErrDuplicateBinding extends CaffeineIoCError {
     super(
       errMessage(`Cannot register "${keyStr(key)}": a binding is already registered under this key`)
         .solutions(
-          `Use rebind() to replace the binding of "${keyStr(key)}" deliberately`,
           `Remove the bind() of a class that is already decorated, or set the "decorators" option to false`,
+          `Bind each implementation under its own key, share one with .extends() or .names(), and mark the default with .primary()`,
           `Give one of the bindings a profile or a condition, so that only one of them is registered`,
         )
         .reference('@caffeinejs/di', ErrDuplicateBinding)

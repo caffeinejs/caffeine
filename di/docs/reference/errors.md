@@ -81,8 +81,9 @@ conditional binding whose conditions pass while another binding holds its key.
 Profiles and conditions are decided first, so bindings of one key that they
 leave to a single survivor do not throw.
 
-**Fix:** Use `rebind()` to replace a binding deliberately. Remove the `bind()` of
-a class that is already decorated, or turn the `decorators` option off. Give one
+**Fix:** Remove the `bind()` of a class that is already decorated, or turn the
+`decorators` option off. Bind each implementation under its own key, share one
+with `.extends()` or `.names()`, and mark the default with `.primary()`. Give one
 of the bindings a profile or a condition so that only one of them is registered.
 
 ---
