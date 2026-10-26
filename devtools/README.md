@@ -30,6 +30,9 @@ const app = createWebApplication({ config }).install(
 )
 ```
 
+Their server is the listener `devtools` in `app.listeners`. When the application already has a listener with that
+name, name theirs otherwise: `DevTools(d => d.listener('ops'))`.
+
 Or mount them on a server that already exists: the application's own server, or a listener's:
 
 ```ts

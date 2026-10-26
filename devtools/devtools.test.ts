@@ -8,6 +8,7 @@ import {
   BaseAuthenticationHandler,
   Claim,
   Identity,
+  Listener,
   Principal,
   type IContext,
   type WebApplication,
@@ -205,6 +206,16 @@ describe('devtools', () => {
       app = createWebApplication().install(DevTools(d => void configure(d))) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_DEVTOOLS_CONFIGURATION' })
+    })
+
+    it('takes the name it is given, beside a listener of the application already named devtools', async () => {
+      app = createWebApplication()
+        .install(Listener('devtools'))
+        .install(DevTools(d => d.listener('ops'))) as WebApplication
+      await app.bootstrap()
+
+      expect((await app.listeners.get('ops')!.fetch('/devtools/info')).status).toBe(200)
+      expect((await app.listeners.get('devtools')!.fetch('/devtools/info')).status).toBe(404)
     })
 
     it('takes where it listens from the configuration, a fluent setter winning', async () => {

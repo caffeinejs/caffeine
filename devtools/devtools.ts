@@ -66,7 +66,7 @@ export interface DevToolsIndex {
   }>
 }
 
-/** The name of the server `DevTools()` adds, and its listener in `app.listeners`. */
+/** The name of the server `DevTools()` adds, and its listener in `app.listeners`, unless `listener(name)` names it. */
 export const DEVTOOLS_LISTENER = 'devtools'
 
 const DEFAULT_HOST = '127.0.0.1'
@@ -145,14 +145,15 @@ export class DevToolsPluginBuilder {
 }
 
 /**
- * The devtools on a server of their own: `DevTools()` adds a listener named {@link DEVTOOLS_LISTENER}, on
- * `127.0.0.1:9090` unless told otherwise, and serves the devtools there alone.
+ * The devtools on a server of their own: `DevTools()` adds a listener named {@link DEVTOOLS_LISTENER} unless
+ * `listener(name)` names it, on `127.0.0.1:9090` unless told otherwise, and serves the devtools there alone.
  */
 export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'devtools'
 
   readonly #options = new DevToolsPluginBuilder()
   #config: Partial<DevToolsConfig> | undefined
+  #listener: string | undefined
   #host: string | undefined
   #port: number | undefined
   #resolved: DevToolsOptions | undefined
@@ -161,6 +162,15 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
   /** Takes what the configuration holds: `d.config(config.app.devtools)`. A fluent setter wins over it. */
   config(config: Partial<DevToolsConfig>): this {
     this.#config = config
+    return this
+  }
+
+  /**
+   * The name of the devtools' server, `devtools` by default: its key in `app.listeners`. Name it otherwise when the
+   * application already has a listener named `devtools`.
+   */
+  listener(name: string): this {
+    this.#listener = name
     return this
   }
 
@@ -220,7 +230,7 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
     // Attached before the container initializes, so its start-up is recorded.
     const events = new EventsTool(kit.container.hooks)
 
-    const listener = new ListenerBuilder<C>(DEVTOOLS_LISTENER, l => {
+    const listener = new ListenerBuilder<C>(this.#listener ?? DEVTOOLS_LISTENER, l => {
       l.server(() => ({ listener: { ...address } }))
 
       // A listener has no gate unless one is registered on it, and a route the fallback policy or `authorize(...)`
