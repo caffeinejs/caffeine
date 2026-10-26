@@ -31,7 +31,7 @@ export const eventsRouter = new Router('/events')
                 <td safe>{String(event.seq)}</td>
                 <td safe>{event.at}</td>
                 <td>
-                  <Badge tone={event.error === undefined ? 'muted' : 'bad'}>{event.kind}</Badge>
+                  <Badge tone={event.error === undefined ? 'muted' : 'bad'} text={event.kind} />
                 </td>
                 <td>
                   <code safe>{display(event.subject)}</code>

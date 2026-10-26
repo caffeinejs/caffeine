@@ -1,3 +1,5 @@
+import { request } from 'node:http'
+
 import { DevTool, ErrDevToolInvalid, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
 import {
   AuthenticateResult,
@@ -87,8 +89,20 @@ describe('devtools', () => {
     app = undefined
   })
 
-  function devtoolsServer(): { fetch: (path: string, init?: RequestInit) => Promise<Response> } {
+  function devtoolsServer() {
     return app!.listeners.get('devtools')!
+  }
+
+  /** The status a request to the devtools answers under `host`, which `fetch` would not let a test set. */
+  function statusFor(port: number, host: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      request({ host: '127.0.0.1', port, path: '/devtools/info', headers: { host } }, res => {
+        res.resume()
+        resolve(res.statusCode!)
+      })
+        .on('error', reject)
+        .end()
+    })
   }
 
   describe('DevTools()', () => {
@@ -123,6 +137,19 @@ describe('devtools', () => {
         '/devtools/di/bindings/:id',
         '/devtools/di/graph',
       ])
+    })
+
+    it("refuses a loopback request under another site's name, which DNS rebinding would send", async () => {
+      app = createWebApplication()
+        .server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
+        .install(DevTools(d => d.port(0))) as WebApplication
+      await app.run()
+      const { port } = new URL(devtoolsServer().address!.origin)
+
+      expect(await statusFor(Number(port), 'evil.example')).toBe(421)
+      expect(await statusFor(Number(port), `evil.example:${port}`)).toBe(421)
+      expect(await statusFor(Number(port), `127.0.0.1:${port}`)).toBe(200)
+      expect(await statusFor(Number(port), `localhost:${port}`)).toBe(200)
     })
 
     it('serves under the path it is given', async () => {

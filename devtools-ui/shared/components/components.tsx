@@ -1,8 +1,10 @@
-import type { Children } from '@kitajs/html'
-
-/** A status word, coloured by what it says. */
-export function Badge(props: { tone: 'good' | 'bad' | 'warn' | 'muted'; children: Children }): JSX.Element {
-  return <span class={`badge badge-${props.tone}`}>{props.children}</span>
+/** A status word, coloured by what it says, escaped: it is often a value the devtools answered. */
+export function Badge(props: { tone: 'good' | 'bad' | 'warn' | 'muted'; text: string }): JSX.Element {
+  return (
+    <span class={`badge badge-${props.tone}`} safe>
+      {props.text}
+    </span>
+  )
 }
 
 /** A two-column list of labelled values; every value is escaped. */

@@ -4,6 +4,7 @@ import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
 import type { WebApplication } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { devTools } from '../devtools.js'
@@ -32,7 +33,8 @@ describe('InfoTool', () => {
 
     expect(info.application).toEqual({ name: 'petstore', profiles: [], contrib: [{ source: 'kafka', topics: 2 }] })
     expect(info.runtime).toMatchObject({ node: process.version, pid: process.pid, nodeEnv: process.env.NODE_ENV })
-    expect(info.runtime.uptime).toBeGreaterThan(0)
+    // Milliseconds: within a second of what the process reports, not a count of seconds.
+    expect(Math.abs(info.runtime.uptime - process.uptime() * Second)).toBeLessThan(1 * Second)
     expect(Date.parse(info.runtime.startedAt)).toBeLessThan(Date.now())
   })
 })

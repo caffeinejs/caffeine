@@ -15,8 +15,11 @@ describe('RuntimeTool', () => {
   })
 
   it('reports memory, the heap, CPU, the event loop and what keeps it alive', async () => {
-    app = createWebApplication().with(devTools()) as WebApplication
-    await app.bootstrap()
+    app = createWebApplication()
+      .server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
+      .with(devTools()) as WebApplication
+    // Listening, so the server's socket is one of what keeps the event loop alive.
+    await app.run()
 
     const runtime = (await (await app.fetch('/devtools/runtime')).json()) as RuntimeRecord
 
@@ -25,6 +28,6 @@ describe('RuntimeTool', () => {
     expect(runtime.resources.userCPUTime).toBeGreaterThan(0)
     expect(runtime.eventLoop.sinceStart).toBeGreaterThanOrEqual(0)
     expect(runtime.eventLoop.sinceStart).toBeLessThanOrEqual(1)
-    expect(Object.values(runtime.activeResources).every(count => count > 0)).toBe(true)
+    expect(runtime.activeResources.TCPServerWrap).toBeGreaterThanOrEqual(1)
   })
 })

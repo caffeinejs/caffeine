@@ -70,10 +70,10 @@ export const diRouter = new Router('/di')
                   <td safe>{display(binding.names)}</td>
                   <td safe>{display(binding.labels)}</td>
                   <td>
-                    {binding.primary ? <Badge tone="good">primary</Badge> : ''}
-                    {binding.lazy ? <Badge tone="muted">lazy</Badge> : ''}
-                    {binding.async ? <Badge tone="muted">async</Badge> : ''}
-                    {binding.internal ? <Badge tone="warn">internal</Badge> : ''}
+                    {binding.primary ? <Badge tone="good" text="primary" /> : ''}
+                    {binding.lazy ? <Badge tone="muted" text="lazy" /> : ''}
+                    {binding.async ? <Badge tone="muted" text="async" /> : ''}
+                    {binding.internal ? <Badge tone="warn" text="internal" /> : ''}
                   </td>
                 </tr>
               ))}

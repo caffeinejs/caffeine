@@ -34,6 +34,7 @@ It reads environment variables prefixed `CAFFEINE_DEVTOOLS_`:
 | `CAFFEINE_DEVTOOLS_LOG__LEVEL`            | `info`                           | The log level                                                                                                     |
 
 Keep the UI on loopback. Anyone who reaches it sees what the devtools show, using the credentials the UI was given.
+On a loopback address it answers loopback host names alone, so a page using DNS rebinding cannot read it.
 
 ## Pages
 

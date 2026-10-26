@@ -12,43 +12,57 @@ export const REDACTED = '******'
  */
 const SENSITIVE_SEGMENT = /pass(word|wd|phrase)?|pwd|secret|token|credential|key|signature|salt|cookie|auth|private/i
 
-/** `scheme://user:password@host`: what a URL with credentials carries before the host. */
-const URL_PASSWORD = /^([a-z][a-z0-9+.-]*:\/\/[^:/?#@\s]*):[^@/?#\s]*@/i
+/**
+ * `scheme://user:password@host`, anywhere in a text and as often as it appears: a password runs to the `@` before the
+ * host, so one holding `/` is masked whole.
+ */
+const URL_PASSWORD = /([a-z][a-z0-9+.-]*:\/\/[^:/?#@\s]*):[^@\s]*@/gi
 
 /**
  * Decides which configuration values are masked: a `$t.Secret` field, a path whose segments name a secret, a path an
  * application named with `redact(...)`; and, in any value shown, the password of a URL.
  */
 export class Redactor {
-  readonly #secret: readonly string[]
   readonly #patterns: readonly RegExp[]
 
   /**
-   * @param secret - The paths the schema marks with `$t.Secret`.
+   * @param secret - The paths the schema marks with `$t.Secret`, `*` standing for an array item or a record entry.
    * @param patterns - Dotted paths, where `*` stands for one segment and `**` for any number of them.
    */
   constructor(secret: readonly string[], patterns: readonly string[]) {
-    this.#secret = secret
-    this.#patterns = patterns.map(compile)
+    this.#patterns = [...secret.map(path => compile(path)), ...patterns.map(assertPattern).map(path => compile(path))]
   }
 
   /** Whether the value at `path`, or anything under it, is masked whole. */
   isSecret(path: string): boolean {
-    return (
-      this.#secret.some(secret => path === secret || path.startsWith(`${secret}.`)) ||
-      path.split('.').some(segment => SENSITIVE_SEGMENT.test(segment)) ||
-      this.#patterns.some(pattern => pattern.test(path))
-    )
+    return path.split('.').some(segment => SENSITIVE_SEGMENT.test(segment)) || this.#patterns.some(p => p.test(path))
   }
 
-  /** The value at `path` as it may be shown. */
+  /** The value at `path` as it may be shown: every secret in it masked, however deep. */
   redact(path: string, value: unknown): unknown {
     if (this.isSecret(path)) {
       return REDACTED
     }
 
-    return maskURLs(value)
+    if (typeof value === 'string') {
+      return maskCredentials(value)
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item, at) => this.redact(`${path}.${at}`, item))
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, this.redact(`${path}.${key}`, item)]))
+    }
+
+    return value
   }
+}
+
+/** `text` with the password of every URL in it masked: what an error naming a connection string is shown as. */
+export function maskCredentials(text: string): string {
+  return text.replace(URL_PASSWORD, `$1:${REDACTED}@`)
 }
 
 /** The dotted paths under `schema` a `$t.Secret` marks, `writeOnly` in JSON Schema. */
@@ -57,7 +71,15 @@ export function secretPaths(schema: unknown, at = ''): string[] {
     return []
   }
 
-  const node = schema as { writeOnly?: unknown; properties?: unknown; anyOf?: unknown; allOf?: unknown }
+  const node = schema as {
+    writeOnly?: unknown
+    properties?: unknown
+    patternProperties?: unknown
+    additionalProperties?: unknown
+    items?: unknown
+    anyOf?: unknown
+    allOf?: unknown
+  }
 
   if (node.writeOnly === true && at !== '') {
     return [at]
@@ -68,6 +90,15 @@ export function secretPaths(schema: unknown, at = ''): string[] {
   if (typeof node.properties === 'object' && node.properties !== null) {
     for (const [key, child] of Object.entries(node.properties)) {
       found.push(...secretPaths(child, at === '' ? key : `${at}.${key}`))
+    }
+  }
+
+  // An array item and a record entry sit one segment down, under any name.
+  const any = at === '' ? '*' : `${at}.*`
+  found.push(...secretPaths(node.items, any), ...secretPaths(node.additionalProperties, any))
+  if (typeof node.patternProperties === 'object' && node.patternProperties !== null) {
+    for (const child of Object.values(node.patternProperties)) {
+      found.push(...secretPaths(child, any))
     }
   }
 
@@ -82,19 +113,7 @@ export function secretPaths(schema: unknown, at = ''): string[] {
   return found
 }
 
-function maskURLs(value: unknown): unknown {
-  if (typeof value === 'string') {
-    return value.replace(URL_PASSWORD, `$1:${REDACTED}@`)
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(maskURLs)
-  }
-
-  return value
-}
-
-function compile(pattern: string): RegExp {
+function assertPattern(pattern: string): string {
   if (!/^(\*\*|\*|[^.*]+)(\.(\*\*|\*|[^.*]+))*$/.test(pattern)) {
     throw new ErrDevToolsConfiguration(
       errMessage(`Cannot redact "${pattern}": it is not a dotted configuration path`)
@@ -107,6 +126,10 @@ function compile(pattern: string): RegExp {
     )
   }
 
+  return pattern
+}
+
+function compile(pattern: string): RegExp {
   const body = pattern
     .split('.')
     .map(segment => (segment === '**' ? '.+' : segment === '*' ? '[^.]+' : escape(segment)))

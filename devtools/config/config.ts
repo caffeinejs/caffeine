@@ -2,7 +2,7 @@ import type { ConfigStore } from '@caffeinejs/application/config'
 import { DevTool, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
 import type { Duration } from '@caffeinejs/std/duration'
 
-import { Redactor, secretPaths } from './redact.js'
+import { maskCredentials, Redactor, secretPaths } from './redact.js'
 
 /** One configuration value, and where it came from. */
 export interface PropertyRecord {
@@ -31,7 +31,7 @@ export interface SourceRecord {
   readonly lastLoadedAt: number
   readonly lastLoadDuration: Duration
   readonly consecutiveFailures: number
-  /** The message of the last failure. */
+  /** The message of the last failure, the password of any URL in it masked. */
   readonly lastError?: string
 }
 
@@ -97,7 +97,8 @@ export class ConfigTool extends DevTool {
       ...source,
       ...(lastError === undefined
         ? {}
-        : { lastError: lastError instanceof Error ? lastError.message : String(lastError) }),
+        : // A driver's error can carry the connection string it failed with.
+          { lastError: maskCredentials(lastError instanceof Error ? lastError.message : String(lastError)) }),
     }))
   }
 

@@ -52,6 +52,24 @@ describe('EventsTool', () => {
     )
   })
 
+  it('masks the password of a connection string a failure names', async () => {
+    class Database {
+      constructor() {
+        throw new Error('Cannot connect to postgres://app:hunter2@db/pets')
+      }
+    }
+
+    const container = new CaffeineIoC({ decorators: false })
+    const tool = new EventsTool(container.hooks)
+    container.bind(Database, t => t.toSelf())
+
+    await expect(container.init()).rejects.toThrow()
+
+    const failed = (await list(tool)).find(event => event.kind === 'binding-initialization-failed')
+
+    expect(failed?.error).toBe('Cannot connect to postgres://app:******@db/pets')
+  })
+
   it("serves the application's start-up from DevTools(), which attaches before the container initializes", async () => {
     app = createWebApplication().install(DevTools()) as WebApplication
     app.container.bind(Pool, t => t.toSelf())

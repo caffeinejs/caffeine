@@ -84,6 +84,34 @@ describe('ConfigTool', () => {
     expect(byPath['mail.hosts']).toMatchObject({ value: ['smtp://mailer:******@mx1', 'smtp://mx2'] })
   })
 
+  it('masks a secret inside an array of objects, a record of secrets, and every URL password in a value', async () => {
+    const leaky = $t.Object({
+      users: $t.Array($t.Object({ name: $t.String(), pin: $t.Secret($t.String()), password: $t.String() })),
+      hooks: $t.Record($t.String(), $t.Secret($t.String())),
+      cache: $t.Object({ nodes: $t.String(), dsn: $t.String() }),
+    })
+    const conf = newConfiguration(leaky)
+      .source(
+        new InlineConfigSource({
+          users: [{ name: 'ann', pin: '1234', password: 'pw-ann' }],
+          hooks: { stripe: 'whsec_1' },
+          cache: { nodes: 'redis://:first@h1,redis://:second@h2', dsn: 'postgres://u:p/ss@db/x' },
+        }),
+      )
+      .build().config
+    app = createWebApplication({ container: new CaffeineIoC(), config: conf }).with(
+      devTools(d => d.showConfigValues()),
+    ) as WebApplication
+    await app.bootstrap()
+
+    const body = JSON.stringify(await properties())
+
+    expect(body).not.toMatch(/1234|pw-ann|whsec_1|first|second|p\/ss/)
+    expect(body).toContain('ann')
+    expect(body).toContain('redis://:******@h1,redis://:******@h2')
+    expect(body).toContain('postgres://u:******@db/x')
+  })
+
   it('answers one value with every layer that set it, masked the same way', async () => {
     vi.stubEnv('DT_DB__PASS', 'from-env')
     await boot(d => d.showConfigValues())

@@ -21,11 +21,12 @@ export const homeRouter = new Router('/')
             <div class="card">
               <h2>Health</h2>
               <p>
-                <Badge tone={health.availability.live === 'correct' ? 'good' : 'bad'}>live</Badge>{' '}
-                <Badge tone={ready ? 'good' : 'bad'}>{ready ? 'ready' : 'not ready'}</Badge>{' '}
-                <Badge tone={health.availability.draining ? 'warn' : 'muted'}>
-                  {health.availability.draining ? 'draining' : 'serving'}
-                </Badge>
+                <Badge tone={health.availability.live === 'correct' ? 'good' : 'bad'} text="live" />{' '}
+                <Badge tone={ready ? 'good' : 'bad'} text={ready ? 'ready' : 'not ready'} />{' '}
+                <Badge
+                  tone={health.availability.draining ? 'warn' : 'muted'}
+                  text={health.availability.draining ? 'draining' : 'serving'}
+                />
               </p>
             </div>
             <div class="card">

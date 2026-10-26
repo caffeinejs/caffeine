@@ -42,7 +42,7 @@ export const configRouter = new Router('/config')
                     <a href={`/config/${encodeURIComponent(property.path)}`}>
                       <code safe>{property.path}</code>
                     </a>{' '}
-                    {property.secret ? <Badge tone="warn">secret</Badge> : ''}
+                    {property.secret ? <Badge tone="warn" text="secret" /> : ''}
                   </td>
                   {shown ? (
                     <td>
@@ -78,9 +78,7 @@ export const configRouter = new Router('/config')
                     {source.consecutiveFailures === 0 ? (
                       '0'
                     ) : (
-                      <Badge tone="bad">
-                        <span safe>{`${source.consecutiveFailures}: ${source.lastError ?? ''}`}</span>
-                      </Badge>
+                      <Badge tone="bad" text={`${source.consecutiveFailures}: ${source.lastError ?? ''}`} />
                     )}
                   </td>
                 </tr>

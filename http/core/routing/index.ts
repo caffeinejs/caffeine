@@ -2,7 +2,13 @@ export * from './builder.js'
 export * from './compile.js'
 export type * from './extension.js'
 export * from './inherit.js'
-export * from './inventory.js'
+export {
+  RouteInventory,
+  type RouteRecord,
+  type RouteSchemaRecord,
+  type RouteSecurityRecord,
+  type ServerRoutes,
+} from './inventory.js'
 export * from './picker.js'
 export * from './programmatic/index.js'
 export * from './route.js'

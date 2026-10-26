@@ -1,3 +1,5 @@
+import { request } from 'node:http'
+
 import { newConfiguration } from '@caffeinejs/application'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { DevTool, type DevToolOperation } from '@caffeinejs/application/devtools'
@@ -61,8 +63,9 @@ describe('devtools UI', () => {
     await target.run()
 
     vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__URL', `${target.listeners.get('devtools')!.address!.origin}/devtools`)
+    vi.stubEnv('CAFFEINE_DEVTOOLS_SERVER__PORT', '0')
     ui = buildApp({ logger: false })
-    await ui.bootstrap()
+    await ui.run()
   })
 
   afterAll(async () => {
@@ -149,6 +152,22 @@ describe('devtools UI', () => {
     expect(res.status).toBe(403)
   })
 
+  it("refuses a request under another site's name, which DNS rebinding would send to its loopback port", async () => {
+    const { port } = new URL(ui.address!.origin)
+    const status = (host: string): Promise<number> =>
+      new Promise((resolve, reject) => {
+        request({ host: '127.0.0.1', port: Number(port), path: '/', headers: { host } }, res => {
+          res.resume()
+          resolve(res.statusCode!)
+        })
+          .on('error', reject)
+          .end()
+      })
+
+    expect(await status(`evil.example:${port}`)).toBe(421)
+    expect(await status(`127.0.0.1:${port}`)).toBe(200)
+  })
+
   it("renders a contributed tool's resources, escaping what it answers", async () => {
     const page = await html('/contributions/queue')
 
@@ -158,10 +177,13 @@ describe('devtools UI', () => {
     expect(page).toContain('/devtools/queue/jobs/:id')
   })
 
-  it.each(['/info', '/health', '/events', '/runtime'])('renders %s', async path => {
-    const res = await ui.fetch(path)
-
-    expect(res.status).toBe(200)
+  it.each([
+    ['/info', process.version],
+    ['/health', 'readiness'],
+    ['/events', 'binding-initialized'],
+    ['/runtime', 'heapUsed'],
+  ])('renders %s with what the devtools answered', async (path, shown) => {
+    expect(await html(path)).toContain(shown)
   })
 })
 

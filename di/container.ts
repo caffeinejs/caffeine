@@ -1324,7 +1324,7 @@ export class CaffeineIoC implements Container {
 
   private async refresh(target?: symbol | Binding): Promise<void> {
     if (typeof target === 'object' && target.scopeID !== Scopes.REFRESH) {
-      throw new ErrNotRefreshable(typeof target.type === 'function' ? target.type.name : `binding #${target.id}`)
+      throw new ErrNotRefreshable(keyStr(target.ctx?.key ?? (target.type as InjectionToken | undefined)))
     }
 
     return (this.scopes.get(Scopes.REFRESH) as RefreshScope).refresh(target)

@@ -20,7 +20,7 @@ export const healthRouter = new Router('/health')
           {Object.entries(health.groups).map(([group, probe]) => (
             <>
               <h2>
-                <span safe>{group}</span> <Badge tone={probe.ok ? 'good' : 'bad'}>{probe.ok ? 'ok' : 'failing'}</Badge>
+                <span safe>{group}</span> <Badge tone={probe.ok ? 'good' : 'bad'} text={probe.ok ? 'ok' : 'failing'} />
               </h2>
               <table>
                 <thead>
@@ -36,7 +36,7 @@ export const healthRouter = new Router('/health')
                     <tr>
                       <td safe>{check.name}</td>
                       <td>
-                        <Badge tone={check.ok ? 'good' : 'bad'}>{check.ok ? 'ok' : 'failing'}</Badge>
+                        <Badge tone={check.ok ? 'good' : 'bad'} text={check.ok ? 'ok' : 'failing'} />
                       </td>
                       <td safe>{display(check.detail)}</td>
                       <td />
@@ -46,9 +46,10 @@ export const healthRouter = new Router('/health')
                     <tr>
                       <td safe>{`${outcome.name}${outcome.critical ? '' : ' (not critical)'}`}</td>
                       <td>
-                        <Badge tone={outcome.status === 'up' ? 'good' : outcome.status === 'degraded' ? 'warn' : 'bad'}>
-                          {outcome.status}
-                        </Badge>
+                        <Badge
+                          tone={outcome.status === 'up' ? 'good' : outcome.status === 'degraded' ? 'warn' : 'bad'}
+                          text={outcome.status}
+                        />
                       </td>
                       <td safe>{display(outcome.detail)}</td>
                       <td>

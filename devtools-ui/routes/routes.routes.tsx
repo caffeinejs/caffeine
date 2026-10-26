@@ -1,5 +1,4 @@
-import type { RouteRecord } from '@caffeinejs/http'
-import { Router } from '@caffeinejs/http'
+import { Router, type RouteRecord } from '@caffeinejs/http'
 
 import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
@@ -70,7 +69,7 @@ export const routesRouter = new Router('/routes')
                     <tr>
                       <td safe>{route.methods.join(' ')}</td>
                       <td>
-                        <code safe>{route.url}</code> {route.kind === 'raw' ? <Badge tone="muted">raw</Badge> : ''}
+                        <code safe>{route.url}</code> {route.kind === 'raw' ? <Badge tone="muted" text="raw" /> : ''}
                       </td>
                       <td safe>{display([route.group, route.handler].filter(Boolean).join('.'))}</td>
                       <td>{authentication(route)}</td>
@@ -85,9 +84,8 @@ export const routesRouter = new Router('/routes')
                                 ? 'warn'
                                 : 'muted'
                           }
-                        >
-                          {route.security.csrf}
-                        </Badge>
+                          text={route.security.csrf}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -104,11 +102,11 @@ function authentication(route: RouteRecord): JSX.Element {
   const auth = route.security.authentication
 
   if (auth.skipped) {
-    return <Badge tone="muted">exempt</Badge>
+    return <Badge tone="muted" text="exempt" />
   }
 
   if (auth.gate === undefined) {
-    return <Badge tone="warn">no gate</Badge>
+    return <Badge tone="warn" text="no gate" />
   }
 
   return (
@@ -120,7 +118,7 @@ function authorization(route: RouteRecord): JSX.Element {
   const authz = route.security.authorization
 
   if (!authz.protected) {
-    return <Badge tone={route.security.authentication.skipped ? 'muted' : 'warn'}>open</Badge>
+    return <Badge tone={route.security.authentication.skipped ? 'muted' : 'warn'} text="open" />
   }
 
   const required = [

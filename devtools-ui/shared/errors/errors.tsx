@@ -1,6 +1,7 @@
-import { ErrFetchyHTTP } from '@caffeinejs/fetchy'
+import { ErrFetchy, ErrFetchyHTTP } from '@caffeinejs/fetchy'
 import { HTML } from '@caffeinejs/html'
 import { Catch, ErrHTTP, type ActionResult, type ErrorHandler, type IContext } from '@caffeinejs/http'
+import type { ContextPlatform } from '@caffeinejs/http/fastify'
 
 import { TARGET_AUTHORIZATION_VARIABLE, TARGET_URL_VARIABLE, type Config } from '../../app.config.js'
 import { Layout } from '../layout/Layout.js'
@@ -31,11 +32,28 @@ export function TargetErrorPage(props: { target: string; status: number | undefi
   })
 }
 
-/** Renders a page that failed to read the devtools, keeping the status the devtools answered. */
+/**
+ * Renders a page that failed to read the devtools, keeping the status the devtools answered, and any other failure
+ * as what it is: a page of the UI that failed.
+ */
 @Catch(Error)
 export class TargetErrorHandler implements ErrorHandler<Error> {
   handle(ctx: IContext, err: Error): ActionResult {
     const config = ctx.config as Config
+
+    if (!(err instanceof ErrFetchy) && !isNetworkFailure(err)) {
+      ;(ctx.platform as ContextPlatform).request.log.error({ err }, 'Cannot render the page')
+      ctx.status(500)
+      return HTML(
+        Layout({
+          title: 'Cannot show the page',
+          tools: undefined,
+          target: config.target.url,
+          active: '',
+          children: <p>The page failed to render. The UI log names the error.</p>,
+        }),
+      )
+    }
 
     if (err instanceof ErrFetchyHTTP) {
       ctx.status(err.status === 404 ? 404 : 502)
@@ -76,6 +94,11 @@ export class PageErrorHandler implements ErrorHandler<ErrHTTP> {
       }),
     )
   }
+}
+
+/** What `fetch` throws when it reaches nothing: a `TypeError` whose cause is the socket's error. */
+function isNetworkFailure(err: Error): boolean {
+  return err instanceof TypeError && err.cause instanceof Error
 }
 
 /** The innermost cause's message: what `fetch` puts under its own `fetch failed`. */

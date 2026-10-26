@@ -11,6 +11,7 @@ import type { ConfigStore } from '@caffeinejs/application/config'
 import { DevTool, ErrDevToolInvalid, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
 import {
   ErrHTTPBadRequest,
+  ErrHTTPMisdirectedRequest,
   ErrHTTPNotFound,
   ErrHTTPUnsupportedMediaType,
   HTTPPlugin,
@@ -21,7 +22,7 @@ import {
   type IContext,
   type RouteAuthzOptions,
 } from '@caffeinejs/http'
-import { authentication } from '@caffeinejs/http/fastify'
+import { authentication, type HTTPPluginConfigurer, type RouterTypes } from '@caffeinejs/http/fastify'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { ConfigTool } from './config/config.js'
@@ -45,7 +46,7 @@ export interface DevToolsConfig {
 }
 
 /** What one devtools mount serves, resolved. */
-export interface DevToolsOptions {
+interface DevToolsOptions {
   readonly path: string
   /** What every devtools route requires; `undefined` leaves them to the server's own gate and fallback policy. */
   readonly authorize: RouteAuthzOptions | undefined
@@ -226,7 +227,10 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
       // protects with no gate over it is refused at start-up. So the gate goes wherever authentication is installed,
       // and `authorize(...)` without it fails as the gate does, naming the feature.
       l.with(context =>
-        options.authorize !== undefined || context.hasFeature('auth') ? authentication()(context) : new NoGate(),
+        options.authorize !== undefined || context.hasFeature('auth')
+          ? // Named, and without the OIDC routes: they belong to the application's own gate, the first to install.
+            authentication(g => g.name('devtools').oidcRoutes(false))(context)
+          : new NoGate(),
       )
 
       l.with(devToolsPlugin(options, events))
@@ -278,11 +282,11 @@ export function DevTools<C = unknown>(configure?: FeatureConfigurer<DevToolsBuil
  * @throws ErrDevToolsConfiguration at start-up for a malformed path or a malformed tool.
  */
 export function devTools<C = unknown>(
-  configure?: (builder: DevToolsPluginBuilder, context: HTTPSetupContext<C>) => void,
+  configure?: HTTPPluginConfigurer<DevToolsPluginBuilder, C>,
 ): AdapterExtensionFactory<HTTPPlugin, C> {
   return context => {
     const builder = new DevToolsPluginBuilder()
-    configure?.(builder, context)
+    configure?.(builder, context as HTTPSetupContext<C, RouterTypes>)
 
     const options = builder[kResolve](undefined)
     assertNotProduction(options, 'Serve devtools on a server of their own instead: ".install(DevTools())"')
@@ -342,7 +346,10 @@ class DevToolsPlugin extends HTTPPlugin {
       router.authorize(options.authorize)
     }
 
-    router.get('/', (): DevToolsIndex => ({ tools: tools.map(tool => indexOf(tool, options.path)) }))
+    router.get('/', (ctx: IContext): DevToolsIndex => {
+      assertLoopbackHost(ctx)
+      return { tools: tools.map(tool => indexOf(tool, options.path)) }
+    })
 
     for (const tool of tools) {
       for (const operation of tool.operations) {
@@ -370,10 +377,12 @@ function indexOf(tool: DevTool, path: string): DevToolsIndex['tools'][number] {
 const JSON_TYPE = /^application\/(?:[\w.+-]+\+)?json\s*(?:;|$)/i
 
 async function answer(operation: DevToolOperation, ctx: IContext): Promise<unknown> {
+  assertLoopbackHost(ctx)
+
   const withBody = operation.method === 'POST' || operation.method === 'PUT' || operation.method === 'PATCH'
 
   if (withBody && !JSON_TYPE.test(ctx.req.header('content-type') ?? '')) {
-    throw new ErrHTTPUnsupportedMediaType('Send the request body as "application/json"')
+    throw new ErrHTTPUnsupportedMediaType('Cannot read the request body: it is not "application/json"')
   }
 
   let result: unknown
@@ -505,5 +514,36 @@ function isProduction(): boolean {
 }
 
 function isLoopback(host: string): boolean {
-  return host === 'localhost' || host === '::1' || host.startsWith('127.')
+  return host === 'localhost' || host === '::1' || host.startsWith('127.') || host.startsWith('::ffff:127.')
+}
+
+/**
+ * Refuses a request that reached a loopback address under a `Host` naming anything else.
+ *
+ * A page on another site can resolve its own name to `127.0.0.1` (DNS rebinding) and become same-origin with a
+ * server listening there, which takes it past every check a browser makes. Its requests still carry its own name as
+ * the `Host`, so a server only this machine should reach answers loopback names alone. A request that came in on
+ * another address, or with no socket at all (`app.fetch(...)`), is left alone.
+ *
+ * @throws ErrHTTPMisdirectedRequest for a loopback request whose `Host` is not `localhost`, `*.localhost`,
+ * `127.x.x.x` or `[::1]`.
+ */
+export function assertLoopbackHost(ctx: IContext): void {
+  const local = (ctx.req.raw as { socket?: { localAddress?: string } } | undefined)?.socket?.localAddress
+
+  if (local === undefined || !isLoopback(local)) {
+    return
+  }
+
+  const host = ctx.req.header('host') ?? ''
+  let name: string
+  try {
+    name = new URL(`http://${host}`).hostname
+  } catch {
+    name = ''
+  }
+
+  if (name !== '[::1]' && name !== 'localhost' && !name.endsWith('.localhost') && !/^127\.\d+\.\d+\.\d+$/.test(name)) {
+    throw new ErrHTTPMisdirectedRequest(`Cannot answer for host "${host}": this server answers loopback names alone`)
+  }
 }

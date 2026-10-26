@@ -1,6 +1,8 @@
 import { DevTool, ErrDevToolInvalid, type DevToolOperation } from '@caffeinejs/application/devtools'
 import type { Container, InjectionToken } from '@caffeinejs/di'
 
+import { maskCredentials } from '../config/redact.js'
+
 type Hooks = Container['hooks']
 
 /** How many events the tool keeps; the oldest goes first. */
@@ -22,6 +24,7 @@ export interface ContainerEventRecord {
   readonly subject: string | undefined
   /** An ISO 8601 timestamp. */
   readonly at: string
+  /** The failure's message, the password of any URL in it masked. */
   readonly error?: string
 }
 
@@ -81,7 +84,9 @@ export class EventsTool extends DevTool {
       kind,
       subject,
       at: new Date().toISOString(),
-      ...(error === undefined ? {} : { error: error instanceof Error ? error.message : String(error) }),
+      ...(error === undefined
+        ? {}
+        : { error: maskCredentials(error instanceof Error ? error.message : String(error)) }),
     })
 
     if (this.#events.length > CAPACITY) {

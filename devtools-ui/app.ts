@@ -3,6 +3,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import type { Logger } from '@caffeinejs/application/logger'
+import { assertLoopbackHost } from '@caffeinejs/devtools'
 import { CaffeineIoC, type Container } from '@caffeinejs/di'
 import { FetchyClient } from '@caffeinejs/fetchy'
 import { html } from '@caffeinejs/html'
@@ -49,6 +50,12 @@ export function buildApp(options: BuildAppOptions = {}) {
       .server(({ config }) => ({ listener: config.server }))
       .logger((b, { config }) => b.level(config.log.level))
       .errorHandling(e => e.globalHandlers(PageErrorHandler, TargetErrorHandler))
+      // A page on another site that resolves its name to this loopback address is refused: it would read the devtools
+      // with the credentials this UI holds.
+      .use((ctx, next) => {
+        assertLoopbackHost(ctx)
+        return next()
+      })
       // The refresh forms change something in the application the UI reads: no other site may post them.
       .with(csrf())
       .with(() => html())

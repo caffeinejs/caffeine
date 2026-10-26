@@ -106,7 +106,7 @@ describe('RoutesTool', () => {
     expect(security.gates).toEqual([
       { server: '', gates: ['default'] },
       { server: 'admin', gates: ['default'] },
-      { server: 'devtools', gates: ['default'] },
+      { server: 'devtools', gates: ['devtools'] },
     ])
   })
 })

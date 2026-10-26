@@ -41,13 +41,14 @@ Listener('admin', l => l.with(devTools()))
 
 The devtools show the shape of your application to anyone who can reach them, so each default holds them back:
 
-| Default                                                                                                                                   | Change it with                                                                                 |
-| ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `DevTools()` listens on `127.0.0.1`.                                                                                                      | `host(...)`. A warning is logged when the host is not loopback and no `authorize(...)` is set. |
-| Start-up fails with `ErrDevToolsInProduction` where `NODE_ENV` is `production`.                                                           | `allowProduction()`. A warning is logged at every start.                                       |
-| Configuration values are left out: a property shows its path and its origin only.                                                         | `showConfigValues()`                                                                           |
-| A `POST`, `PUT` or `PATCH` without `Content-Type: application/json` gets a 415, so a cross-site form cannot reach it without a preflight. | Nothing changes it.                                                                            |
-| Every answer is sent with `Cache-Control: no-store`.                                                                                      | Nothing changes it.                                                                            |
+| Default                                                                                                                                      | Change it with                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `DevTools()` listens on `127.0.0.1`.                                                                                                         | `host(...)`. A warning is logged when the host is not loopback and no `authorize(...)` is set. |
+| Start-up fails with `ErrDevToolsInProduction` where `NODE_ENV` is `production`.                                                              | `allowProduction()`. A warning is logged at every start.                                       |
+| Configuration values are left out: a property shows its path and its origin only.                                                            | `showConfigValues()`                                                                           |
+| A `POST`, `PUT` or `PATCH` without `Content-Type: application/json` gets a 415, so a cross-site form cannot reach it without a preflight.    | Nothing changes it.                                                                            |
+| Every answer is sent with `Cache-Control: no-store`.                                                                                         | Nothing changes it.                                                                            |
+| A request reaching a loopback address under a `Host` that is not a loopback name gets a 421, so a page using DNS rebinding cannot read them. | Nothing changes it.                                                                            |
 
 To require something of every devtools route, use `authorize(...)`. It takes what `router.authorize(...)` takes:
 
@@ -57,7 +58,8 @@ createWebApplication()
   .install(DevTools(d => d.authorize({ roles: ['ops'] })))
 ```
 
-- When authentication is installed, `DevTools()` registers the authentication gate on its own server. The
+- When authentication is installed, `DevTools()` registers an authentication gate named `devtools` on its own
+  server, without the OIDC routes, which stay with the application's own gate. The
   application's fallback policy then reaches the devtools as it reaches every route.
 - `authorize(...)` without `Authentication(...)` fails at start-up.
 - With `devTools()`, the server's own gate and fallback policy apply.
