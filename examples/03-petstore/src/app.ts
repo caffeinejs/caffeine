@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 
 import type { Logger } from '@caffeinejs/application/logger'
+import { DevTools } from '@caffeinejs/devtools'
 import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
 import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
@@ -132,6 +133,10 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
         ),
       )
       .with(authentication())
+      // The devtools, on their own port, never the one users reach: http://127.0.0.1:9090/devtools by default. Values
+      // are shown, and the GitHub client secret, the session secret and the docs password stay masked: their keys
+      // name a secret. With authentication installed, the devtools' server gets a gate of its own.
+      .install(DevTools((d, { config }) => d.config(config.devtools).showConfigValues()))
       // JSX server-side rendering. Registering it is optional — `HTML(...)` renders without it — and what it
       // configures is whether the markup is prefixed with a doctype.
       .with(() => html())
