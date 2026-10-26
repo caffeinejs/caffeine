@@ -21,9 +21,9 @@
   },
   "dependencies": {
     "@caffeinejs/application": "*",
+    "@caffeinejs/brewer": "*",
     "@caffeinejs/devtools": "*",
     "@caffeinejs/di": "*",
-    "@caffeinejs/fetchy": "*",
     "@caffeinejs/html": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/static": "*",
@@ -31,5 +31,8 @@
     "@hpcc-js/wasm-graphviz": "^1.30.0",
     "@kitajs/html": "^4.2.13",
     "fastify": "^5.12.5"
+  },
+  "devDependencies": {
+    "@caffeinejs/testing": "*"
   }
 }

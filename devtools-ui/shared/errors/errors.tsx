@@ -1,10 +1,10 @@
-import { ErrFetchy, ErrFetchyHTTP } from '@caffeinejs/fetchy'
 import { HTML } from '@caffeinejs/html'
 import { Catch, ErrHTTP, type ActionResult, type ErrorHandler, type IContext } from '@caffeinejs/http'
 import type { ContextPlatform } from '@caffeinejs/http/fastify'
 
 import { TARGET_AUTHORIZATION_VARIABLE, TARGET_URL_VARIABLE, type Config } from '../../app.config.js'
 import { Layout } from '../layout/Layout.js'
+import { ErrDevToolsAnswered } from './answered.js'
 
 /**
  * What the UI says when it cannot read the devtools: which URL it asked, what came back, and the variable that
@@ -41,7 +41,7 @@ export class TargetErrorHandler implements ErrorHandler<Error> {
   handle(ctx: IContext, err: Error): ActionResult {
     const config = ctx.config as Config
 
-    if (!(err instanceof ErrFetchy) && !isNetworkFailure(err)) {
+    if (!(err instanceof ErrDevToolsAnswered) && !isNetworkFailure(err)) {
       ;(ctx.platform as ContextPlatform).request.log.error({ err }, 'Cannot render the page')
       ctx.status(500)
       return HTML(
@@ -55,7 +55,7 @@ export class TargetErrorHandler implements ErrorHandler<Error> {
       )
     }
 
-    if (err instanceof ErrFetchyHTTP) {
+    if (err instanceof ErrDevToolsAnswered) {
       ctx.status(err.status === 404 ? 404 : 502)
       return HTML(
         TargetErrorPage({

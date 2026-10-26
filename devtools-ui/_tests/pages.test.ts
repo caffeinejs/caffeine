@@ -8,6 +8,7 @@ import { DevTools } from '@caffeinejs/devtools'
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import type { WebApplication } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { testClient, type TestClient } from '@caffeinejs/testing/http'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { buildApp } from '../app.js'
@@ -47,6 +48,8 @@ const listener = { host: '127.0.0.1', port: 0 }
 describe('devtools UI', () => {
   let target: WebApplication
   let ui: ReturnType<typeof buildApp>
+  // Typed by the UI's own routes: a page renamed or removed breaks this file.
+  let client: TestClient<ReturnType<typeof buildApp>>
 
   beforeAll(async () => {
     const conf = newConfiguration($t.Object({ db: $t.Object({ pass: $t.Secret($t.String()), pool: $t.Integer() }) }))
@@ -67,7 +70,9 @@ describe('devtools UI', () => {
     vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__URL', `${target.listeners.get('devtools')!.address!.origin}/devtools`)
     vi.stubEnv('CAFFEINE_DEVTOOLS_SERVER__PORT', '0')
     ui = buildApp({ logger: false })
+    // Listening, for the test that reaches the UI on its socket; the others go through the client.
     await ui.run()
+    client = testClient(ui)
   })
 
   afterAll(async () => {
@@ -76,14 +81,14 @@ describe('devtools UI', () => {
     await target?.close()
   })
 
-  async function html(path: string, init?: RequestInit): Promise<string> {
-    const res = await ui.request(path, init)
+  async function html(sent: Promise<{ readonly headers: Headers; text(): Promise<string> }>): Promise<string> {
+    const res = await sent
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
     return res.text()
   }
 
   it('navigates to every tool the devtools list, a contributed one included', async () => {
-    const page = await html('/')
+    const page = await html(client.get())
 
     for (const href of ['/info', '/health', '/di', '/config', '/routes', '/refreshables', '/events', '/runtime']) {
       expect(page).toContain(`href="${href}"`)
@@ -97,7 +102,7 @@ describe('devtools UI', () => {
   }
 
   it('draws the dependency graph on the server, with the edge from a binding to what it injects', async () => {
-    const page = await html('/di')
+    const page = await html(client.di.get())
     const graph = graphOf(page)
     // A node is a `<g class="node">` titled with its name, its first line of text the binding's key.
     const nodes = [...graph.matchAll(/<g id="node\d+" class="node">\s*<title>(n\d+)<\/title>([\s\S]*?)<\/g>/g)]
@@ -109,7 +114,7 @@ describe('devtools UI', () => {
   })
 
   it('keeps the graph to the bindings a filter keeps and what they are wired to', async () => {
-    const graph = graphOf(await html('/di?q=petservice'))
+    const graph = graphOf(await html(client.di.get({ query: { q: 'petservice' } })))
 
     expect(graph).toContain('PetService')
     expect(graph).toContain('Repository')
@@ -117,21 +122,21 @@ describe('devtools UI', () => {
   })
 
   it('draws a binding whose key is written as DOT as text, never as a link', async () => {
-    const graph = graphOf(await html('/di'))
+    const graph = graphOf(await html(client.di.get()))
 
     expect(graph).toContain('x&quot; URL=&quot;javascript:alert(1)')
     expect(graph).not.toMatch(/xlink:href|<a /)
   })
 
   it('serves the script that makes the graph explorable', async () => {
-    const res = await ui.request('/static/graph.js')
+    const res = await client.$fetch('/static/graph.js')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toContain("querySelectorAll('.di-graph')")
   })
 
   it('shows configuration values masked as the devtools masked them', async () => {
-    const page = await html('/config')
+    const page = await html(client.config.get())
 
     expect(page).toContain('db.pass')
     expect(page).toContain('******')
@@ -139,7 +144,7 @@ describe('devtools UI', () => {
   })
 
   it("lists every server's routes with what each requires", async () => {
-    const page = await html('/routes')
+    const page = await html(client.routes.get())
 
     expect(page).toContain('The application&#39;s own server')
     expect(page).toContain('Listener devtools')
@@ -147,11 +152,11 @@ describe('devtools UI', () => {
   })
 
   it("filters the routes to one server, the application's own being the empty name, or back to every server", async () => {
-    const page = await html('/routes')
+    const page = await html(client.routes.get())
     const every = /<option value="([^"]*)"[^>]*>every server<\/option>/.exec(page)?.[1]
 
-    const all = await html(`/routes?server=${every}`)
-    const own = await html('/routes?server=')
+    const all = await html(client.routes.get({ query: { server: every! } }))
+    const own = await html(client.routes.get({ query: { server: '' } }))
 
     expect(all).toContain('The application&#39;s own server')
     expect(all).toContain('Listener devtools')
@@ -161,10 +166,10 @@ describe('devtools UI', () => {
 
   it('refreshes a refreshable from a form, and comes back naming it', async () => {
     const before = target.container.get(Rates).at
-    const page = await html('/refreshables')
-    const action = /action="(\/refreshables\/\d+\/refreshes)"/.exec(page)![1]
+    const page = await html(client.refreshables.get())
+    const id = /action="\/refreshables\/(\d+)\/refreshes"/.exec(page)![1]!
 
-    const res = await ui.request(action, { method: 'POST' })
+    const res = await client.refreshables({ id }).refreshes.post()
 
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/refreshables?refreshed=Rates')
@@ -172,7 +177,8 @@ describe('devtools UI', () => {
   })
 
   it('refuses a refresh posted from another site', async () => {
-    const res = await ui.request('/refreshables/refreshes', {
+    // Sent as a form would be, which the typed client never does.
+    const res = await client.$fetch('/refreshables/refreshes', {
       method: 'POST',
       headers: { 'sec-fetch-site': 'cross-site', 'content-type': 'application/x-www-form-urlencoded' },
       body: 'label=',
@@ -198,7 +204,7 @@ describe('devtools UI', () => {
   })
 
   it("renders a contributed tool's resources, escaping what it answers", async () => {
-    const page = await html('/contributions/queue')
+    const page = await html(client.contributions({ id: 'queue' }).get())
 
     expect(page).toMatch(/pending&#?\w+;: 3/)
     expect(page).toContain('w-&lt;script>')
@@ -206,30 +212,27 @@ describe('devtools UI', () => {
     expect(page).toContain('/devtools/queue/jobs/:id')
   })
 
-  it.each([
-    ['/info', process.version],
-    ['/health', 'readiness'],
-    ['/events', 'binding-initialized'],
-    ['/runtime', 'heapUsed'],
-  ])('renders %s with what the devtools answered', async (path, shown) => {
-    expect(await html(path)).toContain(shown)
+  it.each<[string, () => Promise<Response>, string]>([
+    ['/info', () => client.info.get(), process.version],
+    ['/health', () => client.health.get(), 'readiness'],
+    ['/events', () => client.events.get(), 'binding-initialized'],
+    ['/runtime', () => client.runtime.get(), 'heapUsed'],
+  ])('renders %s with what the devtools answered', async (_, open, shown) => {
+    expect(await html(open())).toContain(shown)
   })
 })
 
 describe('devtools UI without devtools to read', () => {
   it('says which URL it could not reach and the variable that changes it', async () => {
     vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__URL', 'http://127.0.0.1:1/devtools')
-    const ui = buildApp({ logger: false })
-    await ui.bootstrap()
+    await using ui = testClient(buildApp({ logger: false }))
 
-    const res = await ui.request('/')
+    const res = await ui.get()
     const page = await res.text()
 
     expect(res.status).toBe(502)
     expect(page).toContain('Cannot reach the devtools at http://127.0.0.1:1/devtools')
     expect(page).toContain('CAFFEINE_DEVTOOLS_TARGET__URL')
-
-    await ui.close()
     vi.unstubAllEnvs()
   })
 })

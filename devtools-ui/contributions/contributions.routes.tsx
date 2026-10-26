@@ -23,13 +23,10 @@ export const contributionsRouter = new Router('/contributions')
     const readable = tool.links.filter(link => link.method === 'GET' && !link.href.includes('/:'))
     const resources = await Promise.all(
       readable.map(async link => {
-        const segments = link.href.slice(prefix.length).split('/').filter(Boolean)
+        const path = link.href.slice(prefix.length)
 
-        if (segments.length === 1) {
-          return { link, value: await api.toolRoot(segments[0]) }
-        }
-
-        return segments.length === 2 ? { link, value: await api.toolResource(segments[0], segments[1]) } : { link }
+        // The tool's root, or a resource one segment under it.
+        return path.split('/').filter(Boolean).length <= 2 ? { link, value: await api.contributed(path) } : { link }
       }),
     )
 

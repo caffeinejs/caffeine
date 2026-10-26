@@ -4,12 +4,11 @@ import { fileURLToPath } from 'node:url'
 import type { Logger } from '@caffeinejs/application/logger'
 import { assertLoopbackHost } from '@caffeinejs/devtools'
 import { CaffeineIoC, type Container } from '@caffeinejs/di'
-import { FetchyClient } from '@caffeinejs/fetchy'
 import { html } from '@caffeinejs/html'
 import { createWebApplication, csrf } from '@caffeinejs/http/fastify'
 import { staticFiles } from '@caffeinejs/static'
 
-import { DevToolsAPI, devToolsClient } from './api.js'
+import { DevToolsAPI } from './api.js'
 import { configuration, kConfig } from './app.config.js'
 import { configRouter } from './config/index.js'
 import { contributionsRouter } from './contributions/index.js'
@@ -38,10 +37,7 @@ export interface BuildAppOptions {
 export function buildApp(options: BuildAppOptions = {}) {
   const container = options.container ?? new CaffeineIoC()
 
-  container.bind(FetchyClient, t =>
-    t.toFactory(ctx => devToolsClient(ctx.container.get(kConfig))).preDestroy(client => client.close()),
-  )
-  container.bind(DevToolsAPI, t => t.toFactory(ctx => ctx.container.get(FetchyClient).create(DevToolsAPI)))
+  container.bind(DevToolsAPI, t => t.toFactory(ctx => new DevToolsAPI(ctx.container.get(kConfig))))
 
   return (
     createWebApplication({ container, config: configuration, logger: options.logger })

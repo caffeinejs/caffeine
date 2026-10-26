@@ -1,8 +1,9 @@
 # @caffeinejs/devtools-ui
 
 A web UI for the [devtools](../devtools/README.md) endpoints, built as a Caffeine application. It renders HTML on the
-server with `@caffeinejs/html`, reads the devtools through a `@caffeinejs/fetchy` client, and draws the dependency
-graph with Graphviz on the server. It runs as a process of its own, next to the application it reads.
+server with `@caffeinejs/html`, reads the devtools through a `@caffeinejs/brewer` client typed by their own routes,
+and draws the dependency graph with Graphviz on the server. It runs as a process of its own, next to the application
+it reads.
 
 ## Run it
 
@@ -63,7 +64,7 @@ devtools-ui/
   app.ts          container and application setup
   app.config.ts   configuration
   main.ts         starts the server
-  api.ts          the fetchy client for the devtools
+  api.ts          the devtools client, typed by DevToolsRoutes
   shared/         layout, error pages, components
   <page>/         one router per page
   public/         stylesheet, and the script that makes the graph explorable

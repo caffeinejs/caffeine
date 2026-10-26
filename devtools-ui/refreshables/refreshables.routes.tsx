@@ -64,12 +64,12 @@ export const refreshablesRouter = new Router('/refreshables')
   })
   .post('/refreshes', async (ctx, { api }) => {
     const label = (ctx.req.body() as { label?: string } | undefined)?.label
-    const result = await api.refreshAll(label === undefined || label === '' ? {} : { label })
+    const result = await api.refreshAll(label === '' ? undefined : label)
 
     return ctx.redirect(`/refreshables?refreshed=${encodeURIComponent(keysOf(result.refreshed))}`, 303)
   })
   .post('/:id/refreshes', async (ctx, { api }) => {
-    const result = await api.refreshOne(ctx.req.param('id')!, {})
+    const result = await api.refreshOne(ctx.req.param('id')!)
 
     return ctx.redirect(`/refreshables?refreshed=${encodeURIComponent(keysOf(result.refreshed))}`, 303)
   })

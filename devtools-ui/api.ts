@@ -1,103 +1,114 @@
-import type {
-  BindingRecord,
-  ContainerEventRecord,
-  DependencyGraph,
-  DevToolsIndex,
-  HealthRecord,
-  InfoRecord,
-  PropertyDetail,
-  PropertyRecord,
-  RefreshableRecord,
-  RefreshRecord,
-  RuntimeRecord,
-  SecurityRecord,
-  ServerRoutesRecord,
-  SourceRecord,
-} from '@caffeinejs/devtools'
-import { API, Body, GET, newClient, Param, Params, POST, Query, type FetchyClient } from '@caffeinejs/fetchy'
+import { brewer, type BrewClient } from '@caffeinejs/brewer'
+import type { DevToolsRoutes } from '@caffeinejs/devtools'
 
 import type { Config } from './app.config.js'
+import { ErrDevToolsAnswered } from './shared/errors/index.js'
 
-/**
- * The devtools endpoints the UI reads, one field per resource. The base URL is the devtools path itself, so a
- * resource here is written as the devtools serve it under `/devtools`.
- */
-@API()
-export class DevToolsAPI {
-  // No path of its own: the index is the base URL as written, which a trailing slash would miss.
-  @GET('')
-  index!: () => Promise<DevToolsIndex>
-
-  @GET('/info')
-  info!: () => Promise<InfoRecord>
-
-  @GET('/health')
-  health!: () => Promise<HealthRecord>
-
-  @GET('/di/bindings')
-  @Params([Query('internal')])
-  bindings!: (internal: 'true' | undefined) => Promise<BindingRecord[]>
-
-  @GET('/di/graph')
-  @Params([Query('internal')])
-  graph!: (internal: 'true' | undefined) => Promise<DependencyGraph>
-
-  @GET('/config/properties')
-  properties!: () => Promise<PropertyRecord[]>
-
-  @GET('/config/properties/{path}')
-  @Params([Param('path')])
-  property!: (path: string) => Promise<PropertyDetail>
-
-  @GET('/config/sources')
-  sources!: () => Promise<SourceRecord[]>
-
-  @GET('/routes')
-  routes!: () => Promise<ServerRoutesRecord[]>
-
-  @GET('/routes/security')
-  security!: () => Promise<SecurityRecord>
-
-  @GET('/refreshables')
-  refreshables!: () => Promise<RefreshableRecord[]>
-
-  @POST('/refreshables/refreshes')
-  @Params([Body()])
-  refreshAll!: (body: { label?: string }) => Promise<RefreshRecord>
-
-  @POST('/refreshables/{id}/refreshes')
-  @Params([Param('id'), Body()])
-  refreshOne!: (id: string, body: Record<string, never>) => Promise<RefreshRecord>
-
-  @GET('/events')
-  events!: () => Promise<ContainerEventRecord[]>
-
-  @GET('/runtime')
-  runtime!: () => Promise<RuntimeRecord>
-
-  /** A contributed tool's root resource: `GET /devtools/<tool>`. */
-  @GET('/{tool}')
-  @Params([Param('tool')])
-  toolRoot!: (tool: string) => Promise<unknown>
-
-  /** A contributed tool's resource one segment under its root: `GET /devtools/<tool>/<resource>`. */
-  @GET('/{tool}/{resource}')
-  @Params([Param('tool'), Param('resource')])
-  toolResource!: (tool: string, resource: string) => Promise<unknown>
+/** What a typed call answers: a member per status the route declares. */
+interface Answer {
+  readonly status: number
+  readonly statusText: string
+  json(): Promise<unknown>
 }
 
-/** The client every page reads the devtools through, sending `target.authorization` when it is set. */
-export function devToolsClient(config: Config): FetchyClient {
-  const builder = newClient().baseURL(config.target.url)
-  const authorization = config.target.authorization
+/** The body of a call's `200`, typed from the route's schema. */
+type OK<R> = R extends { readonly status: 200; json(): Promise<infer B> } ? B : never
 
-  if (authorization !== undefined) {
-    builder.addInterceptor(chain => {
-      const request = chain.request()
-      request.headers.set('authorization', authorization)
-      return chain.proceed(request)
-    })
+/**
+ * The devtools resources the UI reads. Each is a call of a client typed by the devtools' own routes,
+ * `DevToolsRoutes`, so a resource the devtools rename or re-type fails to compile here rather than to render.
+ *
+ * @throws ErrDevToolsAnswered from every method when the devtools answer anything but `200`.
+ */
+export class DevToolsAPI {
+  readonly #client: BrewClient<DevToolsRoutes>
+  readonly #target: string
+  readonly #headers: Record<string, string>
+
+  constructor(config: Config) {
+    const authorization = config.target.authorization
+    this.#target = config.target.url
+    this.#headers = authorization === undefined ? {} : { authorization }
+    this.#client = brewer<DevToolsRoutes>(this.#target, { headers: this.#headers })
   }
 
-  return builder.build()
+  index() {
+    return read(this.#client.get())
+  }
+
+  info() {
+    return read(this.#client.info.get())
+  }
+
+  health() {
+    return read(this.#client.health.get())
+  }
+
+  bindings(internal: 'true' | undefined) {
+    return read(this.#client.di.bindings.get({ query: { internal } }))
+  }
+
+  graph(internal: 'true' | undefined) {
+    return read(this.#client.di.graph.get({ query: { internal } }))
+  }
+
+  properties() {
+    return read(this.#client.config.properties.get())
+  }
+
+  property(path: string) {
+    return read(this.#client.config.properties({ path }).get())
+  }
+
+  sources() {
+    return read(this.#client.config.sources.get())
+  }
+
+  routes() {
+    return read(this.#client.routes.get())
+  }
+
+  security() {
+    return read(this.#client.routes.security.get())
+  }
+
+  refreshables() {
+    return read(this.#client.refreshables.get())
+  }
+
+  /** Refreshes every refreshable, or those carrying `label`. */
+  refreshAll(label: string | undefined) {
+    return read(this.#client.refreshables.refreshes.post({ body: label === undefined ? {} : { label } }))
+  }
+
+  refreshOne(id: string) {
+    return read(this.#client.refreshables({ id }).refreshes.post({ body: {} }))
+  }
+
+  events() {
+    return read(this.#client.events.get())
+  }
+
+  runtime() {
+    return read(this.#client.runtime.get())
+  }
+
+  /**
+   * A contributed tool's resource, by its path under the devtools: `/queue/jobs`. A contributed tool is not in
+   * `DevToolsRoutes`, so what it answers is untyped.
+   */
+  async contributed(path: string): Promise<unknown> {
+    return read(fetch(`${this.#target}${path}`, { headers: this.#headers }))
+  }
+}
+
+/** The body of a `200`, or the devtools' refusal thrown. */
+async function read<R extends Answer>(sent: Promise<R>): Promise<OK<R>> {
+  const res = await sent
+
+  if (res.status !== 200) {
+    throw new ErrDevToolsAnswered(res.status, res.statusText)
+  }
+
+  return (await res.json()) as OK<R>
 }

@@ -8,13 +8,13 @@
       "path": "../application/tsconfig.build.json"
     },
     {
+      "path": "../brewer/tsconfig.build.json"
+    },
+    {
       "path": "../devtools/tsconfig.build.json"
     },
     {
       "path": "../di/tsconfig.build.json"
-    },
-    {
-      "path": "../fetchy/fetchy/tsconfig.build.json"
     },
     {
       "path": "../html/tsconfig.build.json"
