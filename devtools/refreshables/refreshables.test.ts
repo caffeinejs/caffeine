@@ -45,7 +45,7 @@ describe('RefreshablesTool', () => {
   }
 
   async function post(path: string, body: unknown = {}): Promise<Response> {
-    return app!.fetch(`/devtools/refreshables${path}`, {
+    return app!.request(`/devtools/refreshables${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -53,7 +53,7 @@ describe('RefreshablesTool', () => {
   }
 
   async function list(): Promise<RefreshableRecord[]> {
-    return (await (await app!.fetch('/devtools/refreshables')).json()) as RefreshableRecord[]
+    return (await (await app!.request('/devtools/refreshables')).json()) as RefreshableRecord[]
   }
 
   it('lists the refresh-scoped injectables with their labels', async () => {
@@ -113,6 +113,6 @@ describe('RefreshablesTool', () => {
 
     expect((await post('/refreshes', { label: 'nope' })).status).toBe(400)
     expect((await post('/999999/refreshes')).status).toBe(404)
-    expect((await app!.fetch('/devtools/refreshables/999999')).status).toBe(404)
+    expect((await app!.request('/devtools/refreshables/999999')).status).toBe(404)
   })
 })

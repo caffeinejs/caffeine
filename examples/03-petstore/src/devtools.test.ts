@@ -22,15 +22,15 @@ describe('devtools', () => {
 
     const devtools = app.listeners.get('devtools')!
 
-    expect((await devtools.fetch('/devtools/routes')).status).toBe(200)
-    expect((await app.fetch('/devtools/routes')).status).toBe(404)
+    expect((await devtools.request('/devtools/routes')).status).toBe(200)
+    expect((await app.request('/devtools/routes')).status).toBe(404)
   })
 
   it('show configuration values with the secrets masked', async () => {
     app = buildApp(createContainer(rootModule), { logger: false })
     await app.bootstrap()
 
-    const res = await app.listeners.get('devtools')!.fetch('/devtools/config/properties')
+    const res = await app.listeners.get('devtools')!.request('/devtools/config/properties')
     const values = Object.fromEntries(
       ((await res.json()) as Array<{ path: string; value: unknown }>).map(({ path, value }) => [path, value]),
     )

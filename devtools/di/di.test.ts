@@ -36,7 +36,7 @@ describe('DependencyInjectionTool', () => {
   }
 
   async function bindings(query = ''): Promise<BindingRecord[]> {
-    return (await (await app!.fetch(`/devtools/di/bindings${query}`)).json()) as BindingRecord[]
+    return (await (await app!.request(`/devtools/di/bindings${query}`)).json()) as BindingRecord[]
   }
 
   it("lists the application's bindings and leaves the framework's own out", async () => {
@@ -80,14 +80,14 @@ describe('DependencyInjectionTool', () => {
 
     const [first] = await bindings()
 
-    expect(await (await app!.fetch(`/devtools/di/bindings/${first.id}`)).json()).toEqual(first)
-    expect((await app!.fetch('/devtools/di/bindings/999999')).status).toBe(404)
+    expect(await (await app!.request(`/devtools/di/bindings/${first.id}`)).json()).toEqual(first)
+    expect((await app!.request('/devtools/di/bindings/999999')).status).toBe(404)
   })
 
   it('renders the graph as a Mermaid flowchart naming each binding', async () => {
     await boot()
 
-    const graph = (await (await app!.fetch('/devtools/di/graph')).json()) as DependencyGraph
+    const graph = (await (await app!.request('/devtools/di/graph')).json()) as DependencyGraph
 
     expect(graph.nodes.map(node => node.label)).toEqual(expect.arrayContaining(['PetService', 'Repository']))
     expect(graph.mermaid).toMatch(/^%%\{init.*\nflowchart LR\n/)

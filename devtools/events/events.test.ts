@@ -75,7 +75,7 @@ describe('EventsTool', () => {
     app.container.bind(Pool, t => t.toSelf())
     await app.bootstrap()
 
-    const res = await app.listeners.get('devtools')!.fetch('/devtools/events')
+    const res = await app.listeners.get('devtools')!.request('/devtools/events')
     const events = (await res.json()) as ContainerEventRecord[]
 
     expect(events.filter(event => event.subject === 'Pool').map(event => event.kind)).toEqual([

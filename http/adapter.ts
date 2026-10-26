@@ -12,7 +12,7 @@ import type {
 } from './core/middleware/middleware.js'
 import type { MiddlewarePipeline, ResolvedMiddleware } from './core/middleware/pipeline.js'
 import type { RouteGroupCompiler } from './core/routing/compile.js'
-import type { RouteInventory, RouteRecord } from './core/routing/inventory.js'
+import type { RouteRecord } from './core/routing/inventory.js'
 import type { Router } from './core/routing/programmatic/programmatic.js'
 import type { IRouteGroup } from './core/routing/route.js'
 import type { IServer } from './server.js'
@@ -150,7 +150,7 @@ export interface AdapterIn<T extends IAdapterTypes> {
    */
   basePath: string | undefined
   /**
-   * Hands the server's routes to the application's {@link RouteInventory}, once every route has registered and before
+   * Hands the server's routes to the application's `RouteInventory`, once every route has registered and before
    * the server is ready. Called once.
    */
   recordRoutes(routes: readonly RouteRecord[]): void

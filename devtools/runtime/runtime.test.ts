@@ -21,7 +21,7 @@ describe('RuntimeTool', () => {
     // Listening, so the server's socket is one of what keeps the event loop alive.
     await app.run()
 
-    const runtime = (await (await app.fetch('/devtools/runtime')).json()) as RuntimeRecord
+    const runtime = (await (await app.request('/devtools/runtime')).json()) as RuntimeRecord
 
     expect(runtime.memory.heapUsed).toBeGreaterThan(0)
     expect(runtime.heap.heap_size_limit).toBeGreaterThan(runtime.memory.heapUsed)

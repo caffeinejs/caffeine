@@ -75,7 +75,7 @@ describe('devtools UI', () => {
   })
 
   async function html(path: string, init?: RequestInit): Promise<string> {
-    const res = await ui.fetch(path, init)
+    const res = await ui.request(path, init)
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
     return res.text()
   }
@@ -108,7 +108,7 @@ describe('devtools UI', () => {
   })
 
   it('serves the Mermaid script it loads', async () => {
-    const res = await ui.fetch('/assets/mermaid/mermaid.min.js')
+    const res = await ui.request('/assets/mermaid/mermaid.min.js')
 
     expect(res.status).toBe(200)
     expect((await res.text()).length).toBeGreaterThan(100_000)
@@ -135,7 +135,7 @@ describe('devtools UI', () => {
     const page = await html('/refreshables')
     const action = /action="(\/refreshables\/\d+\/refreshes)"/.exec(page)![1]
 
-    const res = await ui.fetch(action, { method: 'POST' })
+    const res = await ui.request(action, { method: 'POST' })
 
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/refreshables?refreshed=Rates')
@@ -143,7 +143,7 @@ describe('devtools UI', () => {
   })
 
   it('refuses a refresh posted from another site', async () => {
-    const res = await ui.fetch('/refreshables/refreshes', {
+    const res = await ui.request('/refreshables/refreshes', {
       method: 'POST',
       headers: { 'sec-fetch-site': 'cross-site', 'content-type': 'application/x-www-form-urlencoded' },
       body: 'label=',
@@ -193,7 +193,7 @@ describe('devtools UI without devtools to read', () => {
     const ui = buildApp({ logger: false })
     await ui.bootstrap()
 
-    const res = await ui.fetch('/')
+    const res = await ui.request('/')
     const page = await res.text()
 
     expect(res.status).toBe(502)

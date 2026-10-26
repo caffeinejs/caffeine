@@ -65,7 +65,9 @@ describe('RoutesTool', () => {
 
   async function get<T>(path: string): Promise<T> {
     // The fallback policy reaches the devtools too: their own server runs the gate.
-    const res = await app!.listeners.get('devtools')!.fetch(`/devtools/routes${path}`, { headers: { 'x-user': 'ops' } })
+    const res = await app!.listeners
+      .get('devtools')!
+      .request(`/devtools/routes${path}`, { headers: { 'x-user': 'ops' } })
     return (await res.json()) as T
   }
 
@@ -93,7 +95,7 @@ describe('RoutesTool', () => {
   it("puts the devtools under the application's fallback policy", async () => {
     await boot()
 
-    expect((await app!.listeners.get('devtools')!.fetch('/devtools/routes')).status).toBe(401)
+    expect((await app!.listeners.get('devtools')!.request('/devtools/routes')).status).toBe(401)
   })
 
   it('names the schemes, the fallback policy and the gates of each server', async () => {

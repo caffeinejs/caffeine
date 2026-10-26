@@ -52,7 +52,7 @@ describe('HealthTool', () => {
   it('shows every indicator with its details, and the availability', async () => {
     await boot()
 
-    const health = (await (await app!.fetch('/devtools/health')).json()) as HealthRecord
+    const health = (await (await app!.request('/devtools/health')).json()) as HealthRecord
 
     expect(health.groups.readiness.outcomes).toEqual([
       expect.objectContaining({ name: 'database', status: 'up', data: { pool: 4 } }),
@@ -64,10 +64,10 @@ describe('HealthTool', () => {
   it('answers one group, and 404 for a group there is not', async () => {
     await boot()
 
-    const readiness = await app!.fetch('/devtools/health/readiness')
+    const readiness = await app!.request('/devtools/health/readiness')
 
     expect(readiness.status).toBe(200)
     expect(((await readiness.json()) as { outcomes: unknown[] }).outcomes).toHaveLength(2)
-    expect((await app!.fetch('/devtools/health/wellness')).status).toBe(404)
+    expect((await app!.request('/devtools/health/wellness')).status).toBe(404)
   })
 })

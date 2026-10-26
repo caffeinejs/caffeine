@@ -111,15 +111,15 @@ describe('devtools', () => {
       app = createWebApplication().install(DevTools()) as WebApplication
       await app.bootstrap()
 
-      expect((await devtoolsServer().fetch('/devtools')).status).toBe(200)
-      expect((await app.fetch('/devtools')).status).toBe(404)
+      expect((await devtoolsServer().request('/devtools')).status).toBe(200)
+      expect((await app.request('/devtools')).status).toBe(404)
     })
 
     it('lists every core tool with links to its resources, and answers with no-store', async () => {
       app = createWebApplication().install(DevTools()) as WebApplication
       await app.bootstrap()
 
-      const res = await devtoolsServer().fetch('/devtools')
+      const res = await devtoolsServer().request('/devtools')
       const { tools } = (await res.json()) as { tools: Array<{ id: string; links: Array<{ href: string }> }> }
 
       expect(res.headers.get('cache-control')).toBe('no-store')
@@ -157,8 +157,8 @@ describe('devtools', () => {
       app = createWebApplication().install(DevTools(d => d.path('/_admin/devtools'))) as WebApplication
       await app.bootstrap()
 
-      expect((await devtoolsServer().fetch('/_admin/devtools/info')).status).toBe(200)
-      expect((await devtoolsServer().fetch('/devtools/info')).status).toBe(404)
+      expect((await devtoolsServer().request('/_admin/devtools/info')).status).toBe(200)
+      expect((await devtoolsServer().request('/devtools/info')).status).toBe(404)
     })
 
     it('requires what authorize(...) names, authenticating on its own server', async () => {
@@ -167,9 +167,9 @@ describe('devtools', () => {
         .install(DevTools(d => d.authorize({ roles: ['ops'] }))) as WebApplication
       await app.bootstrap()
 
-      expect((await devtoolsServer().fetch('/devtools/info')).status).toBe(401)
-      expect((await devtoolsServer().fetch('/devtools/info', { headers: { 'x-user': 'bob:dev' } })).status).toBe(403)
-      expect((await devtoolsServer().fetch('/devtools/info', { headers: { 'x-user': 'ann:ops' } })).status).toBe(200)
+      expect((await devtoolsServer().request('/devtools/info')).status).toBe(401)
+      expect((await devtoolsServer().request('/devtools/info', { headers: { 'x-user': 'bob:dev' } })).status).toBe(403)
+      expect((await devtoolsServer().request('/devtools/info', { headers: { 'x-user': 'ann:ops' } })).status).toBe(200)
     })
 
     it('refuses authorize(...) without authentication installed, rather than serve the devtools unprotected', async () => {
@@ -194,7 +194,7 @@ describe('devtools', () => {
       app = createWebApplication().install(DevTools(d => d.allowProduction())) as WebApplication
       await app.bootstrap()
 
-      expect((await devtoolsServer().fetch('/devtools')).status).toBe(200)
+      expect((await devtoolsServer().request('/devtools')).status).toBe(200)
     })
 
     it.each<[string, (d: DevToolsBuilder) => unknown]>([
@@ -214,8 +214,8 @@ describe('devtools', () => {
         .install(DevTools(d => d.listener('ops'))) as WebApplication
       await app.bootstrap()
 
-      expect((await app.listeners.get('ops')!.fetch('/devtools/info')).status).toBe(200)
-      expect((await app.listeners.get('devtools')!.fetch('/devtools/info')).status).toBe(404)
+      expect((await app.listeners.get('ops')!.request('/devtools/info')).status).toBe(200)
+      expect((await app.listeners.get('devtools')!.request('/devtools/info')).status).toBe(404)
     })
 
     it('takes where it listens from the configuration, a fluent setter winning', async () => {
@@ -224,8 +224,8 @@ describe('devtools', () => {
       ) as WebApplication
       await app.bootstrap()
 
-      expect((await devtoolsServer().fetch('/fluent/info')).status).toBe(200)
-      expect((await devtoolsServer().fetch('/from-config/info')).status).toBe(404)
+      expect((await devtoolsServer().request('/fluent/info')).status).toBe(200)
+      expect((await devtoolsServer().request('/from-config/info')).status).toBe(404)
     })
   })
 
@@ -234,7 +234,7 @@ describe('devtools', () => {
       app = createWebApplication().with(devTools()) as WebApplication
       await app.bootstrap()
 
-      expect((await app.fetch('/devtools/info')).status).toBe(200)
+      expect((await app.request('/devtools/info')).status).toBe(200)
     })
 
     it('refuses to start where NODE_ENV is production, pointing at a server of their own', async () => {
@@ -258,7 +258,7 @@ describe('devtools', () => {
     it('is listed with its resources and served', async () => {
       await boot()
 
-      const { tools } = (await (await app!.fetch('/devtools')).json()) as {
+      const { tools } = (await (await app!.request('/devtools')).json()) as {
         tools: Array<{ id: string; links: unknown[] }>
       }
 
@@ -273,14 +273,14 @@ describe('devtools', () => {
           { method: 'DELETE', href: '/devtools/queue/jobs/:id' },
         ],
       })
-      expect(await (await app!.fetch('/devtools/queue/jobs/7')).json()).toEqual({ id: '7', state: 'pending' })
+      expect(await (await app!.request('/devtools/queue/jobs/7')).json()).toEqual({ id: '7', state: 'pending' })
     })
 
     it('answers 404 for what a tool does not have and 400 for what it refuses', async () => {
       await boot()
 
-      const missing = await app!.fetch('/devtools/queue/jobs/8')
-      const refused = await app!.fetch('/devtools/queue/jobs', {
+      const missing = await app!.request('/devtools/queue/jobs/8')
+      const refused = await app!.request('/devtools/queue/jobs', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id: 8 }),
@@ -294,16 +294,16 @@ describe('devtools', () => {
     it("answers with the operation's status, and 204 when it returns nothing", async () => {
       await boot()
 
-      const created = await app!.fetch('/devtools/queue/jobs', {
+      const created = await app!.request('/devtools/queue/jobs', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id: '8' }),
       })
-      const deleted = await app!.fetch('/devtools/queue/jobs/7', { method: 'DELETE' })
+      const deleted = await app!.request('/devtools/queue/jobs/7', { method: 'DELETE' })
 
       expect(created.status).toBe(201)
       expect(deleted.status).toBe(204)
-      expect((await app!.fetch('/devtools/queue/jobs/7')).status).toBe(404)
+      expect((await app!.request('/devtools/queue/jobs/7')).status).toBe(404)
     })
 
     it('refuses a change sent as anything but JSON, which a cross-site form could send', async () => {
@@ -314,9 +314,9 @@ describe('devtools', () => {
         { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{"id":"9"}' },
         { method: 'POST' },
       ]) {
-        expect((await app!.fetch('/devtools/queue/jobs', init)).status).toBe(415)
+        expect((await app!.request('/devtools/queue/jobs', init)).status).toBe(415)
       }
-      expect((await app!.fetch('/devtools/queue/jobs/9')).status).toBe(404)
+      expect((await app!.request('/devtools/queue/jobs/9')).status).toBe(404)
     })
 
     it.each([

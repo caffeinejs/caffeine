@@ -29,7 +29,7 @@ describe('InfoTool', () => {
     }) as WebApplication
     await app.bootstrap()
 
-    const info = (await (await app.fetch('/devtools/info')).json()) as InfoRecord
+    const info = (await (await app.request('/devtools/info')).json()) as InfoRecord
 
     expect(info.application).toEqual({ name: 'petstore', profiles: [], contrib: [{ source: 'kafka', topics: 2 }] })
     expect(info.runtime).toMatchObject({ node: process.version, pid: process.pid, nodeEnv: process.env.NODE_ENV })
