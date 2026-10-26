@@ -53,14 +53,18 @@ export class RefreshablesTool extends DevTool {
       return refreshed(all)
     }
 
-    const symbol = all.flatMap(([, binding]) => binding.labels).find(candidate => candidate.description === label)
+    // Two modules may each write `Symbol('db')`: the label names both.
+    const symbols = new Set(all.flatMap(([, binding]) => binding.labels).filter(symbol => labelText(symbol) === label))
 
-    if (symbol === undefined) {
+    if (symbols.size === 0) {
       throw new ErrDevToolInvalid(`No refresh-scoped injectable carries the label "${label}"`)
     }
 
-    await this.#container.refresher.refresh(symbol)
-    return refreshed(all.filter(([, binding]) => binding.labels.includes(symbol)))
+    for (const symbol of symbols) {
+      await this.#container.refresher.refresh(symbol)
+    }
+
+    return refreshed(all.filter(([, binding]) => binding.labels.some(symbol => symbols.has(symbol))))
   }
 
   async #refreshOne(id: string): Promise<RefreshRecord> {
@@ -90,7 +94,7 @@ export class RefreshablesTool extends DevTool {
       {
         id: binding.id,
         key: keys.get(binding.id)!,
-        labels: binding.labels.map(label => label.description ?? String(label)),
+        labels: binding.labels.map(labelText),
       },
       binding,
     ])
@@ -101,9 +105,18 @@ function refreshed(entries: ReadonlyArray<[RefreshableRecord, Binding]>): Refres
   return { refreshed: entries.map(([record]) => record), at: new Date().toISOString() }
 }
 
+/** A label as the list shows it and a refresh names it. */
+function labelText(label: symbol): string {
+  return label.description ?? String(label)
+}
+
 function labelOf(body: unknown): string | undefined {
   if (body === undefined || body === null) {
     return undefined
+  }
+
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    throw new ErrDevToolInvalid('Cannot refresh: the body must be a JSON object')
   }
 
   const label = (body as { label?: unknown }).label

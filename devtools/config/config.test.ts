@@ -152,6 +152,17 @@ describe('ConfigTool', () => {
     expect(JSON.stringify([users, tags])).not.toMatch(/1234|tag-a|tag-b/)
   })
 
+  it('masks a URL password holding "@" whole: the host starts after the last one', () => {
+    expect(maskCredentials('postgres://u:p@ss@db/x')).toBe('postgres://u:******@db/x')
+    expect(maskCredentials('mongodb://admin:p@ssw0rd@db.internal:27017/app')).toBe(
+      'mongodb://admin:******@db.internal:27017/app',
+    )
+    expect(maskCredentials('redis://:first@h1,redis://:second@h2')).toBe('redis://:******@h1,redis://:******@h2')
+    expect(maskCredentials('see https://u:p@ss@h/a?next=x@y and more')).toBe(
+      'see https://u:******@h/a?next=x@y and more',
+    )
+  })
+
   it('masks in linear time, so a crafted value cannot stall the devtools', () => {
     // Each start position used to rescan the rest of the text: quadratic, and minutes on this input.
     const crafted = 'a://:'.repeat(200_000)

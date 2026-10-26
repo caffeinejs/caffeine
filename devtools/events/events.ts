@@ -99,7 +99,12 @@ export class EventsTool extends DevTool {
     const last = count('limit', limit)
     const found = this.#events.filter(event => event.seq > since)
 
-    return last === undefined ? found : found.slice(-last)
+    if (last === undefined) {
+      return found
+    }
+
+    // `slice(-0)` is `slice(0)`: every event.
+    return last === 0 ? [] : found.slice(-last)
   }
 }
 

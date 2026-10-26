@@ -95,6 +95,8 @@ describe('EventsTool', () => {
 
     expect((await list(tool, { after: String(first.seq) })).map(event => event.seq)).not.toContain(first.seq)
     expect(await list(tool, { limit: '1' })).toHaveLength(1)
+    // The last none is none, not all of them.
+    expect(await list(tool, { limit: '0' })).toEqual([])
     await expect(list(tool, { after: 'x' })).rejects.toMatchObject({ code: 'ERR_DEVTOOL_INVALID' })
   })
 })

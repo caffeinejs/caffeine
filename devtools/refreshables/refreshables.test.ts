@@ -95,6 +95,48 @@ describe('RefreshablesTool', () => {
     expect(app!.container.get(Rates).id).toBe(rates.id)
   })
 
+  it('re-creates everything a label names, though two modules wrote that label as two symbols', async () => {
+    class Pool {
+      readonly id = Math.random()
+    }
+
+    class Cache {
+      readonly id = Math.random()
+    }
+
+    class Anonymous {
+      readonly id = Math.random()
+    }
+
+    app = createWebApplication().with(devTools()) as WebApplication
+    app.container.bind(Pool, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('db')))
+    app.container.bind(Cache, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('db')))
+    app.container.bind(Anonymous, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol()))
+    await app.bootstrap()
+    const pool = app.container.get(Pool)
+    const cache = app.container.get(Cache)
+    const anonymous = app.container.get(Anonymous)
+    const published = (await list()).find(entry => entry.key === 'Anonymous')!.labels[0]!
+
+    const db = (await (await post('/refreshes', { label: 'db' })).json()) as RefreshRecord
+    const unnamed = await post('/refreshes', { label: published })
+
+    expect(db.refreshed.map(entry => entry.key)).toEqual(['Pool', 'Cache'])
+    expect(app.container.get(Pool).id).not.toBe(pool.id)
+    expect(app.container.get(Cache).id).not.toBe(cache.id)
+    expect(unnamed.status).toBe(200)
+    expect(app.container.get(Anonymous).id).not.toBe(anonymous.id)
+  })
+
+  it('refuses a body that is not an object, rather than taking it for "refresh everything"', async () => {
+    await boot()
+    const rates = app!.container.get(Rates)
+
+    expect((await post('/refreshes', [])).status).toBe(400)
+    expect((await post('/refreshes', 'flags')).status).toBe(400)
+    expect(app!.container.get(Rates).id).toBe(rates.id)
+  })
+
   it('re-creates one by id, leaving the others', async () => {
     await boot()
     const flags = app!.container.get(Flags)
