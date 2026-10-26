@@ -17,7 +17,6 @@ import {
   CSRFExempt,
   ErrCSRFCrossOrigin,
   Identity,
-  Listener,
   Post,
   Principal,
   bindTo,
@@ -956,7 +955,7 @@ describe('csrf()', () => {
 
       const app = (await running(
         createWebApplication()
-          .install(Listener('admin', l => l.server(() => ({ listener })).with(csrf())))
+          .listener('admin', l => l.server(() => ({ listener })).with(csrf()))
           .server(() => ({ listener }))
           .mount(metrics, api),
       )) as WebApplication

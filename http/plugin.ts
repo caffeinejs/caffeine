@@ -12,7 +12,7 @@ import type { IAdapterTypes, HTTPSetupContext } from './adapter.js'
  *
  * Where it is registered decides what `context.app` reaches:
  *
- * - With `.with(...)` on the application, or `Listener(name, l => l.with(...))`, it registers in that slot, before the
+ * - With `.with(...)` on the application, or `.listener(name, l => l.with(...))`, it registers in that slot, before the
  *   adapter builds the server: what it mounts that server serves, and its middleware joins that server's pipeline.
  * - With `router.with(...)`, it registers once during start-up, before routing is built: what it mounts nests under
  *   the router, and its middleware runs in front of the router's routes, with paths relative to the router.
@@ -33,7 +33,7 @@ import type { IAdapterTypes, HTTPSetupContext } from './adapter.js'
  * }
  *
  * app.with(() => new Metrics())
- * app.install(Listener('admin', l => l.with(() => new Metrics())))
+ * app.listener('admin', l => l.with(() => new Metrics()))
  * ```
  */
 export abstract class HTTPPlugin<T extends IAdapterTypes = never> {

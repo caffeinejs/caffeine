@@ -13,7 +13,6 @@ import {
   Guards,
   HTTPPlugin,
   type HTTPSetupContext,
-  Listener,
   type MiddlewareFn,
   Router,
   bindTo,
@@ -299,7 +298,7 @@ describe('HTTPPlugin', () => {
 
     const typed = createWebApplication()
       .with(factory)
-      .install(Listener('admin', l => l.with(factory)))
+      .listener('admin', l => l.with(factory))
     new Router('/typed').with(factory)
     newRouter('/typed-bound').with(factory)
 
@@ -308,7 +307,7 @@ describe('HTTPPlugin', () => {
 
   describe('on a listener', () => {
     it('serves on the listener whose l.with(...) installed it, and nowhere else', async () => {
-      app = createWebApplication().install(Listener('admin', l => l.with(() => new Metrics())))
+      app = createWebApplication().listener('admin', l => l.with(() => new Metrics()))
       await app.bootstrap()
 
       const admin = await app.listeners.get('admin')!.request('/metrics')
@@ -319,7 +318,7 @@ describe('HTTPPlugin', () => {
 
     it("refuses a router bound to a listener from the application's own server", async () => {
       app = createWebApplication()
-        .install(Listener('admin'))
+        .listener('admin')
         .with(() => new Bound('admin'))
 
       await expect(app.bootstrap()).rejects.toThrow(
@@ -329,7 +328,7 @@ describe('HTTPPlugin', () => {
     })
 
     it('refuses a router bound to another server from a listener', async () => {
-      app = createWebApplication().install(Listener('admin', l => l.with(() => new Bound('metrics'))))
+      app = createWebApplication().listener('admin', l => l.with(() => new Bound('metrics')))
 
       await expect(app.bootstrap()).rejects.toThrow(
         /^Cannot add route group "Metrics" to listener "admin": it is bound to "metrics"/,
@@ -341,7 +340,7 @@ describe('HTTPPlugin', () => {
       const shared = new Router('/shared-admin').extend(bindTo('admin')).get('/', () => ({ shared: true }))
 
       app = createWebApplication()
-        .install(Listener('admin', l => l.with(() => new Mounter(shared))))
+        .listener('admin', l => l.with(() => new Mounter(shared)))
         .mount(shared) as WebApplication
       await app.bootstrap()
 
@@ -357,7 +356,7 @@ describe('HTTPPlugin', () => {
         .mount(new Router('/child').extend(bindTo('admin')).get('/', () => ({ child: true })))
 
       app = createWebApplication()
-        .install(Listener('admin', l => l.with(() => new Mounter(split))))
+        .listener('admin', l => l.with(() => new Mounter(split)))
         .mount(split) as WebApplication
       await app.bootstrap()
 
@@ -395,7 +394,7 @@ describe('HTTPPlugin', () => {
 
     it('stays on the server it was registered on', async () => {
       app = createWebApplication()
-        .install(Listener('admin', l => l.with(() => new Stamping('x-admin'))))
+        .listener('admin', l => l.with(() => new Stamping('x-admin')))
         .mount(
           new Router('/own').get('/', () => ({})),
           new Router('/ops').extend(bindTo('admin')).get('/', () => ({})),
@@ -506,7 +505,7 @@ describe('HTTPPlugin', () => {
         .with(() => new Nester())
         .get('/', () => ({}))
 
-      app = createWebApplication().install(Listener('admin')).mount(bound) as WebApplication
+      app = createWebApplication().listener('admin').mount(bound) as WebApplication
       await app.bootstrap()
 
       expect((await app.listeners.get('admin')!.request('/admin-ops/jobs')).status).toBe(200)
@@ -806,7 +805,7 @@ describe('HTTPPlugin', () => {
       }
 
       app = createWebApplication()
-        .install(Listener('admin', l => l.with(() => new Sharing())))
+        .listener('admin', l => l.with(() => new Sharing()))
         .mount(shared) as WebApplication
       await app.bootstrap()
 

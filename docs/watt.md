@@ -146,7 +146,7 @@ the factory on the default export when there is one.
 
 ### Listeners
 
-A `Listener(...)` binds in `run()`, after the application's own server, with the listen settings of its own
+A listener, `.listener(...)`, binds in `run()`, after the application's own server, with the listen settings of its own
 `l.server(...)`.
 
 - In script mode Watt takes over the first listen to complete, which is the application's own, so a listener binds

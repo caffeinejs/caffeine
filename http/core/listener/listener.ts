@@ -1,16 +1,17 @@
-import {
-  FeatureBuilder,
-  kFeatureName,
-  type Feature,
-  type FeatureConfigureKit,
-  type FeatureConfigurer,
-} from '@caffeinejs/application'
-import { token } from '@caffeinejs/di'
+import { ErrApplicationStarted, type FeatureConfigureKit } from '@caffeinejs/application'
+import { errMessage } from '@caffeinejs/std/err'
 
-import type { AdapterExtensionFactory, AnyAdapterExtension, AnyAdapterTypes, ServerConfigurer } from '../../adapter.js'
+import type {
+  AdapterExtensionFactory,
+  AnyAdapterExtension,
+  AnyAdapterTypes,
+  HTTPSetupContext,
+  ServerConfigurer,
+} from '../../adapter.js'
 import type { HTTPPlugin } from '../../plugin.js'
 import { assertPluginFactory } from '../../plugin_factory.js'
 import { ServerDefinition } from '../../server_definition.js'
+import { ErrConfiguration } from '../error/common.js'
 import {
   parseUse,
   type MiddlewareFactory,
@@ -25,7 +26,8 @@ import {
 
 /**
  * Fluently builds one listener: a server of its own, on its own port, serving the routers bound to it with
- * `bindTo(name)` or `@BindTo(name)` and nothing else.
+ * `bindTo(name)` or `@BindTo(name)` and nothing else. Handed to the callback of `app.listener(name, ...)` or
+ * `listenersOf(kit).add(name, ...)`.
  *
  * The application builds it the way it builds its own server — the same request context, error handling, cookies
  * and start-up checks — and starts it after its own, closing it after its own. Its plugins and middleware are
@@ -38,18 +40,11 @@ import {
  * `@Authorize(...)`, exactly as on the application's own server. Authenticating takes a gate registered here,
  * `with(authentication())`.
  */
-export class ListenerBuilder<C = unknown> extends FeatureBuilder<C> {
-  get [kFeatureName](): string {
-    return `listener:${this.#name}`
-  }
-
-  readonly #name: string
+export class ListenerBuilder<C = unknown> {
   readonly #definition: ServerDefinition<AnyAdapterTypes, C>
 
-  constructor(name: string, configure?: FeatureConfigurer<ListenerBuilder<C>, C>) {
-    super(configure as FeatureConfigurer<never, C> | undefined)
-    this.#name = name
-    this.#definition = new ServerDefinition<AnyAdapterTypes, C>(name)
+  constructor(definition: ServerDefinition<AnyAdapterTypes, C>) {
+    this.#definition = definition
   }
 
   /**
@@ -58,7 +53,7 @@ export class ListenerBuilder<C = unknown> extends FeatureBuilder<C> {
    * factory gets; several calls shallow-merge section by section, in call order.
    *
    * ```ts
-   * .install(Listener('admin', (l, { config }) => l.server(() => ({ listener: config.app.admin }))))
+   * .listener('admin', (l, { config }) => l.server(() => ({ listener: config.app.admin })))
    * ```
    */
   server(configure: ServerConfigurer<AnyAdapterTypes, C>): this {
@@ -73,7 +68,7 @@ export class ListenerBuilder<C = unknown> extends FeatureBuilder<C> {
    * this server.
    *
    * ```ts
-   * .install(Listener('admin', l => l.with(authentication()).with(healthProbes())))
+   * .listener('admin', l => l.with(authentication()).with(healthProbes()))
    * ```
    */
   with(factory: AdapterExtensionFactory<AnyAdapterExtension | HTTPPlugin<AnyAdapterTypes>, C, AnyAdapterTypes>): this {
@@ -88,7 +83,7 @@ export class ListenerBuilder<C = unknown> extends FeatureBuilder<C> {
    * server's own: a listener has no base path.
    *
    * ```ts
-   * .install(Listener('admin', l => l.use(AuditLog).use('/jobs', kRateLimiter, { hook: 'preHandler' })))
+   * .listener('admin', l => l.use(AuditLog).use('/jobs', kRateLimiter, { hook: 'preHandler' }))
    * ```
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
@@ -128,7 +123,7 @@ export class ListenerBuilder<C = unknown> extends FeatureBuilder<C> {
    * adds one to the application's own.
    *
    * ```ts
-   * .install(Listener('admin', l => l.useFn(({ config }) => rateLimit(config.app.adminLimits))))
+   * .listener('admin', l => l.useFn(({ config }) => rateLimit(config.app.adminLimits)))
    * ```
    */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions<AnyAdapterTypes['hook']>): this
@@ -142,26 +137,86 @@ export class ListenerBuilder<C = unknown> extends FeatureBuilder<C> {
     this.#definition.middlewares.addFactory(parsed.path, parsed.target, parsed.hook)
     return this
   }
-
-  protected override configure(kit: FeatureConfigureKit<C>): void {
-    kit.container.bind(token<ServerDefinition>(Symbol.for(`@caffeinejs/http:listener:${this.#name}`)), t =>
-      t
-        .toValue(this.#definition as unknown as ServerDefinition)
-        .extends(ServerDefinition)
-        .internal(),
-    )
-  }
 }
 
 /**
- * Installs a listener named `name`: one more port, serving only the routers bound to it.
+ * Fills a listener's builder. Runs at start-up, once the container has initialized, with the context a plugin
+ * factory gets: `config`, `store`, `logger`, a container that resolves, and `hasFeature`.
+ */
+export type ListenerConfigurer<C = unknown> = (listener: ListenerBuilder<C>, context: HTTPSetupContext<C>) => void
+
+/** What can add a listener: `app.listener(...)` on the application, `listenersOf(kit)` in a feature. */
+export interface ListenerAdder<C = unknown> {
+  /**
+   * Adds a listener named `name`, serving the routers bound to it. The name is taken at once; `configure` runs at
+   * start-up.
+   *
+   * @throws ErrConfiguration when a listener of that name is already added.
+   * @throws ErrApplicationStarted once the application has built its servers.
+   */
+  add(name: string, configure?: ListenerConfigurer<C>): void
+}
+
+/** The listeners an application runs besides its own server, in the order they were added. */
+export class Listeners<C = unknown> implements ListenerAdder<C> {
+  readonly #added: { definition: ServerDefinition<AnyAdapterTypes, C>; configure?: ListenerConfigurer<C> }[] = []
+  #built = false
+
+  add(name: string, configure?: ListenerConfigurer<C>): void {
+    if (this.#built) {
+      throw new ErrApplicationStarted()
+    }
+
+    if (this.#added.some(({ definition }) => definition.name === name)) {
+      throw new ErrConfiguration(
+        errMessage(`Cannot add listener "${name}": a listener named "${name}" is already added`)
+          .solutions('Give one of them another name and bind its routers to it with bindTo(...)')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    this.#added.push({ definition: new ServerDefinition<AnyAdapterTypes, C>(name), configure })
+  }
+
+  /** Runs every listener's callback, in add order, and hands back what each server is built from. */
+  build(context: HTTPSetupContext<C>): ServerDefinition<AnyAdapterTypes, C>[] {
+    this.#built = true
+
+    return this.#added.map(({ definition, configure }) => {
+      configure?.(new ListenerBuilder(definition), context)
+      return definition
+    })
+  }
+}
+
+/** The configure kit a web application hands its features: the usual one, and a way to add a listener. */
+export interface HTTPFeatureConfigureKit<C = unknown> extends FeatureConfigureKit<C> {
+  readonly listeners: ListenerAdder<C>
+}
+
+/**
+ * Lets a feature add a listener from its configure step, when the application installing it is a web application.
  *
  * ```ts
- * createWebApplication()
- *   .install(Listener('admin', l => l.server(() => ({ listener: { port: 9464 } })).with(healthProbes())))
- *   .mount(newRouter('/metrics').extend(bindTo('admin')).get('/', () => metrics()))
+ * protected configure(kit: FeatureConfigureKit<C>): void {
+ *   listenersOf(kit).add('metrics', l => l.server(() => ({ listener: { port: this.#port } })).with(metrics()))
+ * }
  * ```
+ *
+ * @throws ErrConfiguration when the application is not a web application.
  */
-export function Listener<C = unknown>(name: string, configure?: FeatureConfigurer<ListenerBuilder<C>, C>): Feature<C> {
-  return new ListenerBuilder<C>(name, configure)
+export function listenersOf<C>(kit: FeatureConfigureKit<C>): ListenerAdder<C> {
+  const listeners = (kit as Partial<HTTPFeatureConfigureKit<C>>).listeners
+
+  if (listeners === undefined) {
+    throw new ErrConfiguration(
+      errMessage('Cannot add a listener: the application is not a web application')
+        .solutions('Install the feature on createWebApplication()')
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
+
+  return listeners
 }

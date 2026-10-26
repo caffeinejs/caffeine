@@ -5,7 +5,7 @@ import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import { testTLS, testTLSCertificate } from '@caffeinejs/testing/tls'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Listener, bindTo, type WebApplication } from '../../../index.js'
+import { bindTo, type WebApplication } from '../../../index.js'
 import { createWebApplication, newRouter } from '../../../platform/fastify/index.js'
 
 /**
@@ -80,7 +80,7 @@ describe('a listener with TLS', () => {
 
   it('serves HTTPS on the listener while the application server stays plain HTTP', async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ factory: { https: testTLS() }, listener }))))
+      .listener('admin', l => l.server(() => ({ factory: { https: testTLS() }, listener })))
       .server(() => ({ listener }))
       .mount(echo('/ops').extend(bindTo('admin')), echo('/api')) as WebApplication
 
@@ -99,7 +99,7 @@ describe('a listener with TLS', () => {
 
   it('serves plain HTTP on the listener while the application server serves HTTPS', async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener }))))
+      .listener('admin', l => l.server(() => ({ listener })))
       .server(() => ({ factory: { https: testTLS() }, listener }))
       .mount(echo('/ops').extend(bindTo('admin')), echo('/api')) as WebApplication
 
@@ -118,7 +118,7 @@ describe('a listener with TLS', () => {
 
   it('serves HTTP/2 over TLS on the listener', async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ factory: { http2: true, https: testTLS() }, listener }))))
+      .listener('admin', l => l.server(() => ({ factory: { http2: true, https: testTLS() }, listener })))
       .mount(echo('/ops').extend(bindTo('admin'))) as WebApplication
 
     await app.run()
@@ -131,7 +131,7 @@ describe('a listener with TLS', () => {
 
   it('closes promptly with an idle HTTP/2 session still open on the listener', async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ factory: { http2: true, https: testTLS() }, listener }))))
+      .listener('admin', l => l.server(() => ({ factory: { http2: true, https: testTLS() }, listener })))
       .mount(echo('/ops').extend(bindTo('admin'))) as WebApplication
 
     await app.run()
@@ -153,7 +153,7 @@ describe('a listener with TLS', () => {
     const held = new Promise<void>(resolve => (release = resolve))
 
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ factory: { http2: true, https: testTLS() }, listener }))))
+      .listener('admin', l => l.server(() => ({ factory: { http2: true, https: testTLS() }, listener })))
       .shutdown(s => s.drainDelay(0).shutdownTimeout(200))
       .mount(
         newRouter('/slow')
