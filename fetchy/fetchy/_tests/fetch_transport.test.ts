@@ -24,11 +24,10 @@ import {
   POST,
   PUT,
   RawRequestBodyConverter,
-  Retry,
   SignalParam,
   UseRequestBodyConverter,
 } from '../index.js'
-import { RetryInterceptor } from '../retry/index.js'
+import { Retry, RetryInterceptor } from '../retry/index.js'
 import { OtherFile, OtherFormData } from './other_form_data.js'
 
 /**

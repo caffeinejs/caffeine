@@ -20,8 +20,8 @@ import {
 } from '../request_body_converter.js'
 import { JSONResponseConverter, TextResponseConverter } from '../response_converter.js'
 import { DefaultResponseHandler, NoopResponseHandler } from '../response_handler.js'
+import { fakeJSONResponse, TestTransportFactory } from '../test_transport_factory.testkit.js'
 import { OtherFormData } from './other_form_data.js'
-import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 @API('/users')
 class ConverterAPI {

@@ -1,5 +1,5 @@
 import { MultipartRequestBodyConverter } from '../request_body_converter.js'
-import { classOrMember } from './_decorator_util.js'
+import { classOrMember } from './decorator_util.js'
 import { configureClass, configureMethod } from './registrar/registrar.js'
 
 /**

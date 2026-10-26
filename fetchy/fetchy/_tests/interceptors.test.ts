@@ -4,11 +4,10 @@ import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
 import { Params } from '../decorators/params.js'
 import { Param } from '../decorators/params/param.js'
-import { Retry } from '../decorators/retry.js'
 import { GET } from '../decorators/verbs.js'
 import type { Interceptor, InterceptorFunction } from '../interceptor.js'
-import { RetryInterceptor } from '../retry/index.js'
-import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
+import { Retry, RetryInterceptor } from '../retry/index.js'
+import { fakeJSONResponse, TestTransportFactory } from '../test_transport_factory.testkit.js'
 
 interface User {
   id: string

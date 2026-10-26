@@ -1,6 +1,6 @@
-import type { FetchyRequest } from '../request.js'
-import type { FetchyResponse } from '../response.js'
-import type { Transport, TransportFactory } from '../transport.js'
+import type { FetchyRequest } from './request.js'
+import type { FetchyResponse } from './response.js'
+import type { Transport, TransportFactory } from './transport.js'
 
 /**
  * Fake {@link Transport} that records the last request it received and returns pre-programmed

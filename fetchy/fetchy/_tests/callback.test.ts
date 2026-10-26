@@ -9,7 +9,7 @@ import { Param } from '../decorators/params/param.js'
 import { GET } from '../decorators/verbs.js'
 import { ErrFetchyClientNotBuilt, ErrFetchyHTTP, ErrFetchyMissingCallbackArgument } from '../errors.js'
 import { noop } from '../noop.js'
-import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
+import { fakeJSONResponse, TestTransportFactory } from '../test_transport_factory.testkit.js'
 
 interface User {
   id: string

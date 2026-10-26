@@ -30,8 +30,8 @@ import {
 import { noop } from '../noop.js'
 import { JSONRequestBodyConverter, MultipartRequestBodyConverter } from '../request_body_converter.js'
 import { type ResponseConverter as ResponseConverterInstance, TextResponseConverter } from '../response_converter.js'
+import { fakeJSONResponse, TestTransportFactory } from '../test_transport_factory.testkit.js'
 import type { Transport } from '../transport.js'
-import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 interface User {
   id: string
