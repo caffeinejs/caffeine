@@ -7,16 +7,17 @@ plain functions. Its one dependency is `@caffeinejs/std`, which has none; every 
 npm install @caffeinejs/resilience
 ```
 
-| Import from                             | What                                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------- |
-| `@caffeinejs/resilience`                | `compose`, `runWith`, `exponential`, the strategy types, shared errors |
-| `@caffeinejs/resilience/circuitbreaker` | `circuitBreaker`, `ErrCallNotPermitted`                                |
-| `@caffeinejs/resilience/retry`          | `retry`, `ErrMaxRetriesExceeded`                                       |
-| `@caffeinejs/resilience/timelimiter`    | `timeLimiter`, `ErrTimeLimitExceeded`                                  |
-| `@caffeinejs/resilience/bulkhead`       | `bulkhead`, `ErrBulkheadFull`                                          |
-| `@caffeinejs/resilience/ratelimiter`    | `rateLimiter`, `ErrRateLimitExceeded`                                  |
-| `@caffeinejs/resilience/fallback`       | `fallback`                                                             |
-| `@caffeinejs/resilience/otel`           | OpenTelemetry instruments, with `@opentelemetry/api` installed         |
+| Import from                             | What                                                                                                      |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `@caffeinejs/resilience`                | `compose`, `runWith`, `exponential`, the strategy types, shared errors                                    |
+| `@caffeinejs/resilience/circuitbreaker` | `circuitBreaker`, `ErrCallNotPermitted`                                                                   |
+| `@caffeinejs/resilience/retry`          | `retry`, `ErrMaxRetriesExceeded`                                                                          |
+| `@caffeinejs/resilience/timelimiter`    | `timeLimiter`, `ErrTimeLimitExceeded`                                                                     |
+| `@caffeinejs/resilience/bulkhead`       | `bulkhead`, `ErrBulkheadFull`                                                                             |
+| `@caffeinejs/resilience/ratelimiter`    | `rateLimiter`, `ErrRateLimitExceeded`                                                                     |
+| `@caffeinejs/resilience/fallback`       | `fallback`                                                                                                |
+| `@caffeinejs/resilience/aop`            | Annotations and the `Resilience()` feature, with `@caffeinejs/di` and `@caffeinejs/application` installed |
+| `@caffeinejs/resilience/otel`           | OpenTelemetry instruments, with `@opentelemetry/api` installed                                            |
 
 ## Quick start
 
@@ -378,6 +379,118 @@ divide a partner's quota by the replica count, or enforce it where the calls lea
 `±jitter` of itself for `jitter` in `[0, 1)` without passing the cap. A delay that reached the cap is spread over
 `[maxDelay·(1−jitter), maxDelay]`, so clients that back off for long still wait different times. It fits both
 `retry({ backoff })` and `circuitBreaker({ waitDurationInOpenState })`.
+
+## Annotations
+
+```sh
+npm install @caffeinejs/di @caffeinejs/application
+```
+
+`@caffeinejs/resilience/aop` applies the strategies to methods of the classes the container builds, by name. The
+`Resilience()` feature defines the named instances and weaves them in.
+
+```ts
+import { Injectable } from '@caffeinejs/di'
+import { ErrCallRefused } from '@caffeinejs/resilience'
+import {
+  Bulkhead,
+  CircuitBreaker,
+  Fallback,
+  RateLimiter,
+  Resilience,
+  Retry,
+  TimeLimiter,
+} from '@caffeinejs/resilience/aop'
+
+@Injectable([StockCache])
+export class InventoryClient {
+  constructor(private readonly cache: StockCache) {}
+
+  @Fallback('cachedStock', { fallbackOn: error => error instanceof ErrCallRefused })
+  @Retry('inventory')
+  @CircuitBreaker('inventory')
+  @RateLimiter('inventory')
+  @TimeLimiter('inventory')
+  @Bulkhead('inventory')
+  async stock(id: string, signal?: AbortSignal): Promise<Stock> {
+    const res = await fetch(`https://inventory/stock/${id}`, { signal })
+    if (!res.ok) {
+      throw new InventoryUnavailable(res.status)
+    }
+    return (await res.json()) as Stock
+  }
+
+  // the error first, then the original arguments
+  async cachedStock(error: unknown, id: string): Promise<Stock> {
+    return this.cache.get(id)
+  }
+}
+
+createApplication({ container, config }).install(
+  Resilience((r, { config }) =>
+    r
+      .config(config.resilience)
+      .circuitBreaker('inventory', { recordResult: res => res instanceof Response && res.status >= 500 })
+      .retry('inventory', { maxAttempts: 3 })
+      .rateLimiter('inventory', { limitForPeriod: 100, limitRefreshPeriod: 1 * Second })
+      .timeLimiter('inventory', { timeoutDuration: 2 * Second })
+      .bulkhead('inventory', { maxConcurrentCalls: 20 }),
+  ),
+)
+```
+
+- **Names, not options.** `@Retry('inventory')` uses the retry named `inventory`. Every method naming it shares one
+  instance, and so one state, in that container; two applications never share one.
+- **One order.** Whatever order the decorators are written in, a method runs
+  `fallback(retry(circuitBreaker(rateLimiter(timeLimiter(bulkhead(method))))))`, any subset keeping that order.
+- **Methods returning a promise only.** On a synchronous method, a class or a field, the decorators are a type error.
+- **`@Fallback(method)`** names a method of the same class that takes the error, then the original arguments, and
+  resolves to what the decorated method does; anything else is a type error. It never runs once the caller's
+  signal has aborted.
+- **The signal argument.** The first argument that is an `AbortSignal` is the caller's signal; each attempt receives
+  its own in its place, which a time limiter aborts at its limit. A caller that passes none still gets the limit,
+  but the method is never told.
+- **What is woven.** Every class the container builds: decorated with `@Injectable`, bound by hand, in any scope,
+  and subclasses, which inherit the annotations of the methods they do not redeclare. A call through `this` goes
+  through the strategies too. An instance built with `new`, and a value or a factory bound without a class, is not
+  woven.
+- **Other aspects.** The resilience aspect wraps every aspect without an order of its own, so a retry runs a
+  transaction aspect once per attempt. An aspect with a negative order wraps the whole call instead.
+- **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when a method names an instance nothing defines,
+  a `@Fallback` names a method its class lacks, or an instance's options are out of range.
+
+`Resilience()` binds a `ResilienceRegistry`: inject it to use the same instances by hand, or to instrument them,
+fallbacks included (`registry.fallbacks()`, one per method, named `Class.method`).
+
+### Configuration
+
+An instance is defined in code, in the configuration tree, or both; code wins, option by option. The application
+declares the block in its own schema, with records of named instances holding the data options only:
+
+```ts
+export const ConfigSchema = $t.Object({
+  resilience: $t.Object(
+    {
+      retries: $t.Record(
+        $t.String(),
+        $t.Object({ maxAttempts: $t.Optional($t.Integer()), backoff: $t.Optional($t.Duration()) }),
+        { default: {} },
+      ),
+      timeLimiters: $t.Record($t.String(), $t.Object({ timeoutDuration: $t.Optional($t.Duration()) }), {
+        default: {},
+      }),
+    },
+    { default: {} },
+  ),
+})
+```
+
+```sh
+APP_RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS=5
+APP_RESILIENCE__TIME_LIMITERS__INVENTORY__TIMEOUT_DURATION=1500ms
+```
+
+Durations are text with a unit: a bare `1500` fails validation at `bootstrap()`.
 
 ## Errors
 
