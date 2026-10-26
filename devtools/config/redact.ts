@@ -70,29 +70,56 @@ export function maskCredentials(text: string): string {
 
   while (at !== -1) {
     const next = text.indexOf('://', at + 3)
-    // A scheme ends right before `://`.
-    const colon = at > 0 && SCHEME_CHAR.test(text[at - 1]!) ? scan(text, at + 3, USER_END) : -1
+    const colon = colonOf(text, at)
 
-    if (text[colon] !== ':') {
+    if (colon === -1) {
       at = next
       continue
     }
 
-    const near = signOf(text, colon + 1, next === -1 ? text.length : next)
-    // Past the next URL only when there is no `@` before it: up to the next space.
-    const end = near === -1 ? scan(text, colon + 1, SPACE) : -1
-    const sign = near === -1 ? signOf(text, colon + 1, end) : near
+    const { sign, resume } = passwordOf(text, colon, next)
 
     if (sign !== -1) {
       masked += `${text.slice(copied, colon + 1)}${REDACTED}`
       copied = sign
     }
 
-    // A URL a password holds is part of it; with no `@` up to the space, no URL before it has a password either.
-    at = sign > next ? text.indexOf('://', sign) : near === -1 ? text.indexOf('://', Math.max(end, at + 3)) : next
+    at = resume
   }
 
   return masked + text.slice(copied)
+}
+
+/** The `:` ending the user of the URL whose `://` is at `at`; `-1` when no scheme precedes it or the user has none. */
+function colonOf(text: string, at: number): number {
+  // A scheme ends right before `://`.
+  if (at === 0 || !SCHEME_CHAR.test(text[at - 1]!)) {
+    return -1
+  }
+
+  const colon = scan(text, at + 3, USER_END)
+
+  return text[colon] === ':' ? colon : -1
+}
+
+/**
+ * Where the password after `colon` ends, `-1` when it has no `@`, and where the search for the next `://` resumes.
+ *
+ * The password ends short of the next URL, at `next`, when an `@` comes before it. Otherwise it runs on to the next
+ * space: a URL it holds is part of it, and with no `@` up to the space, no URL before the space has a password
+ * either, so the search resumes past what was read and the text is read once.
+ */
+function passwordOf(text: string, colon: number, next: number): { sign: number; resume: number } {
+  const near = signOf(text, colon + 1, next === -1 ? text.length : next)
+
+  if (near !== -1) {
+    return { sign: near, resume: next }
+  }
+
+  const end = scan(text, colon + 1, SPACE)
+  const sign = signOf(text, colon + 1, end)
+
+  return { sign, resume: text.indexOf('://', sign === -1 ? end : sign) }
 }
 
 const SCHEME_CHAR = /[a-z0-9+.-]/i
