@@ -427,29 +427,52 @@ npm install @opentelemetry/api
 ```
 
 ```ts
-import { instrumentCircuitBreaker, instrumentRetry } from '@caffeinejs/resilience/otel'
+import {
+  instrumentBulkhead,
+  instrumentCircuitBreaker,
+  instrumentFallback,
+  instrumentRateLimiter,
+  instrumentRetry,
+  instrumentTimeLimiter,
+} from '@caffeinejs/resilience/otel'
 
 const stopBreaker = instrumentCircuitBreaker(breaker) // global MeterProvider
 const stopRetry = instrumentRetry(retries, { meterProvider }) // or a provider of your own
+const stop = [
+  instrumentTimeLimiter(deadline),
+  instrumentBulkhead(pool),
+  instrumentRateLimiter(quota),
+  instrumentFallback(staleStock),
+]
 
 stopBreaker()
 stopRetry()
+stop.forEach(off => off())
 ```
 
 Instruments are created under the scope `@caffeinejs/resilience`. Give every instrumented strategy its own `name`.
 Two that share one write to the same series: the duration histogram adds them up, and for every observable
 instrument the strategy instrumented last replaces the other.
 
-| Metric                                           | Instrument                 | Unit     | Attributes                                                                                                                                          |
-| ------------------------------------------------ | -------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `resilience.circuit_breaker.call.duration`       | Histogram                  | `s`      | name, `resilience.circuit_breaker.kind` (`successful`, `failed`, `ignored`), `error.type` when failed                                               |
-| `resilience.circuit_breaker.not_permitted_calls` | Observable counter         | `{call}` | name                                                                                                                                                |
-| `resilience.circuit_breaker.state`               | Observable up-down counter | `1`      | name, `resilience.circuit_breaker.state`: 1 for the current state, 0 for the others                                                                 |
-| `resilience.circuit_breaker.buffered_calls`      | Observable up-down counter | `{call}` | name, kind (`successful`, `failed`)                                                                                                                 |
-| `resilience.circuit_breaker.slow_calls`          | Observable up-down counter | `{call}` | name, kind (`successful`, `failed`)                                                                                                                 |
-| `resilience.circuit_breaker.failure_rate`        | Observable gauge           | `1`      | name; 0 to 1, absent below the minimum number of calls                                                                                              |
-| `resilience.circuit_breaker.slow_call_rate`      | Observable gauge           | `1`      | name; 0 to 1, absent below the minimum number of calls                                                                                              |
-| `resilience.retry.calls`                         | Observable counter         | `{call}` | `resilience.retry.name`, `resilience.retry.kind` (`successful_without_retry`, `successful_with_retry`, `failed_without_retry`, `failed_with_retry`) |
+| Metric                                             | Instrument                 | Unit           | Attributes                                                                                                                                          |
+| -------------------------------------------------- | -------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resilience.circuit_breaker.call.duration`         | Histogram                  | `s`            | name, `resilience.circuit_breaker.kind` (`successful`, `failed`, `ignored`), `error.type` when failed                                               |
+| `resilience.circuit_breaker.not_permitted_calls`   | Observable counter         | `{call}`       | name                                                                                                                                                |
+| `resilience.circuit_breaker.state`                 | Observable up-down counter | `1`            | name, `resilience.circuit_breaker.state`: 1 for the current state, 0 for the others                                                                 |
+| `resilience.circuit_breaker.buffered_calls`        | Observable up-down counter | `{call}`       | name, kind (`successful`, `failed`)                                                                                                                 |
+| `resilience.circuit_breaker.slow_calls`            | Observable up-down counter | `{call}`       | name, kind (`successful`, `failed`)                                                                                                                 |
+| `resilience.circuit_breaker.failure_rate`          | Observable gauge           | `1`            | name; 0 to 1, absent below the minimum number of calls                                                                                              |
+| `resilience.circuit_breaker.slow_call_rate`        | Observable gauge           | `1`            | name; 0 to 1, absent below the minimum number of calls                                                                                              |
+| `resilience.retry.calls`                           | Observable counter         | `{call}`       | `resilience.retry.name`, `resilience.retry.kind` (`successful_without_retry`, `successful_with_retry`, `failed_without_retry`, `failed_with_retry`) |
+| `resilience.time_limiter.calls`                    | Observable counter         | `{call}`       | `resilience.time_limiter.name`, `resilience.time_limiter.kind` (`successful`, `failed`, `timeout`)                                                  |
+| `resilience.bulkhead.available_concurrent_calls`   | Observable up-down counter | `{call}`       | `resilience.bulkhead.name`                                                                                                                          |
+| `resilience.bulkhead.max_allowed_concurrent_calls` | Observable up-down counter | `{call}`       | `resilience.bulkhead.name`                                                                                                                          |
+| `resilience.bulkhead.queued_calls`                 | Observable up-down counter | `{call}`       | `resilience.bulkhead.name`                                                                                                                          |
+| `resilience.bulkhead.rejected_calls`               | Observable counter         | `{call}`       | `resilience.bulkhead.name`                                                                                                                          |
+| `resilience.rate_limiter.available_permissions`    | Observable up-down counter | `{permission}` | `resilience.rate_limiter.name`                                                                                                                      |
+| `resilience.rate_limiter.waiting_calls`            | Observable up-down counter | `{call}`       | `resilience.rate_limiter.name`                                                                                                                      |
+| `resilience.rate_limiter.rejected_calls`           | Observable counter         | `{call}`       | `resilience.rate_limiter.name`                                                                                                                      |
+| `resilience.fallback.calls`                        | Observable counter         | `{call}`       | `resilience.fallback.name`, `resilience.fallback.kind` (`successful`, `recovered`, `failed`, `ignored`)                                             |
 
 The breaker's name attribute is `resilience.circuit_breaker.name`. The duration histogram advises bucket
 boundaries from 5 ms to 60 s.

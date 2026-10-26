@@ -8,9 +8,13 @@ import {
   type ResourceMetrics,
 } from '@opentelemetry/sdk-metrics'
 
+import { bulkhead, type Bulkhead } from '../bulkhead/bulkhead.js'
 import { circuitBreaker, type CircuitBreaker } from '../circuitbreaker/circuitbreaker.js'
 import { runWith } from '../compose.js'
+import { fallback, type Fallback } from '../fallback/fallback.js'
+import { rateLimiter, type RateLimiter } from '../ratelimiter/ratelimiter.js'
 import { retry, type Retry } from '../retry/retry.js'
+import { timeLimiter, type TimeLimiter } from '../timelimiter/timelimiter.js'
 
 export interface Point {
   attributes: Attributes
@@ -90,4 +94,36 @@ export async function driveRetry(retries: Retry): Promise<void> {
   await runWith(() => {
     throw new Error('down')
   }, retries).catch(() => undefined)
+}
+
+// One of each newer strategy, sized so `driveOthers` reaches every series each one reports.
+export function newOtherStrategies(): { limiter: TimeLimiter; pool: Bulkhead; quota: RateLimiter; stale: Fallback } {
+  return {
+    limiter: timeLimiter({ name: 'inventory', timeoutDuration: 5 }),
+    pool: bulkhead({ name: 'inventory', maxConcurrentCalls: 1 }),
+    quota: rateLimiter({ name: 'inventory', limitForPeriod: 1, limitRefreshPeriod: 3_600_000 }),
+    stale: fallback({ name: 'inventory' }),
+  }
+}
+
+export async function driveOthers({
+  limiter,
+  pool,
+  quota,
+  stale,
+}: ReturnType<typeof newOtherStrategies>): Promise<void> {
+  await runWith(() => 'ok', limiter)
+  await runWith(() => new Promise(resolve => setTimeout(resolve, 50)), limiter).catch(() => undefined)
+
+  let release!: () => void
+  const held = runWith(() => new Promise<void>(resolve => (release = resolve)), pool)
+  await runWith(() => 'ok', pool).catch(() => undefined)
+  release()
+  await held
+
+  await runWith(() => 'ok', quota)
+  await runWith(() => 'ok', quota).catch(() => undefined)
+
+  await stale.recover(Promise.resolve('ok'), () => 'cached')
+  await stale.recover(Promise.reject(new Error('down')), () => 'cached')
 }

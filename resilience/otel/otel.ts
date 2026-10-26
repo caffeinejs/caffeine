@@ -8,8 +8,12 @@ import {
   type ObservableResult,
 } from '@opentelemetry/api'
 
+import type { Bulkhead } from '../bulkhead/bulkhead.js'
 import { CIRCUIT_BREAKER_STATES, type CircuitBreaker } from '../circuitbreaker/circuitbreaker.js'
+import type { Fallback } from '../fallback/fallback.js'
+import type { RateLimiter } from '../ratelimiter/ratelimiter.js'
 import type { Retry } from '../retry/retry.js'
+import type { TimeLimiter } from '../timelimiter/timelimiter.js'
 import { errorType } from './_error_type.js'
 
 const SCOPE = '@caffeinejs/resilience'
@@ -172,5 +176,172 @@ export function instrumentRetry(retries: Retry, options: ResilienceInstrumentati
 
   return () => {
     calls.removeCallback(observe)
+  }
+}
+
+// One observable counter of lifetime calls by outcome, for the strategies whose metrics are only counts.
+function instrumentCalls(
+  options: ResilienceInstrumentationOptions,
+  instrument: string,
+  attribute: string,
+  name: string,
+  description: string,
+  counts: () => Record<string, number>,
+): () => void {
+  const meter = (options.meterProvider ?? metrics.getMeterProvider()).getMeter(SCOPE)
+  const calls = meter.createObservableCounter(instrument, { unit: '{call}', description })
+
+  const kinds = new Map<string, Attributes>()
+  const observe = guarded('collect', (result: ObservableResult) => {
+    for (const [kind, value] of Object.entries(counts())) {
+      let attributes = kinds.get(kind)
+      if (attributes === undefined) {
+        attributes = { [`${attribute}.name`]: name, [`${attribute}.kind`]: kind }
+        kinds.set(kind, attributes)
+      }
+      result.observe(value, attributes)
+    }
+  })
+  calls.addCallback(observe)
+
+  return () => {
+    calls.removeCallback(observe)
+  }
+}
+
+/**
+ * Records OpenTelemetry metrics for one time limiter. Returns the function that stops it.
+ *
+ * `resilience.time_limiter.calls` (counter) counts each call once by `resilience.time_limiter.kind`: `successful`,
+ * `failed` or `timeout`. A call the caller aborted is in none of them. Every series carries
+ * `resilience.time_limiter.name`.
+ *
+ * A failure inside the instrumentation is reported to `diag.error` and never reaches the call.
+ */
+export function instrumentTimeLimiter(
+  limiter: TimeLimiter,
+  options: ResilienceInstrumentationOptions = {},
+): () => void {
+  return instrumentCalls(
+    options,
+    'resilience.time_limiter.calls',
+    'resilience.time_limiter',
+    limiter.name,
+    'Calls through the time limiter, by outcome',
+    () => {
+      const snapshot = limiter.metrics()
+      return { successful: snapshot.successfulCalls, failed: snapshot.failedCalls, timeout: snapshot.timedOutCalls }
+    },
+  )
+}
+
+/**
+ * Records OpenTelemetry metrics for one fallback. Returns the function that stops it.
+ *
+ * `resilience.fallback.calls` (counter) counts each call once by `resilience.fallback.kind`: `successful`,
+ * `recovered`, `failed` or `ignored`. Every series carries `resilience.fallback.name`.
+ *
+ * A failure inside the instrumentation is reported to `diag.error` and never reaches the call.
+ */
+export function instrumentFallback(stale: Fallback, options: ResilienceInstrumentationOptions = {}): () => void {
+  return instrumentCalls(
+    options,
+    'resilience.fallback.calls',
+    'resilience.fallback',
+    stale.name,
+    'Calls through the fallback, by outcome',
+    () => {
+      const snapshot = stale.metrics()
+      return {
+        successful: snapshot.successfulCalls,
+        recovered: snapshot.recoveredCalls,
+        failed: snapshot.failedCalls,
+        ignored: snapshot.ignoredCalls,
+      }
+    },
+  )
+}
+
+/**
+ * Records OpenTelemetry metrics for one bulkhead. Returns the function that stops it.
+ *
+ * `resilience.bulkhead.available_concurrent_calls`, `resilience.bulkhead.max_allowed_concurrent_calls` and
+ * `resilience.bulkhead.queued_calls` (up-down counters), and `resilience.bulkhead.rejected_calls` (counter). Every
+ * series carries `resilience.bulkhead.name`.
+ *
+ * A failure inside the instrumentation is reported to `diag.error` and never reaches the call.
+ */
+export function instrumentBulkhead(pool: Bulkhead, options: ResilienceInstrumentationOptions = {}): () => void {
+  const meter = (options.meterProvider ?? metrics.getMeterProvider()).getMeter(SCOPE)
+
+  const available = meter.createObservableUpDownCounter('resilience.bulkhead.available_concurrent_calls', {
+    unit: '{call}',
+    description: 'Calls the bulkhead would let start now',
+  })
+  const allowed = meter.createObservableUpDownCounter('resilience.bulkhead.max_allowed_concurrent_calls', {
+    unit: '{call}',
+    description: 'Calls the bulkhead lets run at once',
+  })
+  const queued = meter.createObservableUpDownCounter('resilience.bulkhead.queued_calls', {
+    unit: '{call}',
+    description: 'Calls waiting for a slot',
+  })
+  const rejected = meter.createObservableCounter('resilience.bulkhead.rejected_calls', {
+    unit: '{call}',
+    description: 'Calls the bulkhead refused',
+  })
+
+  const name = { 'resilience.bulkhead.name': pool.name }
+  const observables = [available, allowed, queued, rejected]
+  const observe = guarded('collect', (result: BatchObservableResult) => {
+    const snapshot = pool.metrics()
+    result.observe(available, snapshot.availableConcurrentCalls, name)
+    result.observe(allowed, snapshot.maxAllowedConcurrentCalls, name)
+    result.observe(queued, snapshot.queuedCalls, name)
+    result.observe(rejected, snapshot.rejectedCalls, name)
+  })
+  meter.addBatchObservableCallback(observe, observables)
+
+  return () => {
+    meter.removeBatchObservableCallback(observe, observables)
+  }
+}
+
+/**
+ * Records OpenTelemetry metrics for one rate limiter. Returns the function that stops it.
+ *
+ * `resilience.rate_limiter.available_permissions` and `resilience.rate_limiter.waiting_calls` (up-down counters),
+ * and `resilience.rate_limiter.rejected_calls` (counter). Every series carries `resilience.rate_limiter.name`.
+ *
+ * A failure inside the instrumentation is reported to `diag.error` and never reaches the call.
+ */
+export function instrumentRateLimiter(quota: RateLimiter, options: ResilienceInstrumentationOptions = {}): () => void {
+  const meter = (options.meterProvider ?? metrics.getMeterProvider()).getMeter(SCOPE)
+
+  const available = meter.createObservableUpDownCounter('resilience.rate_limiter.available_permissions', {
+    unit: '{permission}',
+    description: 'Permits left in the current period',
+  })
+  const waiting = meter.createObservableUpDownCounter('resilience.rate_limiter.waiting_calls', {
+    unit: '{call}',
+    description: 'Calls waiting for a permit',
+  })
+  const rejected = meter.createObservableCounter('resilience.rate_limiter.rejected_calls', {
+    unit: '{call}',
+    description: 'Calls the rate limiter refused',
+  })
+
+  const name = { 'resilience.rate_limiter.name': quota.name }
+  const observables = [available, waiting, rejected]
+  const observe = guarded('collect', (result: BatchObservableResult) => {
+    const snapshot = quota.metrics()
+    result.observe(available, snapshot.availablePermissions, name)
+    result.observe(waiting, snapshot.waitingCalls, name)
+    result.observe(rejected, snapshot.rejectedCalls, name)
+  })
+  meter.addBatchObservableCallback(observe, observables)
+
+  return () => {
+    meter.removeBatchObservableCallback(observe, observables)
   }
 }
