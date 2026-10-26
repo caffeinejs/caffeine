@@ -1,6 +1,5 @@
 import { createApplication, ErrFeatureAlreadyInstalled, type Feature } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
@@ -83,6 +82,35 @@ describe('Resilience()', () => {
     // maxAttempts from code, failAfterMaxAttempts from configuration.
     expect(attempts).toBe(3)
     expect(error).toBeInstanceOf(ErrMaxRetriesExceeded)
+  })
+
+  // `{ maxAttempts: flag ? 5 : undefined }` in code means "code does not say", not "erase what configuration says".
+  it('keeps a configured option that code passes as undefined', async () => {
+    const app = await boot(
+      Resilience(r =>
+        inventory(r)
+          .config({ retries: { polling: { maxAttempts: 4 } } })
+          .retry('polling', { maxAttempts: undefined, backoff: 0 }),
+      ),
+    )
+    let attempts = 0
+
+    await runWith(() => {
+      attempts++
+      throw new Error('down')
+    }, app.container.get(ResilienceRegistry).retry('polling')).catch(() => undefined)
+
+    expect(attempts).toBe(4)
+  })
+
+  // Two definitions of one name in code are a mistake to report, not a choice to make silently.
+  it('refuses a name defined twice in code', async () => {
+    const error = await boot(
+      Resilience(r => inventory(r).retry('polling', { maxAttempts: 2 }).retry('polling', { maxAttempts: 5 })),
+    ).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message.split('\n')[0]).toBe('Cannot define retry "polling" twice')
   })
 
   it('defines an instance named only in configuration', async () => {

@@ -169,8 +169,8 @@ group('time limiter, bulkhead, rate limiter and fallback, success path', () => {
       caffeineRetry(),
       caffeineBreaker(),
       rateLimiter({ name: 'bench', limitForPeriod: 1e12, limitRefreshPeriod: 1 * Hour }),
-      timeLimiter({ name: 'bench', timeoutDuration: 1 * Second }),
       bulkhead({ name: 'bench', maxConcurrentCalls: 1_000 }),
+      timeLimiter({ name: 'bench', timeoutDuration: 1 * Second }),
     )
 
     bench('new: compose(timeLimiter)', async () => {
@@ -185,7 +185,7 @@ group('time limiter, bulkhead, rate limiter and fallback, success path', () => {
     bench('new: fallback.recover(op())', async () => {
       await stale.recover(op(), ignore)
     })
-    bench('new: compose(retry, breaker, rateLimiter, timeLimiter, bulkhead)', async () => {
+    bench('new: compose(retry, breaker, rateLimiter, bulkhead, timeLimiter)', async () => {
       await chain(op)
     })
   })

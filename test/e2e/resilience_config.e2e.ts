@@ -143,9 +143,13 @@ afterEach(async () => {
   vi.unstubAllEnvs()
 })
 
+// What code defines when a test does not say otherwise; the environment tunes what it leaves open.
+const inventory = (r: ResilienceBuilder<Config>): unknown =>
+  r.retry('inventory', { backoff: 0 }).timeLimiter('inventory', { timeoutDuration: 5 * Second })
+
 async function shop(
   profile = 'e2e-resilience-config',
-  code: (r: ResilienceBuilder<Config>) => unknown = () => undefined,
+  code: (r: ResilienceBuilder<Config>) => unknown = inventory,
 ): Promise<{ running: RunningApp<Config>; registry: ResilienceRegistry }> {
   const container = new CaffeineIoC({ profiles: [profile] })
   container.bind(kInventory, t => t.toValue(upstream.origin))
@@ -157,10 +161,7 @@ async function shop(
       app
         .install(
           Resilience<Config>((r, { config }) => {
-            r.config(config.resilience)
-              .retry('inventory', { backoff: 0 })
-              .timeLimiter('inventory', { timeoutDuration: 5 * Second })
-            code(r)
+            code(r.config(config.resilience))
           }),
         )
         .install(ResilienceHTTP<Config>((h, { config }) => h.config(config.resilienceHttp)))
@@ -180,11 +181,13 @@ describe('resilience tuned from the environment', { timeout: 30_000 }, () => {
     expect(upstream.arrivals).toHaveLength(5)
   })
 
-  it('cuts a call at the deadline the environment says, overriding nothing code set', async () => {
+  it('cuts a call at the deadline the environment sets for a time limiter code defines without one', async () => {
     vi.stubEnv('APP_RESILIENCE__TIME_LIMITERS__INVENTORY__TIMEOUT_DURATION', '150ms')
     vi.stubEnv('APP_RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS', '1')
     upstream.setDefault('hang')
-    const { running, registry } = await shop('e2e-resilience-config', r => r.timeLimiter('inventory', {}))
+    const { running, registry } = await shop('e2e-resilience-config', r =>
+      r.retry('inventory', { backoff: 0 }).timeLimiter('inventory', {}),
+    )
     const limit = new Promise<number>(resolve =>
       registry.timeLimiter('inventory').on('timeout', e => resolve(e.timeoutDuration)),
     )
@@ -197,7 +200,9 @@ describe('resilience tuned from the environment', { timeout: 30_000 }, () => {
   // An author who pinned an option in code meant it: the environment tunes only what code left open.
   it('lets code win over the environment for the same option', async () => {
     vi.stubEnv('APP_RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS', '5')
-    const { running } = await shop('e2e-resilience-config', r => r.retry('inventory', { maxAttempts: 2, backoff: 0 }))
+    const { running } = await shop('e2e-resilience-config', r =>
+      r.retry('inventory', { maxAttempts: 2, backoff: 0 }).timeLimiter('inventory', { timeoutDuration: 5 * Second }),
+    )
 
     await fetch(`${running.origin}/stock/42`)
 

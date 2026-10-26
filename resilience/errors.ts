@@ -11,8 +11,16 @@ export class ErrResilience extends Error {
 }
 
 /**
- * An option or argument was invalid. Factories, `compose()` and `runWith()` throw it synchronously; a call rejects
- * with it when a delay computed at call time is not a finite number.
+ * An option, an argument, a name or an annotation was invalid.
+ *
+ * It is thrown synchronously where the bad value is given: by the factories, `compose()`, `runWith()`, the
+ * `Resilience()` builder, a resilience annotation and a `ResilienceRegistry` lookup of an undefined name.
+ * `Resilience()` and `ResilienceHTTP()` throw it at `bootstrap()`.
+ *
+ * A call rejects with it when it cannot run as configured: a delay computed at call time is not a finite number, a
+ * predicate such as `retryOn` or `fallbackOn` returns anything but a boolean, `recover()` is handed a handler that is
+ * not a function, a strategy hands `next` a context that `runWith()`, `compose()` or `ctx.with()` did not make, or an
+ * annotated method names an instance or a fallback method that does not exist.
  */
 export class ErrInvalidOption extends ErrResilience {
   constructor(message: string) {

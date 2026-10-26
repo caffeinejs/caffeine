@@ -10,16 +10,21 @@ import { kAddFallback, labelOf, type ResilienceKind, type ResilienceRegistry } f
 
 type Member = string | symbol
 
-/** Where the resilience aspect sits among aspects: outside every aspect with no order of its own. */
+/** Where the resilience aspect sits among aspects: outside every aspect with a positive order or none. */
 export const RESILIENCE_ASPECT_ORDER = 0
 
 function annotated(cls: AnyClass, member: Member): boolean {
-  return ANNOTATIONS.some(annotation => reflect.effective(cls, annotation, member as never) !== undefined)
+  for (const annotation of ANNOTATIONS.keys()) {
+    if (reflect.effective(cls, annotation, member) !== undefined) {
+      return true
+    }
+  }
+  return false
 }
 
 function annotatedMembers(cls: AnyClass): Set<Member> {
   const members = new Set<Member>()
-  for (const annotation of ANNOTATIONS) {
+  for (const annotation of ANNOTATIONS.keys()) {
     for (const member of reflect.members(cls, annotation).keys()) {
       members.add(member)
     }
@@ -41,7 +46,7 @@ interface Plan {
 
 /**
  * Runs each annotated method through its strategies, in one fixed order whatever the order of the decorators:
- * fallback, retry, circuit breaker, rate limiter, time limiter, bulkhead.
+ * fallback, retry, circuit breaker, rate limiter, bulkhead, time limiter.
  *
  * The first argument that is an `AbortSignal` is taken as the caller's signal, and each attempt receives the
  * attempt's signal in its place.
@@ -57,10 +62,24 @@ export class ResilienceAspect implements MethodAspect {
   /**
    * Builds the plan of every annotated method of `cls`.
    *
-   * @throws {@link ErrInvalidOption} when a method names an instance nothing defines, or a `@Fallback` names a method
-   * `cls` lacks.
+   * @throws {@link ErrInvalidOption} when a method names an instance nothing defines, a `@Fallback` names a method
+   * `cls` lacks, or an annotation is on a static method.
    */
   prepare(cls: AnyClass): void {
+    for (const [annotation, decorator] of ANNOTATIONS) {
+      const [member] = reflect.members(cls, annotation, { static: true }).keys()
+      if (member !== undefined) {
+        throw new ErrInvalidOption(
+          errMessage(
+            `Cannot weave "${cls.name}.${String(member)}": @${decorator} is on a static method, which is never woven`,
+          )
+            .solutions(`Move @${decorator} to an instance method of "${cls.name}"`)
+            .reference('@caffeinejs/resilience', ErrInvalidOption)
+            .build(),
+        )
+      }
+    }
+
     for (const member of annotatedMembers(cls)) {
       this.#plan(cls, member)
     }
@@ -139,19 +158,17 @@ export class ResilienceAspect implements MethodAspect {
       return this.#registry[kind](name)
     }
 
-    const effective = <V>(annotation: unknown): V | undefined =>
-      reflect.effective(cls, annotation as never, member as never) as V | undefined
-
-    // Outermost first: retry, circuit breaker, rate limiter, time limiter, bulkhead.
+    // Outermost first: retry, circuit breaker, rate limiter, bulkhead, time limiter. The time limiter sits inside the
+    // bulkhead so it times the running call, not the wait for a slot, which the bulkhead bounds and refuses itself.
     const strategies = [
-      named('retry', 'Retry', effective<{ name: string }>(Retry)?.name),
-      named('circuitBreaker', 'CircuitBreaker', effective<string>(CircuitBreaker)),
-      named('rateLimiter', 'RateLimiter', effective<string>(RateLimiter)),
-      named('timeLimiter', 'TimeLimiter', effective<string>(TimeLimiter)),
-      named('bulkhead', 'Bulkhead', effective<string>(Bulkhead)),
+      named('retry', 'Retry', reflect.effective(cls, Retry, member)?.name),
+      named('circuitBreaker', 'CircuitBreaker', reflect.effective(cls, CircuitBreaker, member)),
+      named('rateLimiter', 'RateLimiter', reflect.effective(cls, RateLimiter, member)),
+      named('bulkhead', 'Bulkhead', reflect.effective(cls, Bulkhead, member)),
+      named('timeLimiter', 'TimeLimiter', reflect.effective(cls, TimeLimiter, member)),
     ].filter((strategy): strategy is Strategy => strategy !== undefined)
 
-    const recovery = effective<{ method: Member; fallbackOn: ((error: unknown) => boolean) | undefined }>(Fallback)
+    const recovery = reflect.effective(cls, Fallback, member)
     if (recovery === undefined) {
       return { run: compose(...strategies), fallback: undefined }
     }

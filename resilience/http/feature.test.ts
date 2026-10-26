@@ -1,6 +1,6 @@
 import { ErrFeatureNotInstalled, type Feature } from '@caffeinejs/application'
 import { CaffeineIoC, Injectable, Profile } from '@caffeinejs/di'
-import { BodyAsStream, Controller, Delete, Get, Keys, Method, Patch, Post, Put } from '@caffeinejs/http'
+import { BodyAsStream, Controller, Delete, Get, Keys, Method, Patch, Post, Prefix, Put } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -294,6 +294,60 @@ describe('ResilienceHTTP() widened', () => {
     expect(error!.message).toContain(
       'Cannot retry "POST /uploads" (UploadsController.upload): the route reads its body as a stream, which cannot be read twice',
     )
+  })
+})
+
+describe('ResilienceHTTP() and how a controller is bound', () => {
+  @Controller('/subclassed')
+  @Profile('rh-subclassed-base')
+  class OrdersController {
+    @Post('/')
+    async place(): Promise<string> {
+      return 'placed'
+    }
+  }
+
+  class RetriedOrders extends OrdersController {
+    @Retry('feed')
+    override async place(): Promise<string> {
+      return super.place()
+    }
+  }
+
+  // The routes come from the key, the handler that runs from the class bound under it: a subclass that retries the
+  // POST handler must not slip past the check.
+  it('refuses a POST handler retried by the class a controller key is bound to', async () => {
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(OrdersController, t => t.toClass(RetriedOrders).labels(Keys.CONTROLLER))
+    const app = createWebApplication({ container, logger: false })
+      .install(Resilience(instances))
+      .install(ResilienceHTTP())
+    opened.push(() => app.close())
+
+    const error = await refusal(app.bootstrap())
+
+    expect(error?.message).toContain(
+      'Cannot retry "POST /subclassed" (RetriedOrders.place): POST is not a retryable method',
+    )
+  })
+
+  @Prefix('/api')
+  @Controller('/prefixed')
+  @Profile('rh-prefixed')
+  class PrefixedController {
+    @Retry('feed')
+    @Post('/')
+    async place(): Promise<string> {
+      return 'placed'
+    }
+  }
+  void PrefixedController
+
+  // The first line names the route a reader can search for: the one the server answers on.
+  it('names the route with its prefix', async () => {
+    const error = await refusal(boot('rh-prefixed', Resilience(instances), ResilienceHTTP()))
+
+    expect(error?.message).toContain('Cannot retry "POST /api/prefixed" (PrefixedController.place)')
   })
 })
 

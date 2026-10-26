@@ -151,32 +151,22 @@ export function instrumentCircuitBreaker(
  * A failure inside the instrumentation is reported to `diag.error` and never reaches the call.
  */
 export function instrumentRetry(retries: Retry, options: ResilienceInstrumentationOptions = {}): () => void {
-  const meter = (options.meterProvider ?? metrics.getMeterProvider()).getMeter(SCOPE)
-
-  const calls = meter.createObservableCounter('resilience.retry.calls', {
-    unit: '{call}',
-    description: 'Calls through the retry, by outcome',
-  })
-
-  const name = { 'resilience.retry.name': retries.name }
-  const kind = (value: string): Attributes => ({ ...name, 'resilience.retry.kind': value })
-  const successfulWithoutRetry = kind('successful_without_retry')
-  const successfulWithRetry = kind('successful_with_retry')
-  const failedWithoutRetry = kind('failed_without_retry')
-  const failedWithRetry = kind('failed_with_retry')
-
-  const observe = guarded('collect', (result: ObservableResult) => {
-    const snapshot = retries.metrics()
-    result.observe(snapshot.successfulCallsWithoutRetry, successfulWithoutRetry)
-    result.observe(snapshot.successfulCallsWithRetry, successfulWithRetry)
-    result.observe(snapshot.failedCallsWithoutRetry, failedWithoutRetry)
-    result.observe(snapshot.failedCallsWithRetry, failedWithRetry)
-  })
-  calls.addCallback(observe)
-
-  return () => {
-    calls.removeCallback(observe)
-  }
+  return instrumentCalls(
+    options,
+    'resilience.retry.calls',
+    'resilience.retry',
+    retries.name,
+    'Calls through the retry, by outcome',
+    () => {
+      const snapshot = retries.metrics()
+      return {
+        successful_without_retry: snapshot.successfulCallsWithoutRetry,
+        successful_with_retry: snapshot.successfulCallsWithRetry,
+        failed_without_retry: snapshot.failedCallsWithoutRetry,
+        failed_with_retry: snapshot.failedCallsWithRetry,
+      }
+    },
+  )
 }
 
 // One observable counter of lifetime calls by outcome, for the strategies whose metrics are only counts.

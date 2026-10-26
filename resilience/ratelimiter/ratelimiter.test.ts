@@ -22,7 +22,7 @@ function limiterOf(options: Partial<RateLimiterOptions> = {}) {
   return rateLimiter({
     name: 'partner-api',
     limitForPeriod: 2,
-    limitRefreshPeriod: 1 * Millisecond * Second,
+    limitRefreshPeriod: 1 * Second,
     ...options,
   })
 }
@@ -115,7 +115,7 @@ describe('rate limiter', () => {
   })
 
   it('makes a call wait for the next period when its permit comes within maxWaitDuration, first come first served', async () => {
-    const quota = limiterOf({ maxWaitDuration: 1 * Millisecond * Second })
+    const quota = limiterOf({ maxWaitDuration: 1 * Second })
     const { starts, operation } = recorder()
     await vi.advanceTimersByTimeAsync(400)
 
@@ -135,7 +135,7 @@ describe('rate limiter', () => {
   })
 
   it('spreads reservations over as many periods as the waiting calls need', async () => {
-    const quota = limiterOf({ maxWaitDuration: 5 * Millisecond * Second })
+    const quota = limiterOf({ maxWaitDuration: 5 * Second })
     const { starts, operation } = recorder()
 
     const calls = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(id => runWith(operation(id), quota))
@@ -168,7 +168,7 @@ describe('rate limiter', () => {
   })
 
   it('takes a waiting call out of line when its signal aborts, without delaying the calls behind it', async () => {
-    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Millisecond * Second })
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
     const { starts, operation } = recorder()
     const caller = new AbortController()
     const reason = new Error('client left')
@@ -193,7 +193,7 @@ describe('rate limiter', () => {
   // An aborted call's permit is spent rather than handed on: calls reserve by count, so handing it to a newcomer
   // would start two calls in a period that has room for one.
   it('never starts more than limitForPeriod calls in a period after a waiting call aborts', async () => {
-    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Millisecond * Second })
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
     const { starts, operation } = recorder()
     const caller = new AbortController()
 
@@ -216,7 +216,7 @@ describe('rate limiter', () => {
 
   // Nobody reserved after the last call in line, so its permit can go back exactly: the next call takes its place.
   it('hands the permit of the last call in line to the next call when it aborts', async () => {
-    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 1_500 * Millisecond * Millisecond })
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 1_500 * Millisecond })
     const { starts, operation } = recorder()
     const caller = new AbortController()
 
@@ -235,7 +235,7 @@ describe('rate limiter', () => {
   })
 
   it('leaves no timer behind when the only waiting call aborts', async () => {
-    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Millisecond * Second })
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
     const caller = new AbortController()
 
     await runWith(() => 'a', quota)
@@ -248,7 +248,7 @@ describe('rate limiter', () => {
   })
 
   it('rejects at once, reserving nothing, when the caller’s signal has already aborted', async () => {
-    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Millisecond * Second })
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
     const { starts, operation } = recorder()
     const caller = new AbortController()
     caller.abort(new Error('gone'))
@@ -279,7 +279,7 @@ describe('rate limiter', () => {
   })
 
   it('reports each call as it gets a permit or is refused', async () => {
-    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 1 * Millisecond * Second })
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 1 * Second })
     const seen = listen(quota, 'permitted', 'rejected')
 
     await runWith(() => 'a', quota)
@@ -357,8 +357,8 @@ describe('rate limiter on a busy event loop', () => {
     const quota = rateLimiter({
       name: 'partner-api',
       limitForPeriod: 1,
-      limitRefreshPeriod: 50 * Millisecond * Millisecond,
-      maxWaitDuration: 1 * Millisecond * Second,
+      limitRefreshPeriod: 50 * Millisecond,
+      maxWaitDuration: 1 * Second,
     })
     const order: string[] = []
 

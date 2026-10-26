@@ -72,15 +72,18 @@ The first is the usual choice. With every strategy, the recommended order is:
 ```ts
 import { compose } from '@caffeinejs/resilience'
 
-const inventory = compose(retries, breaker, quota, deadline, pool)
-// retry( circuitBreaker( rateLimiter( timeLimiter( bulkhead( operation )))))
+const inventory = compose(retries, breaker, quota, pool, deadline)
+// retry( circuitBreaker( rateLimiter( bulkhead( timeLimiter( operation )))))
 ```
 
 - The retry repeats the whole inner chain; an open breaker, a full bulkhead or a spent quota fails the call at once.
-- The breaker records each attempt, a timeout included.
+- The breaker records each attempt, a timeout included, and never a refusal from inside it.
 - The rate limiter counts attempts against the quota.
-- The time limiter bounds each attempt, and the time it spends waiting for a bulkhead slot.
-- The bulkhead holds a slot while the operation runs.
+- The bulkhead holds a slot while the attempt runs, and bounds the wait for one with its own `maxWaitDuration`.
+- The time limiter bounds the attempt once it runs. Inside the bulkhead, it does not count the wait for a slot: timed
+  out there, a call that only waited would count as a dependency failure and open the breaker on a healthy dependency.
+
+For a budget that covers the wait too, put a second time limiter outside the chain.
 
 A fallback answers for the whole call, outside the chain: see [Fallback](#fallback).
 
@@ -437,7 +440,7 @@ createApplication({ container, config }).install(
 - **Names, not options.** `@Retry('inventory')` uses the retry named `inventory`. Every method naming it shares one
   instance, and so one state, in that container; two applications never share one.
 - **One order.** Whatever order the decorators are written in, a method runs
-  `fallback(retry(circuitBreaker(rateLimiter(timeLimiter(bulkhead(method))))))`, any subset keeping that order.
+  `fallback(retry(circuitBreaker(rateLimiter(bulkhead(timeLimiter(method))))))`, any subset keeping that order.
 - **Methods returning a promise only.** On a synchronous method, a class or a field, the decorators are a type error.
 - **`@Fallback(method)`** names a method of the same class that takes the error, then the original arguments, and
   resolves to what the decorated method does; anything else is a type error. It never runs once the caller's
@@ -449,10 +452,13 @@ createApplication({ container, config }).install(
   and subclasses, which inherit the annotations of the methods they do not redeclare. A call through `this` goes
   through the strategies too. An instance built with `new`, and a value or a factory bound without a class, is not
   woven.
-- **Other aspects.** The resilience aspect wraps every aspect without an order of its own, so a retry runs a
-  transaction aspect once per attempt. An aspect with a negative order wraps the whole call instead.
-- **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when a method names an instance nothing defines,
-  a `@Fallback` names a method its class lacks, or an instance's options are out of range.
+- **Other aspects.** Aspects run outermost first by ascending order, and the resilience aspect's order is `0`. It
+  wraps every aspect with a positive order or none, so a retry runs a transaction aspect once per attempt. An aspect
+  with a negative order wraps the whole call instead. An aspect with order `0` ties with it, and the order they were
+  registered in decides which runs outside: give such an aspect a non-zero order rather than rely on it.
+- **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a name twice, a method names an
+  instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static method, an
+  instance's options are out of range, or a controller carries `@Retry` without `ResilienceHTTP()`.
 
 `Resilience()` binds a `ResilienceRegistry`: inject it to use the same instances by hand, or to instrument them,
 fallbacks included (`registry.fallbacks()`, one per method, named `Class.method`).
@@ -555,20 +561,22 @@ async place(key: string, order: NewOrder): Promise<Order> { … }
 ```
 
 The better answer is usually none of them: put `@Retry` on the outbound client method the handler calls, where the
-repeated unit is one dependency call. A service's `@Retry` is never checked. `Resilience()` refuses to start when a
-controller carries `@Retry` and `ResilienceHTTP()` is not installed. Nothing checks that a response was already sent
-before a retry or a fallback (hazard 4): keep handler retries for handlers that answer only by returning.
+repeated unit is one dependency call. A service's `@Retry` is never checked, and neither is one on a controller method
+that is not a route handler: a helper the handler calls through `this` is woven, so its writes replay unchecked; keep
+`@Retry` on the outbound client method. `Resilience()` refuses to start when a controller carries `@Retry` and
+`ResilienceHTTP()` is not installed. Nothing checks that a response was already sent before a retry or a fallback
+(hazard 4): keep handler retries for handlers that answer only by returning.
 
 ## Errors
 
-| Error                   | From              | `code`                     | When                                                                                      |
-| ----------------------- | ----------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
-| `ErrCallNotPermitted`   | `/circuitbreaker` | `ERR_CALL_NOT_PERMITTED`   | A breaker refused the call. `breaker`, `state`, and `retryAfter` when `state` is `open`   |
-| `ErrBulkheadFull`       | `/bulkhead`       | `ERR_BULKHEAD_FULL`        | No slot, and no room or time to wait for one. `bulkhead`                                  |
-| `ErrRateLimitExceeded`  | `/ratelimiter`    | `ERR_RATE_LIMIT_EXCEEDED`  | No permit within `maxWaitDuration`. `rateLimiter`, `retryAfter`                           |
-| `ErrTimeLimitExceeded`  | `/timelimiter`    | `ERR_TIME_LIMIT_EXCEEDED`  | The rest of the chain ran past the limit. `timeLimiter`, `timeoutDuration`                |
-| `ErrMaxRetriesExceeded` | `/retry`          | `ERR_MAX_RETRIES_EXCEEDED` | `failAfterMaxAttempts` and the last value was still retryable. `attempts`, `result`       |
-| `ErrInvalidOption`      | root              | `ERR_INVALID_OPTION`       | A factory, `compose()` or `runWith()` got a bad argument; or a computed delay is unusable |
+| Error                   | From              | `code`                     | When                                                                                                                                             |
+| ----------------------- | ----------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ErrCallNotPermitted`   | `/circuitbreaker` | `ERR_CALL_NOT_PERMITTED`   | A breaker refused the call. `breaker`, `state`, and `retryAfter` when `state` is `open`                                                          |
+| `ErrBulkheadFull`       | `/bulkhead`       | `ERR_BULKHEAD_FULL`        | No slot, and no room or time to wait for one. `bulkhead`                                                                                         |
+| `ErrRateLimitExceeded`  | `/ratelimiter`    | `ERR_RATE_LIMIT_EXCEEDED`  | No permit within `maxWaitDuration`. `rateLimiter`, `retryAfter`                                                                                  |
+| `ErrTimeLimitExceeded`  | `/timelimiter`    | `ERR_TIME_LIMIT_EXCEEDED`  | The rest of the chain ran past the limit. `timeLimiter`, `timeoutDuration`                                                                       |
+| `ErrMaxRetriesExceeded` | `/retry`          | `ERR_MAX_RETRIES_EXCEEDED` | `failAfterMaxAttempts` and the last value was still retryable. `attempts`, `result`                                                              |
+| `ErrInvalidOption`      | root              | `ERR_INVALID_OPTION`       | A bad option, argument, name or annotation, when created, at `bootstrap()` or on a call; or a computed delay or a predicate's answer is unusable |
 
 All extend `ErrResilience`. A refusal, a call a strategy turned away without running it, extends `ErrCallRefused`,
 which carries `retryAfter` when the strategy knows how long to wait: catch `ErrCallRefused` to handle every kind of

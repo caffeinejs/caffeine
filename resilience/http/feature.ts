@@ -50,9 +50,7 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    const methods = this.#retryableMethods ?? this.#config?.retryableMethods ?? SAFE_METHODS
-    const retryableMethods = new Set(methods.map(method => method.toUpperCase()))
-    kit.container.bind(kResilienceHTTP, t => t.toValue({ retryableMethods }))
+    kit.container.bind(kResilienceHTTP, t => t.toValue(true))
   }
 
   protected override bootstrap(kit: BootstrapKit<C>): void {
@@ -63,11 +61,13 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
       )
     }
 
-    const { retryableMethods } = kit.container.get(kResilienceHTTP)
-    for (const { binding } of kit.container.getBindingsByLabel(Keys.CONTROLLER)) {
-      const cls = binding.type as AnyClass | undefined
-      const group = cls === undefined ? undefined : getRouteGroup(cls)?.toRouteGroup()
-      if (cls === undefined || group === undefined) {
+    const methods = this.#retryableMethods ?? this.#config?.retryableMethods ?? SAFE_METHODS
+    const retryableMethods = new Set(methods.map(method => method.toUpperCase()))
+    for (const { key, binding } of kit.container.getBindingsByLabel(Keys.CONTROLLER)) {
+      // The routes are the key's, as the HTTP package builds them; the handlers that run are the bound class's.
+      const group = typeof key === 'function' ? getRouteGroup(key)?.toRouteGroup() : undefined
+      const cls = (binding.type ?? key) as AnyClass
+      if (group === undefined) {
         continue
       }
 
@@ -78,7 +78,7 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
         }
 
         const where = `${cls.name}.${String(route.name)}`
-        let path = `${group.path}${route.path}`
+        let path = `${group.prefix ?? ''}${group.path}${route.path}`
         while (path.length > 1 && path.endsWith('/')) {
           path = path.slice(0, -1)
         }

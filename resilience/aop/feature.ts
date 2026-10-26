@@ -20,15 +20,9 @@ import { ANNOTATIONS, Retry } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
 import { type ResilienceDefinitions, ResilienceRegistry } from './registry.js'
 
-/** What the HTTP replay check, `ResilienceHTTP()`, settled on. */
-export interface ResilienceHTTPSettings {
-  /** The HTTP methods a handler may retry without declaring itself repeatable, upper case. */
-  readonly retryableMethods: ReadonlySet<string>
-}
-
-// Bound by `ResilienceHTTP()`. A controller's `@Retry` needs it: without the check, a handler for any method would
-// replay.
-export const kResilienceHTTP = token<ResilienceHTTPSettings>('@caffeinejs/resilience:http')
+// Bound to `true` by `ResilienceHTTP()`. A controller's `@Retry` needs it: without the check, a handler for any method
+// would replay.
+export const kResilienceHTTP = token<boolean>('@caffeinejs/resilience:http')
 
 // The label `@Controller` gives a class, registered so it is read here without importing the HTTP package.
 const kController = Symbol.for('@caffeinejs/http:controller')
@@ -66,7 +60,14 @@ function merged<O>(
 ): Record<string, O> {
   const instances: Record<string, O> = {}
   for (const name of new Set([...Object.keys(fromConfig ?? {}), ...fromCode.keys()])) {
-    instances[name] = { ...fromConfig?.[name], ...fromCode.get(name) } as O
+    const options: Record<string, unknown> = { ...fromConfig?.[name] }
+    // An option code passes as `undefined` leaves the configured one in place.
+    for (const [option, value] of Object.entries(fromCode.get(name) ?? {})) {
+      if (value !== undefined) {
+        options[option] = value
+      }
+    }
+    instances[name] = options as O
   }
   return instances
 }
@@ -75,8 +76,10 @@ function merged<O>(
  * Configures the named strategies the resilience annotations use, and weaves them into every method that carries
  * one, in the classes the container builds.
  *
- * An instance is defined by code, by configuration, or both; code wins, option by option. A method naming an instance
- * nothing defines, or a `@Fallback` naming a method its class lacks, fails `bootstrap()`.
+ * An instance is defined by code, by configuration, or both; code wins, option by option, and an option code passes as
+ * `undefined` keeps the configured one. `bootstrap()` fails when code defines a name twice, a method names an instance
+ * nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static method, or a controller
+ * carries `@Retry` without `ResilienceHTTP()`.
  *
  * ```ts
  * .install(Resilience((r, { config }) => r.config(config.resilience).retry('inventory', { maxAttempts: 3 })))
@@ -100,28 +103,62 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
+  /**
+   * Defines the circuit breaker `name`, over what the configuration tree sets for it.
+   *
+   * @throws {@link ErrInvalidOption} when code already defined a circuit breaker of that name.
+   */
   circuitBreaker(name: string, options: Omit<CircuitBreakerOptions, 'name'> = {}): this {
-    this.#code.circuitBreakers.set(name, options)
-    return this
+    return this.#define('circuitBreakers', 'circuit breaker', name, options)
   }
 
+  /**
+   * Defines the retry `name`, over what the configuration tree sets for it.
+   *
+   * @throws {@link ErrInvalidOption} when code already defined a retry of that name.
+   */
   retry(name: string, options: Omit<RetryOptions, 'name'> = {}): this {
-    this.#code.retries.set(name, options)
-    return this
+    return this.#define('retries', 'retry', name, options)
   }
 
+  /**
+   * Defines the time limiter `name`, over what the configuration tree sets for it.
+   *
+   * @throws {@link ErrInvalidOption} when code already defined a time limiter of that name.
+   */
   timeLimiter(name: string, options: Partial<Omit<TimeLimiterOptions, 'name'>> = {}): this {
-    this.#code.timeLimiters.set(name, options)
-    return this
+    return this.#define('timeLimiters', 'time limiter', name, options)
   }
 
+  /**
+   * Defines the bulkhead `name`, over what the configuration tree sets for it.
+   *
+   * @throws {@link ErrInvalidOption} when code already defined a bulkhead of that name.
+   */
   bulkhead(name: string, options: Omit<BulkheadOptions, 'name'> = {}): this {
-    this.#code.bulkheads.set(name, options)
-    return this
+    return this.#define('bulkheads', 'bulkhead', name, options)
   }
 
+  /**
+   * Defines the rate limiter `name`, over what the configuration tree sets for it.
+   *
+   * @throws {@link ErrInvalidOption} when code already defined a rate limiter of that name.
+   */
   rateLimiter(name: string, options: Partial<Omit<RateLimiterOptions, 'name'>> = {}): this {
-    this.#code.rateLimiters.set(name, options)
+    return this.#define('rateLimiters', 'rate limiter', name, options)
+  }
+
+  #define(kind: Kinds, label: string, name: string, options: object): this {
+    const instances = this.#code[kind]
+    if (instances.has(name)) {
+      throw new ErrInvalidOption(
+        errMessage(`Cannot define ${label} "${name}" twice`)
+          .solutions(`Pass every option of "${name}" in one call`)
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
+    }
+    instances.set(name, options)
     return this
   }
 
@@ -165,7 +202,7 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
 
     const aspect = kit.container.get(ResilienceAspect)
     const classes = new Set<AnyClass>()
-    for (const annotation of ANNOTATIONS) {
+    for (const annotation of ANNOTATIONS.keys()) {
       for (const { binding } of kit.container.getBindingsByAnnotation(annotation)) {
         if (binding.type !== undefined) {
           classes.add(binding.type as AnyClass)
@@ -183,8 +220,9 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
  * Installs the resilience annotations: the named circuit breakers, retries, time limiters, bulkheads and rate
  * limiters they use, and the aspect that runs annotated methods through them.
  *
- * @throws {@link ErrInvalidOption} at `bootstrap()` when an instance's options are out of range, a method names an
- * instance nothing defines, or a `@Fallback` names a method its class lacks.
+ * @throws {@link ErrInvalidOption} at `bootstrap()` when an instance's options are out of range, code defines a name
+ * twice, a method names an instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on
+ * a static method, or a controller carries `@Retry` without `ResilienceHTTP()`.
  */
 export function Resilience<C = unknown>(configure?: FeatureConfigurer<ResilienceBuilder<C>, C>): Feature<C> {
   return new ResilienceBuilder<C>(configure as never)

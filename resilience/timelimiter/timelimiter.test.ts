@@ -108,7 +108,7 @@ describe('time limiter', () => {
 
   // The point of a time limiter: a hung dependency must not hold its caller forever.
   it('rejects at the limit with ErrTimeLimitExceeded, even when the operation never settles', async () => {
-    const limiter = limiterOf({ timeoutDuration: 2 * Millisecond * Second })
+    const limiter = limiterOf({ timeoutDuration: 2 * Second })
     const { operation } = controllable()
     let outcome: unknown = 'pending'
     const call = runWith(operation, limiter).then(
@@ -124,7 +124,7 @@ describe('time limiter', () => {
     expect(outcome).toBeInstanceOf(ErrTimeLimitExceeded)
     expect(outcome).toMatchObject({
       timeLimiter: 'inventory',
-      timeoutDuration: 2 * Millisecond * Second,
+      timeoutDuration: 2 * Second,
       code: 'ERR_TIME_LIMIT_EXCEEDED',
       name: 'ErrTimeLimitExceeded',
     })
@@ -162,7 +162,7 @@ describe('time limiter', () => {
 
   // The caller giving up is not the dependency being slow: it must not count as a timeout, nor wait for the limit.
   it('rejects with the caller’s reason at once when the caller aborts first, and does not count a timeout', async () => {
-    const limiter = limiterOf({ timeoutDuration: 10 * Millisecond * Second })
+    const limiter = limiterOf({ timeoutDuration: 10 * Second })
     const caller = new AbortController()
     const reason = new Error('caller gave up')
     const { operation, signal } = controllable()
@@ -179,7 +179,7 @@ describe('time limiter', () => {
   })
 
   it('rejects with the caller’s reason when the operation aborts the caller’s signal while it starts', async () => {
-    const limiter = limiterOf({ timeoutDuration: 10 * Millisecond * Second })
+    const limiter = limiterOf({ timeoutDuration: 10 * Second })
     const caller = new AbortController()
     const reason = new Error('aborted inside')
 
@@ -300,7 +300,7 @@ describe('time limiter in a chain', () => {
 
   // Outside a retry, the limit is a budget for the whole call: a wait between attempts is cut short too.
   it('bounds every attempt and every wait between them when it sits outside the retry', async () => {
-    const limiter = limiterOf({ timeoutDuration: 1 * Millisecond * Second })
+    const limiter = limiterOf({ timeoutDuration: 1 * Second })
     const retries = retry({ name: 'inventory', maxAttempts: 5, backoff: 400 * Millisecond })
     let attempts = 0
 
@@ -341,7 +341,7 @@ describe('time limiter in a chain', () => {
       minimumNumberOfCalls: 1,
       slidingWindow: { type: 'count', size: 1 },
     })
-    const limiter = limiterOf({ timeoutDuration: 10 * Millisecond * Second })
+    const limiter = limiterOf({ timeoutDuration: 10 * Second })
     const caller = new AbortController()
 
     const call = runWith(() => new Promise(() => undefined), breaker, limiter, caller.signal).catch(() => undefined)

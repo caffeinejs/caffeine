@@ -77,6 +77,9 @@ export async function startPaymentProvider(
 
   const send = (res: ServerResponse, status: number, body: unknown): void => {
     if (!res.writableEnded && !res.destroyed) {
+      // Keep-alive stays on, unlike the scripted upstream: with `connection: close`, a reply the proxy holds reaches
+      // the client as a closed connection rather than as silence, and a lost answer would no longer look like one.
+      // Every client reaches this server through the proxy, whose close drops its connections, so none outlives a test.
       res.writeHead(status, { 'content-type': 'application/json' })
       res.end(JSON.stringify(body))
     }

@@ -9,7 +9,7 @@ import {
   TimeLimiter,
 } from '@caffeinejs/resilience/aop'
 import { ResilienceErrorHandler, ResilienceHTTP } from '@caffeinejs/resilience/http'
-import { Millisecond } from '@caffeinejs/std/duration'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -81,7 +81,7 @@ class StorefrontController {
     return this.catalog.page(id, signal)
   }
 
-  // The whole page gets 500 ms, whatever the retries inside it would take.
+  // The whole page gets 1.5 s, whatever the retries inside it would take.
   @TimeLimiter('page')
   @Get('/live/:id', p => [p.param('id'), p.signal()])
   async live(id: string, signal: AbortSignal): Promise<Stock> {
@@ -109,12 +109,15 @@ beforeEach(async () => {
                 minimumNumberOfCalls: 4,
                 slidingWindow: { type: 'count', size: 4 },
                 slowCallDurationThreshold: 200 * Millisecond,
-                waitDurationInOpenState: 300 * Millisecond,
+                // Long enough that the requests a test sends while the breaker is open never meet a trial call.
+                waitDurationInOpenState: 2 * Second,
                 automaticTransitionFromOpenToHalfOpen: true,
                 permittedNumberOfCallsInHalfOpenState: 1,
               })
-              .timeLimiter('inventory', { timeoutDuration: 300 * Millisecond })
-              .timeLimiter('page', { timeoutDuration: 500 * Millisecond }),
+              // Far above the slow-call threshold, so a slow call on a busy machine is still slow, not cut.
+              .timeLimiter('inventory', { timeoutDuration: 1 * Second })
+              // Half-way through the second attempt, so the page's budget, not an attempt's, ends the call.
+              .timeLimiter('page', { timeoutDuration: 1500 * Millisecond }),
           ),
         )
         .install(ResilienceHTTP())
@@ -167,14 +170,8 @@ describe('a product page in front of a flaky inventory service', { timeout: 30_0
   })
 
   it('serves fresh pages again once the dependency recovers and a trial call succeeds', async () => {
-    upstream.setDefault({ status: 503 })
-    await get('/products/1')
-    await get('/products/2')
     const breaker = registry.circuitBreaker('inventory')
-    expect(breaker.state).toBe('open')
-
-    upstream.setDefault({ status: 200, body: { count: 9 } })
-    await new Promise<void>(resolve => {
+    const halfOpen = new Promise<void>(resolve => {
       const off = breaker.on('stateChange', event => {
         if (event.to === 'half_open') {
           off()
@@ -182,6 +179,13 @@ describe('a product page in front of a flaky inventory service', { timeout: 30_0
         }
       })
     })
+    upstream.setDefault({ status: 503 })
+    await get('/products/1')
+    await get('/products/2')
+    expect(breaker.state).toBe('open')
+
+    upstream.setDefault({ status: 200, body: { count: 9 } })
+    await halfOpen
 
     expect(await get('/products/3')).toEqual({ status: 200, body: { id: '3', count: 9, stale: false } })
     expect(breaker.state).toBe('closed')
@@ -197,8 +201,8 @@ describe('a product page in front of a flaky inventory service', { timeout: 30_0
     expect(upstream.arrivals).toHaveLength(3)
   })
 
-  // The page's budget is the earlier deadline: it answers 504, aborts the attempt on the wire, and no attempt
-  // starts after it.
+  // The first attempt hits its own limit and the retry starts a second; the page's budget runs out during it. The page
+  // answers 504, the attempt is aborted on the wire, and no third attempt starts.
   it('answers 504 when the page budget runs out first, and stops the retry with it', async () => {
     upstream.setDefault('hang')
     const ended = new Promise<number>(resolve => {
@@ -261,7 +265,7 @@ describe('a product page in front of a flaky inventory service', { timeout: 30_0
     const text = await res.text()
 
     expect(res.status).toBe(503)
-    expect(Number(res.headers.get('retry-after'))).toBeGreaterThanOrEqual(1)
+    expect(['1', '2']).toContain(res.headers.get('retry-after'))
     expect(text).not.toContain('inventory')
     expect(JSON.parse(text)).toMatchObject({ code: 'ERR_CALL_NOT_PERMITTED' })
   })

@@ -112,6 +112,7 @@ describe('ResilienceErrorHandler', () => {
 
   // Retry-After counts whole seconds: a client told 0 would come straight back while the limit still holds.
   it.each([
+    ['0', '1'],
     ['1', '1'],
     ['999', '1'],
     ['1000', '1'],

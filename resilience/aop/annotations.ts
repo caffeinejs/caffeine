@@ -1,7 +1,7 @@
 import { type Annotation, createAnnotation } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { ErrInvalidOption } from '../errors.js'
+import { described, ErrInvalidOption } from '../errors.js'
 
 // A strategy settles a call later, so only a method that returns a promise can carry one.
 type AsyncMethod<This, A extends unknown[], R> = (this: This, ...args: A) => Promise<R>
@@ -50,7 +50,9 @@ export interface FallbackAnnotation {
 function nameOf(decorator: string, name: unknown): string {
   if (typeof name !== 'string' || name.length === 0) {
     throw new ErrInvalidOption(
-      errMessage(`Cannot apply @${decorator}: the name must be a non-empty string, got ${JSON.stringify(name)}`)
+      errMessage(
+        `Cannot apply @${decorator}: the name must be a non-empty string, got ${typeof name === 'string' ? '""' : described(name)}`,
+      )
         .solutions(
           `Name the instance defined with Resilience(r => r.${decorator[0]!.toLowerCase()}${decorator.slice(1)}('name', { ... }))`,
         )
@@ -105,7 +107,9 @@ export const Fallback = createAnnotation.on('method')(
   (method: string | symbol, options?: FallbackAnnotationOptions): FallbackAnnotation => {
     if ((typeof method !== 'string' || method.length === 0) && typeof method !== 'symbol') {
       throw new ErrInvalidOption(
-        errMessage(`Cannot apply @Fallback: the method must be a non-empty string or a symbol, got ${String(method)}`)
+        errMessage(
+          `Cannot apply @Fallback: the method must be a non-empty string or a symbol, got ${typeof method === 'string' ? '""' : described(method)}`,
+        )
           .reference('@caffeinejs/resilience', ErrInvalidOption)
           .build(),
       )
@@ -116,12 +120,15 @@ export const Fallback = createAnnotation.on('method')(
 ) as unknown as (<K extends string | symbol>(method: K, options?: FallbackAnnotationOptions) => FallbackDecorator<K>) &
   Annotation<FallbackAnnotation, 'method'>
 
-// Every annotation the aspect weaves, in no particular order.
-export const ANNOTATIONS: readonly Annotation<unknown, 'method'>[] = [
-  Retry,
-  CircuitBreaker,
-  TimeLimiter,
-  Bulkhead,
-  RateLimiter,
-  Fallback,
-]
+// Every annotation the aspect weaves, in no particular order, with the decorator name a message gives it.
+export const ANNOTATIONS: ReadonlyMap<Annotation<unknown, 'method'>, string> = new Map<
+  Annotation<unknown, 'method'>,
+  string
+>([
+  [Retry, 'Retry'],
+  [CircuitBreaker, 'CircuitBreaker'],
+  [TimeLimiter, 'TimeLimiter'],
+  [Bulkhead, 'Bulkhead'],
+  [RateLimiter, 'RateLimiter'],
+  [Fallback, 'Fallback'],
+])

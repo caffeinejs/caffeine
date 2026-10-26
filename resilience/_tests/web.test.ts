@@ -16,6 +16,7 @@ const seen = {
   catalogCalls: 0,
   catalogSignals: [] as AbortSignal[],
   pageSignals: [] as AbortSignal[],
+  requestSignals: [] as AbortSignal[],
   feedHandlerCalls: 0,
   feedServiceCalls: 0,
   reportCalls: 0,
@@ -31,6 +32,7 @@ beforeEach(() => {
   seen.catalogCalls = 0
   seen.catalogSignals = []
   seen.pageSignals = []
+  seen.requestSignals = []
   seen.feedHandlerCalls = 0
   seen.feedServiceCalls = 0
   seen.reportCalls = 0
@@ -62,6 +64,13 @@ class Catalog {
   @RateLimiter('lookup')
   async lookup(id: string): Promise<string> {
     return `found ${id}`
+  }
+
+  // Woven, but by a strategy that bounds no time.
+  @CircuitBreaker('prices')
+  async price(id: string, signal?: AbortSignal): Promise<string> {
+    seen.catalogSignals.push(signal!)
+    return `price ${id}`
   }
 }
 
@@ -123,6 +132,15 @@ class ProductsController {
   @Get('/lookup/:id', p => [p.param('id')])
   async lookup(id: string): Promise<string> {
     return this.catalog.lookup(id)
+  }
+
+  // The context is not a signal, so no weave replaces it: it carries the request's own signal.
+  @CircuitBreaker('prices')
+  @Get('/prices/:id', p => [p.param('id'), p.signal(), p.context()])
+  async price(id: string, signal: AbortSignal, ctx: IContext): Promise<string> {
+    seen.requestSignals.push(ctx.signal)
+    seen.pageSignals.push(signal)
+    return this.catalog.price(id, signal)
   }
 }
 void ProductsController
@@ -206,6 +224,7 @@ async function storefront() {
             waitDurationInOpenState: 1 * Minute,
           })
           .circuitBreaker('scoped', { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } })
+          .circuitBreaker('prices')
           .retry('feed', { maxAttempts: 2, backoff: 0 })
           .retry('orders', { maxAttempts: 2, backoff: 0 }),
       ),
@@ -345,14 +364,19 @@ describe('resilience on the services controllers call', () => {
     expect((attempt.reason as ErrTimeLimitExceeded).timeLimiter).toBe('page')
   })
 
+  // Nothing on this route bounds time, so the service must get the very signal the handler was handed: a disconnect
+  // still reaches it, and no signal is made per call.
   it('passes the request signal through to the service when nothing derives one', async () => {
     const app = await storefront()
 
-    const res = await app.fetch('/products/42')
+    const res = await app.fetch('/products/prices/42')
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ id: '42', count: 1 })
-    expect(seen.catalogSignals[0]).toBeInstanceOf(AbortSignal)
-    expect(seen.catalogSignals[0]!.aborted).toBe(false)
+    expect(await res.text()).toBe('price 42')
+    expect(seen.requestSignals).toHaveLength(1)
+    expect(seen.pageSignals).toHaveLength(1)
+    expect(seen.catalogSignals).toHaveLength(1)
+    expect(seen.pageSignals[0]).toBe(seen.requestSignals[0])
+    expect(seen.catalogSignals[0]).toBe(seen.requestSignals[0])
   })
 })

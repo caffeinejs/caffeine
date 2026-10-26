@@ -8,7 +8,7 @@ import {
   Scopes,
   token,
 } from '@caffeinejs/di'
-import { Hour, Millisecond } from '@caffeinejs/std/duration'
+import { Hour, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrBulkheadFull } from '../bulkhead/bulkhead.js'
@@ -227,6 +227,36 @@ describe('the order of the strategies', () => {
 
     expect(target.attempts).toBe(2)
     expect(error).toBeInstanceOf(ErrCallNotPermitted)
+  })
+})
+
+// The time limiter bounds the call while it runs, not while it waits for a bulkhead slot: a wait is the process's own
+// queue, and timed as a failure it would open the breaker on a dependency that answers every call in time.
+describe('waiting for a bulkhead slot', () => {
+  class Queued {
+    @CircuitBreaker('queued')
+    @TimeLimiter('queued')
+    @Bulkhead('queued')
+    async call(): Promise<string> {
+      await new Promise(resolve => setTimeout(resolve, 80))
+      return 'ok'
+    }
+  }
+
+  it('does not count against the time limit, so the breaker stays closed on a healthy dependency', async () => {
+    const { di, registry } = await containerWith(di => di.bind(Queued, t => t.toSelf()), {
+      circuitBreakers: { queued: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } } },
+      timeLimiters: { queued: { timeoutDuration: 100 * Millisecond } },
+      bulkheads: { queued: { maxConcurrentCalls: 1, maxQueuedCalls: 5, maxWaitDuration: 1 * Second } },
+    })
+    const queued = di.get(Queued)
+
+    const calls = Promise.all([queued.call(), queued.call(), queued.call()].map(call => call.catch((e: unknown) => e)))
+    await vi.advanceTimersByTimeAsync(240)
+
+    expect(await calls).toEqual(['ok', 'ok', 'ok'])
+    expect(registry.circuitBreaker('queued').metrics().failedCalls).toBe(0)
+    expect(registry.circuitBreaker('queued').state).toBe('closed')
   })
 })
 
@@ -510,6 +540,23 @@ describe('preparing a class', () => {
 
     expect(() => aspect.prepare(MissingFallback)).toThrow(
       'Cannot weave "MissingFallback.call": @Fallback names "cachedStok", which is not a method of "MissingFallback"',
+    )
+  })
+
+  class StaticLoader {
+    @Retry('inventory')
+    static async load(): Promise<string> {
+      return 'ok'
+    }
+  }
+
+  // No container builds a static method, so nothing would weave it: refused rather than silently ignored.
+  it('refuses an annotation on a static method', async () => {
+    const { di } = await containerWith(di => di.bind(StaticLoader, t => t.toSelf()))
+    const aspect = di.get(ResilienceAspect)
+
+    expect(() => aspect.prepare(StaticLoader)).toThrow(
+      'Cannot weave "StaticLoader.load": @Retry is on a static method, which is never woven',
     )
   })
 

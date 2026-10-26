@@ -19,7 +19,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-// retry(circuitBreaker(rateLimiter(timeLimiter(bulkhead(operation))))), the order the README recommends.
+// retry(circuitBreaker(rateLimiter(bulkhead(timeLimiter(operation))))), the order the README recommends.
 function chain(options: { limitForPeriod?: number } = {}) {
   const breaker = circuitBreaker({
     name: 'inventory',
@@ -30,11 +30,11 @@ function chain(options: { limitForPeriod?: number } = {}) {
   const quota = rateLimiter({
     name: 'inventory',
     limitForPeriod: options.limitForPeriod ?? 100,
-    limitRefreshPeriod: 1 * Millisecond * Hour,
+    limitRefreshPeriod: 1 * Hour,
   })
-  const deadline = timeLimiter({ name: 'inventory', timeoutDuration: 1 * Millisecond * Second })
+  const deadline = timeLimiter({ name: 'inventory', timeoutDuration: 1 * Second })
   const pool = bulkhead({ name: 'inventory', maxConcurrentCalls: 10 })
-  return { breaker, retries, quota, run: compose(retries, breaker, quota, deadline, pool) }
+  return { breaker, retries, quota, run: compose(retries, breaker, quota, pool, deadline) }
 }
 
 describe('the recommended order', () => {
@@ -102,9 +102,9 @@ describe('the recommended order', () => {
       const run = compose(
         retry({ name: 'inventory', maxAttempts: 1 }),
         circuitBreaker({ name: 'inventory' }),
-        rateLimiter({ name: 'inventory', limitForPeriod: 100, limitRefreshPeriod: 1 * Millisecond * Second }),
-        timeLimiter({ name: 'inventory', timeoutDuration: 100 * Millisecond * Millisecond }),
+        rateLimiter({ name: 'inventory', limitForPeriod: 100, limitRefreshPeriod: 1 * Second }),
         bulkhead({ name: 'inventory' }),
+        timeLimiter({ name: 'inventory', timeoutDuration: 100 * Millisecond }),
       )
       function callsTheChain(): Promise<unknown> {
         return run(operationThatThrows)
