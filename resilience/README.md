@@ -17,6 +17,7 @@ npm install @caffeinejs/resilience
 | `@caffeinejs/resilience/ratelimiter`    | `rateLimiter`, `ErrRateLimitExceeded`                                                                     |
 | `@caffeinejs/resilience/fallback`       | `fallback`                                                                                                |
 | `@caffeinejs/resilience/aop`            | Annotations and the `Resilience()` feature, with `@caffeinejs/di` and `@caffeinejs/application` installed |
+| `@caffeinejs/resilience/http`           | `ResilienceErrorHandler` and the `ResilienceHTTP()` replay check, with `@caffeinejs/http` installed       |
 | `@caffeinejs/resilience/otel`           | OpenTelemetry instruments, with `@opentelemetry/api` installed                                            |
 
 ## Quick start
@@ -147,13 +148,7 @@ answers only the calls that never ran, which matters for writes such as payments
 
 `.catch()` still works for a one-off; `fallback()` adds a shared filter, abort awareness, events and metrics.
 
-`ErrCallRefused.retryAfter` tells an HTTP layer what to put in `Retry-After`, which counts seconds:
-
-```ts
-if (error instanceof ErrCallRefused && error.retryAfter !== undefined) {
-  reply.header('retry-after', Math.ceil(error.retryAfter / Second)).code(503)
-}
-```
+`ErrCallRefused.retryAfter` is what an HTTP layer puts in `Retry-After`; see [HTTP](#http).
 
 ## Reusing a chain with `compose()`
 
@@ -491,6 +486,78 @@ APP_RESILIENCE__TIME_LIMITERS__INVENTORY__TIMEOUT_DURATION=1500ms
 ```
 
 Durations are text with a unit: a bare `1500` fails validation at `bootstrap()`.
+
+## HTTP
+
+```sh
+npm install @caffeinejs/http
+```
+
+`@caffeinejs/resilience/http` answers resilience errors over HTTP and checks, at start-up, which handlers may be
+retried.
+
+```ts
+import { Resilience } from '@caffeinejs/resilience/aop'
+import { ResilienceErrorHandler, ResilienceHTTP } from '@caffeinejs/resilience/http'
+
+createWebApplication({ container, config })
+  .install(Resilience(r => r.retry('feed', { maxAttempts: 3 })))
+  .install(ResilienceHTTP())
+  .errorHandling(e => e.globalHandlers(ResilienceErrorHandler))
+```
+
+`ResilienceErrorHandler` answers with the default JSON envelope, its message the status phrase, so breaker and
+dependency names never reach a client:
+
+| Error                  | Status | `Retry-After`                                |
+| ---------------------- | ------ | -------------------------------------------- |
+| `ErrCallNotPermitted`  | 503    | whole seconds, rounded up, when it is `open` |
+| `ErrRateLimitExceeded` | 503    | whole seconds, rounded up                    |
+| `ErrBulkheadFull`      | 503    | none                                         |
+| `ErrTimeLimitExceeded` | 504    | none                                         |
+
+A rate limiter on a route answers 503, not 429: it limits the whole process, not one client. Any other error is
+left to the application's handlers.
+
+### Retrying a handler replays it
+
+Resilience annotations work on controller methods as on any other: a controller is a class the container builds.
+`@Retry` on a handler runs the whole handler again, every service it calls, every write and every outbound
+request included:
+
+1. **Side effects run again.** A `POST /orders` that wrote the order, then failed, writes a second one.
+2. **Attempts overlap after a timeout.** A time limiter gives up on an attempt the dependency may still be running;
+   the next attempt can overlap it. Aborting the signal stops only work that listens to it.
+3. **A body read as a stream is gone.** The second attempt reads nothing.
+4. **A response already sent** cannot be replaced by a second attempt or a fallback.
+
+`ResilienceHTTP()` refuses, at `bootstrap()`, `@Retry` on a handler routed for any method but `GET`, `HEAD` or
+`OPTIONS`, and on any route that reads its body as a stream:
+
+```text
+ErrInvalidOption: Cannot retry "POST /orders" (OrdersController.place): POST is not a retryable method
+```
+
+There are three ways out, narrowest first:
+
+```ts
+// 1. The handler declares that running it twice is safe, such as an upsert by a client-sent Idempotency-Key.
+//    This permits the replay; it deduplicates nothing.
+@Retry('orders', { repeatable: true })
+@Post('/', p => [p.header('idempotency-key'), p.body()])
+async place(key: string, order: NewOrder): Promise<Order> { … }
+
+// 2. Every handler of a method is safe to replay, such as the idempotent PUT and DELETE.
+.install(ResilienceHTTP(h => h.retryableMethods('GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE')))
+
+// 3. From configuration, code winning: RESILIENCE_HTTP__RETRYABLE_METHODS=GET,HEAD,OPTIONS,PUT
+.install(ResilienceHTTP((h, { config }) => h.config(config.resilienceHttp)))
+```
+
+The better answer is usually none of them: put `@Retry` on the outbound client method the handler calls, where the
+repeated unit is one dependency call. A service's `@Retry` is never checked. `Resilience()` refuses to start when a
+controller carries `@Retry` and `ResilienceHTTP()` is not installed. Nothing checks that a response was already sent
+before a retry or a fallback (hazard 4): keep handler retries for handlers that answer only by returning.
 
 ## Errors
 

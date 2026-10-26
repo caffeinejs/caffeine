@@ -40,6 +40,10 @@
       "types": "./dist/aop/index.d.ts",
       "default": "./dist/aop/index.js"
     },
+    "./http": {
+      "types": "./dist/http/index.d.ts",
+      "default": "./dist/http/index.js"
+    },
     "./otel": {
       "types": "./dist/otel/index.d.ts",
       "default": "./dist/otel/index.js"
@@ -61,6 +65,7 @@
   "peerDependencies": {
     "@caffeinejs/application": "*",
     "@caffeinejs/di": "*",
+    "@caffeinejs/http": "*",
     "@opentelemetry/api": ">=1 <2"
   },
   "peerDependenciesMeta": {
@@ -70,6 +75,9 @@
     "@caffeinejs/di": {
       "optional": true
     },
+    "@caffeinejs/http": {
+      "optional": true
+    },
     "@opentelemetry/api": {
       "optional": true
     }
@@ -77,6 +85,7 @@
   "devDependencies": {
     "@caffeinejs/application": "*",
     "@caffeinejs/di": "*",
+    "@caffeinejs/http": "*",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-prometheus": "^0.222.0",
     "@opentelemetry/sdk-metrics": "^2.11.0"

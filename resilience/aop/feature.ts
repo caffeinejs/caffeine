@@ -6,17 +6,32 @@ import {
   type FeatureConfigureKit,
   kFeatureName,
 } from '@caffeinejs/application'
-import type { AnyClass } from '@caffeinejs/di'
+import { type AnyClass, reflect, token } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/err'
 
 import type { BulkheadOptions } from '../bulkhead/bulkhead.js'
 import type { CircuitBreakerOptions } from '../circuitbreaker/circuitbreaker.js'
+import { ErrInvalidOption } from '../errors.js'
 import type { RateLimiterOptions } from '../ratelimiter/ratelimiter.js'
 import type { RetryOptions } from '../retry/retry.js'
 import type { TimeLimiterOptions } from '../timelimiter/timelimiter.js'
-import { ANNOTATIONS } from './annotations.js'
+import { ANNOTATIONS, Retry } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
 import { type ResilienceDefinitions, ResilienceRegistry } from './registry.js'
+
+/** What the HTTP replay check, `ResilienceHTTP()`, settled on. */
+export interface ResilienceHTTPSettings {
+  /** The HTTP methods a handler may retry without declaring itself repeatable, upper case. */
+  readonly retryableMethods: ReadonlySet<string>
+}
+
+// Bound by `ResilienceHTTP()`. A controller's `@Retry` needs it: without the check, a handler for any method would
+// replay.
+export const kResilienceHTTP = token<ResilienceHTTPSettings>('@caffeinejs/resilience:http')
+
+// The label `@Controller` gives a class, registered so it is read here without importing the HTTP package.
+const kController = Symbol.for('@caffeinejs/http:controller')
 
 /** The circuit breaker options a configuration tree can carry: data only. */
 export type CircuitBreakerConfig = Omit<
@@ -128,6 +143,26 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override bootstrap(kit: BootstrapKit<C>): void {
+    if (!kit.container.has(kResilienceHTTP)) {
+      for (const { binding } of kit.container.getBindingsByLabel(kController)) {
+        const cls = binding.type as AnyClass | undefined
+        const retried = cls === undefined ? undefined : [...reflect.members(cls, Retry).keys()][0]
+        if (retried !== undefined) {
+          throw new ErrInvalidOption(
+            errMessage(
+              `Cannot retry "${cls!.name}.${String(retried)}": @Retry on a controller needs the HTTP replay check`,
+            )
+              .solutions(
+                'Install ResilienceHTTP() from @caffeinejs/resilience/http',
+                `Move @Retry('${reflect.members(cls!, Retry).get(retried)!.name}') to the outbound client method the handler calls`,
+              )
+              .reference('@caffeinejs/resilience', ErrInvalidOption)
+              .build(),
+          )
+        }
+      }
+    }
+
     const aspect = kit.container.get(ResilienceAspect)
     const classes = new Set<AnyClass>()
     for (const annotation of ANNOTATIONS) {
