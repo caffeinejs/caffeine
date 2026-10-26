@@ -7,7 +7,7 @@ import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Listener, bindTo, csrfExempt, type OriginPredicate, type WebApplication } from '../../../index.js'
+import { bindTo, csrfExempt, type OriginPredicate, type WebApplication } from '../../../index.js'
 import { createWebApplication, csrf, newRouter } from '../../../platform/fastify/index.js'
 
 /**
@@ -394,7 +394,7 @@ describe('csrf() at the edges', () => {
     it("leaves the application server's paths to its own plugin, whatever a listener excludes", async () => {
       const app = (await running(
         createWebApplication()
-          .install(Listener('admin', l => l.server(() => ({ listener })).with(csrf(c => c.exclude('/hooks')))))
+          .listener('admin', l => l.server(() => ({ listener })).with(csrf(c => c.exclude('/hooks'))))
           .server(() => ({ listener }))
           .with(csrf())
           .mount(newRouter('/hooks').extend(bindTo('admin')).post('/', ok), newRouter('/hooks').post('/', ok)),

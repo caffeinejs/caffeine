@@ -13,11 +13,8 @@ export type BasePathConfigurer<C> = (context: HTTPSetupContext<C>) => string | u
 
 /**
  * What one server is built from: its settings, its plugins and its middleware. The application's own server and
- * every listener, `Listener(name, ...)`, are each one of these, built the same way; which routers a server serves is
- * decided by their binding alone.
- *
- * A listener's is bound under a key of its own, extending this class, and the application collects them all with
- * `container.getManyOptional(ServerDefinition)`.
+ * every listener, `.listener(name, ...)`, are each one of these, built the same way; which routers a server serves
+ * is decided by their binding alone.
  */
 export class ServerDefinition<T extends IAdapterTypes = IAdapterTypes, C = unknown> {
   /** What its `.server(...)` calls return, in call order. */

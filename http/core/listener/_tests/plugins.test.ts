@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { type IContext, Listener, bindTo, type WebApplication } from '../../../index.js'
+import { Health, type IContext, bindTo, type WebApplication } from '../../../index.js'
 import { createWebApplication, newRouter } from '../../../platform/fastify/index.js'
 
 /**
@@ -62,13 +62,11 @@ describe("a listener's own plugins and middleware", () => {
 
   it("installs its own plugins in the order they were written, and none of the application's", async () => {
     app = createWebApplication()
-      .install(
-        Listener('admin', l =>
-          l
-            .server(() => ({ listener }))
-            .with(marking('x-order', 'first'))
-            .with(marking('x-order', 'second')),
-        ),
+      .listener('admin', l =>
+        l
+          .server(() => ({ listener }))
+          .with(marking('x-order', 'first'))
+          .with(marking('x-order', 'second')),
       )
       .server(() => ({ listener }))
       .with(marking('x-app-plugin'))
@@ -87,14 +85,12 @@ describe("a listener's own plugins and middleware", () => {
 
   it("runs its own middleware on its own requests, by path, and the application's on the application's", async () => {
     app = createWebApplication()
-      .install(
-        Listener('admin', l =>
-          l
-            .server(() => ({ listener }))
-            .use(tagging('x-admin-middleware'))
-            .use('/jobs', tagging('x-jobs-middleware'))
-            .useFn(() => tagging('x-built-middleware')),
-        ),
+      .listener('admin', l =>
+        l
+          .server(() => ({ listener }))
+          .use(tagging('x-admin-middleware'))
+          .use('/jobs', tagging('x-jobs-middleware'))
+          .useFn(() => tagging('x-built-middleware')),
       )
       .server(() => ({ listener }))
       .mount(jobs(), status(), api()) as WebApplication
@@ -119,10 +115,10 @@ describe("a listener's own plugins and middleware", () => {
   })
 
   it('refuses a feature handed to its with(...), as the application refuses one', async () => {
-    app = createWebApplication().install(Listener('admin', l => l.with(Listener('other') as never))) as WebApplication
+    app = createWebApplication().listener('admin', l => l.with(Health() as never)) as WebApplication
 
     await expect(app.bootstrap()).rejects.toThrow(
-      /^Cannot register feature "listener:other" with "\.with\(\.\.\.\)": a feature is not a server plugin/,
+      /^Cannot register feature "health" with "\.with\(\.\.\.\)": a feature is not a server plugin/,
     )
   })
 })

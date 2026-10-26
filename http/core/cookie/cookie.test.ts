@@ -16,7 +16,6 @@ import {
   CookieSigner,
   Get,
   HMACCookieSigner,
-  Listener,
   type IContext,
   type CookieSecret,
   type CookieUnsignResult,
@@ -796,7 +795,7 @@ describe('servers', () => {
       .get('/read', async ctx => ({ tok: await ctx.req.signedCookie('tok') }))
 
     const app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener }))))
+      .listener('admin', l => l.server(() => ({ listener })))
       .server(() => ({ listener }))
       .cookie(k => k.secret(SECRET))
       .mount(admin)

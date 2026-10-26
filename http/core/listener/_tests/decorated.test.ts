@@ -12,7 +12,6 @@ import {
   Get,
   type Guard,
   type GuardInput,
-  Listener,
   Use,
   UseGuards,
   type WebApplication,
@@ -81,7 +80,7 @@ describe('a controller bound with @BindTo', () => {
 
   async function started(): Promise<{ main: string; admin: string }> {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener }))))
+      .listener('admin', l => l.server(() => ({ listener })))
       .server(() => ({ listener }))
 
     await app.run()
