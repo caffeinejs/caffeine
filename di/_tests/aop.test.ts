@@ -1997,3 +1997,118 @@ describe('annotations in aspects', function () {
     expect(guardedCalls).toEqual(['HalfGuarded.secret', 'FullyGuarded.first', 'FullyGuarded.second'])
   })
 })
+
+// An around hook that proceeds more than once, as a retry does: every call must go through the aspects inside it
+// again, or a transaction or a trace opened by an inner aspect is skipped from the second attempt on.
+describe('an around hook that proceeds more than once', function () {
+  class Repeated {
+    calls = 0
+
+    add(a: number, b: number): number {
+      this.calls++
+      return a + b
+    }
+
+    async load(id: number): Promise<number> {
+      this.calls++
+      return id
+    }
+  }
+
+  const innerLog: unknown[][] = []
+
+  @Order(1)
+  @Aspect([$aop.forClass(Repeated, 'add')])
+  @Profile('aop-reproceed-sync')
+  class ThriceAspect implements MethodAspect<Repeated> {
+    around(jp: JoinPoint<Repeated>) {
+      jp.proceed(...jp.args)
+      jp.proceed(...jp.args)
+      return jp.proceed(...jp.args)
+    }
+  }
+  void ThriceAspect
+
+  @Order(1)
+  @Aspect([$aop.forClass(Repeated, 'add')])
+  @Profile('aop-reproceed-args')
+  class NewArgsAspect implements MethodAspect<Repeated> {
+    around(jp: JoinPoint<Repeated>) {
+      jp.proceed(1, 2)
+      return jp.proceed(10, 20)
+    }
+  }
+  void NewArgsAspect
+
+  @Order(1)
+  @Aspect([$aop.forClass(Repeated, 'load')])
+  @Profile('aop-reproceed-async')
+  class AsyncAgainAspect implements MethodAspect<Repeated> {
+    async around(jp: JoinPoint<Repeated>) {
+      await jp.proceed(...jp.args)
+      await Promise.resolve()
+      return jp.proceed(...jp.args)
+    }
+  }
+  void AsyncAgainAspect
+
+  @Order(10)
+  @Aspect([$aop.forClass(Repeated, ['add', 'load'])])
+  @Profile('aop-reproceed-sync', 'aop-reproceed-args', 'aop-reproceed-async')
+  class InnerAspect implements MethodAspect<Repeated> {
+    before(jp: JoinPoint<Repeated>) {
+      innerLog.push([...jp.args])
+    }
+  }
+  void InnerAspect
+
+  async function containerFor(profile: string): Promise<CaffeineIoC> {
+    innerLog.length = 0
+    const di = new CaffeineIoC({ profiles: [profile] })
+    di.bind(Repeated, t => t.toSelf())
+    await di.init()
+    return di
+  }
+
+  it('runs the inner aspect on every proceed, not only the first', async function () {
+    const di = await containerFor('aop-reproceed-sync')
+    const target = di.get(Repeated)
+
+    expect(target.add(1, 2)).toBe(3)
+    expect(target.calls).toBe(3)
+    expect(innerLog).toEqual([
+      [1, 2],
+      [1, 2],
+      [1, 2],
+    ])
+  })
+
+  it('hands the inner aspect the arguments each proceed passes', async function () {
+    const di = await containerFor('aop-reproceed-args')
+
+    expect(di.get(Repeated).add(0, 0)).toBe(30)
+    expect(innerLog).toEqual([
+      [1, 2],
+      [10, 20],
+    ])
+  })
+
+  it('runs the inner aspect again when the second proceed comes after an await', async function () {
+    const di = await containerFor('aop-reproceed-async')
+    const target = di.get(Repeated)
+
+    expect(await target.load(7)).toBe(7)
+    expect(target.calls).toBe(2)
+    expect(innerLog).toEqual([[7], [7]])
+  })
+
+  it('keeps the arguments of interleaved calls apart', async function () {
+    const di = await containerFor('aop-reproceed-async')
+    const target = di.get(Repeated)
+
+    const [a, b] = await Promise.all([target.load(1), target.load(2)])
+
+    expect([a, b]).toEqual([1, 2])
+    expect(innerLog.map(args => args[0]).sort()).toEqual([1, 1, 2, 2])
+  })
+})
