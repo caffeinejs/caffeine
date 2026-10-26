@@ -92,8 +92,11 @@ function filteredMermaid(source: string, ids: ReadonlySet<number>): string {
       return ids.has(Number(node[1]))
     }
 
-    const edge = /^\s*n(\d+) .* n(\d+)$/.exec(line)
-    return edge === null || (ids.has(Number(edge[1])) && ids.has(Number(edge[2])))
+    // An edge is `n<from> <arrow> [|"label"|] n<to>`: its first and last words name the two nodes.
+    const words = line.trim().split(' ')
+    const from = /^n(\d+)$/.exec(words[0] ?? '')
+    const to = /^n(\d+)$/.exec(words.at(-1) ?? '')
+    return from === null || to === null || words.length < 3 || (ids.has(Number(from[1])) && ids.has(Number(to[1])))
   })
 
   return kept.some(line => /^\s*n\d+\[/.test(line)) ? kept.join('\n') : ''

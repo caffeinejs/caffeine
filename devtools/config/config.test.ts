@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { devTools, type DevToolsPluginBuilder } from '../devtools.js'
 import type { PropertyDetail, PropertyRecord, SourceRecord } from './config.js'
+import { maskCredentials } from './redact.js'
 
 /**
  * The configuration as the devtools show it. A secret reaching this response is a leak to whoever can reach the
@@ -51,7 +52,7 @@ describe('ConfigTool', () => {
   }
 
   async function properties(): Promise<PropertyRecord[]> {
-    return (await (await app!.fetch('/devtools/config/properties')).json()) as PropertyRecord[]
+    return (await (await app!.request('/devtools/config/properties')).json()) as PropertyRecord[]
   }
 
   it('lists every path and where it came from, and no value, unless told to show them', async () => {
@@ -112,11 +113,19 @@ describe('ConfigTool', () => {
     expect(body).toContain('postgres://u:******@db/x')
   })
 
+  it('masks in linear time, so a crafted value cannot stall the devtools', () => {
+    // Each start position used to rescan the rest of the text: quadratic, and minutes on this input.
+    const crafted = 'a://:'.repeat(200_000)
+
+    expect(maskCredentials(crafted)).toBe(crafted)
+    expect(maskCredentials(`${'a'.repeat(200_000)}://u:p@h`)).toBe(`${'a'.repeat(200_000)}://u:******@h`)
+  })
+
   it('answers one value with every layer that set it, masked the same way', async () => {
     vi.stubEnv('DT_DB__PASS', 'from-env')
     await boot(d => d.showConfigValues())
 
-    const detail = (await (await app!.fetch('/devtools/config/properties/db.pass')).json()) as PropertyDetail
+    const detail = (await (await app!.request('/devtools/config/properties/db.pass')).json()) as PropertyDetail
 
     expect(detail.layers).toEqual([
       { layer: 'env:DT_', origin: 'env:DT_DB__PASS', value: '******' },
@@ -128,13 +137,13 @@ describe('ConfigTool', () => {
   it('answers 404 for a path the configuration does not hold', async () => {
     await boot()
 
-    expect((await app!.fetch('/devtools/config/properties/db.nope')).status).toBe(404)
+    expect((await app!.request('/devtools/config/properties/db.nope')).status).toBe(404)
   })
 
   it('lists the sources it was loaded from', async () => {
     await boot()
 
-    const sources = (await (await app!.fetch('/devtools/config/sources')).json()) as SourceRecord[]
+    const sources = (await (await app!.request('/devtools/config/sources')).json()) as SourceRecord[]
 
     expect(sources.map(source => source.name)).toEqual(['inline', 'env:DT_'])
     expect(sources.every(source => source.consecutiveFailures === 0)).toBe(true)

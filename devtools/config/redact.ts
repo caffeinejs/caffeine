@@ -13,12 +13,6 @@ export const REDACTED = '******'
 const SENSITIVE_SEGMENT = /pass(word|wd|phrase)?|pwd|secret|token|credential|key|signature|salt|cookie|auth|private/i
 
 /**
- * `scheme://user:password@host`, anywhere in a text and as often as it appears: a password runs to the `@` before the
- * host, so one holding `/` is masked whole.
- */
-const URL_PASSWORD = /([a-z][a-z0-9+.-]*:\/\/[^:/?#@\s]*):[^@\s]*@/gi
-
-/**
  * Decides which configuration values are masked: a `$t.Secret` field, a path whose segments name a secret, a path an
  * application named with `redact(...)`; and, in any value shown, the password of a URL.
  */
@@ -60,9 +54,58 @@ export class Redactor {
   }
 }
 
-/** `text` with the password of every URL in it masked: what an error naming a connection string is shown as. */
+/**
+ * `text` with the password of every URL in it masked: what an error naming a connection string is shown as.
+ *
+ * A password runs from the `:` after the user to the `@` before the host, so one holding `/` is masked whole. Read in
+ * one pass: a regular expression for it backtracks on a crafted value, and a value comes from wherever the
+ * configuration was loaded.
+ */
 export function maskCredentials(text: string): string {
-  return text.replace(URL_PASSWORD, `$1:${REDACTED}@`)
+  let masked = ''
+  let copied = 0
+  let at = text.indexOf('://')
+
+  while (at !== -1) {
+    // A scheme ends right before `://`.
+    if (at > 0 && SCHEME_CHAR.test(text[at - 1]!)) {
+      const colon = scan(text, at + 3, USER_END)
+
+      if (text[colon] === ':') {
+        const sign = scan(text, colon + 1, PASSWORD_END)
+
+        if (text[sign] === '@') {
+          masked += `${text.slice(copied, colon + 1)}${REDACTED}`
+          copied = sign
+        }
+
+        // Nothing up to `sign` holds an `@`, so no URL starting before it has a password to mask either.
+        at = text.indexOf('://', Math.max(sign, at + 3))
+        continue
+      }
+    }
+
+    at = text.indexOf('://', at + 3)
+  }
+
+  return masked + text.slice(copied)
+}
+
+const SCHEME_CHAR = /[a-z0-9+.-]/i
+/** What ends a URL's user: its password, its host, its path, or the end of the URL. */
+const USER_END = /[:/?#@\s]/
+/** What ends a URL's password: its host, or the end of the URL. */
+const PASSWORD_END = /[@\s]/
+
+/** The index of the first character from `from` that `end` matches; the length of `text` when none does. */
+function scan(text: string, from: number, end: RegExp): number {
+  let at = from
+
+  while (at < text.length && !end.test(text[at]!)) {
+    at++
+  }
+
+  return at
 }
 
 /** The dotted paths under `schema` a `$t.Secret` marks, `writeOnly` in JSON Schema. */

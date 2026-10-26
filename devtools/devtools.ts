@@ -383,15 +383,22 @@ function indexOf(tool: DevTool, path: string): DevToolsIndex['tools'][number] {
   }
 }
 
-/** A body a cross-site form cannot send without a preflight: what keeps a changing request same-origin. */
-const JSON_TYPE = /^application\/(?:[\w.+-]+\+)?json\s*(?:;|$)/i
+/**
+ * Whether a `Content-Type` is JSON, `application/json` or `application/<anything>+json`: a body a cross-site form
+ * cannot send without a preflight, which is what keeps a changing request same-origin.
+ */
+function isJSON(contentType: string | undefined): boolean {
+  const type = (contentType ?? '').split(';', 1)[0]!.trim().toLowerCase()
+
+  return type === 'application/json' || (type.startsWith('application/') && type.endsWith('+json'))
+}
 
 async function answer(operation: DevToolOperation, ctx: IContext): Promise<unknown> {
   assertLoopbackHost(ctx)
 
   const withBody = operation.method === 'POST' || operation.method === 'PUT' || operation.method === 'PATCH'
 
-  if (withBody && !JSON_TYPE.test(ctx.req.header('content-type') ?? '')) {
+  if (withBody && !isJSON(ctx.req.header('content-type'))) {
     throw new ErrHTTPUnsupportedMediaType('Cannot read the request body: it is not "application/json"')
   }
 
@@ -533,7 +540,7 @@ function isLoopback(host: string): boolean {
  * A page on another site can resolve its own name to `127.0.0.1` (DNS rebinding) and become same-origin with a
  * server listening there, which takes it past every check a browser makes. Its requests still carry its own name as
  * the `Host`, so a server only this machine should reach answers loopback names alone. A request that came in on
- * another address, or with no socket at all (`app.fetch(...)`), is left alone.
+ * another address, or with no socket at all (`app.request(...)`), is left alone.
  *
  * @throws ErrHTTPMisdirectedRequest for a loopback request whose `Host` is not `localhost`, `*.localhost`,
  * `127.x.x.x` or `[::1]`.
