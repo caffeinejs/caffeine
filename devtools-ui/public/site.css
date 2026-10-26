@@ -216,7 +216,7 @@ tr.winner td {
 }
 
 .json,
-.mermaid {
+.di-graph {
   overflow: auto;
   padding: 12px;
   border: 1px solid var(--line);
@@ -226,4 +226,38 @@ tr.winner td {
 
 .error {
   border-color: var(--bad);
+}
+
+.di-graph {
+  height: 65vh;
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
+  background: #ffffff;
+}
+
+.di-graph svg {
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.di-graph g.node {
+  cursor: pointer;
+}
+
+/* Tracing a binding dims the rest; the lit rules come after the dimming ones and match them in weight, so they win. */
+.di-graph svg.tracing g.node,
+.di-graph svg.tracing g.edge {
+  opacity: 0.15;
+}
+
+.di-graph svg.tracing g.node.lit,
+.di-graph svg.tracing g.edge.lit {
+  opacity: 1;
+}
+
+.di-graph svg.tracing g.node.lit path,
+.di-graph svg.tracing g.node.lit polygon {
+  fill: #fef3c7;
 }

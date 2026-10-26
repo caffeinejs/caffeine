@@ -2,7 +2,7 @@
 
 A web UI for the [devtools](../devtools/README.md) endpoints, built as a Caffeine application. It renders HTML on the
 server with `@caffeinejs/html`, reads the devtools through a `@caffeinejs/fetchy` client, and draws the dependency
-graph with Mermaid. It runs as a process of its own, next to the application it reads.
+graph with Graphviz on the server. It runs as a process of its own, next to the application it reads.
 
 ## Run it
 
@@ -38,17 +38,17 @@ On a loopback address it answers loopback host names alone, so a page using DNS 
 
 ## Pages
 
-| Page                 | Shows                                                                                                                         |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Overview             | The application, whether it is live and ready, and every tool                                                                 |
-| Info                 | The application's name, profiles and features, and the process                                                                |
-| Health               | Every indicator with its details, and the availability                                                                        |
-| Dependency injection | The Mermaid graph and the table of bindings. Filter them by key; the framework's own bindings are included on request         |
-| Configuration        | Every value's path and origin, and each layer that set it. Values appear when the application shows them, with secrets masked |
-| Routes               | Every route of every server: its gate and schemes, its roles and policies, its guards, its cross-origin protection            |
-| Refreshables         | The refresh-scoped injectables, refreshed all at once, by label, or one at a time                                             |
-| Container events     | What the container did since the devtools attached to it                                                                      |
-| Runtime              | Memory, heap, CPU, event-loop utilization and active resources                                                                |
+| Page                 | Shows                                                                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Overview             | The application, whether it is live and ready, and every tool                                                                                                         |
+| Info                 | The application's name, profiles and features, and the process                                                                                                        |
+| Health               | Every indicator with its details, and the availability                                                                                                                |
+| Dependency injection | The graph, which you can drag, zoom and click to trace a binding, and the table of bindings. Filter them by key; the framework's own bindings are included on request |
+| Configuration        | Every value's path and origin, and each layer that set it. Values appear when the application shows them, with secrets masked                                         |
+| Routes               | Every route of every server: its gate and schemes, its roles and policies, its guards, its cross-origin protection                                                    |
+| Refreshables         | The refresh-scoped injectables, refreshed all at once, by label, or one at a time                                                                                     |
+| Container events     | What the container did since the devtools attached to it                                                                                                              |
+| Runtime              | Memory, heap, CPU, event-loop utilization and active resources                                                                                                        |
 
 A tool contributed by a package or by the application gets a page of its own. The page lists the tool's
 resources and shows, as JSON, each one the UI can read without a path parameter: the tool's root resource, and
@@ -66,5 +66,5 @@ devtools-ui/
   api.ts          the fetchy client for the devtools
   shared/         layout, error pages, components
   <page>/         one router per page
-  public/         stylesheet, and the script that starts Mermaid
+  public/         stylesheet, and the script that makes the graph explorable
 ```

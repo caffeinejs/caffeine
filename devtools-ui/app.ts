@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -27,7 +26,6 @@ import { PageErrorHandler, TargetErrorHandler } from './shared/errors/index.js'
 // The package root, whether this runs from the sources or from `dist/`.
 const here = dirname(fileURLToPath(import.meta.url))
 const root = basename(here) === 'dist' ? dirname(here) : here
-const mermaid = join(dirname(createRequire(import.meta.url).resolve('mermaid/package.json')), 'dist')
 
 export interface BuildAppOptions {
   /** The container to build on; a fresh one by default. */
@@ -59,13 +57,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       // The refresh forms change something in the application the UI reads: no other site may post them.
       .with(csrf())
       .with(() => html())
-      .with(
-        staticFiles(s =>
-          s
-            .serve(join(root, 'public'), { prefix: '/static' })
-            .serve(mermaid, { prefix: '/assets/mermaid', decorateReply: false }),
-        ),
-      )
+      .with(staticFiles(s => s.serve(join(root, 'public'), { prefix: '/static' })))
       .mount(
         homeRouter,
         infoRouter,

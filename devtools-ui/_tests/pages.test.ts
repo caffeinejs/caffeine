@@ -5,7 +5,7 @@ import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { DevTool, type DevToolOperation } from '@caffeinejs/application/devtools'
 import { $t } from '@caffeinejs/application/schema'
 import { DevTools } from '@caffeinejs/devtools'
-import { CaffeineIoC, Scopes } from '@caffeinejs/di'
+import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import type { WebApplication } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -60,6 +60,8 @@ describe('devtools UI', () => {
     target.container.bind(PetService, t => t.toSelf([Repository]))
     target.container.bind(Rates, t => t.toSelf().lifetime(Scopes.REFRESH))
     target.container.bind(QueueTool, t => t.toSelf().extends(DevTool))
+    // A key that reads as DOT: the graph must draw it as a label, not as a node attribute.
+    target.container.bind(token<string>('x" URL="javascript:alert(1)'), t => t.toValue('crafted'))
     await target.run()
 
     vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__URL', `${target.listeners.get('devtools')!.address!.origin}/devtools`)
@@ -89,29 +91,43 @@ describe('devtools UI', () => {
     expect(page).toContain('href="/contributions/queue"')
   })
 
-  it('draws the dependency graph with Mermaid and lists the bindings', async () => {
-    const page = await html('/di')
+  /** The SVG Graphviz drew on the page, or `''` when there is none. */
+  function graphOf(page: string): string {
+    return /<div class="di-graph">\s*(<svg[\s\S]*?<\/svg>)\s*<\/div>/.exec(page)?.[1] ?? ''
+  }
 
-    expect(page).toContain('<pre class="mermaid">')
-    expect(page).toContain('flowchart LR')
-    expect(page).toContain('src="/assets/mermaid/mermaid.min.js"')
+  it('draws the dependency graph on the server, with the edge from a binding to what it injects', async () => {
+    const page = await html('/di')
+    const graph = graphOf(page)
+    // A node is a `<g class="node">` titled with its name, its first line of text the binding's key.
+    const nodes = [...graph.matchAll(/<g id="node\d+" class="node">\s*<title>(n\d+)<\/title>([\s\S]*?)<\/g>/g)]
+    const id = (key: string): string => nodes.find(([, , body]) => body!.includes(`>${key}<`))![1]!
+
+    expect(graph).toContain(`<title>${id('PetService')}&#45;&gt;${id('Repository')}</title>`)
+    expect(page).toContain('src="/static/graph.js"')
     expect(page).toMatch(/<code>PetService<\/code>.*Repository/s)
   })
 
   it('keeps the graph to the bindings a filter keeps and what they are wired to', async () => {
-    const page = await html('/di?q=petservice')
-    const graph = /<pre class="mermaid">([\s\S]*?)<\/pre>/.exec(page)![1]
+    const graph = graphOf(await html('/di?q=petservice'))
 
     expect(graph).toContain('PetService')
     expect(graph).toContain('Repository')
     expect(graph).not.toContain('Rates')
   })
 
-  it('serves the Mermaid script it loads', async () => {
-    const res = await ui.request('/assets/mermaid/mermaid.min.js')
+  it('draws a binding whose key is written as DOT as text, never as a link', async () => {
+    const graph = graphOf(await html('/di'))
+
+    expect(graph).toContain('x&quot; URL=&quot;javascript:alert(1)')
+    expect(graph).not.toMatch(/xlink:href|<a /)
+  })
+
+  it('serves the script that makes the graph explorable', async () => {
+    const res = await ui.request('/static/graph.js')
 
     expect(res.status).toBe(200)
-    expect((await res.text()).length).toBeGreaterThan(100_000)
+    expect(await res.text()).toContain("querySelectorAll('.di-graph')")
   })
 
   it('shows configuration values masked as the devtools masked them', async () => {

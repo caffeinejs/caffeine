@@ -28,8 +28,8 @@
     "@caffeinejs/http": "*",
     "@caffeinejs/static": "*",
     "@caffeinejs/std": "*",
+    "@hpcc-js/wasm-graphviz": "^1.30.0",
     "@kitajs/html": "^4.2.13",
-    "fastify": "^5.12.5",
-    "mermaid": "^12.1.0"
+    "fastify": "^5.12.5"
   }
 }

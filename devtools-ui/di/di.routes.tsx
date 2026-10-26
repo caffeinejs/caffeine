@@ -4,6 +4,7 @@ import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
 import { Badge, display } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
+import { drawGraph } from './graph.js'
 
 /**
  * The container's bindings as a table and as a graph. `?internal=true` adds the framework's own bindings, and `?q=`
@@ -17,15 +18,14 @@ export const diRouter = new Router('/di')
     const [bindings, graph] = await Promise.all([api.bindings(internal), api.graph(internal)])
     const shown = q === '' ? bindings : bindings.filter(binding => binding.key.toLowerCase().includes(q))
     const keys = new Map(bindings.map(binding => [binding.id, binding.key]))
+    // The whole graph unless filtered: a filtered one keeps what the kept bindings are wired to.
     const wired = new Set(shown.flatMap(binding => [binding.id, ...binding.dependencies, ...binding.dependents]))
-    // The whole graph unless filtered: a filtered one keeps what the kept bindings are wired to, so an edge is
-    // never drawn to a node that is not there.
-    const mermaid = q === '' ? graph.mermaid : filteredMermaid(graph.mermaid, wired)
+    const svg = await drawGraph(graph, q === '' ? undefined : wired)
 
     return page(api, config, {
       title: 'Dependency injection',
       active: '/di',
-      scripts: ['/assets/mermaid/mermaid.min.js', '/static/devtools.js'],
+      scripts: ['/static/graph.js'],
       body: (
         <>
           <form class="filters" method="get" action="/di">
@@ -36,12 +36,14 @@ export const diRouter = new Router('/di')
             <button type="submit">Apply</button>
           </form>
           <h2>Graph</h2>
-          {mermaid === '' ? (
+          {svg === '' ? (
             <p class="muted">No bindings to draw.</p>
           ) : (
-            <pre class="mermaid" safe>
-              {mermaid}
-            </pre>
+            <>
+              <p class="muted">Drag to move, scroll to zoom, click a binding to trace what it is wired to.</p>
+              {/* Markup Graphviz drew from a DOT this server wrote, labels escaped: see `drawGraph`. */}
+              <div class="di-graph">{svg}</div>
+            </>
           )}
           <h2>
             Bindings <span class="muted">({shown.length})</span>
@@ -83,21 +85,3 @@ export const diRouter = new Router('/di')
       ),
     })
   })
-
-/** The Mermaid source with only the nodes in `ids` and the edges between them. */
-function filteredMermaid(source: string, ids: ReadonlySet<number>): string {
-  const kept = source.split('\n').filter(line => {
-    const node = /^\s*n(\d+)\[/.exec(line)
-    if (node !== null) {
-      return ids.has(Number(node[1]))
-    }
-
-    // An edge is `n<from> <arrow> [|"label"|] n<to>`: its first and last words name the two nodes.
-    const words = line.trim().split(' ')
-    const from = /^n(\d+)$/.exec(words[0] ?? '')
-    const to = /^n(\d+)$/.exec(words.at(-1) ?? '')
-    return from === null || to === null || words.length < 3 || (ids.has(Number(from[1])) && ids.has(Number(to[1])))
-  })
-
-  return kept.some(line => /^\s*n\d+\[/.test(line)) ? kept.join('\n') : ''
-}
