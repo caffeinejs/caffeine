@@ -12,7 +12,6 @@ import {
   BaseAuthenticationHandler,
   Claim,
   Identity,
-  Listener,
   Principal,
   type IContext,
   type WebApplication,
@@ -254,7 +253,7 @@ describe('devtools', () => {
     it('takes the name it is given, beside a listener of the application already named devtools', async () => {
       const devtools = await serve(d => d.listener('ops'), {
         listener: 'ops',
-        prepare: a => a.install(Listener('devtools', l => l.server(() => ({ listener: loopback })))),
+        prepare: a => a.listener('devtools', l => l.server(() => ({ listener: loopback }))),
       })
 
       expect((await devtools.info.get()).status).toBe(200)

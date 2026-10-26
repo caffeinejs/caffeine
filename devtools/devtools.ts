@@ -1,6 +1,5 @@
 import {
   FeatureBuilder,
-  kFeatureConfigure,
   kFeatureName,
   type BootstrapKit,
   type Feature,
@@ -14,7 +13,7 @@ import {
   ErrHTTPMisdirectedRequest,
   ErrHTTPUnsupportedMediaType,
   HTTPPlugin,
-  ListenerBuilder,
+  listenersOf,
   RouteInventory,
   Router,
   type AdapterExtensionFactory,
@@ -221,7 +220,7 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected override async configure(kit: FeatureConfigureKit<C>): Promise<void> {
+  protected override configure(kit: FeatureConfigureKit<C>): void {
     const options = this.#options[kResolve](this.#config?.path)
     assertNotProduction(options, 'Serve devtools on a host and port only your network reaches, with "host(...)"')
 
@@ -235,7 +234,7 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
     // Attached before the container initializes, so its start-up is recorded.
     const events = new EventsTool(kit.container.hooks)
 
-    const listener = new ListenerBuilder<C>(this.#listener ?? DEVTOOLS_LISTENER, l => {
+    listenersOf(kit).add(this.#listener ?? DEVTOOLS_LISTENER, l => {
       l.server(() => ({ listener: { ...address } }))
 
       // A listener has no gate unless one is registered on it, and a route the fallback policy or `authorize(...)`
@@ -250,8 +249,6 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
 
       l.with(devToolsPlugin(options, events))
     })
-
-    await listener[kFeatureConfigure](kit)
   }
 
   protected override bootstrap(kit: BootstrapKit<C>): void {

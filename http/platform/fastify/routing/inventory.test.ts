@@ -6,7 +6,6 @@ import {
   Authorization,
   BaseAuthenticationHandler,
   HTTPPlugin,
-  Listener,
   Router,
   RouteInventory,
   bindTo,
@@ -54,7 +53,7 @@ describe('route inventory', () => {
 
   it("lists the application's own server first, then each listener with the routes bound to it alone", async () => {
     app = createWebApplication()
-      .install(Listener('admin'))
+      .listener('admin')
       .mount(
         newRouter('/api').get('/', () => 'api'),
         newRouter('/jobs')
@@ -127,7 +126,7 @@ describe('route inventory', () => {
       }
     }
 
-    app = createWebApplication().install(Listener('admin', l => l.with(() => new Metrics()))) as WebApplication
+    app = createWebApplication().listener('admin', l => l.with(() => new Metrics())) as WebApplication
 
     await app.bootstrap()
 
@@ -138,7 +137,7 @@ describe('route inventory', () => {
   it('names the gate that authenticates a route and its schemes, and no gate on a server without one', async () => {
     app = createWebApplication()
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
-      .install(Listener('admin'))
+      .listener('admin')
       .with(authentication())
       .mount(
         newRouter('/me')
@@ -201,7 +200,7 @@ describe('route inventory', () => {
 
   it('tells each cross-origin protection verdict apart', async () => {
     app = createWebApplication()
-      .install(Listener('admin'))
+      .listener('admin')
       .with(csrf(c => c.exclude('/hooks')))
       .mount(
         newRouter('/forms').post('/', () => 'ok'),

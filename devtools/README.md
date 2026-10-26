@@ -36,7 +36,7 @@ Or mount them on a server that already exists: the application's own server, or 
 
 ```ts
 createWebApplication().with(devTools())
-Listener('admin', l => l.with(devTools()))
+createWebApplication().listener('admin', l => l.with(devTools()))
 ```
 
 ## Security

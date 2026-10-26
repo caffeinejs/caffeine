@@ -7,7 +7,6 @@ import {
   BaseAuthenticationHandler,
   bindTo,
   Identity,
-  Listener,
   Principal,
   type IContext,
   type WebApplication,
@@ -52,7 +51,7 @@ describe('routesRouter', () => {
       .server(() => ({ listener: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
       .install(Authorization(z => z.requireAuthenticatedByDefault({ except: ['/livez'] })))
-      .install(Listener('admin', l => l.server(() => ({ listener: loopback })).with(authentication())))
+      .listener('admin', l => l.server(() => ({ listener: loopback })).with(authentication()))
       .install(DevTools(d => d.port(0)))
       .with(authentication())
       .with(healthProbes(h => h.enabled(true)))
