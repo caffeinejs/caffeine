@@ -163,8 +163,11 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A core interface that an adapter implements or extends is named `I` plus its full, unabbreviated name
   (`IContext`, `IRequest`, `IRouteGroup`, `IAdapterTypes`), leaving the plain name to the adapter's own type. No
   other interface takes the prefix.
-- No server decoration holds the route table; a plugin needing routes adds an `onRoute` hook
-  (`collectRouteGroups(instance)`), not a scan in the adapter.
+- Every route of every server, raw ones and plugin groups included, is in `RouteInventory`
+  (`core/routing/inventory.ts`): plain data the adapter builds in its first `onReady` hook from what its root
+  `onRoute` hook recorded, readable once every server is built. Nothing else writes it, and no server decoration
+  holds the route table. A plugin needing its own server's compiled groups at start-up still adds an `onRoute` hook
+  (`collectRouteGroups(instance)`); nothing scans the instance for routes.
 - `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
   plugins, or a listener's. A later call is recorded and thrown from `onReady`: avvio does not catch a
   callback-style plugin's throw. It adds the group to the server whose plugin calls it, and refuses a group bound to

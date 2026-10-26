@@ -55,6 +55,7 @@ import { fetchInProcess } from './fetch.js'
 import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
+import { routeRecordsOf } from './routing/inventory.js'
 import { installNotFoundHandler } from './routing/not_found.js'
 import { compileArgs, compileHandler } from './routing/parameters.js'
 import type { CaffeineRouteConfig } from './routing/route_config.js'
@@ -303,6 +304,7 @@ export class Adapter implements IAdapter<AdapterTypes> {
         }
 
         assertRoutesGated(container, registered)
+        input.recordRoutes(routeRecordsOf(container, registered))
         routeTable = 'closed'
         done()
       } catch (err) {
