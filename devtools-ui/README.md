@@ -51,10 +51,6 @@ On a loopback address it answers loopback host names alone, so a page using DNS 
 | Container events     | What the container did since the devtools attached to it                                                                                                              |
 | Runtime              | Memory, heap, CPU, event-loop utilization and active resources                                                                                                        |
 
-A tool contributed by a package or by the application gets a page of its own. The page lists the tool's
-resources and shows, as JSON, each one the UI can read without a path parameter: the tool's root resource, and
-resources one segment below it.
-
 ## Layout
 
 The layout follows the petstore example: one folder per page, and `shared/` for what several pages use.

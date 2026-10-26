@@ -1,21 +1,9 @@
 import type { DevToolsIndex } from '@caffeinejs/devtools'
 import type { Children } from '@kitajs/html'
 
-/** The UI page each core tool has; any other tool is shown by `contributions/`. */
-const PAGES: Readonly<Record<string, string>> = {
-  info: '/info',
-  health: '/health',
-  di: '/di',
-  config: '/config',
-  routes: '/routes',
-  refreshables: '/refreshables',
-  events: '/events',
-  runtime: '/runtime',
-}
-
-/** Where the UI shows a tool. */
+/** Where the UI shows a tool: each tool's page is served under its id. */
 export function pageOf(id: string): string {
-  return PAGES[id] ?? `/contributions/${encodeURIComponent(id)}`
+  return `/${encodeURIComponent(id)}`
 }
 
 export interface LayoutProps {
@@ -32,8 +20,8 @@ export interface LayoutProps {
 }
 
 /**
- * The page chrome every page shares: the navigation built from the tools the devtools list, contributed tools
- * included, and the target they are read from.
+ * The page chrome every page shares: the navigation built from the tools the devtools list, and the target they are
+ * read from.
  */
 export function Layout(props: LayoutProps): JSX.Element {
   return (

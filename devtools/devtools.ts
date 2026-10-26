@@ -8,13 +8,10 @@ import {
   type FeatureConfigurer,
 } from '@caffeinejs/application'
 import type { ConfigStore } from '@caffeinejs/application/config'
-import { DevTool, ErrDevToolInvalid, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Container } from '@caffeinejs/di'
 import {
-  ErrHTTPBadRequest,
   ErrHTTPMisdirectedRequest,
-  ErrHTTPNotFound,
   ErrHTTPUnsupportedMediaType,
   HTTPPlugin,
   ListenerBuilder,
@@ -279,10 +276,10 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
  *
  * Every tool is a set of REST resources under `/devtools/<id>`, and `GET /devtools` lists them: the bindings and the
  * dependency graph, the configuration, the routes and what protects them, health, refreshables, container events,
- * runtime and info, and every tool a package or the application contributed by binding a {@link DevTool}.
+ * runtime and info.
  *
  * @throws ErrDevToolsInProduction at start-up where `NODE_ENV` is `production` and `allowProduction()` was not called.
- * @throws ErrDevToolsConfiguration at start-up for a malformed path, host or port, or a malformed tool.
+ * @throws ErrDevToolsConfiguration at start-up for a malformed path, host or port.
  * @throws ErrFeatureNotInstalled at start-up when `authorize(...)` is set and `Authentication(...)` is not installed.
  */
 export function DevTools<C = unknown>(configure?: FeatureConfigurer<DevToolsBuilder<C>, C>): Feature<C> {
@@ -297,7 +294,7 @@ export function DevTools<C = unknown>(configure?: FeatureConfigurer<DevToolsBuil
  * Prefer `.install(DevTools())`, which keeps them off the port the application serves its users on.
  *
  * @throws ErrDevToolsInProduction at start-up where `NODE_ENV` is `production` and `allowProduction()` was not called.
- * @throws ErrDevToolsConfiguration at start-up for a malformed path or a malformed tool.
+ * @throws ErrDevToolsConfiguration at start-up for a malformed path.
  */
 export function devTools<C = unknown>(
   configure?: HTTPPluginConfigurer<DevToolsPluginBuilder, C>,
@@ -342,34 +339,22 @@ class DevToolsPlugin extends HTTPPlugin {
 
   register(context: HTTPSetupContext): void {
     const options = this.#options
-    const contributed = context.container.getManyOptional(DevTool)
-
-    assertTools(contributed)
-
     const router = new Router(options.path).detail('http', { internal: true }).with(() => new DevToolsGuard())
 
     if (options.authorize !== undefined) {
       router.authorize(options.authorize)
     }
 
-    const tools: ToolInfo[] = [...BUILT_IN, ...contributed]
-
     router.mount(
-      indexRouter(context.container, options.path, tools),
+      indexRouter(context.container, options.path, TOOLS),
       ...builtInRouters(context.container, context.store as ConfigStore<unknown>, options, this.#events),
     )
-
-    for (const tool of contributed) {
-      for (const operation of tool.operations) {
-        router.route(operation.method, `/${tool.id}${operation.path}`, (ctx: IContext) => answer(operation, ctx))
-      }
-    }
 
     context.app.mount(router)
   }
 }
 
-const BUILT_IN: readonly ToolInfo[] = [
+const TOOLS: readonly ToolInfo[] = [
   infoTool,
   healthTool,
   diTool,
@@ -466,87 +451,7 @@ function isJSON(contentType: string | undefined): boolean {
   return type === 'application/json' || (type.startsWith('application/') && type.endsWith('+json'))
 }
 
-async function answer(operation: DevToolOperation, ctx: IContext): Promise<unknown> {
-  const withBody = operation.method === 'POST' || operation.method === 'PUT' || operation.method === 'PATCH'
-
-  let result: unknown
-  try {
-    result = await operation.handle({
-      params: ctx.req.param() as Record<string, string>,
-      query: queryOf(ctx.req.query() as Record<string, string | string[] | undefined>),
-      body: withBody ? ctx.req.body() : undefined,
-      // Read only by an operation that asks: reading it builds an abort controller for the request.
-      get signal() {
-        return ctx.signal
-      },
-    })
-  } catch (err) {
-    if (err instanceof ErrDevToolNotFound) {
-      throw new ErrHTTPNotFound(err.message)
-    }
-
-    if (err instanceof ErrDevToolInvalid) {
-      throw new ErrHTTPBadRequest(err.message)
-    }
-
-    throw err
-  }
-
-  ctx.status(operation.status ?? (result === undefined ? 204 : 200))
-  return result
-}
-
-function queryOf(query: Record<string, string | string[] | undefined>): Record<string, string | undefined> {
-  return Object.fromEntries(Object.entries(query).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value]))
-}
-
-const TOOL_ID = /^[a-z][a-z0-9-]*$/
-const OPERATION_PATH = /^(\/(:[A-Za-z_]\w*|[A-Za-z0-9._~-]+))*$/
 const SERVED_PATH = /^(\/[A-Za-z0-9._~-]+)+$/
-
-function assertTools(tools: readonly DevTool[]): void {
-  const ids = new Set(BUILT_IN.map(tool => tool.id))
-
-  for (const tool of tools) {
-    const name = tool.constructor.name
-
-    if (!TOOL_ID.test(tool.id)) {
-      throw configuration(
-        `Cannot serve devtool "${name}": its id "${tool.id}" is not lower-case letters, digits and dashes`,
-        'Give it an id such as "cache" or "job-queue"',
-      )
-    }
-
-    if (ids.has(tool.id)) {
-      throw configuration(
-        `Cannot serve devtool "${name}": another tool already has the id "${tool.id}"`,
-        'Give one of the two tools another id',
-      )
-    }
-    ids.add(tool.id)
-
-    const operations = new Set<string>()
-
-    for (const operation of tool.operations) {
-      if (!OPERATION_PATH.test(operation.path)) {
-        throw configuration(
-          `Cannot serve devtool "${tool.id}": the path "${operation.path}" of its ${operation.method} operation is malformed`,
-          'Start the path with "/" and name a parameter with ":", such as "/entries/:key", or write "" for the root',
-        )
-      }
-
-      const route = `${operation.method} ${operation.path.replace(/:\w+/g, ':')}`
-
-      if (operations.has(route)) {
-        throw configuration(
-          `Cannot serve devtool "${tool.id}": two operations answer ${operation.method} "${operation.path}"`,
-          'Remove one of the two operations',
-        )
-      }
-      operations.add(route)
-    }
-  }
-}
 
 function assertNotProduction(options: DevToolsOptions, solution: string): void {
   if (!options.allowProduction && isProduction()) {

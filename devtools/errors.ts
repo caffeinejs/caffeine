@@ -24,7 +24,7 @@ export class ErrDevToolsInProduction extends ErrCaffeineWebApplication {
   }
 }
 
-/** A devtools option or a tool is malformed: a path, a port, an id, an operation. Thrown at start-up. */
+/** A devtools option is malformed: a path, a host, a port. Thrown at start-up. */
 export class ErrDevToolsConfiguration extends ErrCaffeineWebApplication {
   constructor(message: string) {
     super(message, 'ERR_DEVTOOLS_CONFIGURATION')

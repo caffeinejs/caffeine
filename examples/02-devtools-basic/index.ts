@@ -1,6 +1,5 @@
 import { newConfiguration } from '@caffeinejs/application'
 import { EnvConfigSource } from '@caffeinejs/application/config/env'
-import { DevTool, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
 import { $t } from '@caffeinejs/application/schema'
 import { DevTools } from '@caffeinejs/devtools'
 import { Injectable } from '@caffeinejs/di'
@@ -64,40 +63,8 @@ class TaskStore {
     return this.#tasks
   }
 
-  find(id: number): Task | undefined {
-    return this.#tasks.find(task => task.id === id)
-  }
-
   remove(id: number): void {
     this.#tasks = this.#tasks.filter(task => task.id !== id)
-  }
-}
-
-// --- a devtool of the application's own: GET /devtools/tasks, GET /devtools/tasks/:id, DELETE /devtools/tasks ---
-
-@Injectable([TaskStore])
-class TasksTool extends DevTool {
-  readonly id = 'tasks'
-  readonly title = 'Tasks'
-  readonly description = 'The tasks the store holds, and clearing them'
-  readonly operations: DevToolOperation[] = [
-    { method: 'GET', path: '', handle: () => ({ count: this.store.list().length, tasks: this.store.list() }) },
-    {
-      method: 'GET',
-      path: '/:id',
-      handle: ({ params }) => {
-        const task = this.store.find(Number(params.id))
-        if (task === undefined) {
-          throw new ErrDevToolNotFound(`No task "${params.id}"`)
-        }
-        return task
-      },
-    },
-    { method: 'DELETE', path: '', handle: () => this.store.list().forEach(task => this.store.remove(task.id)) },
-  ]
-
-  constructor(private readonly store: TaskStore) {
-    super()
   }
 }
 
@@ -126,7 +93,7 @@ class TaskController {
   }
 }
 
-void [TaskController, TasksTool]
+void [TaskController]
 
 // --- authentication: the devtools answer `Authorization: Bearer <devtools.token>` and nothing else ---
 

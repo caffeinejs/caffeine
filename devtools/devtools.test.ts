@@ -2,7 +2,6 @@ import { request } from 'node:http'
 
 import { newConfiguration } from '@caffeinejs/application'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
-import { DevTool, ErrDevToolInvalid, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
 import { newConsoleLogger } from '@caffeinejs/application/logger/console'
 import { $t } from '@caffeinejs/application/schema'
 import { brewer, type BrewOptions } from '@caffeinejs/brewer'
@@ -21,7 +20,7 @@ import {
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DevTools, devTools, type DevToolsBuilder, type DevToolsIndex, type DevToolsRoutes } from './devtools.js'
+import { DevTools, devTools, type DevToolsBuilder, type DevToolsRoutes } from './devtools.js'
 
 /**
  * The devtools describe an application to whoever reaches them, so where they are served, who may reach them and
@@ -48,54 +47,6 @@ class HeaderScheme extends BaseAuthenticationHandler<object> {
       new AuthenticationTicket(new Principal(true, [new Identity('Header', true, claims)]), 'Header'),
     )
   }
-}
-
-/** A tool an application contributes, with a resource, a parameter, a refusal and a change. */
-class QueueTool extends DevTool {
-  readonly id = 'queue'
-  readonly title = 'Job queue'
-  readonly description = 'Pending jobs'
-  readonly jobs = new Map([['7', { id: '7', state: 'pending' }]])
-  readonly operations: DevToolOperation[] = [
-    { method: 'GET', path: '/jobs', handle: () => [...this.jobs.values()] },
-    {
-      method: 'GET',
-      path: '/jobs/:id',
-      handle: ({ params }) => {
-        const job = this.jobs.get(params.id)
-        if (job === undefined) {
-          throw new ErrDevToolNotFound(`No job "${params.id}"`)
-        }
-        return job
-      },
-    },
-    {
-      method: 'POST',
-      path: '/jobs',
-      status: 201,
-      handle: ({ body }) => {
-        const id = (body as { id?: unknown }).id
-        if (typeof id !== 'string') {
-          throw new ErrDevToolInvalid('Cannot add a job: "id" must be a string')
-        }
-        this.jobs.set(id, { id, state: 'pending' })
-        return this.jobs.get(id)
-      },
-    },
-    { method: 'DELETE', path: '/jobs/:id', handle: ({ params }) => void this.jobs.delete(params.id) },
-    {
-      method: 'GET',
-      path: '/search',
-      handle: ({ query, signal }) => ({ state: query.state ?? null, aborted: signal.aborted }),
-    },
-    {
-      method: 'GET',
-      path: '/broken',
-      handle: () => {
-        throw new Error('the queue is gone')
-      },
-    },
-  ]
 }
 
 const conf = newConfiguration($t.Object({ app: $t.Object({ region: $t.String(), pool: $t.Integer() }) }))
@@ -356,116 +307,18 @@ describe('devtools', () => {
       expect(err).toMatchObject({ code: 'ERR_DEVTOOLS_IN_PRODUCTION' })
       expect((err as Error).message).toContain('.install(DevTools())')
     })
-  })
-
-  describe('a contributed tool', () => {
-    async function boot(): Promise<void> {
-      app = createWebApplication().with(devTools()) as WebApplication
-      app.container.bind(QueueTool, t => t.toSelf().extends(DevTool))
-      await app.bootstrap()
-    }
-
-    it('is listed with its resources and served', async () => {
-      await boot()
-
-      const { tools } = (await (await app!.request('/devtools')).json()) as DevToolsIndex
-
-      expect(tools.at(-1)).toEqual({
-        id: 'queue',
-        title: 'Job queue',
-        description: 'Pending jobs',
-        links: [
-          { method: 'GET', href: '/devtools/queue/jobs' },
-          { method: 'GET', href: '/devtools/queue/jobs/:id' },
-          { method: 'POST', href: '/devtools/queue/jobs' },
-          { method: 'DELETE', href: '/devtools/queue/jobs/:id' },
-          { method: 'GET', href: '/devtools/queue/search' },
-          { method: 'GET', href: '/devtools/queue/broken' },
-        ],
-      })
-      expect(await (await app!.request('/devtools/queue/jobs/7')).json()).toEqual({ id: '7', state: 'pending' })
-    })
-
-    it('answers 404 for what a tool does not have and 400 for what it refuses', async () => {
-      await boot()
-
-      const missing = await app!.request('/devtools/queue/jobs/8')
-      const refused = await app!.request('/devtools/queue/jobs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: 8 }),
-      })
-
-      expect(missing.status).toBe(404)
-      expect(((await missing.json()) as { message: string }).message).toBe('No job "8"')
-      expect(refused.status).toBe(400)
-    })
-
-    it('hands an operation its query, the first value of a repeated parameter, and the request signal', async () => {
-      await boot()
-
-      const res = await app!.request('/devtools/queue/search?state=pending&state=done')
-
-      expect(await res.json()).toEqual({ state: 'pending', aborted: false })
-    })
-
-    it('answers 500 for what an operation throws besides a refusal, keeping the message out', async () => {
-      await boot()
-
-      const res = await app!.request('/devtools/queue/broken')
-
-      expect(res.status).toBe(500)
-      expect(await res.text()).not.toContain('the queue is gone')
-    })
-
-    it("answers with the operation's status, and 204 when it returns nothing", async () => {
-      await boot()
-
-      const created = await app!.request('/devtools/queue/jobs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: '8' }),
-      })
-      const deleted = await app!.request('/devtools/queue/jobs/7', { method: 'DELETE' })
-
-      expect(created.status).toBe(201)
-      expect(deleted.status).toBe(204)
-      expect((await app!.request('/devtools/queue/jobs/7')).status).toBe(404)
-    })
 
     it('refuses a change sent as anything but JSON, which a cross-site form could send', async () => {
-      await boot()
+      app = createWebApplication().with(devTools()) as WebApplication
+      await app.bootstrap()
 
       for (const init of [
-        { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'id=9' },
-        { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{"id":"9"}' },
+        { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'label=a' },
+        { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' },
         { method: 'POST' },
       ]) {
-        expect((await app!.request('/devtools/queue/jobs', init)).status).toBe(415)
+        expect((await app.request('/devtools/refreshables/refreshes', init)).status).toBe(415)
       }
-      expect((await app!.request('/devtools/queue/jobs/9')).status).toBe(404)
-    })
-
-    it.each([
-      ['an id that is not lower-case letters, digits and dashes', { id: 'Queue' }],
-      ['an id a core tool has', { id: 'routes' }],
-      ['a malformed path', { path: 'jobs' }],
-      ['two operations on one method and path', { duplicate: true }],
-    ])('refuses %s', async (_, change: { id?: string; path?: string; duplicate?: boolean }) => {
-      class Broken extends DevTool {
-        readonly id = change.id ?? 'broken'
-        readonly title = 'Broken'
-        readonly description = ''
-        readonly operations: DevToolOperation[] = [
-          { method: 'GET', path: change.path ?? '/a/:id', handle: () => 1 },
-          ...(change.duplicate === true ? [{ method: 'GET' as const, path: '/a/:key', handle: () => 2 }] : []),
-        ]
-      }
-
-      app = createWebApplication().with(devTools()) as WebApplication
-      app.container.bind(Broken, t => t.toSelf().extends(DevTool))
-
-      await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_DEVTOOLS_CONFIGURATION' })
     })
   })
 })

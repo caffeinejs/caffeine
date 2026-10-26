@@ -11,7 +11,6 @@ import { staticFiles } from '@caffeinejs/static'
 import { DevToolsAPI } from './api.js'
 import { configuration, kConfig } from './app.config.js'
 import { configRouter } from './config/index.js'
-import { contributionsRouter } from './contributions/index.js'
 import { diRouter } from './di/index.js'
 import { eventsRouter } from './events/index.js'
 import { healthRouter } from './health/index.js'
@@ -64,7 +63,6 @@ export function buildApp(options: BuildAppOptions = {}) {
         refreshablesRouter,
         eventsRouter,
         runtimeRouter,
-        contributionsRouter,
       )
   )
 }

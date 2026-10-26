@@ -47,10 +47,6 @@
       "types": "./dist/config/sources/yaml/index.d.ts",
       "default": "./dist/config/sources/yaml/index.js"
     },
-    "./devtools": {
-      "types": "./dist/devtools/index.d.ts",
-      "default": "./dist/devtools/index.js"
-    },
     "./framework": {
       "types": "./dist/framework/index.d.ts",
       "default": "./dist/framework/index.js"

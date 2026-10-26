@@ -92,14 +92,6 @@ export class DevToolsAPI {
   runtime() {
     return read(this.#client.runtime.get())
   }
-
-  /**
-   * A contributed tool's resource, by its path under the devtools: `/queue/jobs`. A contributed tool is not in
-   * `DevToolsRoutes`, so what it answers is untyped.
-   */
-  async contributed(path: string): Promise<unknown> {
-    return read(fetch(`${this.#target}${path}`, { headers: this.#headers }))
-  }
 }
 
 /** The body of a `200`, or the devtools' refusal thrown. */

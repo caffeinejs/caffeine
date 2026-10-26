@@ -2,7 +2,6 @@ import { request } from 'node:http'
 
 import { newConfiguration } from '@caffeinejs/application'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
-import { DevTool, type DevToolOperation } from '@caffeinejs/application/devtools'
 import { down, HealthIndicator, type HealthReport } from '@caffeinejs/application/health'
 import { $t } from '@caffeinejs/application/schema'
 import { DevTools } from '@caffeinejs/devtools'
@@ -26,7 +25,7 @@ import { buildApp } from '../app.js'
 
 /**
  * The UI against a running application's devtools, over a real socket: every page renders what the devtools
- * answered, a contributed tool gets a page of its own, and nothing the devtools mask reaches the HTML.
+ * answered, and nothing the devtools mask reaches the HTML.
  */
 
 class Repository {
@@ -41,17 +40,6 @@ class PetService {
 
 class Rates {
   readonly at = Math.random()
-}
-
-class QueueTool extends DevTool {
-  readonly id = 'queue'
-  readonly title = 'Job queue'
-  readonly description = 'Pending jobs'
-  readonly operations: DevToolOperation[] = [
-    { method: 'GET', path: '', handle: () => ({ pending: 3 }) },
-    { method: 'GET', path: '/workers', handle: () => [{ name: 'w-<script>' }] },
-    { method: 'GET', path: '/jobs/:id', handle: () => ({}) },
-  ]
 }
 
 class Mailer extends HealthIndicator {
@@ -88,7 +76,6 @@ describe('devtools UI', () => {
     target.container.bind(PetService, t => t.toSelf([Repository]))
     target.container.bind(Rates, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('rates')))
     target.container.bind(Mailer, t => t.toSelf().extends(HealthIndicator))
-    target.container.bind(QueueTool, t => t.toSelf().extends(DevTool))
     // A key that reads as DOT: the graph must draw it as a label, not as a node attribute.
     target.container.bind(token<string>('x" URL="javascript:alert(1)'), t => t.toValue('crafted'))
     await target.run()
@@ -113,13 +100,12 @@ describe('devtools UI', () => {
     return res.text()
   }
 
-  it('navigates to every tool the devtools list, a contributed one included', async () => {
+  it('navigates to every tool the devtools list', async () => {
     const page = await html(client.get())
 
     for (const href of ['/info', '/health', '/di', '/config', '/routes', '/refreshables', '/events', '/runtime']) {
       expect(page).toContain(`href="${href}"`)
     }
-    expect(page).toContain('href="/contributions/queue"')
   })
 
   /** The SVG Graphviz drew on the page, or `''` when there is none. */
@@ -226,13 +212,6 @@ describe('devtools UI', () => {
     expect(page).not.toContain('hunter2')
   })
 
-  it('answers 404 for a tool the devtools do not serve', async () => {
-    const res = await client.contributions({ id: 'nope' }).get()
-
-    expect(res.status).toBe(404)
-    expect(await res.text()).toContain('The devtools serve no tool &#34;nope&#34;')
-  })
-
   it('draws no graph for a filter that keeps no binding', async () => {
     expect(await html(client.di.get({ query: { q: 'no-such-binding' } }))).toContain('No bindings to draw.')
   })
@@ -269,15 +248,6 @@ describe('devtools UI', () => {
 
     expect(await status(`evil.example:${port}`)).toBe(421)
     expect(await status(`127.0.0.1:${port}`)).toBe(200)
-  })
-
-  it("renders a contributed tool's resources, escaping what it answers", async () => {
-    const page = await html(client.contributions({ id: 'queue' }).get())
-
-    expect(page).toMatch(/pending&#?\w+;: 3/)
-    expect(page).toContain('w-&lt;script>')
-    expect(page).not.toContain('w-<script>')
-    expect(page).toContain('/devtools/queue/jobs/:id')
   })
 
   it.each<[string, () => Promise<Response>, string]>([

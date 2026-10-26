@@ -2,8 +2,7 @@
 
 Endpoints that describe a running Caffeine application: its bindings and dependency graph, its configuration,
 every route of every server and what protects each one, health, refreshable injectables, container events, the
-runtime and the process. Every tool is a set of REST resources returning JSON. Packages and applications add
-their own tools.
+runtime and the process. Every tool is a set of REST resources returning JSON.
 
 [`@caffeinejs/devtools-ui`](../devtools-ui/README.md) is a UI that reads them.
 
@@ -133,49 +132,3 @@ if (res.status === 200) {
   const { origin, layers } = await res.json()
 }
 ```
-
-A contributed tool is not in `DevToolsRoutes`: its operations answer what `DevTool` types them as, `unknown`. Read it
-with `fetch`.
-
-## Write a tool
-
-Extend `DevTool` from `@caffeinejs/application/devtools` and bind the subclass so it extends `DevTool`. The
-devtools serve its operations under `/devtools/<id>` and list it in the index. `DevTool` lives in
-`@caffeinejs/application`, which knows no HTTP, so a package can contribute a tool without depending on
-`@caffeinejs/http`; the price is that its operations are untyped, unlike the core tools' routers:
-
-```ts
-import { DevTool, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
-
-@Injectable([Queue])
-export class QueueTool extends DevTool {
-  readonly id = 'queue'
-  readonly title = 'Job queue'
-  readonly description = 'Pending jobs and the workers taking them'
-  readonly operations: DevToolOperation[] = [
-    { method: 'GET', path: '/jobs', handle: () => this.queue.pending() },
-    {
-      method: 'GET',
-      path: '/jobs/:id',
-      handle: ({ params }) => this.queue.find(params.id) ?? notFound(params.id),
-    },
-    { method: 'DELETE', path: '/jobs/:id', handle: ({ params }) => this.queue.cancel(params.id) },
-  ]
-
-  constructor(private readonly queue: Queue) {
-    super()
-  }
-}
-
-function notFound(id: string): never {
-  throw new ErrDevToolNotFound(`No job "${id}"`)
-}
-```
-
-- `@Injectable()` on a subclass extends the base class. Without the decorator, bind the subclass by hand:
-  `container.bind(QueueTool, t => t.toSelf().extends(DevTool))`.
-- A handler's return value is sent as JSON. Use `status` to set the status of a success. A handler that returns
-  nothing is answered with 204.
-- To refuse, throw `ErrDevToolNotFound` (404) or `ErrDevToolInvalid` (400). Their message is the response body.
-- An id is lower-case letters, digits and dashes. Start-up fails with `ErrDevToolsConfiguration` when two tools
-  share an id, when a path is malformed, or when two operations answer the same method and path.
