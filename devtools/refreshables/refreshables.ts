@@ -87,11 +87,11 @@ export class RefreshablesTool {
       throw new ErrHTTPBadRequest(`No refresh-scoped injectable carries the label "${label}"`)
     }
 
-    for (const symbol of symbols) {
-      await this.#container.refresher.refresh(symbol)
-    }
+    // Each binding once, though it carries more than one of them.
+    const reached = all.filter(([, binding]) => binding.labels.some(symbol => symbols.has(symbol)))
+    await Promise.all(reached.map(([, binding]) => this.#container.refresher.refresh(binding)))
 
-    return refreshed(all.filter(([, binding]) => binding.labels.some(symbol => symbols.has(symbol))))
+    return refreshed(reached)
   }
 
   /** @throws ErrHTTPNotFound when no refresh-scoped injectable has `id`. */

@@ -50,7 +50,7 @@ The devtools show the shape of your application to anyone who can reach them, so
 | Start-up fails with `ErrDevToolsInProduction` where `NODE_ENV` is `production`.                                                              | `allowProduction()`. A warning is logged at every start.                                       |
 | Configuration values are left out: a property shows its path and its origin only.                                                            | `showConfigValues()`                                                                           |
 | A `POST`, `PUT` or `PATCH` without `Content-Type: application/json` gets a 415, so a cross-site form cannot reach it without a preflight.    | Nothing changes it.                                                                            |
-| Every answer is sent with `Cache-Control: no-store`.                                                                                         | Nothing changes it.                                                                            |
+| Every answer past authentication is sent with `Cache-Control: no-store`.                                                                     | Nothing changes it.                                                                            |
 | A request reaching a loopback address under a `Host` that is not a loopback name gets a 421, so a page using DNS rebinding cannot read them. | Nothing changes it.                                                                            |
 
 To require something of every devtools route, use `authorize(...)`. It takes what `router.authorize(...)` takes:

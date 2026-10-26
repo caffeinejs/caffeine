@@ -82,6 +82,23 @@ describe('eventsRouter', () => {
     expect(failed?.error).toBe('Cannot connect to postgres://app:******@db/pets')
   })
 
+  it('names what was thrown when it is no Error, without writing out what it holds', async () => {
+    class Driver {
+      constructor() {
+        throw { code: 'ECONNREFUSED', config: { password: 'hunter2' } }
+      }
+    }
+
+    const { container, events } = observe()
+    await using _ = events
+    container.bind(Driver, t => t.toSelf())
+
+    await expect(container.init()).rejects.toBeDefined()
+
+    const failed = (await list(events)).find(event => event.kind === 'binding-initialization-failed')
+    expect(failed?.error).toBe('[object Object]')
+  })
+
   it('records the modules registered and the one that failed, with its message', async () => {
     const { container, events } = observe()
     await using _ = events
@@ -104,17 +121,18 @@ describe('eventsRouter', () => {
   it('keeps the last 500 events, dropping the oldest first', async () => {
     const { container, events } = observe()
     await using _ = events
+    let emitted = 0
+    container.hooks.on('onBindingRegistered', () => emitted++).on('onBindingInitialized', () => emitted++)
     for (let at = 0; at < 300; at++) {
       container.bind(token<number>(`flag-${at}`), t => t.toValue(at))
     }
-    // Each binding is registered and initialized: 600 events in all.
+    // Each binding is registered and initialized: more than 600 events, the container's own included.
     await container.init()
 
     const kept = await list(events)
 
     expect(kept).toHaveLength(500)
-    expect(kept.at(-1)!.seq - kept[0]!.seq).toBe(499)
-    expect(kept[0]!.seq).toBeGreaterThan(1)
+    expect(kept.map(event => event.seq)).toEqual(Array.from({ length: 500 }, (_, at) => emitted - 499 + at))
   })
 
   it('answers the events after a sequence number, and the last few', async () => {

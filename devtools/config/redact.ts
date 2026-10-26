@@ -57,9 +57,11 @@ export class Redactor {
 /**
  * `text` with the password of every URL in it masked: what an error naming a connection string is shown as.
  *
- * A password runs from the `:` after the user to the last `@` before the URL ends, at a query, a fragment, a space
- * or the next URL, so one holding `@` or `/` is masked whole. Read in one pass: a regular expression for it
- * backtracks on a crafted value, and a value comes from wherever the configuration was loaded.
+ * A password runs from the `:` after the user to the `@` before the host: the last `@` before a query or a fragment,
+ * or the first one after when there is none before. It ends short of the next URL, unless it holds no `@` there, in
+ * which case it runs on to the next space, so a raw `@`, `/`, `?`, `#` or `://` in a password is masked with it.
+ * Masking too much is the safe failure. Read in one pass: a regular expression for it backtracks on a crafted value,
+ * and a value comes from wherever the configuration was loaded.
  */
 export function maskCredentials(text: string): string {
   let masked = ''
@@ -68,22 +70,26 @@ export function maskCredentials(text: string): string {
 
   while (at !== -1) {
     const next = text.indexOf('://', at + 3)
-
     // A scheme ends right before `://`.
-    if (at > 0 && SCHEME_CHAR.test(text[at - 1]!)) {
-      const colon = scan(text, at + 3, USER_END)
+    const colon = at > 0 && SCHEME_CHAR.test(text[at - 1]!) ? scan(text, at + 3, USER_END) : -1
 
-      if (text[colon] === ':') {
-        const sign = lastSign(text, colon + 1, next === -1 ? text.length : next)
-
-        if (sign !== -1) {
-          masked += `${text.slice(copied, colon + 1)}${REDACTED}`
-          copied = sign
-        }
-      }
+    if (text[colon] !== ':') {
+      at = next
+      continue
     }
 
-    at = next
+    const near = signOf(text, colon + 1, next === -1 ? text.length : next)
+    // Past the next URL only when there is no `@` before it: up to the next space.
+    const end = near === -1 ? scan(text, colon + 1, SPACE) : -1
+    const sign = near === -1 ? signOf(text, colon + 1, end) : near
+
+    if (sign !== -1) {
+      masked += `${text.slice(copied, colon + 1)}${REDACTED}`
+      copied = sign
+    }
+
+    // A URL a password holds is part of it; with no `@` up to the space, no URL before it has a password either.
+    at = sign > next ? text.indexOf('://', sign) : near === -1 ? text.indexOf('://', Math.max(end, at + 3)) : next
   }
 
   return masked + text.slice(copied)
@@ -92,8 +98,7 @@ export function maskCredentials(text: string): string {
 const SCHEME_CHAR = /[a-z0-9+.-]/i
 /** What ends a URL's user: its password, its host, its path, or the end of the URL. */
 const USER_END = /[:/?#@\s]/
-/** What ends a URL, short of the next one. */
-const URL_END = /[?#\s]/
+const SPACE = /\s/
 
 /** The index of the first character from `from` that `end` matches; the length of `text` when none does. */
 function scan(text: string, from: number, end: RegExp): number {
@@ -106,17 +111,28 @@ function scan(text: string, from: number, end: RegExp): number {
   return at
 }
 
-/** The index of the last `@` from `from` up to where the URL ends, short of `limit`; `-1` when there is none. */
-function lastSign(text: string, from: number, limit: number): number {
-  let sign = -1
+/**
+ * Where a password from `from` ends, short of `limit` and of a space: the last `@` before a `?` or a `#`, else the
+ * first `@` after one; `-1` when there is no `@`.
+ */
+function signOf(text: string, from: number, limit: number): number {
+  let before = -1
+  let query = false
 
-  for (let at = from; at < limit && !URL_END.test(text[at]!); at++) {
-    if (text[at] === '@') {
-      sign = at
+  for (let at = from; at < limit && !SPACE.test(text[at]!); at++) {
+    const char = text[at]
+
+    if (char === '@') {
+      if (query) {
+        return before === -1 ? at : before
+      }
+      before = at
+    } else if (char === '?' || char === '#') {
+      query = true
     }
   }
 
-  return sign
+  return before
 }
 
 /** The dotted paths under `schema` a `$t.Secret` marks, `writeOnly` in JSON Schema. */

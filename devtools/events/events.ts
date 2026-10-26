@@ -1,5 +1,3 @@
-import { inspect } from 'node:util'
-
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Container, InjectionToken } from '@caffeinejs/di'
 import { Router } from '@caffeinejs/http'
@@ -124,9 +122,20 @@ export class EventsTool {
   }
 }
 
-/** A failure's message: an `Error`'s own, or what was thrown, written out. */
+/**
+ * A failure's message: an `Error`'s own, or a thrown value as text. What a thrown object holds is not written out: it
+ * may be a driver's configuration, its password included.
+ */
 function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : inspect(error)
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    return Object.prototype.toString.call(error)
+  }
+
+  return String(error as string | number | boolean | bigint | symbol | undefined)
 }
 
 function keyText(key: InjectionToken): string {

@@ -148,9 +148,9 @@ describe('devtools', () => {
   }
 
   /** The status a request to the devtools answers under `host`, which `fetch` would not let a test set. */
-  function statusFor(port: number, host: string): Promise<number> {
+  function statusFor(port: number, host: string, path = '/devtools/info'): Promise<number> {
     return new Promise((resolve, reject) => {
-      request({ host: '127.0.0.1', port, path: '/devtools/info', headers: { host } }, res => {
+      request({ host: '127.0.0.1', port, path, headers: { host } }, res => {
         res.resume()
         resolve(res.statusCode!)
       })
@@ -204,6 +204,24 @@ describe('devtools', () => {
       expect(await statusFor(Number(port), `localhost:${port}`)).toBe(200)
       // A name no URL can hold is no loopback name either.
       expect(await statusFor(Number(port), '[')).toBe(421)
+    })
+
+    it("guards every core tool's routes as it guards the index", async () => {
+      const devtools = await serve()
+      const { origin, port } = new URL(devtoolsServer().address!.origin)
+
+      const rebound = await statusFor(Number(port), 'evil.example', '/devtools/config/properties')
+      const form = await fetch(`${origin}/devtools/refreshables/refreshes`, {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' },
+        body: '{}',
+      })
+      const read = await devtools.config.properties.get()
+
+      expect(rebound).toBe(421)
+      expect(form.status).toBe(415)
+      expect(form.headers.get('cache-control')).toBe('no-store')
+      expect(read.headers.get('cache-control')).toBe('no-store')
     })
 
     it('warns at start-up when it listens beyond this machine with nothing required of a caller', async () => {

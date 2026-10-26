@@ -1,1 +1,1 @@
-export * from './runtime.js'
+export { RuntimeSchema, type RuntimeRecord } from './runtime.js'

@@ -137,6 +137,26 @@ describe('refreshablesRouter', () => {
     expect(container.get(Anonymous).id).not.toBe(anonymous.id)
   })
 
+  it('refreshes a binding once, though it carries two labels the name matches', async () => {
+    class Pool implements SelfRefreshable {
+      reloads = 0;
+
+      [kSelfRefresh](): void {
+        this.reloads++
+      }
+    }
+
+    const { container, refreshables } = await client(c => {
+      c.bind(Pool, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('db'), Symbol('db')))
+    })
+    await using _ = refreshables
+    const pool = container.get(Pool)
+
+    await refresh(refreshables, 'db')
+
+    expect(pool.reloads).toBe(1)
+  })
+
   it('refuses a body that is not an object, rather than taking it for "refresh everything"', async () => {
     const { container, refreshables } = await client()
     await using _ = refreshables

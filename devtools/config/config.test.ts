@@ -175,6 +175,10 @@ describe('configRouter', () => {
       'mongodb://admin:******@db.internal:27017/app',
     )
     expect(maskCredentials('redis://:first@h1,redis://:second@h2')).toBe('redis://:******@h1,redis://:******@h2')
+    // A raw `?`, `#` or `://` in a password is still the password: masking too much is the safe failure.
+    expect(maskCredentials('postgres://u:p?ss@host/db')).toBe('postgres://u:******@host/db')
+    expect(maskCredentials('postgres://u:p#ss@host/db')).toBe('postgres://u:******@host/db')
+    expect(maskCredentials('mongodb://u:a://b@host/db')).toBe('mongodb://u:******@host/db')
     expect(maskCredentials('see https://u:p@ss@h/a?next=x@y and more')).toBe(
       'see https://u:******@h/a?next=x@y and more',
     )

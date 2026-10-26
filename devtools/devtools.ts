@@ -436,8 +436,8 @@ export type DevToolsRoutes = ReturnType<typeof indexRouter> | ReturnType<typeof 
 
 /**
  * What every devtools route asks of a request before it runs: a loopback name on a loopback address, and JSON for a
- * request that changes something, which a cross-site form cannot send without a preflight. Every answer, a refusal
- * included, is kept out of caches.
+ * request that changes something, which a cross-site form cannot send without a preflight. Every answer from here on,
+ * its own refusals included, is kept out of caches; the authentication gate, which runs first, answers on its own.
  */
 class DevToolsGuard extends HTTPPlugin {
   register(context: HTTPSetupContext): void {
