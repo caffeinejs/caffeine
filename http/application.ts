@@ -23,6 +23,7 @@ import {
 import { CookieBuilder } from './core/cookie/cookie.js'
 import { ErrConfiguration } from './core/error/common.js'
 import { ErrorHandlingBuilder } from './core/error/error.js'
+import { Listeners, type HTTPFeatureConfigureKit, type ListenerConfigurer } from './core/listener/listener.js'
 import { listenerServers } from './core/listener/servers.js'
 import {
   type MiddlewareFactory,
@@ -91,8 +92,10 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   readonly #own = new ServerDefinition<T, C>()
   /** Every server, the application's own first, once {@link setup} has read them. */
   #servers: ServerSet<T> | undefined
-  /** The listeners `Listener(...)` installed, once {@link setup} has built them. */
-  #listeners: ReadonlyMap<string, IServer<T>> | undefined
+  /** What {@link listener} and the features added, in that order of calls. */
+  readonly #listeners = new Listeners<C>()
+  /** The listeners, once {@link setup} has built them. */
+  #listenerServers: ReadonlyMap<string, IServer<T>> | undefined
   #runArgs: T['runArgs'] | undefined
   #routeGroups: IRouteGroup<T['request']>[] = []
   #mounted: Router<any, any, any, any, any, any>[] = []
@@ -141,17 +144,17 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   }
 
   /**
-   * The listeners `Listener(...)` installed, by name and in install order: empty when none was. Each one's `address`
-   * is where to point a client at the routes bound to it.
+   * The listeners {@link listener} and the features added, by name and in the order they were added: empty when none
+   * was. Each one's `address` is where to point a client at the routes bound to it.
    *
    * @throws ErrApplicationNotReady before {@link ready} has built them.
    */
   get listeners(): ReadonlyMap<string, IServer<T>> {
-    if (this.#listeners === undefined) {
+    if (this.#listenerServers === undefined) {
       throw new ErrApplicationNotReady('reach the listeners')
     }
 
-    return this.#listeners
+    return this.#listenerServers
   }
 
   /**
@@ -198,7 +201,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * declared elsewhere, so nothing here checks that they declare the same ones.
    *
    * The pipeline runs on the application's own server alone. A listener has its own:
-   * `Listener(name, l => l.use(...))`.
+   * `.listener(name, l => l.use(...))`.
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,
@@ -269,7 +272,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    *   .with(HTTPCaching(cache => cache.statusHeader('X-Edge')))
    * ```
    *
-   * A listener installs none of them. It has its own: `Listener(name, l => l.with(...))`.
+   * A listener installs none of them. It has its own: `.listener(name, l => l.with(...))`.
    *
    * A factory needing to configure its plugin hands the plugin back together with its options, rather than
    * wrapping it in one that closes over them: an official plugin already wraps itself in `fastify-plugin`, so
@@ -297,6 +300,30 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   }
 
   /**
+   * Adds a listener: a server of its own, on its own port, serving the routers bound to `name` with `bindTo(name)`
+   * or `@BindTo(name)`, and nothing else. It starts after the application's own server and closes after it.
+   *
+   * The name is taken at once. `configure` runs at start-up, once the container has initialized, with the builder
+   * and the context a plugin factory gets, so it reads the configuration:
+   *
+   * ```ts
+   * createWebApplication({ config })
+   *   .listener('admin', (l, { config }) => l.server(() => ({ listener: config.app.admin })).with(healthProbes()))
+   *   .mount(newRouter('/jobs').extend(bindTo('admin')).get('/', () => listJobs()))
+   * ```
+   *
+   * A feature adds one from its configure step with `listenersOf(kit).add(name, configure)`.
+   *
+   * @throws ErrConfiguration when a listener of that name is already added.
+   * @throws ErrApplicationStarted when {@link bootstrap} has already started.
+   */
+  listener(name: string, configure?: ListenerConfigurer<C>): this {
+    this.assertConfigurable()
+    this.#listeners.add(name, configure)
+    return this
+  }
+
+  /**
    * Auto-installs authorization when authentication was installed and `Authorization(...)` never was — so a
    * protected route still gets a default policy — after the {@link bootstrap} callback and before the base
    * class captures the feature list. Neither installed means authorization stays off, by design.
@@ -307,9 +334,14 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     }
   }
 
+  /** The base kit, and the listener list a feature adds to through `listenersOf(kit)`. */
+  protected override configureKit(): HTTPFeatureConfigureKit {
+    return { ...super.configureKit(), listeners: this.#listeners as Listeners }
+  }
+
   /**
    * Configures the server the adapter builds at {@link ready}: the application's own. A listener takes its
-   * settings from `Listener(name, l => l.server(...))`.
+   * settings from `.listener(name, l => l.server(...))`.
    *
    * `configure` resolves against the same context a plugin factory gets and returns the adapter's own settings —
    * under Fastify `{ factory, listener }`, the constructor options and the listen options. To reach the server
@@ -496,10 +528,11 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     await this.#plugins.resolveRouters(this.#mounted, context)
     await this.#controllerPlugins(context)
 
+    const listeners = this.#listeners.build(context as HTTPSetupContext<C>)
     const routing = buildRouting<T['request']>(this.routeSources(), this.container)
     const servers = new ServerSet<T>([
       this.#own as ServerDefinition<T>,
-      ...(this.container.getManyOptional(ServerDefinition) as ServerDefinition<T>[]),
+      ...(listeners as unknown as ServerDefinition<T>[]),
     ])
     this.#servers = servers
 
@@ -515,7 +548,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
       inventory: this.#inventory,
     })
 
-    this.#listeners = listenerServers(servers.named!)
+    this.#listenerServers = listenerServers(servers.named!)
   }
 
   protected override async start(): Promise<void> {

@@ -184,8 +184,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `teardown` and `forceTeardown`. `app.listeners` hands out a view per listener (`core/listener/servers.ts`) delegating
   to its `IAdapterServer`, never the server cast to `IServer`, so only `ServerSet` runs or tears one down.
 - Every server, the application's own included, is a `ServerDefinition` (`server_definition.ts`) built by one path,
-  `ServerSet` (`servers.ts`), through `setup(input)`. `WebApplication` fills its own; `Listener(...)` binds one
-  per name. Nothing in that path is listener-specific: a server differs only by its name, which routers bind to.
+  `ServerSet` (`servers.ts`), through `setup(input)`. `WebApplication` fills its own and keeps the listeners' in
+  a `Listeners` list (`core/listener/listener.ts`), filled by `.listener(...)` and a feature's
+  `listenersOf(kit).add(...)`, never through the container. Nothing in that path is listener-specific: a server
+  differs only by its name, which routers bind to.
 - The application's own server listens first, since Watt takes over the first listen to complete. It also closes
   first, so listeners answer through the drain.
 - Which server serves a router is decided once, in `buildRouting`, from its labels. A source declares groups; it

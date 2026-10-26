@@ -8,7 +8,7 @@ import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { Listener, bindTo, type WebApplication } from '../../../index.js'
+import { bindTo, type WebApplication } from '../../../index.js'
 import { createWebApplication, healthProbes, newRouter } from '../../../platform/fastify/index.js'
 
 /**
@@ -53,12 +53,10 @@ describe('the lifecycle of a listener', () => {
     }
 
     app = createWebApplication()
-      .install(
-        Listener('admin', l =>
-          l
-            .server(() => ({ listener }))
-            .with(() => fp(async (instance: FastifyInstance) => recording('admin')(instance))),
-        ),
+      .listener('admin', l =>
+        l
+          .server(() => ({ listener }))
+          .with(() => fp(async (instance: FastifyInstance) => recording('admin')(instance))),
       )
       .server(() => ({ listener }))
       .serverCallback((_context, instance) => recording('main')(instance))
@@ -73,7 +71,7 @@ describe('the lifecycle of a listener', () => {
 
   it("keeps a listener answering while the application's own server drains, its readiness turning 503", async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener })).with(healthProbes())))
+      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
       .shutdown(s => s.drainDelay(300)) as WebApplication
 
     await app.run()
@@ -108,7 +106,7 @@ describe('the lifecycle of a listener', () => {
     const held = new Promise<void>(resolve => (release = resolve))
 
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener }))))
+      .listener('admin', l => l.server(() => ({ listener })))
       .server(() => ({ factory: { http2: true }, listener }))
       .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
       .mount(
@@ -150,7 +148,7 @@ describe('the lifecycle of a listener', () => {
     const held = new Promise<void>(resolve => (release = resolve))
 
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener }))))
+      .listener('admin', l => l.server(() => ({ listener })))
       .shutdown(s => s.drainDelay(0).shutdownTimeout(200))
       .mount(
         newRouter('/slow')
@@ -179,7 +177,7 @@ describe('the lifecycle of a listener', () => {
 
   it('refuses a router bound to a name no server has, naming the router and the servers there are', async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener }))))
+      .listener('admin', l => l.server(() => ({ listener })))
       .mount(
         newRouter('/jobs')
           .extend(bindTo('nowhere'))
@@ -192,7 +190,7 @@ describe('the lifecycle of a listener', () => {
     expect((error as Error).message).toMatch(
       /^Cannot serve router "Jobs": it is bound to "nowhere", and no installed server has that name/,
     )
-    expect((error as Error).message).toContain(`.install(Listener('nowhere', ...))`)
+    expect((error as Error).message).toContain(`.listener('nowhere', ...)`)
     expect((error as Error).message).toContain('"admin"')
   })
 
@@ -205,7 +203,7 @@ describe('the lifecycle of a listener', () => {
 
     const error = await app.bootstrap().catch((error: unknown) => error)
 
-    expect((error as Error).message).toContain(`.install(Listener('nowhere', ...))`)
+    expect((error as Error).message).toContain(`.listener('nowhere', ...)`)
     expect((error as Error).message).not.toContain('Or bind to an installed server')
   })
 
@@ -221,7 +219,7 @@ describe('the lifecycle of a listener', () => {
       const failure = new Error('admin cannot close')
 
       app = createWebApplication()
-        .install(Listener('admin', l => l.server(() => ({ listener })).with(failingToClose(failure))))
+        .listener('admin', l => l.server(() => ({ listener })).with(failingToClose(failure)))
         .server(() => ({ listener }))
         .mount(jobs()) as WebApplication
 
@@ -242,7 +240,7 @@ describe('the lifecycle of a listener', () => {
       const adminFailure = new Error('admin cannot close')
 
       app = createWebApplication()
-        .install(Listener('admin', l => l.server(() => ({ listener })).with(failingToClose(adminFailure))))
+        .listener('admin', l => l.server(() => ({ listener })).with(failingToClose(adminFailure)))
         .server(() => ({ listener }))
         .with(failingToClose(ownFailure))
         .mount(jobs()) as WebApplication
@@ -280,7 +278,7 @@ describe('the lifecycle of a listener', () => {
     })
 
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener }))))
+      .listener('admin', l => l.server(() => ({ listener })))
       .mount(jobs()) as WebApplication
 
     // Handed to the listener as well, the port would be taken twice and run() would reject.
@@ -292,7 +290,7 @@ describe('the lifecycle of a listener', () => {
 
   it('answers an injected request on a listener, with nothing listening', async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener }))))
+      .listener('admin', l => l.server(() => ({ listener })))
       .mount(jobs()) as WebApplication
 
     await app.bootstrap()

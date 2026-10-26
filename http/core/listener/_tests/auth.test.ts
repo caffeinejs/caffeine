@@ -10,7 +10,6 @@ import {
   Claim,
   type IContext,
   Identity,
-  Listener,
   Principal,
   bindTo,
   type WebApplication,
@@ -103,7 +102,7 @@ describe('a listener with authentication and authorization', () => {
   it("answers 401, 403 and 200 under its router's scheme and roles, while the application server stays open", async () => {
     app = createWebApplication()
       .install(schemes())
-      .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
+      .listener('admin', l => l.server(() => ({ listener })).with(authentication()))
       .server(() => ({ listener }))
       .mount(protectedMetrics(), api()) as WebApplication
 
@@ -125,7 +124,7 @@ describe('a listener with authentication and authorization', () => {
     app = createWebApplication()
       .install(schemes())
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
-      .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
+      .listener('admin', l => l.server(() => ({ listener })).with(authentication()))
       .with(authentication())
       .server(() => ({ listener }))
       .mount(metrics(), api()) as WebApplication
@@ -147,14 +146,12 @@ describe('a listener with authentication and authorization', () => {
     app = createWebApplication()
       .install(schemes())
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
-      .install(
-        Listener('admin', l =>
-          l
-            .server(() => ({ listener }))
-            .with(authentication())
-            .with(healthProbes())
-            .with(raw),
-        ),
+      .listener('admin', l =>
+        l
+          .server(() => ({ listener }))
+          .with(authentication())
+          .with(healthProbes())
+          .with(raw),
       ) as WebApplication
 
     await app.run()
@@ -169,20 +166,20 @@ describe('a listener with authentication and authorization', () => {
     it('refuses a protected route at start-up, naming the route and the fix', async () => {
       app = createWebApplication()
         .install(schemes())
-        .install(Listener('admin', l => l.server(() => ({ listener }))))
+        .listener('admin', l => l.server(() => ({ listener })))
         .mount(protectedMetrics(), api()) as WebApplication
 
       const error = await app.bootstrap().catch((error: unknown) => error)
 
       expect(error).toMatchObject({ code: 'ERR_AUTHENTICATION_GATE_REQUIRED' })
       expect((error as Error).message).toContain('/metrics')
-      expect((error as Error).message).toContain('Listener(name, l => l.with(authentication()))')
+      expect((error as Error).message).toContain('.listener(name, l => l.with(authentication()))')
     })
 
     it("refuses it with the application's own server gated", async () => {
       app = createWebApplication()
         .install(schemes())
-        .install(Listener('admin', l => l.server(() => ({ listener }))))
+        .listener('admin', l => l.server(() => ({ listener })))
         .with(authentication())
         .mount(protectedMetrics(), api()) as WebApplication
 
@@ -193,7 +190,7 @@ describe('a listener with authentication and authorization', () => {
       app = createWebApplication()
         .install(schemes())
         .install(Authorization(z => z.requireAuthenticatedByDefault()))
-        .install(Listener('admin', l => l.server(() => ({ listener }))))
+        .listener('admin', l => l.server(() => ({ listener })))
         .with(authentication())
         .mount(metrics(), api()) as WebApplication
 
@@ -221,7 +218,7 @@ describe('a listener with authentication and authorization', () => {
     it("serves the login callback from the application's own gate, and not from the listener's", async () => {
       app = createWebApplication()
         .install(oidc())
-        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
+        .listener('admin', l => l.server(() => ({ listener })).with(authentication()))
         .with(authentication())
         .server(() => ({ listener }))
         .mount(metrics()) as WebApplication
@@ -235,7 +232,7 @@ describe('a listener with authentication and authorization', () => {
     it("serves the login callback from a listener's gate when it is the only one", async () => {
       app = createWebApplication()
         .install(oidc())
-        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
+        .listener('admin', l => l.server(() => ({ listener })).with(authentication()))
         .server(() => ({ listener }))
         .mount(metrics()) as WebApplication
 
@@ -248,7 +245,7 @@ describe('a listener with authentication and authorization', () => {
     it('keeps the login callback off a listener whose gate turns the OIDC routes off', async () => {
       app = createWebApplication()
         .install(oidc())
-        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication(g => g.oidcRoutes(false)))))
+        .listener('admin', l => l.server(() => ({ listener })).with(authentication(g => g.oidcRoutes(false))))
         .mount(metrics()) as WebApplication
 
       await app.run()
@@ -260,7 +257,7 @@ describe('a listener with authentication and authorization', () => {
   describe('refusals at start-up', () => {
     it('refuses a protected route with authentication never installed', async () => {
       app = createWebApplication()
-        .install(Listener('admin', l => l.server(() => ({ listener }))))
+        .listener('admin', l => l.server(() => ({ listener })))
         .mount(protectedMetrics()) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
@@ -268,7 +265,7 @@ describe('a listener with authentication and authorization', () => {
 
     it('refuses a gate on a server with authentication never installed', async () => {
       app = createWebApplication()
-        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
+        .listener('admin', l => l.server(() => ({ listener })).with(authentication()))
         .mount(metrics()) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({
@@ -280,7 +277,7 @@ describe('a listener with authentication and authorization', () => {
     it('refuses a route naming a scheme nothing registered', async () => {
       app = createWebApplication()
         .install(schemes())
-        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
+        .listener('admin', l => l.server(() => ({ listener })).with(authentication()))
         .mount(
           newRouter('/metrics')
             .extend(bindTo('admin'))

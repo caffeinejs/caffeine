@@ -3,7 +3,7 @@ import type { RouteGroupExtension } from '../core/routing/extension.js'
 import { configureRouteGroup } from './registrar/registrar.js'
 
 /**
- * Binds a router to the server installed under `name` — `.install(Listener('admin', ...))` — which serves its routes
+ * Binds a router to the server added under `name` — `.listener('admin', ...)` — which serves its routes
  * in place of the application's own server.
  *
  * A router nested in a bound one is served where its parent is: binding it to another server is refused at
@@ -20,7 +20,7 @@ export function bindTo(name: string): RouteGroupExtension {
 }
 
 /**
- * Binds a controller to the server installed under `name` — `.install(Listener('admin', ...))` — which serves its
+ * Binds a controller to the server added under `name` — `.listener('admin', ...)` — which serves its
  * routes in place of the application's own server. The controller counterpart of {@link bindTo}.
  *
  * ```ts

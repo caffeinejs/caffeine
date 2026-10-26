@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 
 import type { IAdapter, AdapterIn, IAdapterServer, HTTPSetupContext } from '../../../adapter.js'
 import { WebApplication } from '../../../application.js'
-import { Listener } from '../../../index.js'
 import type { AdapterTypes } from '../../../platform/fastify/adapter.js'
 import { pluginName, type AnyPlugin } from '../../../platform/fastify/plugin.js'
 
@@ -56,20 +55,18 @@ describe('a listener, as its adapter is handed it', () => {
     const seen: HTTPSetupContext[] = []
 
     const app = new WebApplication(() => adapter, { container: new CaffeineIoC({ decorators: false }) })
-      .install(
-        Listener('admin', l =>
-          l
-            .server(context => {
-              seen.push(context)
-              return { listener: { port: 9464 } }
-            })
-            .with(context => {
-              seen.push(context)
-              return named('first')()
-            })
-            .with(named('second'))
-            .use((_ctx, next) => next(), { hook: 'preHandler' }),
-        ),
+      .listener('admin', l =>
+        l
+          .server(context => {
+            seen.push(context)
+            return { listener: { port: 9464 } }
+          })
+          .with(context => {
+            seen.push(context)
+            return named('first')()
+          })
+          .with(named('second'))
+          .use((_ctx, next) => next(), { hook: 'preHandler' }),
       )
       .with(named('own'))
       .basePath('/api')
