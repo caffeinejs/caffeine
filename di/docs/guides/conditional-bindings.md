@@ -352,7 +352,7 @@ Multiple `.conditional()` calls chain as AND, matching the decorator behaviour.
 
 A binding made by hand with `.conditional()` is decided when the container compiles, the way a decorated one is. A
 key takes one binding: if its conditions pass while another binding holds its key, `init()` fails with
-`ErrDuplicateBinding`. `rebind()` of the same key discards it.
+`ErrDuplicateBinding`. Give the other binding a profile or a condition, so that only one of them registers.
 
 ---
 
