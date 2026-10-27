@@ -11,7 +11,8 @@ walkthrough is [`docs/watt.md`](../../docs/watt.md).
 | `worker`    | headless        | script, with `node.hasServer: false` in its `watt.json`                     |
 
 [`watt.ts`](watt.ts) is the part to copy: `registerWattChecks(app)` answers Watt's readiness and
-liveness checks from the application's `ApplicationHealth`.
+liveness checks from the application's `ApplicationHealth`. `orders` also hands Watt its OpenAPI document with
+`setOpenapiSchema`, for a Watt gateway to compose.
 
 ## Run
 
