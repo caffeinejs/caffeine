@@ -3,7 +3,8 @@ import { createServer } from 'node:net'
 import { testClient } from '@caffeinejs/testing/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { runtimeRouter, RuntimeTool } from './runtime.js'
+import { runtimeRouter } from './runtime.route.js'
+import { RuntimeTool } from './runtime.tool.js'
 
 /** A snapshot of the process an operator reads when it slows down: memory, CPU and how busy the event loop is. */
 describe('runtimeRouter', () => {

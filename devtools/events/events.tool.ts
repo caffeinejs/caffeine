@@ -1,59 +1,18 @@
-import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Container, InjectionToken } from '@caffeinejs/di'
-import { Router } from '@caffeinejs/http'
 
 import { maskCredentials } from '../config/redact.js'
-import { ErrorSchema, type ToolInfo } from '../tool.js'
+import type { ToolInfo } from '../tool.js'
+import type { ContainerEventKind, ContainerEventRecord } from './events.schema.js'
 
 type Hooks = Container['hooks']
 
 /** How many events the tool keeps; the oldest goes first. */
 const CAPACITY = 500
 
-export const ContainerEventSchema = $t.Object({
-  /** Increases by one per event, from 1: what `?after=` reads from. */
-  seq: $t.Integer(),
-  kind: $t.UnionEnum([
-    'binding-initialized',
-    'binding-initialization-failed',
-    'binding-registered',
-    'module-registered',
-    'module-registration-failed',
-    'container-disposed',
-  ]),
-  /** The binding's key or the module's name. */
-  subject: $t.Optional($t.String()),
-  /** An ISO 8601 timestamp. */
-  at: $t.String(),
-  /** The failure's message, the password of any URL in it masked. */
-  error: $t.Optional($t.String()),
-})
-
-export type ContainerEventRecord = InferSchema<typeof ContainerEventSchema>
-export type ContainerEventKind = ContainerEventRecord['kind']
-
 export const eventsTool: ToolInfo = {
   id: 'events',
   title: 'Container events',
   description: 'What the container did since the devtools attached: bindings initialized, failures, modules',
-}
-
-/**
- * What the container did since the tool attached to its hooks.
- *
- * - `GET /events`: the events, oldest first; `?after=<seq>` those after one, `?limit=<n>` the last `n`
- */
-export function eventsRouter(tool: EventsTool) {
-  return new Router('/events')
-    .get('')
-    .schema({
-      querystring: $t.Object({
-        after: $t.Optional($t.Integer({ minimum: 0 })),
-        limit: $t.Optional($t.Integer({ minimum: 0 })),
-      }),
-      response: { 200: $t.Array(ContainerEventSchema), 400: ErrorSchema },
-    })
-    .handler(ctx => tool.list(ctx.req.query().after, ctx.req.query().limit))
 }
 
 /**

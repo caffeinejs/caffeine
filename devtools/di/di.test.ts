@@ -2,7 +2,7 @@ import { CaffeineIoC, type Container } from '@caffeinejs/di'
 import { testClient } from '@caffeinejs/testing/http'
 import { describe, expect, it } from 'vitest'
 
-import { diRouter } from './di.js'
+import { diRouter } from './di.route.js'
 
 /**
  * The container as the devtools show it: what a reader trusts to find why a service got the dependency it got, so

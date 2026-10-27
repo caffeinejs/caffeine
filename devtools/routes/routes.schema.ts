@@ -1,8 +1,4 @@
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
-import type { Container } from '@caffeinejs/di'
-import { AuthenticationSchemeProvider, blend, kAuthzOpts, RouteInventory, Router } from '@caffeinejs/http'
-
-import type { ToolInfo } from '../tool.js'
 
 const Strings = $t.Array($t.String())
 
@@ -76,61 +72,3 @@ export const SecuritySchema = $t.Object({
 
 export type ServerRoutesRecord = InferSchema<typeof ServerRoutesSchema>
 export type SecurityRecord = InferSchema<typeof SecuritySchema>
-
-export const routesTool: ToolInfo = {
-  id: 'routes',
-  title: 'Routes',
-  description: 'Every route of every server, and what each one requires',
-}
-
-/**
- * Every route of every server, the routes plugins registered included, and what each one requires: its schemes,
- * the gate that authenticates it, its roles and policies, its guards and its cross-origin protection.
- *
- * - `GET /routes`: every server's routes; `?server=<name>` one server's, `?server=` the application's own
- * - `GET /routes/security`: the schemes, the fallback policy and the gates
- */
-export function routesRouter(container: Container) {
-  const servers = (): ServerRoutesRecord[] =>
-    container.get(RouteInventory).servers.map(entry => ({ ...entry, server: entry.server ?? '' }) as ServerRoutesRecord)
-
-  const routes = new Router('/routes')
-
-  const list = routes
-    .get('')
-    .schema({
-      querystring: $t.Object({ server: $t.Optional($t.String()) }),
-      response: { 200: $t.Array(ServerRoutesSchema) },
-    })
-    .handler(ctx => {
-      const only = ctx.req.query().server
-
-      return only === undefined ? servers() : servers().filter(entry => entry.server === only)
-    })
-
-  const security = routes
-    .get('/security')
-    .schema({ response: { 200: SecuritySchema } })
-    .handler((): SecurityRecord => {
-      const schemes = container.getOptional(AuthenticationSchemeProvider)
-      const authz = container.getOptional(kAuthzOpts)
-
-      return {
-        authentication: {
-          schemes: [...(schemes?.schemeNames ?? [])],
-          defaultScheme: schemes?.defaultAuthenticateScheme || undefined,
-        },
-        authorization: {
-          fallbackPolicy: authz?.fallbackPolicy?.name,
-          fallbackExcept: [...(authz?.fallbackExcept ?? [])],
-          defaultPolicy: authz?.authorizeDecoratorDefaultPolicy.name,
-        },
-        gates: servers().map(entry => ({
-          server: entry.server,
-          gates: [...new Set(entry.routes.flatMap(route => route.security.authentication.gate ?? []))],
-        })),
-      }
-    })
-
-  return blend(list, security)
-}

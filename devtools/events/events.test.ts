@@ -6,7 +6,8 @@ import { testClient } from '@caffeinejs/testing/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { DevTools, type DevToolsRoutes } from '../devtools.js'
-import { eventsRouter, EventsTool } from './events.js'
+import { eventsRouter } from './events.route.js'
+import { EventsTool } from './events.tool.js'
 
 /**
  * Why an application failed to start, or what it built, is told by the container's events: they must name each

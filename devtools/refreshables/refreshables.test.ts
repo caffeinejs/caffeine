@@ -2,7 +2,8 @@ import { CaffeineIoC, kSelfRefresh, Scopes, type Container, type SelfRefreshable
 import { testClient } from '@caffeinejs/testing/http'
 import { describe, expect, it } from 'vitest'
 
-import { refreshablesRouter, RefreshablesTool } from './refreshables.js'
+import { refreshablesRouter } from './refreshables.route.js'
+import { RefreshablesTool } from './refreshables.tool.js'
 
 /**
  * Refreshing from the devtools re-creates refresh-scoped injectables, and only the ones asked for: a refresh that

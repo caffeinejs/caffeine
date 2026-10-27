@@ -3,7 +3,7 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { testClient } from '@caffeinejs/testing/http'
 import { describe, expect, it } from 'vitest'
 
-import { healthRouter } from './health.js'
+import { healthRouter } from './health.route.js'
 
 /** The probes answer a status; an operator chasing why needs each indicator's details, which only this shows. */
 describe('healthRouter', () => {

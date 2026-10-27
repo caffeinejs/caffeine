@@ -6,7 +6,8 @@ import { $t } from '@caffeinejs/application/schema'
 import { testClient } from '@caffeinejs/testing/http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { configRouter, ConfigTool, type ConfigToolOptions } from './config.js'
+import { configRouter } from './config.route.js'
+import { ConfigTool, type ConfigToolOptions } from './config.tool.js'
 import { maskCredentials } from './redact.js'
 
 /**

@@ -5,4 +5,4 @@ export {
   type PropertyDetail,
   type PropertyRecord,
   type SourceRecord,
-} from './config.js'
+} from './config.schema.js'

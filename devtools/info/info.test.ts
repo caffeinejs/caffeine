@@ -7,7 +7,7 @@ import { Second } from '@caffeinejs/std/duration'
 import { testClient } from '@caffeinejs/testing/http'
 import { describe, expect, it } from 'vitest'
 
-import { infoRouter } from './info.js'
+import { infoRouter } from './info.route.js'
 
 /** What an operator asks first of a running process: which application, under which profiles, on what. */
 describe('infoRouter', () => {

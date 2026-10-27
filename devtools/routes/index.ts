@@ -4,4 +4,4 @@ export {
   ServerRoutesSchema,
   type SecurityRecord,
   type ServerRoutesRecord,
-} from './routes.js'
+} from './routes.schema.js'

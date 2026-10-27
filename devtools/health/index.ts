@@ -5,4 +5,4 @@ export {
   type AvailabilityRecord,
   type HealthRecord,
   type ProbeRecord,
-} from './health.js'
+} from './health.schema.js'

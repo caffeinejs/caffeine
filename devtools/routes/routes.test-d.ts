@@ -2,7 +2,7 @@ import type { InferSchema } from '@caffeinejs/application/schema'
 import type { RouteRecord } from '@caffeinejs/http'
 import { describe, expectTypeOf, it } from 'vitest'
 
-import type { RouteSchema } from './routes.js'
+import type { RouteSchema } from './routes.schema.js'
 
 type Served = InferSchema<typeof RouteSchema>
 
