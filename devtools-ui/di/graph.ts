@@ -33,8 +33,9 @@ export async function drawGraph(graph: DependencyGraph, keep?: ReadonlySet<numbe
   }
 
   graphviz ??= Graphviz.load()
-  // Placed before the first node: a default holds for the statements after it, and `graphToDot` opens with `{`.
-  const svg = (await graphviz).dot(dot.replace('{', `{\n  ${LOOK.join('\n  ')}`))
+  // Right after the `{` that opens the digraph, before the first node: a default holds for the statements after it.
+  const open = dot.indexOf('{') + 1
+  const svg = (await graphviz).dot(`${dot.slice(0, open)}\n  ${LOOK.join('\n  ')}${dot.slice(open)}`)
 
   // Graphviz writes a whole document: the page takes the `<svg>` element alone.
   return svg.slice(svg.indexOf('<svg'))
