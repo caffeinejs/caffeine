@@ -44,7 +44,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       // --- Settings. These configure builders the constructor already registered, so where they are written
       // makes no difference to install order; they are grouped first because they read as configuration.
 
-      // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
+      // Server host/port come from `server` in config/application.yaml.
       .server(({ config }) => ({ listener: config.server }))
       // The two handlers that render every thrown error: HTTPErrorHandler for an ErrHTTP, FallbackErrorHandler
       // for a validation failure or anything unexpected. Declaring them is not enough — this is what puts them
@@ -72,7 +72,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       .install(
         Authentication((auth, { config }) =>
           auth
-            // Basic, for the API documentation only. Demo credentials, overridable from the environment.
+            // Basic, for the API documentation only. Demo credentials; the password is read from the environment.
             .addBasic('Basic', o =>
               o
                 .realm('Petstore docs')

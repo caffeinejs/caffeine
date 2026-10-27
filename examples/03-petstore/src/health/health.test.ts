@@ -7,10 +7,6 @@ import { type PetstoreApp, buildApp } from '../app.js'
 import { rootModule } from '../root.gen.mod.js'
 import { DatabaseHealth } from './db.health.js'
 
-// Ephemeral port: the probes only answer once `run()` has started listening, and the configured default (9999)
-// would collide with anything else on the machine.
-process.env.PETSTORE_SERVER__PORT = '0'
-
 class FakeDatabaseHealth extends HealthIndicator {
   get name(): string {
     return 'database'
