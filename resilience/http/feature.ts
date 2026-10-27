@@ -8,7 +8,7 @@ import {
   kFeatureName,
 } from '@caffeinejs/application'
 import { type AnyClass, reflect } from '@caffeinejs/di'
-import { Keys } from '@caffeinejs/http'
+import { Keys, SAFE_METHODS } from '@caffeinejs/http'
 import { getRouteGroup } from '@caffeinejs/http/decorators/registrar'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -23,13 +23,11 @@ export interface ResilienceHTTPConfig {
   readonly retryableMethods?: readonly string[]
 }
 
-const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS']
-
 /**
  * Refuses, at `bootstrap()`, a `@Retry` on a controller handler that running twice could harm.
  *
- * A handler may carry `@Retry` only when every HTTP method routed to it is retryable, `GET`, `HEAD` and `OPTIONS`
- * by default, or when it declares itself repeatable with `@Retry(name, { repeatable: true })`. A route that reads its
+ * A handler may carry `@Retry` only when every HTTP method routed to it is retryable, by default
+ * the safe methods of `SAFE_METHODS`, or when it declares itself repeatable with `@Retry(name, { repeatable: true })`. A route that reads its
  * body as a stream is refused even then. `@Retry` on a service a handler calls is not checked.
  */
 export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
@@ -61,7 +59,7 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
       )
     }
 
-    const methods = this.#retryableMethods ?? this.#config?.retryableMethods ?? SAFE_METHODS
+    const methods = this.#retryableMethods ?? this.#config?.retryableMethods ?? [...SAFE_METHODS]
     const retryableMethods = new Set(methods.map(method => method.toUpperCase()))
     for (const { key, binding } of kit.container.getBindingsByLabel(Keys.CONTROLLER)) {
       // The routes are the key's, as the HTTP package builds them; the handlers that run are the bound class's.
@@ -121,9 +119,9 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
 }
 
 /**
- * Installs the HTTP replay check for the resilience annotations: a `@Retry` on a controller handler for a method other
- * than `GET`, `HEAD` or `OPTIONS` fails `bootstrap()`, unless the handler declares itself repeatable or the method is
- * allowed with `retryableMethods(...)`.
+ * Installs the HTTP replay check for the resilience annotations: a `@Retry` on a controller handler for a method that
+ * is not safe (`SAFE_METHODS`: `GET`, `HEAD`, `OPTIONS`, `TRACE` and `QUERY`) fails `bootstrap()`, unless the handler
+ * declares itself repeatable or the method is allowed with `retryableMethods(...)`.
  *
  * It needs `Resilience()`, and `Resilience()` needs it once any controller carries `@Retry`.
  *

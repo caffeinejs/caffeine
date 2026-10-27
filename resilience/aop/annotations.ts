@@ -24,8 +24,8 @@ type FallbackDecorator<K extends string | symbol> = <
 
 export interface RetryAnnotationOptions {
   /**
-   * Declares that running the method twice is safe. An HTTP handler may carry `@Retry` on a method other than `GET`,
-   * `HEAD` or `OPTIONS` only when it says so; it deduplicates nothing.
+   * Declares that running the method twice is safe. An HTTP handler routed for a method that is not safe may carry
+   * `@Retry` only when it says so, unless the application allows that method; it deduplicates nothing.
    */
   readonly repeatable?: boolean
 }

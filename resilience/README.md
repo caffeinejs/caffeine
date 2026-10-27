@@ -537,8 +537,11 @@ request included:
 3. **A body read as a stream is gone.** The second attempt reads nothing.
 4. **A response already sent** cannot be replaced by a second attempt or a fallback.
 
-`ResilienceHTTP()` refuses, at `bootstrap()`, `@Retry` on a handler routed for any method but `GET`, `HEAD` or
-`OPTIONS`, and on any route that reads its body as a stream:
+`ResilienceHTTP()` refuses, at `bootstrap()`, `@Retry` on a handler routed for any method that is not safe, and on any
+route that reads its body as a stream. The safe methods are `SAFE_METHODS` from `@caffeinejs/http`: `GET`, `HEAD`,
+`OPTIONS` and `TRACE` (RFC 9110), and `QUERY`, the same list the cross-site request check exempts. `PUT` and `DELETE`
+are idempotent but not safe: idempotence promises only the final state of the resource, while a replayed handler repeats
+everything else it does, and after a timeout two attempts can run at once.
 
 ```text
 ErrInvalidOption: Cannot retry "POST /orders" (OrdersController.place): POST is not a retryable method
@@ -553,10 +556,11 @@ There are three ways out, narrowest first:
 @Post('/', p => [p.header('idempotency-key'), p.body()])
 async place(key: string, order: NewOrder): Promise<Order> { … }
 
-// 2. Every handler of a method is safe to replay, such as the idempotent PUT and DELETE.
-.install(ResilienceHTTP(h => h.retryableMethods('GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE')))
+// 2. Every handler of a method is safe to replay: here, every PUT and DELETE handler of the application.
+//    SAFE_METHODS comes from @caffeinejs/http; retryableMethods(...) replaces the default, it does not add to it.
+.install(ResilienceHTTP(h => h.retryableMethods(...SAFE_METHODS, 'PUT', 'DELETE')))
 
-// 3. From configuration, code winning: RESILIENCE_HTTP__RETRYABLE_METHODS=GET,HEAD,OPTIONS,PUT
+// 3. From configuration, code winning: RESILIENCE_HTTP__RETRYABLE_METHODS=GET,HEAD,OPTIONS,TRACE,QUERY,PUT
 .install(ResilienceHTTP((h, { config }) => h.config(config.resilienceHttp)))
 ```
 

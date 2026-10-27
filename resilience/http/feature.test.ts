@@ -66,6 +66,39 @@ describe('ResilienceHTTP() by default', () => {
     expect(await res.json()).toEqual(['a', 'b'])
   })
 
+  @Controller('/search')
+  @Profile('rh-safe')
+  class SearchController {
+    attempts = 0
+
+    // GET brings its HEAD twin: with these, the route answers every method RFC 9110 and the QUERY draft call safe.
+    @Retry('feed')
+    @Method(['get', 'options', 'trace', 'query'])
+    @Get('/')
+    async search(): Promise<string> {
+      this.attempts++
+      if (this.attempts === 1) {
+        throw new Error('blip')
+      }
+      return 'found'
+    }
+  }
+  void SearchController
+
+  // A safe method changes nothing, so running its handler twice is what the CSRF check already assumes is harmless.
+  it('lets a handler routed for every safe method carry @Retry, and retries a QUERY', async () => {
+    const app = await boot('rh-safe', Resilience(instances), ResilienceHTTP())
+
+    const res = await app.fetch('/search', {
+      method: 'QUERY',
+      headers: { 'content-type': 'application/json' },
+      body: '{"q":"tea"}',
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('found')
+  })
+
   @Controller('/orders')
   @Profile('rh-post')
   class OrdersController {
