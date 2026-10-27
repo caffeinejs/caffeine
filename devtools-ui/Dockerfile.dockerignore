@@ -1,6 +1,4 @@
-# The context of devtools-ui/Dockerfile, which is the repo root. Everything is left out except the root manifests
-# and the workspace packages the UI runs on; a package the UI starts to depend on is added here, or the build fails
-# at `tsc --build` naming it.
+# Allowlist: a workspace package devtools-ui starts to depend on must be added here.
 *
 !package.json
 !package-lock.json
@@ -15,7 +13,6 @@
 !static
 !std
 
-# What the build excludes anyway (tsconfig.build.json), or produces itself.
 **/node_modules
 **/dist
 **/*.tsbuildinfo
