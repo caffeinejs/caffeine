@@ -107,6 +107,6 @@ export class LoggerBuilder<C = unknown> extends FeatureBuilder<C> {
       logger.level = level
     }
 
-    kit.container.rebind(logToken(), t => t.toValue(logger))
+    kit.container.bind(logToken(), t => t.toValue(logger))
   }
 }
