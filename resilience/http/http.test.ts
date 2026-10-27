@@ -79,7 +79,7 @@ describe('ResilienceErrorHandler', () => {
   it('answers an open breaker with 503, the default envelope and Retry-After in seconds', async () => {
     const app = await enrolled()
 
-    const res = await app.fetch('/stock/open')
+    const res = await app.request('/stock/open')
 
     expect(res.status).toBe(503)
     expect(res.headers.get('retry-after')).toBe('37')
@@ -95,7 +95,7 @@ describe('ResilienceErrorHandler', () => {
   it('never names the breaker or the dependency in the body', async () => {
     const app = await enrolled()
 
-    const text = await (await app.fetch('/stock/open')).text()
+    const text = await (await app.request('/stock/open')).text()
 
     expect(text).not.toContain('inventory')
     expect(text).not.toContain('Cannot call')
@@ -104,7 +104,7 @@ describe('ResilienceErrorHandler', () => {
   it('answers a forced-open breaker with 503 and no Retry-After, since nobody knows when it closes', async () => {
     const app = await enrolled()
 
-    const res = await app.fetch('/stock/forced')
+    const res = await app.request('/stock/forced')
 
     expect(res.status).toBe(503)
     expect(res.headers.get('retry-after')).toBe(null)
@@ -120,7 +120,7 @@ describe('ResilienceErrorHandler', () => {
   ])('rounds a rate limit’s %s ms wait up to Retry-After: %s', async (ms, header) => {
     const app = await enrolled()
 
-    const res = await app.fetch(`/stock/quota/${ms}`)
+    const res = await app.request(`/stock/quota/${ms}`)
 
     expect(res.status).toBe(503)
     expect(res.headers.get('retry-after')).toBe(header)
@@ -130,7 +130,7 @@ describe('ResilienceErrorHandler', () => {
   it('answers a full bulkhead with 503 and no Retry-After', async () => {
     const app = await enrolled()
 
-    const res = await app.fetch('/stock/full')
+    const res = await app.request('/stock/full')
 
     expect(res.status).toBe(503)
     expect(res.headers.get('retry-after')).toBe(null)
@@ -140,7 +140,7 @@ describe('ResilienceErrorHandler', () => {
   it('answers a time limit with 504 and no Retry-After', async () => {
     const app = await enrolled()
 
-    const res = await app.fetch('/stock/slow')
+    const res = await app.request('/stock/slow')
 
     expect(res.status).toBe(504)
     expect(res.headers.get('retry-after')).toBe(null)
@@ -156,7 +156,7 @@ describe('ResilienceErrorHandler', () => {
   it.each(['/stock/exhausted', '/stock/misconfigured', '/stock/bug'])('leaves %s to the 500 default', async path => {
     const app = await enrolled()
 
-    expect((await app.fetch(path)).status).toBe(500)
+    expect((await app.request(path)).status).toBe(500)
   })
 })
 
@@ -177,7 +177,7 @@ describe('ResilienceErrorHandler named with @CatchWith', () => {
     opened.push(() => app.close())
     await app.bootstrap()
 
-    const res = await app.fetch('/scoped/open')
+    const res = await app.request('/scoped/open')
 
     expect(res.status).toBe(503)
     expect(res.headers.get('retry-after')).toBe('2')

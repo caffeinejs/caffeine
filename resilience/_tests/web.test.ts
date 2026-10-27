@@ -304,7 +304,7 @@ describe('resilience on controllers', () => {
   it('answers 504 when a handler outruns its @TimeLimiter, its signal argument aborted at the limit', async () => {
     const app = await storefront()
 
-    const res = await app.fetch('/products/hang')
+    const res = await app.request('/products/hang')
 
     expect(res.status).toBe(504)
     expect(seen.pageSignals).toHaveLength(1)
@@ -315,8 +315,8 @@ describe('resilience on controllers', () => {
   it('answers 503 without Retry-After past a handler’s @Bulkhead, while the admitted call completes', async () => {
     const app = await storefront()
 
-    const admitted = app.fetch('/products/export/run')
-    const refused = await app.fetch('/products/export/run')
+    const admitted = app.request('/products/export/run')
+    const refused = await app.request('/products/export/run')
     seen.release()
 
     expect(refused.status).toBe(503)
@@ -327,8 +327,8 @@ describe('resilience on controllers', () => {
   it('answers 503 with Retry-After past a handler’s @RateLimiter', async () => {
     const app = await storefront()
 
-    expect((await app.fetch('/products/search/run')).status).toBe(200)
-    const refused = await app.fetch('/products/search/run')
+    expect((await app.request('/products/search/run')).status).toBe(200)
+    const refused = await app.request('/products/search/run')
 
     expect(refused.status).toBe(503)
     expect(refused.headers.get('retry-after')).toBe('3600')
@@ -337,9 +337,9 @@ describe('resilience on controllers', () => {
   it('answers 503 with Retry-After once a handler’s @CircuitBreaker opens, without running the handler', async () => {
     const app = await storefront()
 
-    await app.fetch('/products/reports/run')
-    await app.fetch('/products/reports/run')
-    const refused = await app.fetch('/products/reports/run')
+    await app.request('/products/reports/run')
+    await app.request('/products/reports/run')
+    const refused = await app.request('/products/reports/run')
 
     expect(refused.status).toBe(503)
     expect(refused.headers.get('retry-after')).toBe('60')
@@ -349,7 +349,7 @@ describe('resilience on controllers', () => {
   it('answers with the @Fallback method, handed the same picked arguments', async () => {
     const app = await storefront()
 
-    const res = await app.fetch('/products/featured/42')
+    const res = await app.request('/products/featured/42')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('degraded 42')
@@ -359,7 +359,7 @@ describe('resilience on controllers', () => {
   it('runs a retried GET handler, and the service call inside it, again', async () => {
     const app = await storefront()
 
-    const res = await app.fetch('/products/feed/run')
+    const res = await app.request('/products/feed/run')
 
     expect(res.status).toBe(200)
     expect(seen.feedHandlerCalls).toBe(2)
@@ -369,7 +369,7 @@ describe('resilience on controllers', () => {
   it('leaves exactly one order when a repeatable POST keyed by Idempotency-Key fails after writing', async () => {
     const app = await storefront()
 
-    const res = await app.fetch('/orders', {
+    const res = await app.request('/orders', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'idempotency-key': 'k-1' },
       body: JSON.stringify({ item: 'kettle' }),
@@ -385,9 +385,9 @@ describe('resilience on controllers', () => {
   it('keeps the breaker of a request-scoped controller across requests', async () => {
     const app = await storefront()
 
-    await app.fetch('/scoped/run')
-    await app.fetch('/scoped/run')
-    const refused = await app.fetch('/scoped/run')
+    await app.request('/scoped/run')
+    await app.request('/scoped/run')
+    const refused = await app.request('/scoped/run')
 
     expect(refused.status).toBe(503)
     expect(seen.scopedCalls).toBe(2)
@@ -396,8 +396,8 @@ describe('resilience on controllers', () => {
   it('hands a refusal to the controller’s own @Catch before the global handler', async () => {
     const app = await storefront()
 
-    await app.fetch('/local/run')
-    const refused = await app.fetch('/local/run')
+    await app.request('/local/run')
+    const refused = await app.request('/local/run')
 
     expect(refused.status).toBe(429)
     expect(await refused.json()).toEqual({ local: true })
@@ -408,8 +408,8 @@ describe('resilience on the services controllers call', () => {
   it('answers 503 when a service refuses a call made by a controller without annotations', async () => {
     const app = await storefront()
 
-    expect(await (await app.fetch('/products/lookup/1')).text()).toBe('found 1')
-    const refused = await app.fetch('/products/lookup/2')
+    expect(await (await app.request('/products/lookup/1')).text()).toBe('found 1')
+    const refused = await app.request('/products/lookup/2')
 
     expect(refused.status).toBe(503)
     expect(refused.headers.get('retry-after')).toBe('3600')
@@ -419,7 +419,7 @@ describe('resilience on the services controllers call', () => {
   it('lets the controller’s budget abort the service’s call, before the service’s own limit or a retry', async () => {
     const app = await storefront()
 
-    const res = await app.fetch('/products/hang')
+    const res = await app.request('/products/hang')
 
     expect(res.status).toBe(504)
     expect(seen.catalogCalls).toBe(1)
@@ -433,7 +433,7 @@ describe('resilience on the services controllers call', () => {
   it('passes the request signal through to the service when nothing derives one', async () => {
     const app = await storefront()
 
-    const res = await app.fetch('/products/prices/42')
+    const res = await app.request('/products/prices/42')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('price 42')
@@ -452,7 +452,7 @@ describe('resilience on a handler that streams its response', () => {
     const registry = app.container.get(ResilienceRegistry)
     useFakeClock({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
 
-    const res = await app.fetch('/streams/slow')
+    const res = await app.request('/streams/slow')
     expect(res.status).toBe(200)
     const reader = res.body!.getReader()
     const decoder = new TextDecoder()
@@ -474,7 +474,7 @@ describe('resilience on a handler that streams its response', () => {
     const app = await storefront()
     const registry = app.container.get(ResilienceRegistry)
 
-    const res = await app.fetch('/streams/broken')
+    const res = await app.request('/streams/broken')
     expect(res.status).toBe(200)
     const reader = res.body!.getReader()
     expect(new TextDecoder().decode((await reader.read()).value)).toBe('head')

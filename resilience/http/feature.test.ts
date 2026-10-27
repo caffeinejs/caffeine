@@ -60,7 +60,7 @@ describe('ResilienceHTTP() by default', () => {
   it('lets a GET handler carry @Retry, and retries it', async () => {
     const app = await boot('rh-get', Resilience(instances), ResilienceHTTP())
 
-    const res = await app.fetch('/feed')
+    const res = await app.request('/feed')
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual(['a', 'b'])
@@ -89,7 +89,7 @@ describe('ResilienceHTTP() by default', () => {
   it('lets a handler routed for every safe method carry @Retry, and retries a QUERY', async () => {
     const app = await boot('rh-safe', Resilience(instances), ResilienceHTTP())
 
-    const res = await app.fetch('/search', {
+    const res = await app.request('/search', {
       method: 'QUERY',
       headers: { 'content-type': 'application/json' },
       body: '{"q":"tea"}',
@@ -208,7 +208,7 @@ describe('ResilienceHTTP() by default', () => {
   it('lets a POST handler carry every annotation but @Retry', async () => {
     const app = await boot('rh-others', Resilience(instances), ResilienceHTTP())
 
-    const res = await app.fetch('/others', { method: 'POST' })
+    const res = await app.request('/others', { method: 'POST' })
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('created')
@@ -245,7 +245,7 @@ describe('ResilienceHTTP() by default', () => {
   it('leaves a service’s @Retry alone, even when a POST handler calls it', async () => {
     const app = await boot('rh-service', Resilience(instances), ResilienceHTTP())
 
-    const res = await app.fetch('/notify', { method: 'POST' })
+    const res = await app.request('/notify', { method: 'POST' })
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('sent')
@@ -267,7 +267,7 @@ describe('ResilienceHTTP() widened', () => {
   it('lets a POST handler that declares itself repeatable carry @Retry', async () => {
     const app = await boot('rh-repeatable', Resilience(instances), ResilienceHTTP())
 
-    expect((await app.fetch('/orders', { method: 'POST' })).status).toBe(200)
+    expect((await app.request('/orders', { method: 'POST' })).status).toBe(200)
   })
 
   it('lets a PUT handler carry @Retry once PUT is retryable, and still refuses POST', async () => {
@@ -415,7 +415,7 @@ describe('the two halves', () => {
   it('needs no ResilienceHTTP() when no controller carries @Retry', async () => {
     const app = await boot('rh-plain', Resilience(instances))
 
-    expect((await app.fetch('/plain')).status).toBe(200)
+    expect((await app.request('/plain')).status).toBe(200)
   })
 
   // `aop/` recognises a controller by this registered symbol, without importing the HTTP package: if the HTTP package
