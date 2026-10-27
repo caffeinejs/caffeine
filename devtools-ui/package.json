@@ -30,7 +30,7 @@
     "@caffeinejs/std": "*",
     "@hpcc-js/wasm-graphviz": "^1.30.0",
     "@kitajs/html": "^4.2.13",
-    "fastify": "^5.12.5"
+    "fastify": "^5.12.7"
   },
   "devDependencies": {
     "@caffeinejs/testing": "*",
