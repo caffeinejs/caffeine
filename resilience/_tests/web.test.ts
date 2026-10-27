@@ -483,8 +483,18 @@ describe('resilience on a handler that streams its response', () => {
     await expect(reader.read()).rejects.toBeInstanceOf(Error)
 
     expect(seen.streamCalls).toBe(1)
-    expect(registry.retry('streamed').metrics().successfulCallsWithoutRetry).toBe(1)
-    expect(registry.circuitBreaker('streamed').metrics().successfulCalls).toBe(1)
-    expect(registry.circuitBreaker('streamed').metrics().failedCalls).toBe(0)
+    expect(registry.retry('streamed').metrics()).toEqual({
+      successfulCallsWithoutRetry: 1,
+      successfulCallsWithRetry: 0,
+      failedCallsWithoutRetry: 0,
+      failedCallsWithRetry: 0,
+    })
+    expect(registry.circuitBreaker('streamed').metrics()).toMatchObject({
+      bufferedCalls: 1,
+      successfulCalls: 1,
+      failedCalls: 0,
+      slowCalls: 0,
+      notPermittedCalls: 0,
+    })
   })
 })

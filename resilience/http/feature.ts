@@ -26,9 +26,10 @@ export interface ResilienceHTTPConfig {
 /**
  * Refuses, at `bootstrap()`, a `@Retry` on a controller handler that running twice could harm.
  *
- * A handler may carry `@Retry` only when every HTTP method routed to it is retryable, by default
- * the safe methods of `SAFE_METHODS`, or when it declares itself repeatable with `@Retry(name, { repeatable: true })`. A route that reads its
- * body as a stream is refused even then. `@Retry` on a service a handler calls is not checked.
+ * A handler may carry `@Retry` only when every HTTP method routed to it is retryable, by default `SAFE_METHODS` from
+ * `@caffeinejs/http`, or when it declares itself repeatable with `@Retry(name, { repeatable: true })`. `PUT` and
+ * `DELETE` are idempotent, not safe: a replay repeats every side effect of the handler, not only its final state. A
+ * route that reads its body as a stream is refused even then. `@Retry` on a service a handler calls is not checked.
  */
 export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'resilience-http'
@@ -41,7 +42,10 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  /** Replaces the methods a handler may retry without declaring itself repeatable, such as `'PUT'`, `'DELETE'`. */
+  /**
+   * Replaces the methods a handler may retry without declaring itself repeatable. It replaces the default rather than
+   * adding to it: `h.retryableMethods(...SAFE_METHODS, 'PUT')`.
+   */
   retryableMethods(...methods: string[]): this {
     this.#retryableMethods = methods
     return this
