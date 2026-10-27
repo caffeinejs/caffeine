@@ -88,7 +88,7 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/std": "*",
     "cookie": "^2.0.1",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.7",
     "fastify-plugin": "^6.0.0",
     "jose": "^6.2.10",
     "path-to-regexp": "^8.4.2"

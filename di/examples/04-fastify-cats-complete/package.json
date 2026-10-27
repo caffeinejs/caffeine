@@ -13,7 +13,7 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/testing": "*",
     "@google-cloud/storage": "^8.1.0",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.7",
     "ioredis": "^6.0.0",
     "pg": "^8.23.0"
   },

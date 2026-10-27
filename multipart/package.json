@@ -33,6 +33,6 @@
   "devDependencies": {
     "@caffeinejs/di": "*",
     "@caffeinejs/std": "*",
-    "fastify": "^5.12.5"
+    "fastify": "^5.12.7"
   }
 }
