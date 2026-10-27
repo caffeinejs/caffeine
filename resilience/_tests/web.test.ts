@@ -2,11 +2,13 @@ import { CaffeineIoC, Injectable, Lifetime, Profile, Scopes } from '@caffeinejs/
 import { Catch, Controller, Get, type IContext, Post } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { Hour, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from '../aop/annotations.js'
 import { Resilience } from '../aop/feature.js'
+import { ResilienceRegistry } from '../aop/registry.js'
 import { ErrCallRefused } from '../errors.js'
+import { useFakeClock } from '../fake_clock.testkit.js'
 import { ResilienceHTTP } from '../http/feature.js'
 import { ResilienceErrorHandler } from '../http/http.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
@@ -23,10 +25,14 @@ const seen = {
   scopedCalls: 0,
   orderAttempts: 0,
   orders: new Map<string, { id: string; item: string }>(),
+  streamCalls: 0,
+  streamSignals: [] as AbortSignal[],
   release: (() => undefined) as () => void,
+  releaseStream: (() => undefined) as () => void,
 }
 
 let exportGate = Promise.resolve()
+let streamGate = Promise.resolve()
 
 beforeEach(() => {
   seen.catalogCalls = 0
@@ -39,7 +45,10 @@ beforeEach(() => {
   seen.scopedCalls = 0
   seen.orderAttempts = 0
   seen.orders = new Map()
+  seen.streamCalls = 0
+  seen.streamSignals = []
   exportGate = new Promise<void>(resolve => (seen.release = resolve))
+  streamGate = new Promise<void>(resolve => (seen.releaseStream = resolve))
 })
 
 @Injectable()
@@ -196,10 +205,63 @@ class LocalController {
 }
 void LocalController
 
+const encoder = new TextEncoder()
+
+@Controller('/streams')
+@Profile('resilience-web')
+class StreamsController {
+  // The handler returns at once; its body is sent afterwards, and stops if the handler's signal aborts.
+  @TimeLimiter('page')
+  @Get('/slow', p => [p.signal()])
+  async slow(signal: AbortSignal): Promise<Response> {
+    seen.streamSignals.push(signal)
+    const gate = streamGate
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('head'))
+          signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
+        },
+        async pull(controller) {
+          await gate
+          if (!signal.aborted) {
+            controller.enqueue(encoder.encode('tail'))
+            controller.close()
+          }
+        },
+      }),
+    )
+  }
+
+  // The handler succeeds; the body it returned fails part-way, after the strategies have seen the outcome.
+  @Retry('streamed')
+  @CircuitBreaker('streamed')
+  @Get('/broken')
+  async broken(): Promise<Response> {
+    seen.streamCalls++
+    const gate = streamGate
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('head'))
+        },
+        async pull(controller) {
+          await gate
+          controller.error(new Error('disk gone'))
+        },
+      }),
+    )
+  }
+}
+void StreamsController
+
 const opened: Array<() => Promise<unknown>> = []
 
 afterEach(async () => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
   seen.release()
+  seen.releaseStream()
   for (const close of opened.splice(0)) {
     await close().catch(() => undefined)
   }
@@ -226,7 +288,9 @@ async function storefront() {
           .circuitBreaker('scoped', { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } })
           .circuitBreaker('prices')
           .retry('feed', { maxAttempts: 2, backoff: 0 })
-          .retry('orders', { maxAttempts: 2, backoff: 0 }),
+          .retry('orders', { maxAttempts: 2, backoff: 0 })
+          .retry('streamed', { maxAttempts: 2, backoff: 0 })
+          .circuitBreaker('streamed'),
       ),
     )
     .install(ResilienceHTTP())
@@ -378,5 +442,49 @@ describe('resilience on the services controllers call', () => {
     expect(seen.catalogSignals).toHaveLength(1)
     expect(seen.pageSignals[0]).toBe(seen.requestSignals[0])
     expect(seen.catalogSignals[0]).toBe(seen.requestSignals[0])
+  })
+})
+
+// A time limiter on a handler bounds the handler: once it returns a body to stream, the body is not timed.
+describe('resilience on a handler that streams its response', () => {
+  it('sends a body streamed past the handler’s time limit whole, and the limit never fires', async () => {
+    const app = await storefront()
+    const registry = app.container.get(ResilienceRegistry)
+    useFakeClock({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+
+    const res = await app.fetch('/streams/slow')
+    expect(res.status).toBe(200)
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    expect(decoder.decode((await reader.read()).value)).toBe('head')
+
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    expect(seen.streamSignals).toHaveLength(1)
+    expect(seen.streamSignals[0]!.aborted).toBe(false)
+    expect(registry.timeLimiter('page').metrics()).toEqual({ successfulCalls: 1, failedCalls: 0, timedOutCalls: 0 })
+
+    seen.releaseStream()
+    expect(decoder.decode((await reader.read()).value)).toBe('tail')
+    expect((await reader.read()).done).toBe(true)
+  })
+
+  // The handler already succeeded: a retry would answer a second time over a response under way.
+  it('neither retries nor records a body that fails after the handler returned', async () => {
+    const app = await storefront()
+    const registry = app.container.get(ResilienceRegistry)
+
+    const res = await app.fetch('/streams/broken')
+    expect(res.status).toBe(200)
+    const reader = res.body!.getReader()
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('head')
+    seen.releaseStream()
+    // The client sees the body cut short, as the transport reports it.
+    await expect(reader.read()).rejects.toBeInstanceOf(Error)
+
+    expect(seen.streamCalls).toBe(1)
+    expect(registry.retry('streamed').metrics().successfulCallsWithoutRetry).toBe(1)
+    expect(registry.circuitBreaker('streamed').metrics().successfulCalls).toBe(1)
+    expect(registry.circuitBreaker('streamed').metrics().failedCalls).toBe(0)
   })
 })
