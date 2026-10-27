@@ -5,7 +5,7 @@ import type { Logger } from '@caffeinejs/application/logger'
 import { assertLoopbackHost } from '@caffeinejs/devtools'
 import { CaffeineIoC, type Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
-import { createWebApplication, csrf } from '@caffeinejs/http/fastify'
+import { createWebApplication, csrf, healthProbes } from '@caffeinejs/http/fastify'
 import { staticFiles } from '@caffeinejs/static'
 
 import { DevToolsAPI } from './api.js'
@@ -51,6 +51,9 @@ export function buildApp(options: BuildAppOptions = {}) {
       })
       // The refresh forms change something in the application the UI reads: no other site may post them.
       .with(csrf())
+      // `/livez`, `/readyz` and `/startupz`, for an orchestrator: they say whether the UI serves, whatever the devtools
+      // it reads answer.
+      .with(healthProbes())
       .with(() => html())
       .with(staticFiles(s => s.serve(join(root, 'public'), { prefix: '/static' })))
       .mount(

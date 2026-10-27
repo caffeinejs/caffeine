@@ -436,6 +436,22 @@ describe('devtools UI without devtools to read', () => {
     expect(page).toContain('CAFFEINE_DEVTOOLS_TARGET__URL')
     vi.unstubAllEnvs()
   })
+
+  it('answers its probes, so an orchestrator keeps it running while the devtools it reads are down', async () => {
+    vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__URL', 'http://127.0.0.1:1/devtools')
+    vi.stubEnv('CAFFEINE_DEVTOOLS_SERVER__PORT', '0')
+    const ui = buildApp({ logger: false })
+    const { address } = await ui.run()
+
+    try {
+      for (const probe of ['/livez', '/readyz', '/startupz']) {
+        expect((await fetch(new URL(probe, address.origin))).status, probe).toBe(200)
+      }
+    } finally {
+      await ui.close()
+      vi.unstubAllEnvs()
+    }
+  })
 })
 
 /** Authenticates `Bearer <user>:<role>` as that user, holding that role. */
