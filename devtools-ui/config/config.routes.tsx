@@ -2,7 +2,7 @@ import { Router } from '@caffeinejs/http'
 
 import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
-import { Badge, display } from '../shared/components/index.js'
+import { Badge, Table, display } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
 
 /**
@@ -27,7 +27,7 @@ export const configRouter = new Router('/config')
               Values are hidden. The application shows them with <code>showConfigValues()</code>, secrets masked.
             </p>
           )}
-          <table>
+          <Table>
             <thead>
               <tr>
                 <th>Path</th>
@@ -55,9 +55,9 @@ export const configRouter = new Router('/config')
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           <h2>Sources</h2>
-          <table>
+          <Table>
             <thead>
               <tr>
                 <th>Source</th>
@@ -84,7 +84,7 @@ export const configRouter = new Router('/config')
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         </>
       ),
     })
@@ -100,7 +100,7 @@ export const configRouter = new Router('/config')
           <p>
             <a href="/config">All values</a>
           </p>
-          <table>
+          <Table>
             <thead>
               <tr>
                 <th>Layer</th>
@@ -123,7 +123,7 @@ export const configRouter = new Router('/config')
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {property.layers.length === 0 ? <p class="muted">No layer sets it: the schema's default applies.</p> : ''}
         </>
       ),

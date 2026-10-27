@@ -2,7 +2,7 @@ import { Router } from '@caffeinejs/http'
 
 import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
-import { Badge, KeyValue, display } from '../shared/components/index.js'
+import { Badge, KeyValue, Table, display } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
 
 /** How an indicator's status reads on its badge. */
@@ -25,7 +25,7 @@ export const healthRouter = new Router('/health')
               <h2>
                 <span safe>{group}</span> <Badge tone={probe.ok ? 'good' : 'bad'} text={probe.ok ? 'ok' : 'failing'} />
               </h2>
-              <table>
+              <Table>
                 <thead>
                   <tr>
                     <th>Check</th>
@@ -58,7 +58,7 @@ export const healthRouter = new Router('/health')
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </>
           ))}
         </>

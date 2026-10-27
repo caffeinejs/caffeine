@@ -2,7 +2,7 @@ import { Router } from '@caffeinejs/http'
 
 import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
-import { Badge, display } from '../shared/components/index.js'
+import { Badge, Icon, Table, display, type IconName } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
 import { drawGraph } from './graph.js'
 
@@ -29,26 +29,29 @@ export const diRouter = new Router('/di')
       body: (
         <>
           <form class="filters" method="get" action="/di">
-            <input type="search" name="q" value={q} placeholder="Filter by key" />
-            <label>
-              <input type="checkbox" name="internal" value="true" checked={internal === 'true'} /> internal bindings
+            <label class="search">
+              <Icon name="search" />
+              <input type="search" name="q" value={q} placeholder="Filter by key" aria-label="Filter by key" />
             </label>
-            <button type="submit">Apply</button>
+            <label class="check">
+              <input type="checkbox" name="internal" value="true" checked={internal === 'true'} /> Internal bindings
+            </label>
+            <button type="submit" class="primary">
+              Apply
+            </button>
           </form>
-          <h2>Graph</h2>
           {svg === '' ? (
-            <p class="muted">No bindings to draw.</p>
-          ) : (
             <>
-              <p class="muted">Drag to move, scroll to zoom, click a binding to trace what it is wired to.</p>
-              {/* Markup Graphviz drew from a DOT this server wrote, labels escaped: see `drawGraph`. */}
-              <div class="di-graph">{svg}</div>
+              <h2>Graph</h2>
+              <p class="muted">No bindings to draw.</p>
             </>
+          ) : (
+            <GraphPanel svg={svg} />
           )}
           <h2>
             Bindings <span class="muted">({shown.length})</span>
           </h2>
-          <table>
+          <Table>
             <thead>
               <tr>
                 <th>Key</th>
@@ -80,8 +83,36 @@ export const diRouter = new Router('/di')
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         </>
       ),
     })
   })
+
+/** The graph in a panel of its own, under a header holding the zoom controls `graph.js` wires. */
+function GraphPanel(props: Readonly<{ svg: string }>): JSX.Element {
+  return (
+    <section class="graph-panel">
+      <header class="graph-head">
+        <h2>Graph</h2>
+        <p class="muted">Drag to move, scroll to zoom, click a binding to trace what it is wired to.</p>
+        <div class="graph-tools" role="toolbar" aria-label="Zoom">
+          <ZoomButton zoom="out" label="Zoom out" icon="zoomOut" />
+          <output class="zoom-level">100%</output>
+          <ZoomButton zoom="in" label="Zoom in" icon="zoomIn" />
+          <ZoomButton zoom="reset" label="Reset zoom" icon="fit" />
+        </div>
+      </header>
+      {/* Markup Graphviz drew from a DOT this server wrote, labels escaped: see `drawGraph`. */}
+      <div class="di-graph">{props.svg}</div>
+    </section>
+  )
+}
+
+function ZoomButton(props: Readonly<{ zoom: 'in' | 'out' | 'reset'; label: string; icon: IconName }>): JSX.Element {
+  return (
+    <button type="button" class="icon-button" data-zoom={props.zoom} title={props.label} aria-label={props.label}>
+      <Icon name={props.icon} />
+    </button>
+  )
+}

@@ -1,4 +1,6 @@
+import { readFile } from 'node:fs/promises'
 import { request } from 'node:http'
+import { createRequire } from 'node:module'
 
 import { newConfiguration } from '@caffeinejs/application'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
@@ -57,6 +59,63 @@ class Mailer extends HealthIndicator {
 }
 
 const listener = { host: '127.0.0.1', port: 0 }
+
+const THEME_KEY = 'caffeine-devtools:theme'
+const SIDEBAR_KEY = 'caffeine-devtools:sidebar'
+
+// jsdom ships no types, and this package is type-checked without the DOM library: the browser is driven untyped.
+const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: object) => any }
+
+interface Browsing {
+  /** Whether the system prefers a dark theme. */
+  readonly dark?: boolean
+  /** What a previous page left in localStorage. */
+  readonly stored?: Readonly<Record<string, string>>
+  /** `false` for a browser that refuses localStorage, as a private window can. */
+  readonly storage?: boolean
+}
+
+/** A page as a browser runs it, the UI's scripts inlined where the page loads them, once it has loaded. */
+async function browse(page: string, browsing: Browsing = {}): Promise<any> {
+  let inlined = page
+
+  for (const name of ['site.js', 'graph.js']) {
+    const source = await readFile(new URL(`../public/${name}`, import.meta.url), 'utf8')
+    inlined = inlined.replace(
+      new RegExp(`<script src="/static/${name}"( defer)?></script>`),
+      () => `<script>${source}</script>`,
+    )
+  }
+
+  const { window } = new JSDOM(inlined, {
+    url: 'http://127.0.0.1/',
+    runScripts: 'dangerously',
+    beforeParse(window: any) {
+      window.matchMedia = () => ({ matches: browsing.dark === true, addEventListener() {} })
+
+      for (const [key, value] of Object.entries(browsing.stored ?? {})) {
+        window.localStorage.setItem(key, value)
+      }
+
+      if (browsing.storage === false) {
+        Object.defineProperty(window, 'localStorage', {
+          get: () => {
+            throw new window.DOMException('The user denied storage', 'SecurityError')
+          },
+        })
+      }
+    },
+  })
+
+  await new Promise(resolve => window.addEventListener('load', resolve))
+  return window
+}
+
+/** A viewBox, to the precision floating point keeps after a few zooms. */
+function expectView(actual: number[], expected: number[]): void {
+  expect(actual).toHaveLength(4)
+  actual.forEach((value, at) => expect(value).toBeCloseTo(expected[at]!, 6))
+}
 
 describe('devtools UI', () => {
   let target: WebApplication
@@ -145,6 +204,92 @@ describe('devtools UI', () => {
 
     expect(res.status).toBe(200)
     expect(await res.text()).toContain("querySelectorAll('.di-graph')")
+  })
+
+  it('zooms the graph about its middle from the buttons, and resets it to the whole drawing', async () => {
+    const { document } = await browse(await html(client.di.get()))
+    const svg = document.querySelector('.di-graph svg')
+    const level = document.querySelector('.zoom-level')
+    const view = (): number[] => svg.getAttribute('viewBox').trim().split(/\s+/).map(Number)
+    const press = (zoom: string): void => document.querySelector(`.graph-panel [data-zoom="${zoom}"]`).click()
+    const [x, y, w, h] = view() as [number, number, number, number]
+
+    press('in')
+    // A press shows 1 / 1.25 of the width and height, centred where the view was.
+    expectView(view(), [x + w * 0.1, y + h * 0.1, w * 0.8, h * 0.8])
+    expect(level.textContent).toBe('125%')
+
+    press('out')
+    press('out')
+    expectView(view(), [x - w * 0.125, y - h * 0.125, w * 1.25, h * 1.25])
+    expect(level.textContent).toBe('80%')
+
+    press('reset')
+    expect(view()).toEqual([x, y, w, h])
+    expect(level.textContent).toBe('100%')
+  })
+
+  it('switches away from the theme the system uses, and the next page opens in the one chosen', async () => {
+    const page = await html(client.get())
+    const first = await browse(page, { dark: true })
+    const root = first.document.documentElement
+    const button = first.document.querySelector('[data-action="theme"]')
+
+    expect(root.dataset.theme).toBe(undefined)
+    expect(button.getAttribute('aria-label')).toBe('Switch to the light theme')
+
+    button.click()
+
+    expect(root.dataset.theme).toBe('light')
+    expect(button.getAttribute('aria-label')).toBe('Switch to the dark theme')
+    expect(first.localStorage.getItem(THEME_KEY)).toBe('light')
+
+    const next = await browse(page, { dark: true, stored: { [THEME_KEY]: 'light' } })
+
+    expect(next.document.documentElement.dataset.theme).toBe('light')
+  })
+
+  it('collapses the sidebar and expands it again, and the next page opens as it was left', async () => {
+    const page = await html(client.get())
+    const first = await browse(page)
+    const root = first.document.documentElement
+    const button = first.document.querySelector('[data-action="sidebar"]')
+
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+
+    button.click()
+
+    expect(root.dataset.sidebar).toBe('collapsed')
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(button.title).toBe('Expand the sidebar')
+    expect(first.localStorage.getItem(SIDEBAR_KEY)).toBe('collapsed')
+
+    const next = await browse(page, { stored: { [SIDEBAR_KEY]: 'collapsed' } })
+
+    expect(next.document.documentElement.dataset.sidebar).toBe('collapsed')
+    expect(next.document.querySelector('[data-action="sidebar"]').getAttribute('aria-expanded')).toBe('false')
+
+    button.click()
+
+    expect(root.dataset.sidebar).toBe(undefined)
+    expect(first.localStorage.getItem(SIDEBAR_KEY)).toBe('expanded')
+  })
+
+  it('still switches the theme and the sidebar where the browser refuses storage, for that page alone', async () => {
+    const { document } = await browse(await html(client.get()), { storage: false })
+
+    document.querySelector('[data-action="theme"]').click()
+    document.querySelector('[data-action="sidebar"]').click()
+
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    expect(document.documentElement.dataset.sidebar).toBe('collapsed')
+  })
+
+  it('serves the script that keeps the theme and the sidebar a person chose', async () => {
+    const res = await client.$fetch('/static/site.js')
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('javascript')
   })
 
   it('marks every page with the CaffeineJS icon, and serves it', async () => {

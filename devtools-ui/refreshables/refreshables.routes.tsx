@@ -2,7 +2,7 @@ import { Router } from '@caffeinejs/http'
 
 import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
-import { display } from '../shared/components/index.js'
+import { Table, display } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
 
 /**
@@ -23,7 +23,7 @@ export const refreshablesRouter = new Router('/refreshables')
         <>
           {refreshed === undefined ? '' : <p class="notice" safe>{`Refreshed: ${refreshed}`}</p>}
           <form class="filters" method="post" action="/refreshables/refreshes">
-            <select name="label">
+            <select name="label" aria-label="What to refresh">
               <option value="">every refreshable</option>
               {labels.map(label => (
                 <option value={label} safe>
@@ -31,9 +31,11 @@ export const refreshablesRouter = new Router('/refreshables')
                 </option>
               ))}
             </select>
-            <button type="submit">Refresh</button>
+            <button type="submit" class="primary">
+              Refresh
+            </button>
           </form>
-          <table>
+          <Table>
             <thead>
               <tr>
                 <th>Key</th>
@@ -56,7 +58,7 @@ export const refreshablesRouter = new Router('/refreshables')
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {refreshables.length === 0 ? <p class="muted">No injectable is refresh-scoped.</p> : ''}
         </>
       ),

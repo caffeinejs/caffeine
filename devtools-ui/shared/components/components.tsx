@@ -1,3 +1,5 @@
+import type { Children } from '@kitajs/html'
+
 /** A status word, coloured by what it says, escaped: it is often a value the devtools answered. */
 export function Badge(props: { tone: 'good' | 'bad' | 'warn' | 'muted'; text: string }): JSX.Element {
   return (
@@ -18,6 +20,15 @@ export function KeyValue(props: { rows: ReadonlyArray<readonly [string, unknown]
         </>
       ))}
     </dl>
+  )
+}
+
+/** A table on a panel of its own, which scrolls sideways when its columns do not fit beside the navigation. */
+export function Table(props: Readonly<{ children: Children }>): JSX.Element {
+  return (
+    <div class="table-scroll">
+      <table>{props.children}</table>
+    </div>
   )
 }
 

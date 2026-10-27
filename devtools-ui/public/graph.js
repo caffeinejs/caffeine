@@ -1,6 +1,11 @@
-// The dependency graph Graphviz drew, made explorable: drag to move it, scroll to zoom, click a binding to keep only it,
-// what it depends on and what depends on it, and click the background to show everything again. No library: the SVG is
-// already on the page, and this only moves its viewBox and toggles classes.
+// The dependency graph Graphviz drew, made explorable: drag to move it, scroll or press the zoom buttons to zoom, click
+// a binding to keep only it, what it depends on and what depends on it, and click the background to show everything
+// again. No library: the SVG is already on the page, and this only moves its viewBox and toggles classes.
+
+// How much one press of a zoom button zooms; a turn of the wheel zooms less, and more often.
+const BUTTON_STEP = 1.25
+const WHEEL_STEP = 1 / 0.9
+
 for (const box of document.querySelectorAll('.di-graph')) {
   const svg = box.querySelector('svg')
   if (svg === null) {
@@ -11,9 +16,29 @@ for (const box of document.querySelectorAll('.di-graph')) {
   svg.removeAttribute('width')
   svg.removeAttribute('height')
 
+  // The whole drawing, copied: `baseVal` follows the viewBox as it moves.
   const start = svg.viewBox.baseVal
-  let view = { x: start.x, y: start.y, w: start.width, h: start.height }
-  const show = () => svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`)
+  const whole = { x: start.x, y: start.y, w: start.width, h: start.height }
+  let view = { ...whole }
+  const panel = box.closest('.graph-panel')
+  const level = panel?.querySelector('.zoom-level')
+  const show = () => {
+    svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`)
+    if (level) {
+      level.textContent = `${Math.round((whole.w / view.w) * 100)}%`
+    }
+  }
+
+  // Zooms by `scale` about `point`, which stays where it is on the screen: above 1 zooms out, below 1 zooms in.
+  const zoom = (scale, point) => {
+    view = {
+      x: point.x - (point.x - view.x) * scale,
+      y: point.y - (point.y - view.y) * scale,
+      w: view.w * scale,
+      h: view.h * scale,
+    }
+    show()
+  }
 
   // The point under the cursor, in the drawing's own units.
   const at = event => {
@@ -28,18 +53,25 @@ for (const box of document.querySelectorAll('.di-graph')) {
     'wheel',
     event => {
       event.preventDefault()
-      const scale = event.deltaY < 0 ? 0.9 : 1 / 0.9
-      const point = at(event)
-      view = {
-        x: point.x - (point.x - view.x) * scale,
-        y: point.y - (point.y - view.y) * scale,
-        w: view.w * scale,
-        h: view.h * scale,
-      }
-      show()
+      zoom(event.deltaY < 0 ? 1 / WHEEL_STEP : WHEEL_STEP, at(event))
     },
     { passive: false },
   )
+
+  // The buttons zoom about the middle of what is shown; reset shows the whole drawing again.
+  const middle = () => ({ x: view.x + view.w / 2, y: view.y + view.h / 2 })
+  const buttons = {
+    in: () => zoom(1 / BUTTON_STEP, middle()),
+    out: () => zoom(BUTTON_STEP, middle()),
+    reset: () => {
+      view = { ...whole }
+      show()
+    },
+  }
+
+  for (const button of panel?.querySelectorAll('[data-zoom]') ?? []) {
+    button.addEventListener('click', buttons[button.dataset.zoom])
+  }
 
   let drag
   let dragged = false

@@ -3,7 +3,7 @@ import { Router } from '@caffeinejs/http'
 
 import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
-import { Badge, display } from '../shared/components/index.js'
+import { Badge, Table, display } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
 
 const EVERY_SERVER = '*'
@@ -46,7 +46,7 @@ export const routesRouter = new Router('/routes')
             </div>
           </section>
           <form class="filters" method="get" action="/routes">
-            <select name="server">
+            <select name="server" aria-label="Server">
               <option value={EVERY_SERVER} selected={only === undefined}>
                 every server
               </option>
@@ -56,7 +56,9 @@ export const routesRouter = new Router('/routes')
                 </option>
               ))}
             </select>
-            <button type="submit">Show</button>
+            <button type="submit" class="primary">
+              Show
+            </button>
           </form>
           {shown.map(server => (
             <>
@@ -64,7 +66,7 @@ export const routesRouter = new Router('/routes')
               <p class="muted" safe>
                 {`Gates: ${display(security.gates.find(gate => gate.server === server.server)?.gates)}${basePathOf(server)}`}
               </p>
-              <table>
+              <Table>
                 <thead>
                   <tr>
                     <th>Method</th>
@@ -93,7 +95,7 @@ export const routesRouter = new Router('/routes')
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </>
           ))}
         </>

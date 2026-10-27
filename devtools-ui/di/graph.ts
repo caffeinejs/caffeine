@@ -6,6 +6,17 @@ import { Graphviz } from '@hpcc-js/wasm-graphviz'
 let graphviz: Promise<Graphviz> | undefined
 
 /**
+ * How the UI draws every graph: no page behind it, and Helvetica, a face Graphviz has the metrics of, so the boxes it
+ * sizes fit the text the browser sets. Graphviz measures any name it does not know, a list of faces included, as
+ * Times. The stylesheet colours the rest by the theme.
+ */
+const LOOK = [
+  'graph [bgcolor=transparent, pad=0.25, nodesep=0.3, ranksep=0.6]',
+  'node [fontname=Helvetica, fontsize=12, margin="0.16,0.08"]',
+  'edge [fontname=Helvetica, fontsize=10, arrowsize=0.7]',
+]
+
+/**
  * Draws the dependency graph as an SVG document fragment, ready to place in a page.
  *
  * The DOT is written here, from the nodes and edges the devtools answered, never taken from them: Graphviz honours a
@@ -22,7 +33,8 @@ export async function drawGraph(graph: DependencyGraph, keep?: ReadonlySet<numbe
   }
 
   graphviz ??= Graphviz.load()
-  const svg = (await graphviz).dot(dot)
+  // Placed before the first node: a default holds for the statements after it, and `graphToDot` opens with `{`.
+  const svg = (await graphviz).dot(dot.replace('{', `{\n  ${LOOK.join('\n  ')}`))
 
   // Graphviz writes a whole document: the page takes the `<svg>` element alone.
   return svg.slice(svg.indexOf('<svg'))

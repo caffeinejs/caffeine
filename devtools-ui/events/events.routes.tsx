@@ -2,7 +2,7 @@ import { Router } from '@caffeinejs/http'
 
 import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
-import { Badge, display } from '../shared/components/index.js'
+import { Badge, Table, display } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
 
 /** What the container did since the devtools attached to it, newest first. */
@@ -15,7 +15,7 @@ export const eventsRouter = new Router('/events')
       title: 'Container events',
       active: '/events',
       body: (
-        <table>
+        <Table>
           <thead>
             <tr>
               <th>#</th>
@@ -40,7 +40,7 @@ export const eventsRouter = new Router('/events')
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       ),
     })
   })

@@ -2,7 +2,7 @@ import { Router } from '@caffeinejs/http'
 
 import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
-import { Badge, KeyValue } from '../shared/components/index.js'
+import { Badge, Icon, KeyValue, toolIcon } from '../shared/components/index.js'
 import { page, pageOf } from '../shared/layout/index.js'
 
 /** The overview: what the application is, whether it is healthy, and every tool the devtools serve. */
@@ -45,10 +45,15 @@ export const homeRouter = new Router('/')
           <ul class="tools">
             {index.tools.map(tool => (
               <li>
-                <a href={pageOf(tool.id)} safe>
-                  {tool.title}
+                <a href={pageOf(tool.id)}>
+                  <Icon name={toolIcon(tool.id)} />
+                  <span>
+                    <strong safe>{tool.title}</strong>
+                    <span class="tool-description" safe>
+                      {tool.description}
+                    </span>
+                  </span>
                 </a>
-                <span safe>{tool.description}</span>
               </li>
             ))}
           </ul>

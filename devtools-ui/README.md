@@ -49,7 +49,7 @@ On a loopback address it answers loopback host names alone, so a page using DNS 
 | Routes               | Every route of every server: its gate and schemes, its roles and policies, its guards, its cross-origin protection                                                    |
 | Refreshables         | The refresh-scoped injectables, refreshed all at once, by label, or one at a time                                                                                     |
 | Container events     | What the container did since the devtools attached to it                                                                                                              |
-| Runtime              | Memory, heap, CPU, event-loop utilization and active resources                                                                                                        |
+| Runtime              | CPU, event loop, heap and resident memory as shares, then memory, heap, CPU time and active resources                                                                 |
 
 ## Layout
 
@@ -63,5 +63,6 @@ devtools-ui/
   api.ts          the devtools client, typed by DevToolsRoutes
   shared/         layout, error pages, components
   <page>/         one router per page
-  public/         stylesheet, and the script that makes the graph explorable
+  public/         stylesheet, the script that keeps the theme and sidebar a person chose, and the script
+                  that makes the graph explorable
 ```
