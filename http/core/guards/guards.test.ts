@@ -206,7 +206,7 @@ describe('guard', () => {
 
     const res = await built.request('/guard-deny/async-result')
     expect(res.status).toBe(403)
-    expect(await res.json()).toMatchObject({ message: 'later' })
+    expect(await res.json()).toMatchObject({ detail: 'later' })
 
     await built.close()
   })
@@ -577,17 +577,18 @@ describe('denial', () => {
     DenialController,
   ]
 
-  it('renders the default 403 envelope for boolean false', async () => {
+  it('renders the default 403 problem for boolean false', async () => {
     const built = buildApp()
     await built.bootstrap()
 
     const res = await built.request('/denial/false')
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({
-      statusCode: 403,
-      error: 'Forbidden',
+      type: 'about:blank',
+      title: 'Forbidden',
+      status: 403,
+      detail: 'Resource forbidden',
       code: 'ERR_HTTP_FORBIDDEN',
-      message: 'Resource forbidden',
     })
 
     await built.close()
@@ -600,10 +601,11 @@ describe('denial', () => {
     const res = await built.request('/denial/reason')
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({
-      statusCode: 403,
-      error: 'Forbidden',
+      type: 'about:blank',
+      title: 'Forbidden',
+      status: 403,
+      detail: 'token expired',
       code: 'ERR_HTTP_FORBIDDEN',
-      message: 'token expired',
     })
 
     await built.close()
@@ -617,10 +619,11 @@ describe('denial', () => {
     const res = await built.request('/denial/unauthenticated')
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({
-      statusCode: 401,
-      error: 'Unauthorized',
+      type: 'about:blank',
+      title: 'Unauthorized',
+      status: 401,
+      detail: 'session expired',
       code: 'ERR_HTTP_UNAUTHORIZED',
-      message: 'session expired',
     })
 
     await built.close()
@@ -632,7 +635,7 @@ describe('denial', () => {
 
     const res = await built.request('/denial/unauthenticated-no-reason')
     expect(res.status).toBe(401)
-    expect(await res.json()).toMatchObject({ code: 'ERR_HTTP_UNAUTHORIZED', message: 'Unauthorized' })
+    expect(await res.json()).toMatchObject({ code: 'ERR_HTTP_UNAUTHORIZED', detail: 'Unauthorized' })
 
     await built.close()
   })

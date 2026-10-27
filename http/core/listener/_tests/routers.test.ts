@@ -196,7 +196,7 @@ describe('routers on a listener with middleware, guards and plugins', () => {
     })
   })
 
-  it("answers on the listener with the application's error handlers and its not-found envelope", async () => {
+  it("answers on the listener with the application's error handlers and its not-found problem", async () => {
     app = createWebApplication()
       .listener('admin', admin)
       .server(() => ({ listener }))

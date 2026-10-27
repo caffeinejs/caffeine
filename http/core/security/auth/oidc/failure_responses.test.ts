@@ -78,10 +78,11 @@ describe('a sign-in that cannot go ahead', () => {
 
     expect(res.status).toBe(502)
     expect(JSON.parse(text)).toEqual({
-      statusCode: 502,
-      error: 'Bad Gateway',
+      type: 'about:blank',
+      title: 'Bad Gateway',
+      status: 502,
+      detail: 'Authentication provider is unavailable',
       code: 'ERR_OIDC_DISCOVERY',
-      message: 'Authentication provider is unavailable',
     })
     expect(text).not.toContain('10.0.0.7')
     expect(text).not.toContain('idp.internal')
@@ -97,7 +98,7 @@ describe('a sign-in that cannot go ahead', () => {
     const text = await res.text()
 
     expect(res.status).toBe(502)
-    expect(JSON.parse(text)).toMatchObject({ statusCode: 502, message: 'Authentication provider is unavailable' })
+    expect(JSON.parse(text)).toMatchObject({ status: 502, detail: 'Authentication provider is unavailable' })
     expect(text).not.toContain('10.0.0.7')
     expect(text).not.toContain('idp.internal')
 
@@ -122,7 +123,7 @@ describe('a sign-in that cannot go ahead', () => {
     const text = await res.text()
 
     expect(res.status).toBe(400)
-    expect(JSON.parse(text)).toMatchObject({ code: 'ERR_OAUTH_CALLBACK', message: 'Authentication failed' })
+    expect(JSON.parse(text)).toMatchObject({ code: 'ERR_OAUTH_CALLBACK', detail: 'Authentication failed' })
     expect(text).not.toContain('jane')
 
     // On record for whoever looks, at the level of a request and not of a fault (pino: 30 is info, 50 is error).
@@ -144,7 +145,7 @@ describe('a sign-in that cannot go ahead', () => {
     const res = await app.request('/broken')
 
     expect(res.status).toBe(418)
-    expect(await res.json()).toMatchObject({ message: 'teapot' })
+    expect(await res.json()).toMatchObject({ detail: 'teapot' })
 
     await app.close()
   })

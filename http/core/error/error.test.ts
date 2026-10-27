@@ -19,7 +19,8 @@ import {
   $p,
   type ActionResult,
 } from '../../index.js'
-import { createWebApplication } from '../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
+import { ErrConfiguration } from './common.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
 // ---------------------------------------------------------------------------
@@ -611,5 +612,58 @@ describe('@CatchWith', () => {
 
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ caught: 'orphan delta' })
+  })
+})
+
+describe('problemContentType', () => {
+  function conflicts() {
+    return newRouter('/media')
+      .get('/thrown', () => {
+        throw new ErrHTTPConflict('nope')
+      })
+      .get('/helper', ctx => {
+        ctx.notFound()
+      })
+  }
+
+  // The escape hatch for a client that refuses anything but application/json: the body stays the problem.
+  it('sends every problem the framework renders under the media type the application chose', async () => {
+    const app = createWebApplication()
+      .errorHandling(e => e.problemContentType('application/json'))
+      .mount(conflicts())
+    await app.bootstrap()
+
+    const thrown = await app.request('/media/thrown')
+    expect(thrown.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    expect(await thrown.json()).toEqual({
+      type: 'about:blank',
+      title: 'Conflict',
+      status: 409,
+      detail: 'nope',
+      code: 'ERR_HTTP_CONFLICT',
+    })
+
+    const helper = await app.request('/media/helper')
+    expect(helper.headers.get('content-type')).toBe('application/json; charset=utf-8')
+
+    const unmatched = await app.request('/media/none')
+    expect(unmatched.headers.get('content-type')).toBe('application/json; charset=utf-8')
+
+    await app.close()
+  })
+
+  // The server serializes an object only under a JSON media type; any other would fail every error at runtime.
+  it('refuses a media type that is not JSON at start-up', async () => {
+    const app = createWebApplication().errorHandling(e => e.problemContentType('text/html'))
+
+    const failure = await app.bootstrap().then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+
+    expect(failure).toBeInstanceOf(ErrConfiguration)
+    expect((failure as Error).message.split('\n')[0]).toBe(
+      'Cannot send problems as "text/html": it is not a JSON media type',
+    )
   })
 })

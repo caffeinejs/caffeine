@@ -73,7 +73,7 @@ describe('the API', () => {
 
   // One line in `spa/pages.ts` covers a router base and two controller bases — and every future one.
   describe('the API owns its own misses', () => {
-    it('answers an unknown API path with the JSON envelope, for a navigation as much as for a fetch', async () => {
+    it('answers an unknown API path with the problem, for a navigation as much as for a fetch', async () => {
       for (const path of ['/api/typo', '/api/projects/brew/deep', '/api/profile/extra']) {
         await expectNotFoundJSON(await app.request(path, { headers: { ...NAVIGATION, cookie: member.cookie } }))
         await expectNotFoundJSON(await app.request(path, { headers: { ...XHR, cookie: member.cookie } }))

@@ -104,19 +104,19 @@ export async function signIn(app: WebApplication, username: string, password: st
   return { cookie: header(cookies) }
 }
 
-/** Asserts the JSON envelope the error pipeline renders for a 404, which is what "not the page" means here. */
+/** Asserts the problem the error pipeline renders for a 404, which is what "not the page" means here. */
 export async function expectNotFoundJSON(res: Response): Promise<void> {
   if (res.status !== 404) {
     throw new Error(`expected 404, got ${res.status}: ${await res.text()}`)
   }
 
   const type = res.headers.get('content-type') ?? ''
-  if (!type.startsWith('application/json')) {
-    throw new Error(`expected a JSON 404, got content-type "${type}"`)
+  if (!type.startsWith('application/problem+json')) {
+    throw new Error(`expected a problem 404, got content-type "${type}"`)
   }
 
-  const body = (await res.json()) as { statusCode?: number; code?: string }
-  if (body.statusCode !== 404 || body.code !== 'ERR_HTTP_NOT_FOUND') {
-    throw new Error(`expected the ERR_HTTP_NOT_FOUND envelope, got ${JSON.stringify(body)}`)
+  const body = (await res.json()) as { status?: number; code?: string }
+  if (body.status !== 404 || body.code !== 'ERR_HTTP_NOT_FOUND') {
+    throw new Error(`expected the ERR_HTTP_NOT_FOUND problem, got ${JSON.stringify(body)}`)
   }
 }

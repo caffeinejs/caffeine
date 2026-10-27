@@ -7,6 +7,7 @@ import {
   AuthenticationService,
   RouteBuilder,
   kAuthSchemeDescriptors,
+  kErrorHandlingOptions,
   type AuthSchemeDescriptor,
   type RouteAuthzOptions,
   type IRouteGroup,
@@ -130,6 +131,7 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
               routeGroups: routeGroups() as Array<IRouteGroup<unknown>>,
               options: withBasePathServer(options, instance.$basePath),
               schemes: descriptors,
+              problemContentType: instance.$container.getOptional(kErrorHandlingOptions)?.problemContentType,
               onWarning: message => warnings.push(message),
             })
           : readDocument(options.source)

@@ -83,16 +83,17 @@ function post(app: Requesting, path: string, headers: Record<string, string> = {
   return app.request(path, { method: 'POST', headers })
 }
 
-/** The standard envelope a refusal renders, which carries no header value. */
+/** The standard problem a refusal renders, which carries no header value. */
 async function expectRefused(res: Response): Promise<void> {
   expect(res.status).toBe(403)
 
   const text = await res.text()
   expect(JSON.parse(text)).toEqual({
-    statusCode: 403,
-    error: 'Forbidden',
+    type: 'about:blank',
+    title: 'Forbidden',
+    status: 403,
+    detail: 'Cannot accept the request: it is cross-origin',
     code: 'ERR_CSRF_CROSS_ORIGIN',
-    message: 'Cannot accept the request: it is cross-origin',
   })
   expect(text).not.toContain('evil.example')
 }

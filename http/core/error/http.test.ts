@@ -5,11 +5,13 @@ import {
   Catch,
   type IContext,
   Controller,
+  ErrHTTP,
   ErrHTTPBadRequest,
   ErrHTTPConflict,
+  ErrHTTPUnauthorized,
   ErrorHandler,
   Get,
-  type HTTPErrorBody,
+  type Problem,
   Post,
   Schema,
   type ActionResult,
@@ -30,9 +32,11 @@ function loggingTo(logged: LogEntry[]) {
   return createWebApplication().server(() => ({ factory: { logger: pinoTo(logged) } }))
 }
 
-async function bodyOf(response: Response): Promise<HTTPErrorBody> {
-  return (await response.json()) as HTTPErrorBody
+async function bodyOf(response: Response): Promise<Problem> {
+  return (await response.json()) as Problem
 }
+
+const PROBLEM_JSON = 'application/problem+json; charset=utf-8'
 
 @Controller('/http-err')
 class HTTPErrController {
@@ -49,6 +53,39 @@ class HTTPErrController {
   @Get('/with-headers')
   headers(): ActionResult {
     throw new ErrHTTPBadRequest('bad', { headers: { 'x-detail': 'why' } })
+  }
+
+  @Get('/typed')
+  typed(): ActionResult {
+    throw ErrHTTP.builder()
+      .statusCode(409)
+      .message('Order 42 is already paid')
+      .code('ERR_ORDER_PAID')
+      .type('https://example.com/problems/order-paid')
+      .instance('/orders/42')
+      .extension('orderID', '42')
+      .extensions({ balance: 0 })
+      .build()
+  }
+
+  @Get('/forged')
+  forged(): ActionResult {
+    throw new ErrHTTPConflict('nope', { extensions: { status: 200, title: 'OK', stacktrace: 'forged', retry: false } })
+  }
+
+  @Get('/typed-body')
+  typedBody(): ActionResult {
+    throw new ErrHTTPConflict('nope', {
+      body: { mine: true },
+      type: 'https://example.com/problems/conflict',
+      instance: '/orders/42',
+      extensions: { orderID: '42' },
+    })
+  }
+
+  @Get('/challenge')
+  challenge(): ActionResult {
+    throw new ErrHTTPUnauthorized('Sign in first', { headers: { 'www-authenticate': 'Bearer realm="api"' } })
   }
 }
 void [HTTPErrController]
@@ -79,6 +116,11 @@ class UnexpectedController {
     })
   }
 
+  @Get('/teapot')
+  teapot(): ActionResult {
+    throw Object.assign(new Error('short and stout'), { statusCode: 418 })
+  }
+
   @Post('/validated')
   @Schema({ body: $t.Object({ name: $t.String({ minLength: 1 }) }) })
   validated(): ActionResult {
@@ -87,7 +129,7 @@ class UnexpectedController {
 }
 void [UnexpectedController]
 
-// Declared in the same module as the tests that assert the default envelope, and deliberately so: a handler
+// Declared in the same module as the tests that assert the default problem, and deliberately so: a handler
 // class nobody enrols renders nothing, so it cannot reach the applications built below.
 @Catch(ErrHTTPConflict)
 class NeverEnrolledHandler implements ErrorHandler<ErrHTTPConflict> {
@@ -97,26 +139,110 @@ class NeverEnrolledHandler implements ErrorHandler<ErrHTTPConflict> {
 }
 void [NeverEnrolledHandler]
 
-describe('ErrHTTP envelope fallback', () => {
-  it('renders the status and a structured envelope for an unhandled ErrHTTP', async () => {
+describe('ErrHTTP problem fallback', () => {
+  it('renders an unhandled ErrHTTP as an RFC 9457 problem', async () => {
     const app = createWebApplication()
     await app.bootstrap()
 
     const res = await app.request('/http-err/conflict')
 
     expect(res.status).toBe(409)
-    // `error` is the status phrase, `message` the detail — the two are not interchangeable.
+    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    // `title` is the status phrase, `detail` the message — the two are not interchangeable.
     expect(await res.json()).toEqual({
-      error: 'Conflict',
+      type: 'about:blank',
+      title: 'Conflict',
+      status: 409,
+      detail: 'nope',
       code: 'ERR_HTTP_CONFLICT',
-      statusCode: 409,
-      message: 'nope',
     })
 
     await app.close()
   })
 
-  it('sends a falsy-but-defined body verbatim instead of the envelope', async () => {
+  // A client that only asked for JSON still gets the problem media type: it is JSON, and it says what it is.
+  it('sends the problem media type when the request accepts application/json', async () => {
+    const app = createWebApplication()
+    await app.bootstrap()
+
+    const res = await app.request('/http-err/conflict', { headers: { accept: 'application/json' } })
+
+    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+
+    await app.close()
+  })
+
+  it('sends the type, instance and extensions the error carries', async () => {
+    const app = createWebApplication()
+    await app.bootstrap()
+
+    const res = await app.request('/http-err/typed')
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      type: 'https://example.com/problems/order-paid',
+      title: 'Conflict',
+      status: 409,
+      detail: 'Order 42 is already paid',
+      code: 'ERR_ORDER_PAID',
+      instance: '/orders/42',
+      orderID: '42',
+      balance: 0,
+    })
+
+    await app.close()
+  })
+
+  // An extension cannot change what the status line says, nor slip a stack trace past `exposeStacktrace`.
+  it('drops an extension named like a member the problem defines', async () => {
+    const app = createWebApplication()
+    await app.bootstrap()
+
+    const res = await app.request('/http-err/forged')
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: 'Conflict',
+      status: 409,
+      detail: 'nope',
+      code: 'ERR_HTTP_CONFLICT',
+      retry: false,
+    })
+
+    await app.close()
+  })
+
+  // A body the error carried is the author's: it keeps its media type, and none of the problem's fields join it.
+  it('sends a body the error carried as it stands, without the problem fields or media type', async () => {
+    const app = createWebApplication()
+    await app.bootstrap()
+
+    const res = await app.request('/http-err/typed-body')
+
+    expect(res.status).toBe(409)
+    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    expect(await res.json()).toEqual({ mine: true })
+
+    await app.close()
+  })
+
+  // The body does not stand in for a challenge: a client that authenticates reads `WWW-Authenticate`.
+  it('keeps the headers an ErrHTTP carries beside the problem', async () => {
+    const app = createWebApplication()
+    await app.bootstrap()
+
+    const res = await app.request('/http-err/challenge')
+
+    expect(res.status).toBe(401)
+    expect(res.headers.get('www-authenticate')).toBe('Bearer realm="api"')
+    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(await res.json()).toMatchObject({ status: 401, detail: 'Sign in first', code: 'ERR_HTTP_UNAUTHORIZED' })
+
+    await app.close()
+  })
+
+  it('sends a falsy-but-defined body verbatim instead of the problem', async () => {
     const app = createWebApplication()
     await app.bootstrap()
 
@@ -142,9 +268,9 @@ describe('ErrHTTP envelope fallback', () => {
     await app.close()
   })
 
-  // The envelope is what an application gets for free. A @Catch class declared anywhere in the process used to
+  // The problem is what an application gets for free. A @Catch class declared anywhere in the process used to
   // replace it by being imported; now only the application naming the handler does.
-  it('keeps the envelope when a matching handler was declared but never enrolled', async () => {
+  it('keeps the problem when a matching handler was declared but never enrolled', async () => {
     const app = createWebApplication()
     await app.bootstrap()
 
@@ -156,16 +282,64 @@ describe('ErrHTTP envelope fallback', () => {
     await app.close()
   })
 
-  it('replaces the envelope once the application enrols that same handler', async () => {
+  it('replaces the problem once the application enrols that same handler', async () => {
     const app = createWebApplication().errorHandling(e => e.globalHandlers(NeverEnrolledHandler))
     await app.bootstrap()
 
     const res = await app.request('/http-err/conflict')
 
     expect(res.status).toBe(418)
+    // What a handler answers is its own: the framework does not relabel an object as a problem.
+    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
     expect(await res.json()).toEqual({ enrolled: true })
 
     await app.close()
+  })
+})
+
+// A handler that keeps the problem contract states the media type itself: the framework never guesses it.
+@Catch(ErrHTTPConflict)
+class ProblemHandler implements ErrorHandler<ErrHTTPConflict> {
+  handle(ctx: IContext, err: ErrHTTPConflict): ActionResult {
+    ctx.status(err.statusCode).header('content-type', 'application/problem+json')
+    return { ...err.toProblem(), handledBy: 'ProblemHandler' }
+  }
+}
+void [ProblemHandler]
+
+describe('ErrHTTP.toProblem', () => {
+  it('lets a @Catch handler answer with the problem under the media type it sets', async () => {
+    const app = createWebApplication().errorHandling(e => e.globalHandlers(ProblemHandler))
+    await app.bootstrap()
+
+    const res = await app.request('/http-err/conflict')
+
+    expect(res.status).toBe(409)
+    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: 'Conflict',
+      status: 409,
+      detail: 'nope',
+      code: 'ERR_HTTP_CONFLICT',
+      handledBy: 'ProblemHandler',
+    })
+
+    await app.close()
+  })
+
+  // What a @Catch handler returns to keep the contract while it adds something of its own, such as a log line.
+  it('renders the same problem the error handler sends', () => {
+    const err = new ErrHTTPConflict('nope', { type: 'https://example.com/problems/conflict', instance: '/orders/42' })
+
+    expect(err.toProblem()).toEqual({
+      type: 'https://example.com/problems/conflict',
+      title: 'Conflict',
+      status: 409,
+      detail: 'nope',
+      code: 'ERR_HTTP_CONFLICT',
+      instance: '/orders/42',
+    })
   })
 })
 
@@ -181,11 +355,13 @@ describe('an unexpected failure', () => {
     const text = await res.text()
 
     expect(res.status).toBe(500)
+    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
     expect(JSON.parse(text)).toEqual({
-      statusCode: 500,
-      error: 'Internal Server Error',
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Internal Server Error',
       code: 'ERR_INTERNAL',
-      message: 'Internal Server Error',
     })
     // The name of the table a statement failed on is the caller's business in no deployment.
     expect(text).not.toContain('customers')
@@ -207,19 +383,20 @@ describe('an unexpected failure', () => {
 
     expect(res.status).toBe(503)
     expect(JSON.parse(text)).toEqual({
-      statusCode: 503,
-      error: 'Service Unavailable',
+      type: 'about:blank',
+      title: 'Service Unavailable',
+      status: 503,
+      detail: 'Service Unavailable',
       code: 'ERR_INTERNAL',
-      message: 'Service Unavailable',
     })
     expect(text).not.toContain('10.0.0.5')
 
     await app.close()
   })
 
-  // A 4xx describes what the caller got wrong, so Fastify's own rendering is what answers — and a request
-  // somebody got wrong is not a fault for an operator to be paged about.
-  it('leaves a 4xx alone, with its field detail, and logs it as information', async () => {
+  // A 4xx describes what the caller got wrong, so its message is the detail and each failed rule is listed — and a
+  // request somebody got wrong is not a fault for an operator to be paged about.
+  it('renders a schema failure as a problem listing each failed rule, and logs it as information', async () => {
     const logged: LogEntry[] = []
     const app = loggingTo(logged)
     await app.bootstrap()
@@ -229,14 +406,81 @@ describe('an unexpected failure', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: '' }),
     })
-    const body = await bodyOf(res)
 
     expect(res.status).toBe(400)
-    expect(body.message).toContain('name')
+    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: 'Bad Request',
+      status: 400,
+      detail: 'body/name must NOT have fewer than 1 characters',
+      code: 'FST_ERR_VALIDATION',
+      errors: [{ path: 'body.name', message: 'must NOT have fewer than 1 characters', code: 'minLength' }],
+    })
 
-    const entries = logged.filter(entry => entry.msg?.includes('name'))
-    expect(entries.length).toBeGreaterThan(0)
-    expect(entries.every(entry => entry.level === 30)).toBe(true)
+    const entries = logged.filter(entry => entry.msg === 'body/name must NOT have fewer than 1 characters')
+    expect(entries.map(entry => entry.level)).toEqual([30])
+
+    await app.close()
+  })
+
+  // Ajv reports a missing property at the object that lacks it; the path names the property itself.
+  it('names a missing property in its path', async () => {
+    const app = createWebApplication()
+    await app.bootstrap()
+
+    const res = await app.request('/unexpected/validated', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+
+    expect(res.status).toBe(400)
+    expect((await bodyOf(res)).errors).toEqual([
+      { path: 'body.name', message: "must have required property 'name'", code: 'required' },
+    ])
+
+    await app.close()
+  })
+
+  // Fastify refuses a body it cannot parse before any handler runs; its code is what a client can look up.
+  it('renders a request Fastify refused as a problem with its own code', async () => {
+    const app = createWebApplication()
+    await app.bootstrap()
+
+    const res = await app.request('/unexpected/validated', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{',
+    })
+
+    expect(res.status).toBe(400)
+    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: 'Bad Request',
+      status: 400,
+      detail: "Body is not valid JSON but content-type is set to 'application/json'",
+      code: 'FST_ERR_CTP_INVALID_JSON_BODY',
+    })
+
+    await app.close()
+  })
+
+  it('names the status in the code of a 4xx that carries none', async () => {
+    const app = createWebApplication()
+    await app.bootstrap()
+
+    const res = await app.request('/unexpected/teapot')
+
+    expect(res.status).toBe(418)
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: "I'm a Teapot",
+      status: 418,
+      detail: 'short and stout',
+      code: 'ERR_HTTP_IM_A_TEAPOT',
+    })
 
     await app.close()
   })
@@ -249,8 +493,8 @@ describe('exposeStacktrace', () => {
 
     const body = await bodyOf(await app.request('/unexpected/boom'))
 
-    // The envelope a client parses does not change shape with a server setting.
-    expect(body.message).toBe('Internal Server Error')
+    // The problem a client parses does not change shape with a server setting.
+    expect(body.detail).toBe('Internal Server Error')
     expect(body.stacktrace).toContain('relation "customers" does not exist')
     expect(body.stacktrace).toContain('at ')
 
@@ -276,11 +520,11 @@ describe('exposeStacktrace', () => {
     await app.bootstrap()
 
     const conflict = await bodyOf(await app.request('/http-err/conflict'))
-    expect(conflict.message).toBe('nope')
+    expect(conflict.detail).toBe('nope')
     expect(conflict.stacktrace).toContain('ErrHTTPConflict')
 
     const upstream = await bodyOf(await app.request('/unexpected/upstream'))
-    expect(upstream.message).toBe('Upstream is unavailable')
+    expect(upstream.detail).toBe('Upstream is unavailable')
     expect(upstream.stacktrace).toContain('idp.internal')
 
     await app.close()

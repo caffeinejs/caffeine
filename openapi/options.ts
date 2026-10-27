@@ -93,7 +93,7 @@ export interface OpenAPIOptions {
 
   infer: InferenceOptions
   errors: ErrorStatusOptions
-  /** The body of an inferred error response. */
+  /** The body of an inferred error response, in place of the RFC 9457 problem the server renders. */
   errorSchema: AnySchema | undefined
 
   /** Structurally deduplicate repeated anonymous schemas into `components.schemas`. Off by default. */

@@ -885,10 +885,11 @@ describe('cookies turned off', () => {
 
     expect(response.status).toBe(500)
     expect(JSON.parse(text)).toEqual({
-      statusCode: 500,
-      error: 'Internal Server Error',
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Internal Server Error',
       code: 'ERR_INTERNAL',
-      message: 'Internal Server Error',
     })
     expect(text).not.toContain('disabled')
 

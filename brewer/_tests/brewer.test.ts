@@ -528,7 +528,7 @@ describe('brewer against an application in process', () => {
 
       expect(res.ok).toBe(false)
       expect(res.status).toBe(500)
-      expect(await res.json()).toMatchObject({ statusCode: 500, code: 'ERR_INTERNAL' })
+      expect(await res.json()).toMatchObject({ status: 500, code: 'ERR_INTERNAL' })
     })
   })
 

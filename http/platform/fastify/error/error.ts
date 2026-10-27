@@ -1,17 +1,34 @@
+import { STATUS_CODES } from 'node:http'
+
+import type { SchemaIssue } from '@caffeinejs/application/schema'
 import { errMessage } from '@caffeinejs/std/err'
-import type { FastifyError, FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
+import type {
+  FastifyError,
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+  FastifySchemaValidationError,
+} from 'fastify'
 import fp from 'fastify-plugin'
 
 import { ErrCaffeineWebApplication } from '../../../core/error/common.js'
 import type { GlobalErrorHandlerOptions } from '../../../core/error/error.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from '../../../core/error/handler.js'
-import { ErrHTTP, httpErrorBody, statusErrorBody, type HTTPErrorBody } from '../../../core/error/http.js'
+import { ErrHTTP } from '../../../core/error/http.js'
+import { newProblem, PROBLEM_CONTENT_TYPE, type Problem } from '../../../core/error/problem.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
 import { answer, payloadOf } from '../response.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
+
+const kProblemContentType = Symbol('caffeine.http.problem-content-type')
+
+interface ProblemInstance {
+  [kProblemContentType]?: string
+}
 
 // A cause chain is walked on a request path, and one can be circular as well as long.
 const MAX_CAUSE_DEPTH = 10
@@ -54,10 +71,16 @@ export function globalErrorHandlerPlugin(
   options?: GlobalErrorHandlerOptions,
 ): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
+    instance.decorate(kProblemContentType, options?.problemContentType ?? PROBLEM_CONTENT_TYPE)
     ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider), options)
   }
 
   return fp(plugin, { name: 'caffeine-error-handling' })
+}
+
+/** The media type the server `request` came to sends a problem as. */
+export function problemContentType(request: FastifyRequest): string {
+  return (request.server as unknown as ProblemInstance)[kProblemContentType] ?? PROBLEM_CONTENT_TYPE
 }
 
 /**
@@ -71,11 +94,16 @@ export function installGlobalErrorHandler(
   errorManager: ErrorHandlerProvider,
   options?: GlobalErrorHandlerOptions,
 ): GlobalErrorHandler {
-  const defaultErrorHandler = fastify.errorHandler
   const exposeStacktrace = options?.exposeStacktrace ?? false
+  const contentType = options?.problemContentType ?? PROBLEM_CONTENT_TYPE
 
-  const withStacktrace = (body: HTTPErrorBody, err: Error): HTTPErrorBody =>
-    exposeStacktrace ? { ...body, stacktrace: stacktraceOf(err) } : body
+  // Under the problem media type whatever the request accepts: the body is a problem either way, and a client
+  // reading `application/json` reads it as well.
+  const sendProblem = (reply: FastifyReply, problem: Problem, err: Error): FastifyReply =>
+    reply
+      .status(problem.status)
+      .type(contentType)
+      .send(exposeStacktrace ? { ...problem, stacktrace: stacktraceOf(err) } : problem)
 
   // The application-wide error handler. Also the fallback for per-controller (encapsulated) handlers
   // when they do not handle a given error type.
@@ -89,48 +117,62 @@ export function installGlobalErrorHandler(
     }
 
     if (err instanceof ErrHTTP) {
-      reply.status(err.statusCode)
-
       if (err.headers) {
         reply.headers(err.headers)
       }
 
-      // A body the error carried is the author's own and is sent as it stands — it need not be an object,
-      // so there is nothing to add a stack trace to.
-      const body = err.body !== undefined ? err.body : withStacktrace(httpErrorBody(err), err)
+      if (err.body === undefined) {
+        return sendProblem(reply, err.toProblem(), err)
+      }
 
+      // A body the error carried is the author's own and is sent as it stands, under the media type the reply
+      // already has — it need not be an object, so there is nothing to add a stack trace to.
       // The error's status stands over a Response given as its body.
-      return reply.send(payloadOf(reply, body, true))
+      return reply.status(err.statusCode).send(payloadOf(reply, err.body, true))
     }
 
     // Its message is detail for the log: an issuer, the address a provider could not be reached at.
     if (hasPublicMessage(err)) {
       request.log[err.statusCode >= 500 ? 'error' : 'info']({ err }, err.message)
 
-      return reply
-        .status(err.statusCode)
-        .send(withStacktrace(statusErrorBody(err.statusCode, err.code, err.publicMessage), err))
+      return sendProblem(reply, newProblem({ status: err.statusCode, code: err.code, detail: err.publicMessage }), err)
     }
 
     const status = errorStatus(err)
 
-    // A 4xx describes what the caller got wrong, so its message is written for them and Fastify's own
-    // rendering — the field-level detail of a failed validation — is what answers.
+    // A 4xx describes what the caller got wrong — a failed validation, a body over the limit, JSON that does not
+    // parse — so its message is written for them and answers as the detail, Fastify's own code kept.
     if (status < 500) {
       request.log.info({ err }, err.message)
 
-      // The default handler sends the reply itself. Handed back as the result, the reply tells the runner so;
-      // `undefined` would have it send again while an asynchronous `onSend` hook still holds the first response.
-      defaultErrorHandler(error, request, reply)
+      // Fastify writes the headers its own errors carry, a 405's `Allow` among them.
+      const headers = (err as { headers?: Record<string, string> }).headers
+      if (headers !== undefined) {
+        reply.headers(headers)
+      }
 
-      return reply
+      const code = (err as { code?: unknown }).code
+      const validation = (err as Partial<FastifyError>).validation
+
+      return sendProblem(
+        reply,
+        newProblem({
+          status,
+          code: typeof code === 'string' ? code : codeForStatus(status),
+          detail: err.message,
+          ...(validation === undefined
+            ? {}
+            : { errors: problemErrors(validation, (err as Partial<FastifyError>).validationContext) }),
+        }),
+        err,
+      )
     }
 
     // Nothing here was written for a client: a table name, a driver code, the address of a service that did
     // not answer. It stays in the log, and the response names the status and nothing else.
     request.log.error({ err }, err.message)
 
-    return reply.status(status).send(withStacktrace(statusErrorBody(status, 'ERR_INTERNAL'), err))
+    return sendProblem(reply, newProblem({ status, code: 'ERR_INTERNAL' }), err)
   }
 
   fastify.setErrorHandler(globalErrorHandler)
@@ -213,6 +255,39 @@ function errorStatus(err: Error): number {
   const status = candidate.statusCode ?? candidate.status
 
   return typeof status === 'number' && status >= 400 ? status : 500
+}
+
+// The code an `ErrHTTP*` of that status carries, for a 4xx error that names none: `ERR_HTTP_IM_A_TEAPOT` for 418.
+function codeForStatus(status: number): string {
+  const phrase = STATUS_CODES[status]
+
+  return phrase === undefined
+    ? 'ERR_HTTP'
+    : `ERR_HTTP_${phrase
+        .replaceAll("'", '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')}`
+}
+
+// Ajv reports where a value failed as a JSON pointer inside the slot, and a missing property at the object that
+// lacks it. Both become one dotted path from the slot, as a configuration issue is written.
+function problemErrors(validation: FastifySchemaValidationError[], slot: string | undefined): SchemaIssue[] {
+  return validation.map(issue => {
+    const segments = issue.instancePath
+      .split('/')
+      .slice(1)
+      .map(segment => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
+    const missing = (issue.params as { missingProperty?: unknown } | undefined)?.missingProperty
+    if (typeof missing === 'string') {
+      segments.push(missing)
+    }
+
+    return {
+      path: [...(slot === undefined ? [] : [slot]), ...segments].join('.'),
+      message: issue.message ?? 'is invalid',
+      code: issue.keyword,
+    }
+  })
 }
 
 // Node prints a cause as a "Caused by" section of its own, and that section is usually where the detail is —

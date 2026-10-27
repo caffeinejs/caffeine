@@ -1,7 +1,7 @@
 import type { Container } from '@caffeinejs/di'
-import { Router } from '@caffeinejs/http'
+import { ProblemSchema, Router } from '@caffeinejs/http'
 
-import { ErrorSchema, toolRoutes, type ToolRouter } from '../tool.js'
+import { toolRoutes, type ToolRouter } from '../tool.js'
 import { HealthSchema, ProbeSchema } from './health.schema.js'
 import { HealthTool } from './health.tool.js'
 
@@ -14,7 +14,7 @@ const all = health
 
 const one = health
   .get('/:group')
-  .schema({ response: { 200: ProbeSchema, 404: ErrorSchema } })
+  .schema({ response: { 200: ProbeSchema, 404: ProblemSchema } })
   .handler((ctx, { tool }) => tool.group(ctx.req.param().group))
 
 /**

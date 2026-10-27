@@ -9,13 +9,14 @@ import { ContextState, type IContext } from '../../context.js'
 import type { CookieSerializeOptions } from '../../core/cookie/options.js'
 import type { CookieSecret, CookieUnsignResult } from '../../core/cookie/signer.js'
 import { ErrConfiguration } from '../../core/error/common.js'
-import { statusErrorBody } from '../../core/error/http.js'
+import { newProblem } from '../../core/error/problem.js'
 import type { RouteValidationSchema } from '../../core/routing/spec.js'
 import type { AuthenticationState } from '../../core/security/auth/authentication_state.js'
 import { type Principal } from '../../core/security/identity.js'
 import type { InferBody, InferHeaders, InferParams, InferQuery, IRequest, UnsignedCookie } from '../../request.js'
 import type { ContextPlatform, AdapterTypes } from './adapter.js'
 import { reopenCookieFlush, serverCookies } from './cookie/cookie.js'
+import { problemContentType } from './error/error.js'
 import { protocolOf } from './protocol.js'
 import { payloadOf } from './response.js'
 
@@ -194,13 +195,20 @@ export class Context<
   }
 
   /**
-   * Sends an error status, defaulting the body to the same envelope a thrown `ErrHTTP` renders to.
+   * Sends an error status, defaulting the body to the same problem a thrown `ErrHTTP` renders to, under the same
+   * media type. A body given is sent as it stands, under the media type the reply already has.
    *
    * Without the default these shorthands answer with an empty body, which leaves an application emitting one
    * error shape from `@Catch` and a different one from `ctx.notFound()`.
    */
   #fail(statusCode: number, code: string, method: string, body?: unknown): this {
-    return this.#send(method, body ?? statusErrorBody(statusCode, code), statusCode)
+    if (body !== undefined) {
+      return this.#send(method, body, statusCode)
+    }
+
+    this.#reply.type(problemContentType(this.#fastifyRequest))
+
+    return this.#send(method, newProblem({ status: statusCode, code }), statusCode)
   }
 
   /** Sends `body`, under `statusCode` when given, which stands over a Response's own. */

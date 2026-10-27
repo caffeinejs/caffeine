@@ -134,6 +134,20 @@ describe('openapi endpoints', () => {
     expect(document.tags).toContainEqual({ name: 'Pets', description: 'Browse and manage pets' })
   })
 
+  // The document describes what the server sends, so a media type error handling changed reaches it too.
+  it('lists errors under the media type error handling sends problems as', async () => {
+    app = newBuilder(o => o.docs(false).public()).errorHandling(e =>
+      e.problemContentType('application/json'),
+    ) as WebApplication
+    await app.bootstrap()
+
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
+
+    expect(operationAt(document, '/pets', 'post')?.responses?.['400'].content).toEqual({
+      'application/json': { schema: { $ref: '#/components/schemas/Problem' } },
+    })
+  })
+
   it('hoists $id schemas into components', async () => {
     app = buildApp(o => o.docs(false).public())
     await app.bootstrap()

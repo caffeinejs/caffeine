@@ -1,18 +1,23 @@
 import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/application'
 import { Scopes } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/err'
 
+import { ErrConfiguration } from './common.js'
 import { buildCatchByMap, ErrorHandlerProvider, type ErrorHandlerRef } from './handler.js'
 import { kErrorHandlingOptions } from './keys.js'
+import { PROBLEM_CONTENT_TYPE } from './problem.js'
 
 /** What the error-handling feature settled on, for the server's error handler. */
 export interface GlobalErrorHandlerOptions {
   /**
-   * Sends the stack, and the chain of causes behind it, as `stacktrace` on every body this package renders.
+   * Sends the stack, and the chain of causes behind it, as `stacktrace` on every problem the error handler renders.
    *
-   * Off by default. An error this package did not render — a body an `ErrHTTP` carried, anything a `@Catch`
-   * handler returned, and the 4xx Fastify answers itself — is left alone either way.
+   * Off by default. A body this package did not render — one an `ErrHTTP` carried, anything a `@Catch` handler
+   * returned — is left alone either way.
    */
   exposeStacktrace?: boolean
+  /** The media type every problem this package renders is sent as. `application/problem+json` by default. */
+  problemContentType?: string
 }
 
 /**
@@ -20,7 +25,7 @@ export interface GlobalErrorHandlerOptions {
  *
  * The feature is registered unconditionally and installs ahead of everything `.with(...)` installs, so every
  * route and hook registered afterwards is covered by it whether or not this is ever called. An application that
- * never calls it renders a thrown `ErrHTTP` as the default JSON envelope and leaves anything else to Fastify.
+ * never calls it renders every error as an RFC 9457 problem, sent as `application/problem+json`.
  *
  * What a call adds is enrolment: which `@Catch` handler classes render errors for the whole application.
  * Declaring a class is no longer enough — a handler nobody named here is still reachable through `@CatchWith`
@@ -43,6 +48,7 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
 
   readonly #handlers: ErrorHandlerRef[] = []
   #exposeStacktrace = false
+  #problemContentType = PROBLEM_CONTENT_TYPE
 
   /**
    * Enrols handler classes as the application's global error handlers, each rendering the error types its own
@@ -62,16 +68,40 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * Sends the stack, and the chain of causes behind it, as `stacktrace` on every error body this package
    * renders — the generic 5xx an unexpected failure answers with, a thrown `ErrHTTP`, and an error naming a
-   * public message.
+   * public message, and a request Fastify refused.
    *
    * Off by default, and meant for a development deployment: a stack names source paths, and a cause names the
-   * hosts and driver detail the generic body exists to withhold. A body an `ErrHTTP` carried, anything a
-   * `@Catch` handler returned, and the 4xx Fastify renders itself are left alone either way.
+   * hosts and driver detail the generic body exists to withhold. A body an `ErrHTTP` carried and anything a
+   * `@Catch` handler returned are left alone either way.
    *
    * Turning it on is logged as a warning at start-up, so a deployment that enabled it by accident says so.
    */
   exposeStacktrace(enabled = true): this {
     this.#exposeStacktrace = enabled
+    return this
+  }
+
+  /**
+   * Sends every problem this package renders under `contentType` instead of `application/problem+json`, for a
+   * client that only accepts `application/json`.
+   *
+   * The body stays the same problem. A body an `ErrHTTP` carried, anything a `@Catch` handler returned,
+   * and a body handed to a `ctx` helper keep their own media type.
+   *
+   * @throws ErrConfiguration when `contentType` is not a JSON media type: the server serializes a problem only
+   * for one.
+   */
+  problemContentType(contentType: string): this {
+    if (!(contentType.split(';')[0] ?? '').toLowerCase().includes('json')) {
+      throw new ErrConfiguration(
+        errMessage(`Cannot send problems as "${contentType}": it is not a JSON media type`)
+          .solutions('Pass a JSON media type, such as "application/problem+json" or "application/json"')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    this.#problemContentType = contentType
     return this
   }
 
@@ -94,7 +124,10 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
 
     // What the adapter installs the server's error handler with, ahead of everything `.with(...)` registers.
     kit.container.bind(kErrorHandlingOptions, t =>
-      t.toValue({ exposeStacktrace: this.#exposeStacktrace }).lifetime(Scopes.SINGLETON).internal(),
+      t
+        .toValue({ exposeStacktrace: this.#exposeStacktrace, problemContentType: this.#problemContentType })
+        .lifetime(Scopes.SINGLETON)
+        .internal(),
     )
   }
 

@@ -1,4 +1,4 @@
-import type { IRoute } from '@caffeinejs/http'
+import { ProblemSchema, type IRoute } from '@caffeinejs/http'
 
 import type { ResponseDetail } from '../decorators/detail.js'
 import type { OpenAPIOptions } from '../options.js'
@@ -52,6 +52,7 @@ export function deriveResponses(
   options: OpenAPIOptions,
   registry: ComponentRegistry,
   context: string,
+  problemContentType: string,
   groupResponses: Record<number | string, ResponseDetail> | undefined,
   operationResponses: Record<number | string, ResponseDetail> | undefined,
 ): Record<string, ResponseObject> {
@@ -81,7 +82,7 @@ export function deriveResponses(
         ? {}
         : {
             content: Object.fromEntries(
-              contentTypesFor(key, successStatus, successTypes).map(type => [type, { schema }]),
+              contentTypesFor(key, successStatus, successTypes, problemContentType).map(type => [type, { schema }]),
             ),
           }),
     })
@@ -89,12 +90,12 @@ export function deriveResponses(
 
   // 3. Inferred, never overwriting anything declared.
   if (options.infer.validation && hasRequestSchema(route)) {
-    addInferred(responses, String(options.errors.validation), options, registry, context)
+    addInferred(responses, String(options.errors.validation), options, registry, context, problemContentType)
   }
 
   if (options.infer.auth && route.authorization.hasProtection) {
-    addInferred(responses, String(options.errors.unauthorized), options, registry, context)
-    addInferred(responses, String(options.errors.forbidden), options, registry, context)
+    addInferred(responses, String(options.errors.unauthorized), options, registry, context, problemContentType)
+    addInferred(responses, String(options.errors.forbidden), options, registry, context, problemContentType)
   }
 
   // 4. Authored detail, merged over everything. Controller-wide first, then the operation's own.
@@ -110,19 +111,17 @@ function addInferred(
   options: OpenAPIOptions,
   registry: ComponentRegistry,
   context: string,
+  problemContentType: string,
 ): void {
   if (responses.has(status)) {
     return
   }
 
-  const schema =
-    options.errorSchema === undefined
-      ? undefined
-      : registry.register(options.errorSchema, 'output', `${context} response.${status}`)
+  const schema = registry.register(options.errorSchema ?? ProblemSchema, 'output', `${context} response.${status}`)
 
   responses.set(status, {
     description: REASONS[status] ?? 'Error',
-    content: { 'application/json': schema === undefined ? {} : { schema } },
+    content: { [problemContentType]: { schema } },
   })
 }
 
@@ -151,15 +150,20 @@ function applyDetail(
  * The media types a response body is served as.
  *
  * An error response does not inherit the success types: a route producing `text/csv` still reports failures
- * as JSON — the error handler renders a body, not the resource — so carrying the success type onto a 4xx
+ * as problems — the error handler renders a body, not the resource — so carrying the success type onto a 4xx
  * would describe a CSV error document that never exists.
  */
-function contentTypesFor(status: string, successStatus: string, successTypes: string[]): string[] {
+function contentTypesFor(
+  status: string,
+  successStatus: string,
+  successTypes: string[],
+  problemContentType: string,
+): string[] {
   if (status === successStatus || status.startsWith('2')) {
     return successTypes
   }
 
-  return ['application/json']
+  return [problemContentType]
 }
 
 /**

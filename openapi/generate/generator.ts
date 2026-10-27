@@ -1,4 +1,4 @@
-import type { AuthSchemeDescriptor, IRoute, IRouteGroup } from '@caffeinejs/http'
+import { PROBLEM_CONTENT_TYPE, type AuthSchemeDescriptor, type IRoute, type IRouteGroup } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
@@ -32,6 +32,8 @@ export interface GenerateInput {
   options: OpenAPIOptions
   /** How each registered authentication scheme expects credentials, when the application configured any. */
   schemes?: Map<string, AuthSchemeDescriptor>
+  /** The media type the server sends an error as. `application/problem+json` when absent. */
+  problemContentType?: string
   /** Collects non-fatal problems — a route the target version cannot represent, for instance. */
   onWarning?: (message: string) => void
 }
@@ -147,7 +149,15 @@ function addRoute(ctx: AddRouteInput): void {
     ...(derivedParameters.length > 0 || detail?.parameters !== undefined
       ? { parameters: mergeParameters(derivedParameters, detail?.parameters) }
       : {}),
-    responses: deriveResponses(route, options, ctx.registry, context, group?.responses, detail?.responses),
+    responses: deriveResponses(
+      route,
+      options,
+      ctx.registry,
+      context,
+      input.problemContentType ?? PROBLEM_CONTENT_TYPE,
+      group?.responses,
+      detail?.responses,
+    ),
     ...extensionsOf(detail),
   }
 

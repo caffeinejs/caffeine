@@ -21,7 +21,7 @@ Unmatched URLs do not go through `@Catch`. SPA `index.html` is not an error hand
 5. Optional: `@Catch(ErrType)` on a **controller method** `(ctx, error)` instead of a separate class.
 6. Prefer throwing `ErrHTTPNotFound` in the handler over `ctx.notFound()` if you want `@Catch` to run.
 
-An application that never calls `.errorHandling(...)` still renders a thrown `ErrHTTP` as the default JSON envelope, and answers anything it did not anticipate with a generic body — `code: 'ERR_INTERNAL'`, the status phrase as `message` — keeping the real message and its causes in the log. Do not write a `@Catch(Error)` handler to get that; it is the default. `.errorHandling(e => e.exposeStacktrace(config.app.debug))` adds `stacktrace` to the bodies this package renders, for a development deployment.
+An application that never calls `.errorHandling(...)` still renders a thrown `ErrHTTP` as an RFC 9457 problem (`application/problem+json`), and answers anything it did not anticipate with a generic body — `code: 'ERR_INTERNAL'`, the status phrase as `detail` — keeping the real message and its causes in the log. Do not write a `@Catch(Error)` handler to get that; it is the default. `.errorHandling(e => e.exposeStacktrace(config.app.debug))` adds `stacktrace` to the bodies this package renders, for a development deployment.
 
 ## Shape
 
@@ -31,8 +31,8 @@ import { Catch, ErrHTTP, ErrorHandler, type IContext } from '@caffeinejs/http'
 @Catch(ErrHTTP)
 export class HTTPErrorHandler implements ErrorHandler<ErrHTTP> {
   async handle(ctx: IContext, err: ErrHTTP) {
-    ctx.status(err.statusCode)
-    return { code: err.code, message: err.message }
+    ctx.status(err.statusCode).header('content-type', 'application/problem+json')
+    return err.toProblem()
   }
 }
 
@@ -54,7 +54,7 @@ class PetsController {}
 
 ## Verify
 
-A test or request that throws `ErrHTTPNotFound` returns 404 and the handler body. The same handler left out of `globalHandlers(...)` must leave the default envelope in place. Enrolling two handlers for one type must not boot.
+A test or request that throws `ErrHTTPNotFound` returns 404 and the handler body. The same handler left out of `globalHandlers(...)` must leave the default problem in place. Enrolling two handlers for one type must not boot.
 
 ## Related
 
