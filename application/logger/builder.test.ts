@@ -1,4 +1,4 @@
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, ErrDuplicateBinding } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { Application } from '../application.js'
@@ -110,6 +110,15 @@ describe('Application integration', () => {
 
     expect(app.log).toBe(provided)
     expect(app.container.get(logToken())).toBe(provided)
+  })
+
+  // One binding, made by the logger feature: a second one would let `logToken()` and `app.log` disagree.
+  it('refuses a logToken() binding of its own, so the configured logger is the one every consumer injects', async () => {
+    const app = new Application({ container: new CaffeineIoC({ decorators: false }) })
+
+    app.container.bind(logToken(), t => t.toValue(new ConsoleLogger()))
+
+    await expect(app.bootstrap()).rejects.toThrow(ErrDuplicateBinding)
   })
 
   it('takes the logger from ApplicationOptions.logger, eagerly, before bootstrap()', () => {
