@@ -91,7 +91,7 @@ async upload(stream: import('node:stream').Readable) { ... }
 
 A module is a directory of source files in a library package (not `benchmarks/`, `examples/`, `di/examples/` or `devtools/ui`).
 
-- It has a main file named after it (`cache/cache.ts`, `circuit_breaker/circuit_breaker.ts`) and an `index.ts` barrel that only re-exports.
+- It has a main file named after it (`cache/cache.ts`, `circuitbreaker/circuitbreaker.ts`) and an `index.ts` barrel that only re-exports.
 - A directory of independent files with no main one (`decorators/`, `internal/`, `provider/`) has the barrel alone.
 - A barrel publishes what the package offers. A helper only the package's own code uses stays out of it and is imported by its path.
 - One capability's code and public types live in one module, and other modules call into it rather than hold parts of it, so the capability is found and changed in one place. A package that splits a capability across layers keeps each layer's half whole, as `http/` does between `core/` and `platform/fastify/`.
