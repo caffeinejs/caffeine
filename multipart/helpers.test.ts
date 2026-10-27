@@ -583,7 +583,7 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
       await app.bootstrap()
 
       try {
-        const over = await app.fetch('/uploads/upload', {
+        const over = await app.request('/uploads/upload', {
           method: 'POST',
           headers: multipartHeaders(),
           body: file(4096),
@@ -591,7 +591,7 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
         expect(over.status).toBe(413)
         expect(await over.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
 
-        const within = await app.fetch('/uploads/upload', {
+        const within = await app.request('/uploads/upload', {
           method: 'POST',
           headers: multipartHeaders(),
           body: file(512),
@@ -649,7 +649,7 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
       await app.bootstrap()
 
       try {
-        const res = await app.fetch('/uploads/upload', {
+        const res = await app.request('/uploads/upload', {
           method: 'POST',
           headers: multipartHeaders(),
           body: file(4096),
@@ -803,7 +803,7 @@ describe('multipart(ctx) on a route that declares no bodyLimit', () => {
     await app.bootstrap()
 
     try {
-      const res = await app.fetch('/unlimited/upload', {
+      const res = await app.request('/unlimited/upload', {
         method: 'POST',
         headers: multipartHeaders(),
         body: file(4096),
@@ -825,7 +825,7 @@ describe('multipart(ctx) on a route that declares no bodyLimit', () => {
       await app.bootstrap()
 
       try {
-        const over = await app.fetch('/uploads/upload', {
+        const over = await app.request('/uploads/upload', {
           method: 'POST',
           headers: multipartHeaders(),
           body: file(4096),
@@ -833,7 +833,7 @@ describe('multipart(ctx) on a route that declares no bodyLimit', () => {
         expect(over.status).toBe(413)
         expect(await over.json()).toMatchObject({ code: 'FST_REQ_FILE_TOO_LARGE' })
 
-        const within = await app.fetch('/uploads/upload', {
+        const within = await app.request('/uploads/upload', {
           method: 'POST',
           headers: multipartHeaders(),
           body: file(512),
@@ -889,7 +889,7 @@ describe('multipart(ctx) on a route that declares no bodyLimit', () => {
       await app.bootstrap()
 
       try {
-        const res = await app.fetch('/uploads/upload', {
+        const res = await app.request('/uploads/upload', {
           method: 'POST',
           headers: multipartHeaders(),
           body: file(4096),

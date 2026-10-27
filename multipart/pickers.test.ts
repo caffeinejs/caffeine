@@ -38,7 +38,7 @@ describe('$multipart on a decorated route', () => {
     await app.bootstrap()
 
     const post = (bytes: number) =>
-      app.fetch('/pl1/upload', {
+      app.request('/pl1/upload', {
         method: 'POST',
         headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}` },
         body: upload(bytes),
