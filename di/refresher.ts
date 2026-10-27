@@ -1,3 +1,5 @@
+import type { Binding } from './binding.js'
+
 /**
  * Refresher allows refreshing refresh-scoped instances within a {@link Container} instance.
  * @example
@@ -9,13 +11,14 @@
 export interface Refresher {
   /**
    * Refreshes refresh-scoped instances.
-   * When `label` is provided, only bindings tagged with that label are refreshed.
-   * When omitted, all refresh-scoped bindings are refreshed.
+   * When `target` is a label, only bindings tagged with that label are refreshed; when it is a binding, that binding
+   * alone. When omitted, all refresh-scoped bindings are refreshed.
    *
-   * @param label - Optional symbol label to scope the refresh to a subset of bindings.
+   * @param target - A symbol label or one binding, to scope the refresh to a subset of bindings.
    * @returns A promise that resolves when the refresh is complete.
+   * @throws ErrNotRefreshable when `target` is a binding that is not refresh-scoped.
    */
-  refresh(label?: symbol): Promise<void>
+  refresh(target?: symbol | Binding): Promise<void>
 }
 
 /**

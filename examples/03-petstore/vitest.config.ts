@@ -51,6 +51,8 @@ export default defineConfig({
       // extend a *different* Responder than the adapter checks for, and every HTML route would come back as JSON.
       '@caffeinejs/html': fileURLToPath(new URL('../../html/index.ts', import.meta.url)),
       '@caffeinejs/openapi': fileURLToPath(new URL('../../openapi/index.ts', import.meta.url)),
+      // Source too: its plugin extends `HTTPPlugin`, which the server checks against the source copy above.
+      '@caffeinejs/devtools': fileURLToPath(new URL('../../devtools/index.ts', import.meta.url)),
       '@caffeinejs/testing/http': fileURLToPath(new URL('../../testing/http/index.ts', import.meta.url)),
       '@caffeinejs/testing': fileURLToPath(new URL('../../testing/index.ts', import.meta.url)),
       '@caffeinejs/brewer': fileURLToPath(new URL('../../brewer/index.ts', import.meta.url)),
@@ -58,7 +60,8 @@ export default defineConfig({
   },
   test: {
     name: 'example-petstore',
-    env: rootEnv,
+    // An OS-assigned port for the devtools: a test that runs the application must not collide with another on 9090.
+    env: { ...rootEnv, PETSTORE_DEVTOOLS__PORT: '0' },
     globalSetup: ['./vitest.globalsetup.ts'],
     include: ['**/*.test.ts'],
     environment: 'node',

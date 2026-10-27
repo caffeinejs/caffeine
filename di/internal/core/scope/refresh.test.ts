@@ -159,6 +159,66 @@ describe('Refresh Scope', function () {
     })
   })
 
+  describe('when refreshing one binding', function () {
+    it('resets that binding alone, leaving another refresh-scoped one as it was', async function () {
+      class Target {
+        readonly id = Math.random()
+      }
+
+      class Sibling {
+        readonly id = Math.random()
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Target, t => t.toSelf().lifetime(Scopes.REFRESH))
+      di.bind(Sibling, t => t.toSelf().lifetime(Scopes.REFRESH))
+      await di.init()
+
+      const target = di.get(Target)
+      const sibling = di.get(Sibling)
+
+      await di.refresher.refresh(di.getBinding(Target)!)
+
+      expect(di.get(Target).id).not.toBe(target.id)
+      expect(di.get(Sibling).id).toBe(sibling.id)
+    })
+
+    it('refreshes a self-refreshable instance in place', async function () {
+      const refreshed = vi.fn()
+
+      class InPlace implements SelfRefreshable {
+        [kSelfRefresh](): void {
+          refreshed()
+        }
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(InPlace, t => t.toSelf().lifetime(Scopes.REFRESH))
+      await di.init()
+
+      const before = di.get(InPlace)
+      await di.refresher.refresh(di.getBinding(InPlace)!)
+
+      expect(refreshed).toHaveBeenCalledTimes(1)
+      expect(di.get(InPlace)).toBe(before)
+    })
+
+    it('refuses a binding that is not refresh-scoped, which a refresh would never reach', async function () {
+      class Single {
+        readonly id = Math.random()
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Single, t => t.toSelf())
+      await di.init()
+
+      await expect(di.refresher.refresh(di.getBinding(Single)!)).rejects.toMatchObject({
+        code: 'ERR_NOT_REFRESHABLE',
+        message: expect.stringContaining('Cannot refresh "Single": it is not refresh-scoped'),
+      })
+    })
+  })
+
   describe('when request a scope refresh', function () {
     it('should reset refresh scoped components', async function () {
       const di = new CaffeineIoC()

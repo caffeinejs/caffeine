@@ -1,0 +1,52 @@
+import type { DependencyGraph } from '@caffeinejs/devtools'
+import { graphToDot, type BindingGraph } from '@caffeinejs/di/graph'
+import { Graphviz } from '@hpcc-js/wasm-graphviz'
+
+/** Graphviz, loaded once, on the first graph drawn. */
+let graphviz: Promise<Graphviz> | undefined
+
+/**
+ * How the UI draws every graph: no page behind it, and Helvetica, a face Graphviz has the metrics of, so the boxes it
+ * sizes fit the text the browser sets. Graphviz measures any name it does not know, a list of faces included, as
+ * Times. The stylesheet colours the rest by the theme.
+ */
+const LOOK = [
+  'graph [bgcolor=transparent, pad=0.25, nodesep=0.3, ranksep=0.6]',
+  'node [fontname=Helvetica, fontsize=12, margin="0.16,0.08"]',
+  'edge [fontname=Helvetica, fontsize=10, arrowsize=0.7]',
+]
+
+/**
+ * Draws the dependency graph as an SVG document fragment, ready to place in a page.
+ *
+ * The DOT is written here, from the nodes and edges the devtools answered, never taken from them: Graphviz honours a
+ * node's `URL`, so DOT another process wrote could put a link of its choosing in the page. Graphviz escapes every
+ * label it draws.
+ *
+ * @param keep - The ids of the bindings to draw, and the edges between them; every binding when absent.
+ */
+export async function drawGraph(graph: DependencyGraph, keep?: ReadonlySet<number>): Promise<string> {
+  const dot = graphToDot(trusted(graph, keep))
+
+  if (dot === '') {
+    return ''
+  }
+
+  graphviz ??= Graphviz.load()
+  // Right after the `{` that opens the digraph, before the first node: a default holds for the statements after it.
+  const open = dot.indexOf('{') + 1
+  const svg = (await graphviz).dot(`${dot.slice(0, open)}\n  ${LOOK.join('\n  ')}${dot.slice(open)}`)
+
+  // Graphviz writes a whole document: the page takes the `<svg>` element alone.
+  return svg.slice(svg.indexOf('<svg'))
+}
+
+/** The graph with every id a whole number, so `graphToDot` writes each node's name itself, and only what `keep` keeps. */
+function trusted(graph: DependencyGraph, keep: ReadonlySet<number> | undefined): BindingGraph {
+  const kept = (id: unknown): boolean => Number.isSafeInteger(id) && (keep === undefined || keep.has(id as number))
+
+  return {
+    nodes: graph.nodes.filter(node => kept(node.id)),
+    edges: graph.edges.filter(edge => kept(edge.fromID) && kept(edge.toID)),
+  }
+}
