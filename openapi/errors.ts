@@ -64,12 +64,15 @@ export class ErrOpenAPISchemaConflict extends ErrCaffeineWebApplication {
  */
 export class ErrOpenAPIDocumentNotFound extends ErrCaffeineWebApplication {
   constructor(name: string, registered: readonly string[]) {
+    const plugin = name === DEFAULT_DOCUMENT_NAME ? 'openapi()' : `openapi("${name}")`
+    const names = registered.map(n => `"${n}"`).join(', ')
+
     super(
       errMessage(`Cannot find the OpenAPI document "${name}": no openapi() plugin has registered it`)
         .solutions(
           registered.length === 0
-            ? `Register it with .with(openapi(${name === DEFAULT_DOCUMENT_NAME ? '' : `"${name}"`})) on the application`
-            : `Ask for one of the registered documents: ${registered.map(n => `"${n}"`).join(', ')}`,
+            ? `Register it with .with(${plugin}) on the application`
+            : `Ask for one of the registered documents: ${names}`,
           'Read it after await app.bootstrap() or app.run() resolves, once every plugin has registered its document',
         )
         .reference('@caffeinejs/openapi', ErrOpenAPIDocumentNotFound)
@@ -105,9 +108,11 @@ export class ErrOpenAPIDocumentNotReady extends ErrCaffeineWebApplication {
  */
 export class ErrOpenAPIDocumentAmbiguous extends ErrCaffeineWebApplication {
   constructor(registered: readonly string[]) {
+    const reads = registered.map(n => `docs("${n}")`).join(', ')
+
     super(
       errMessage(`Cannot choose an OpenAPI document: ${registered.length} are registered and none is named "default"`)
-        .solutions(`Name the one to read: ${registered.map(n => `docs("${n}")`).join(', ')}`)
+        .solutions(`Name the one to read: ${reads}`)
         .reference('@caffeinejs/openapi', ErrOpenAPIDocumentAmbiguous)
         .build(),
       'ERR_OPENAPI_DOCUMENT_AMBIGUOUS',

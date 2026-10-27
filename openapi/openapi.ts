@@ -363,11 +363,10 @@ function warnIfUnprotected(instance: FastifyInstance, name: string, options: Ope
     return
   }
 
+  const document = name === DEFAULT_DOCUMENT_NAME ? 'The OpenAPI document' : `The OpenAPI document "${name}"`
+
   process.emitWarning(
-    errMessage(
-      `The OpenAPI document${name === DEFAULT_DOCUMENT_NAME ? '' : ` "${name}"`} is served publicly while ` +
-        'authentication is configured',
-    )
+    errMessage(`${document} is served publicly while authentication is configured`)
       .solutions(
         'Call .secure(s => s.schemes("Bearer")) on the OpenAPI builder to require authentication',
         'Call .public() to state that public access is intended and silence this warning',
