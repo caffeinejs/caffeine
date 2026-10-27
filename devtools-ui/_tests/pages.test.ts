@@ -465,6 +465,7 @@ describe('devtools UI without devtools to read', () => {
         (await ui.request(path, { headers: { host } })).status
 
       expect(await status('evil.example:9091')).toBe(421)
+      expect(await status('not a host')).toBe(421)
       expect(await status('localhost:9091')).toBe(502)
       expect(await status('127.0.0.1:9091')).toBe(502)
       expect(await status('[::1]:9091')).toBe(502)
