@@ -58,6 +58,20 @@ describe('Layout', () => {
     expect(page).toContain('<nav class="side" id="side"')
   })
 
+  it('links the CaffeineJS repository after the theme switch, in a new tab, with a star count to show until site.js fetches one', async () => {
+    const actions = /<div class="top-actions">([\s\S]*?)<\/div>/.exec(await render())![1]!
+    const link = /<a class="github-stars"([^>]*)>([\s\S]*?)<\/a>/.exec(actions)
+
+    expect(link).not.toBeNull()
+    expect(actions.indexOf('data-action="theme"')).toBeLessThan(link!.index)
+    expect(link![1]).toContain('href="https://github.com/caffeinejs/caffeine"')
+    expect(link![1]).toContain('target="_blank"')
+    expect(link![1]).toContain('rel="noopener noreferrer"')
+    expect(link![2]).toMatch(
+      /<span class="visually-hidden">GitHub stars:<\/span>\s*<span class="stars" data-github-stars>\s*0\s*<\/span>/,
+    )
+  })
+
   it('shows where the devtools are read from in the header, escaped', async () => {
     const page = await render({ target: 'http://127.0.0.1:9090/<devtools>' })
 

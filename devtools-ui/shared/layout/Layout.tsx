@@ -3,6 +3,9 @@ import type { Children } from '@kitajs/html'
 
 import { Icon, toolIcon, type IconName } from '../components/index.js'
 
+/** The CaffeineJS repository, linked from the header with its star count. */
+const REPOSITORY = 'https://github.com/caffeinejs/caffeine'
+
 /** Where the UI shows a tool: each tool's page is served under its id. */
 export function pageOf(id: string): string {
   return `/${encodeURIComponent(id)}`
@@ -23,7 +26,7 @@ export interface LayoutProps {
 
 /**
  * The page chrome every page shares: the navigation built from the tools the devtools list, the target they are
- * read from, and the switches for the theme and the sidebar.
+ * read from, the switches for the theme and the sidebar, and the link to the CaffeineJS repository.
  */
 export function Layout(props: LayoutProps): JSX.Element {
   const tools = props.tools ?? []
@@ -67,6 +70,20 @@ export function Layout(props: LayoutProps): JSX.Element {
               <Icon name="moon" class="when-light" />
               <Icon name="sun" class="when-dark" />
             </button>
+            {/* The star count is filled in by `site.js`; offline, or when GitHub does not answer, the fallback stays. */}
+            <a
+              class="github-stars"
+              href={REPOSITORY}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Star CaffeineJS on GitHub"
+            >
+              <Icon name="github" />
+              <span class="visually-hidden">GitHub stars:</span>
+              <span class="stars" data-github-stars>
+                0
+              </span>
+            </a>
           </div>
         </header>
         <div class="frame">

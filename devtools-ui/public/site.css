@@ -103,7 +103,7 @@ h2 {
   color: var(--muted);
 }
 
-/* The header: the brand on the left, the target and the theme switch on the right. */
+/* The header: the brand on the left; the target, the theme switch and the GitHub link on the right. */
 
 .top {
   position: sticky;
@@ -183,6 +183,50 @@ h2 {
 .target span {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The repository link, as the Fastify site draws it: the GitHub mark and the star count in a bordered box. */
+.github-stars {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 8px;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.github-stars:hover {
+  border-color: var(--line-strong);
+}
+
+.github-stars .icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Digits have no descenders: trimmed to their own height, the count centres on the mark rather than sitting high. */
+.stars {
+  font-variant-numeric: tabular-nums;
+  text-box: trim-both cap alphabetic;
+}
+
+/* Read by screen readers, not drawn. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
