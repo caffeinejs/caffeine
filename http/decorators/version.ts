@@ -18,7 +18,7 @@ export function version(version: string): AnyRouteExtension {
  * `1.0.0`, and when several versions satisfy the header the highest wins. A request that sends no
  * `Accept-Version` does not match a versioned route.
  *
- * Sugar for `@Constraint('version', v)`, so it needs `.with(() => constraints())` installed; without it the
+ * Sugar for `@Constraint('version', v)`, so it needs `.with(constraints())` installed; without it the
  * application fails at start-up. URI versioning is a separate concern — use `@Prefix('/v1')`.
  */
 export function Version(v: string) {

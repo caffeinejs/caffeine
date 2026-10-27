@@ -773,7 +773,7 @@ function assertRouteFeaturesInstalled(
   ) {
     throw new ErrConfiguration(
       errMessage('Cannot register constrained routes: the constraints plugin is not installed')
-        .solutions('Add ".with(() => constraints())" to the application builder')
+        .solutions('Add ".with(constraints())" to the application builder')
         .reference('@caffeinejs/http', ErrConfiguration)
         .build(),
     )
