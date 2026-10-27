@@ -1,6 +1,7 @@
 import { $aop, type AnyClass, type JoinPoint, type MethodAspect, type Pointcut, reflect } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
+import { linked } from '../abort.js'
 import { compose } from '../compose.js'
 import { ErrInvalidOption } from '../errors.js'
 import { type Fallback as FallbackPolicy, fallback } from '../fallback/fallback.js'
@@ -48,8 +49,9 @@ interface Plan {
  * Runs each annotated method through its strategies, in one fixed order whatever the order of the decorators:
  * fallback, retry, circuit breaker, rate limiter, bulkhead, time limiter.
  *
- * The first argument that is an `AbortSignal` is taken as the caller's signal, and each attempt receives the
- * attempt's signal in its place.
+ * The first argument that is an `AbortSignal` is taken as the caller's signal. Where a strategy derives a signal for
+ * the attempt, the method receives one that aborts with either, and stays linked to the caller after the method
+ * returns, so a body it streams still learns that the caller left.
  */
 export class ResilienceAspect implements MethodAspect {
   readonly #registry: ResilienceRegistry
@@ -110,7 +112,7 @@ export class ResilienceAspect implements MethodAspect {
       }
 
       const attempt = args.slice()
-      attempt[at] = ctx.signal
+      attempt[at] = ctx.signal === undefined ? undefined : linked(signal!, ctx.signal)
       return jp.proceed(...attempt) as Promise<unknown>
     }, signal)
 

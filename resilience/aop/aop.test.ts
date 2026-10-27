@@ -415,6 +415,33 @@ describe('the signal argument', () => {
     expect((inventory.received[0]![1] as AbortSignal).reason).toBe(reason)
   })
 
+  // A method can hand back work that outlives it, such as a body to stream: the caller leaving later must still reach
+  // it, though the limit no longer times it.
+  it('aborts the method’s signal when the caller aborts after the method returned, and not at the limit', async () => {
+    class Feed {
+      signal: AbortSignal | undefined
+
+      @TimeLimiter('inventory')
+      async open(signal?: AbortSignal): Promise<string> {
+        this.signal = signal
+        return 'opened'
+      }
+    }
+    const { di } = await containerWith(di => di.bind(Feed, t => t.toSelf()))
+    const feed = di.get(Feed)
+    const caller = new AbortController()
+    const reason = new Error('caller left')
+
+    await expect(feed.open(caller.signal)).resolves.toBe('opened')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(feed.signal!.aborted).toBe(false)
+
+    caller.abort(reason)
+
+    expect(feed.signal!.aborted).toBe(true)
+    expect(feed.signal!.reason).toBe(reason)
+  })
+
   it('passes the arguments through untouched when no strategy derives a signal', async () => {
     class Echo {
       seen: unknown[] = []

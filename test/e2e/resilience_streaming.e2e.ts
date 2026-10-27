@@ -1,3 +1,5 @@
+import { once } from 'node:events'
+
 import { CaffeineIoC, Profile } from '@caffeinejs/di'
 import { Controller, Get } from '@caffeinejs/http'
 import { Resilience, ResilienceRegistry, TimeLimiter } from '@caffeinejs/resilience/aop'
@@ -94,5 +96,22 @@ describe('a streamed response under a handler time limit', { timeout: 30_000 }, 
       rest += decoder.decode(chunk.value, { stream: true })
     }
     expect(rest).toBe('tail')
+  })
+
+  // The limit stops timing the body once the handler returns, but the client leaving must still stop the work the body
+  // does: the handler's signal is all it has to learn of it.
+  it('aborts the signal the body holds when the client leaves mid-download', async () => {
+    const client = new AbortController()
+    const res = await fetch(`${running.origin}/reports/export`, { signal: client.signal })
+    const reader = res.body!.getReader()
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('head')
+    const signal = signals.at(-1)!
+    const aborted = once(signal, 'abort')
+
+    client.abort()
+
+    await aborted
+    expect(signal.aborted).toBe(true)
+    expect(registry.timeLimiter('export').metrics().timedOutCalls).toBe(0)
   })
 })
