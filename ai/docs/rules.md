@@ -83,7 +83,7 @@ class UploadsController {}
 app.with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore({ maxSize: 64 * MiB })).maxEntrySize(512 * KiB)))
 
 // An option Caffeine does not type keeps its library's shape, in bytes as well.
-multipartPlugin({ limits: { fileSize: bytes('10mb') } })
+multipart(() => ({ limits: { fileSize: bytes('10mb') } }))
 ```
 
 Every unit is binary: `'1kb'` and `1 * KiB` are both 1024. There is no `KB` constant. Options that took text before (`@BodyLimit('10mb')`, `maxEntrySize('1MB')`, `maxSize: '64MB'`) take a count; wrap text that must stay text in `bytes(...)`.

@@ -163,7 +163,7 @@ const caffeineT = {
    *
    * **The declaration does not parse the request.** A body holding a file is left unvalidated and
    * `ctx.req.body()` stays empty, because the parts are streamed rather than buffered; read them with
-   * `multipart(ctx)` from `@caffeinejs/multipart`. The other slots — `params`, `querystring`, `headers` —
+   * `formData(ctx)` from `@caffeinejs/multipart`. The other slots — `params`, `querystring`, `headers` —
    * still validate.
    */
   File: (options: SchemaOptions = {}) => Type.Unsafe<File>({ ...options, type: 'string', format: 'binary' }),

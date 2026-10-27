@@ -16,7 +16,7 @@ import {
 import type { MultipartField, WebMultipartFile } from './multipart.js'
 
 /**
- * What {@link multipart} needs from a context: the Fastify request behind it.
+ * What {@link formData} needs from a context: the Fastify request behind it.
  *
  * Structural on purpose — the context a programmatic handler receives and the one `$p.context()` hands a
  * decorated handler both satisfy it, so an upload is read the same way whichever way the route was declared.
@@ -25,7 +25,7 @@ export interface MultipartContext {
   readonly platform: { readonly request: FastifyRequest }
 }
 
-/** The multipart readers bound to one request. See {@link multipart}. */
+/** The multipart readers bound to one request. See {@link formData}. */
 export interface MultipartHelpers {
   /**
    * The first file, buffered into memory, or `undefined` when the request carries none.
@@ -39,7 +39,7 @@ export interface MultipartHelpers {
   files(): Promise<File[]>
 
   /** Every part — fields and files alike — buffered into a `FormData`. */
-  formData(): Promise<FormData>
+  form(): Promise<FormData>
 
   /**
    * The first file as a Node stream of one `MultipartFileNode`, selected by `fieldname` as
@@ -73,21 +73,21 @@ export interface MultipartHelpers {
  *
  * ```ts
  * uploads.post('/').handler(async ctx => {
- *   const avatar = await multipart(ctx).file('avatar')
+ *   const avatar = await formData(ctx).file('avatar')
  * })
  * ```
  *
  * Each call starts from wherever the parser currently stands, so one request is read once: a `file()` after a
  * `files()` finds nothing left. The request must have been routed through `@fastify/multipart` — the plugin's
- * `.with(() => multipartPlugin())` — and the route must not also declare a body picker, which would consume the same bytes.
+ * `.with(multipart())` — and the route must not also declare a body picker, which would consume the same bytes.
  */
-export function multipart(ctx: MultipartContext): MultipartHelpers {
+export function formData(ctx: MultipartContext): MultipartHelpers {
   const request = ctx.platform.request
 
   return {
     file: fieldname => readFile(request, fieldname),
     files: () => readFiles(request),
-    formData: () => readFormData(request),
+    form: () => readFormData(request),
     streamFile: fieldname => nodeStreamFile(request, fieldname),
     streamFiles: () => nodeStreamFiles(request),
     streamParts: () => nodeStreamParts(request),
