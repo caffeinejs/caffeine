@@ -1,6 +1,6 @@
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Container } from '@caffeinejs/di'
-import { AuthenticationSchemeProvider, kAuthzOpts, RouteInventory, Router } from '@caffeinejs/http'
+import { AuthenticationSchemeProvider, blend, kAuthzOpts, RouteInventory, Router } from '@caffeinejs/http'
 
 import type { ToolInfo } from '../tool.js'
 
@@ -94,7 +94,9 @@ export function routesRouter(container: Container) {
   const servers = (): ServerRoutesRecord[] =>
     container.get(RouteInventory).servers.map(entry => ({ ...entry, server: entry.server ?? '' }) as ServerRoutesRecord)
 
-  return new Router('/routes')
+  const routes = new Router('/routes')
+
+  const list = routes
     .get('')
     .schema({
       querystring: $t.Object({ server: $t.Optional($t.String()) }),
@@ -105,6 +107,8 @@ export function routesRouter(container: Container) {
 
       return only === undefined ? servers() : servers().filter(entry => entry.server === only)
     })
+
+  const security = routes
     .get('/security')
     .schema({ response: { 200: SecuritySchema } })
     .handler((): SecurityRecord => {
@@ -127,4 +131,6 @@ export function routesRouter(container: Container) {
         })),
       }
     })
+
+  return blend(list, security)
 }

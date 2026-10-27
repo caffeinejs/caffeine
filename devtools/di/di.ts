@@ -1,7 +1,7 @@
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Binding, Container, InjectionToken } from '@caffeinejs/di'
 import { buildBindingGraph, graphToMermaid, type GraphEdge } from '@caffeinejs/di/graph'
-import { ErrHTTPNotFound, Router } from '@caffeinejs/http'
+import { blend, ErrHTTPNotFound, Router } from '@caffeinejs/http'
 
 import { ErrorSchema, type ToolInfo } from '../tool.js'
 
@@ -69,10 +69,14 @@ export const diTool: ToolInfo = {
  * - `GET /di/graph`: the dependency graph with its Mermaid source; `?internal=true` as above
  */
 export function diRouter(container: Container) {
-  return new Router('/di')
+  const di = new Router('/di')
+
+  const bindings = di
     .get('/bindings')
     .schema({ querystring: InternalQuerySchema, response: { 200: $t.Array(BindingSchema) } })
     .handler(ctx => bindingsOf(container, ctx.req.query().internal === 'true'))
+
+  const binding = di
     .get('/bindings/:id')
     .schema({ response: { 200: BindingSchema, 404: ErrorSchema } })
     .handler(ctx => {
@@ -85,6 +89,8 @@ export function diRouter(container: Container) {
 
       return found
     })
+
+  const bindingGraph = di
     .get('/graph')
     .schema({ querystring: InternalQuerySchema, response: { 200: DependencyGraphSchema } })
     .handler((ctx): DependencyGraph => {
@@ -92,6 +98,8 @@ export function diRouter(container: Container) {
 
       return { ...graph, mermaid: graphToMermaid(graph) }
     })
+
+  return blend(bindings, binding, bindingGraph)
 }
 
 function bindingsOf(container: Container, internal: boolean): BindingRecord[] {

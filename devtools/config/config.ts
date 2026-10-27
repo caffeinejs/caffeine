@@ -1,6 +1,6 @@
 import type { ConfigStore } from '@caffeinejs/application/config'
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
-import { ErrHTTPNotFound, Router } from '@caffeinejs/http'
+import { blend, ErrHTTPNotFound, Router } from '@caffeinejs/http'
 
 import { ErrorSchema, type ToolInfo } from '../tool.js'
 import { maskCredentials, REDACTED, Redactor, secretPaths } from './redact.js'
@@ -63,16 +63,24 @@ export const configTool: ToolInfo = {
  * - `GET /config/sources`: the sources, with when each last loaded and its last failure
  */
 export function configRouter(tool: ConfigTool) {
-  return new Router('/config')
+  const config = new Router('/config')
+
+  const properties = config
     .get('/properties')
     .schema({ response: { 200: $t.Array(PropertySchema) } })
     .handler(() => tool.properties())
+
+  const property = config
     .get('/properties/:path')
     .schema({ response: { 200: PropertyDetailSchema, 404: ErrorSchema } })
     .handler(ctx => tool.property(ctx.req.param().path))
+
+  const sources = config
     .get('/sources')
     .schema({ response: { 200: $t.Array(SourceSchema) } })
     .handler(() => tool.sources())
+
+  return blend(properties, property, sources)
 }
 
 /**

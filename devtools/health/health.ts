@@ -1,7 +1,7 @@
 import { ApplicationAvailability, ApplicationHealth, type ProbeResult } from '@caffeinejs/application/health'
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Container } from '@caffeinejs/di'
-import { ErrHTTPNotFound, Router } from '@caffeinejs/http'
+import { blend, ErrHTTPNotFound, Router } from '@caffeinejs/http'
 
 import { ErrorSchema, type ToolInfo } from '../tool.js'
 
@@ -70,7 +70,9 @@ export function healthRouter(container: Container) {
     return recordOf(await probes[group]())
   }
 
-  return new Router('/health')
+  const health = new Router('/health')
+
+  const all = health
     .get('')
     .schema({ response: { 200: HealthSchema } })
     .handler(async (): Promise<HealthRecord> => {
@@ -78,6 +80,8 @@ export function healthRouter(container: Container) {
 
       return { availability: availabilityOf(container), groups: { liveness, readiness, startup } }
     })
+
+  const one = health
     .get('/:group')
     .schema({ response: { 200: ProbeSchema, 404: ErrorSchema } })
     .handler(ctx => {
@@ -89,6 +93,8 @@ export function healthRouter(container: Container) {
 
       return probe(group)
     })
+
+  return blend(all, one)
 }
 
 function isGroup(group: string): group is Group {
