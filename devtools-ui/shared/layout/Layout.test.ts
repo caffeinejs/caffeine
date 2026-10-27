@@ -58,12 +58,12 @@ describe('Layout', () => {
     expect(page).toContain('<nav class="side" id="side"')
   })
 
-  it('links the CaffeineJS repository after the theme switch, in a new tab, with a star count to show until site.js fetches one', async () => {
+  it('links the CaffeineJS repository before the theme switch, in a new tab, with a star count to show until site.js fetches one', async () => {
     const actions = /<div class="top-actions">([\s\S]*?)<\/div>/.exec(await render())![1]!
     const link = /<a class="github-stars"([^>]*)>([\s\S]*?)<\/a>/.exec(actions)
 
     expect(link).not.toBeNull()
-    expect(actions.indexOf('data-action="theme"')).toBeLessThan(link!.index)
+    expect(actions.indexOf('data-action="theme"')).toBeGreaterThan(link!.index)
     expect(link![1]).toContain('href="https://github.com/caffeinejs/caffeine"')
     expect(link![1]).toContain('target="_blank"')
     expect(link![1]).toContain('rel="noopener noreferrer"')

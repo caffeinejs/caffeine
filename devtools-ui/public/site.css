@@ -103,7 +103,7 @@ h2 {
   color: var(--muted);
 }
 
-/* The header: the brand on the left; the target, the theme switch and the GitHub link on the right. */
+/* The header: the brand on the left; the target, the GitHub link and the theme switch on the right. */
 
 .top {
   position: sticky;

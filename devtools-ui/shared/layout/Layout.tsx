@@ -60,16 +60,6 @@ export function Layout(props: LayoutProps): JSX.Element {
               <Icon name="server" />
               <span safe>{props.target}</span>
             </span>
-            <button
-              type="button"
-              class="icon-button"
-              data-action="theme"
-              title="Switch theme"
-              aria-label="Switch theme"
-            >
-              <Icon name="moon" class="when-light" />
-              <Icon name="sun" class="when-dark" />
-            </button>
             {/* The star count is filled in by `site.js`; offline, or when GitHub does not answer, the fallback stays. */}
             <a
               class="github-stars"
@@ -84,6 +74,16 @@ export function Layout(props: LayoutProps): JSX.Element {
                 0
               </span>
             </a>
+            <button
+              type="button"
+              class="icon-button"
+              data-action="theme"
+              title="Switch theme"
+              aria-label="Switch theme"
+            >
+              <Icon name="moon" class="when-light" />
+              <Icon name="sun" class="when-dark" />
+            </button>
           </div>
         </header>
         <div class="frame">
