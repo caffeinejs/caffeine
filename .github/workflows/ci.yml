@@ -230,3 +230,46 @@ jobs:
           docker compose -f test/services/configserver/docker-compose.yml logs
           docker compose -f test/services/oauthserver/docker-compose.yml logs
           docker compose -f test/services/redis/docker-compose.yml logs
+
+  devtools-ui-image:
+    name: DevTools UI Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build
+        run: |
+          docker buildx build --platform linux/amd64,linux/arm64 -f devtools-ui/Dockerfile .
+          docker buildx build --load -t devtools-ui:ci -f devtools-ui/Dockerfile .
+
+      - name: Smoke test
+        run: |
+          docker run -d --name devtools-ui --read-only --cap-drop ALL --security-opt no-new-privileges \
+            -p 127.0.0.1:9091:9091 devtools-ui:ci
+          for _ in $(seq 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' devtools-ui)" = healthy ] && break
+            sleep 2
+          done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' devtools-ui)" = healthy ]
+          [ "$(docker inspect -f '{{.Config.User}}' devtools-ui)" = nonroot ]
+          curl -fsS http://127.0.0.1:9091/readyz
+          curl -fsS -o /dev/null http://127.0.0.1:9091/static/site.css
+          [ "$(curl -s -o page.html -w '%{http_code}' http://127.0.0.1:9091/)" = 502 ]
+          grep -q 'Cannot reach the devtools at http://127.0.0.1:9090/devtools' page.html
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' http://127.0.0.1:9091/)" = 421 ]
+          docker stop devtools-ui
+          [ "$(docker inspect -f '{{.State.ExitCode}}' devtools-ui)" = 0 ]
+
+      - name: Logs
+        if: ${{ failure() }}
+        run: docker logs devtools-ui
