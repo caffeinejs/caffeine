@@ -124,6 +124,7 @@ jobs:
   sonar:
     name: Scan
     runs-on: ubuntu-latest
+    needs: test
     if: ${{ !cancelled() }}
     permissions:
       contents: read
