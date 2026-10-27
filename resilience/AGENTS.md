@@ -9,8 +9,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A test that fakes time calls `useFakeClock()` from `fake_clock.testkit.ts`; fake timers alone miss the captured
   `performance`.
 - Besides `@caffeinejs/std`, itself dependency-free and runtime-agnostic, every package this one imports is an
-  optional peer, reached only from an integration subpath (`aop/`, `http/`, `otel/`, `_spectypes/`); the root entry
-  and the concept subpaths reach none of them.
+  optional peer, reached only from an integration directory; the root entry and the concept subpaths reach none of
+  them.
 - Each resilience concept is its own subpath, and the root entry re-exports none of them; every refusal extends
   `ErrCallRefused` from `errors.ts`.
 - `aop/` never imports `@caffeinejs/http`; it recognises a controller by `Symbol.for('@caffeinejs/http:controller')`,
@@ -30,8 +30,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   when one crosses its threshold.
 - An event object is built only when `emitter.has(type)`.
 - Nothing else calls `next` or a strategy — no helper, no `bind` — and a `try` that must catch a strategy's throw
-  sits in the frame that calls it; the frame-budget tests beside `compose.ts` and each strategy fail when a frame is
-  added.
+  sits in the frame that calls it; the frame-budget tests (`2n + 1` frames) in `compose.test.ts`, the strategies'
+  own tests and `_tests/chain.test.ts` fail when a frame is added.
 - Measure with `make bench:resilience`, alone on the machine, before and after touching `compose.ts` or a
   strategy's `run`.
 
