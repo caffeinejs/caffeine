@@ -41,4 +41,17 @@ describe('devtools', () => {
     // What names no secret is shown as it is.
     expect(typeof values['server.port']).toBe('number')
   })
+
+  it('name the Prisma client binding the repositories are injected with', async () => {
+    app = buildApp(createContainer(rootModule), { logger: false })
+    await app.bootstrap()
+
+    const res = await app.listeners.get('devtools')!.request('/devtools/di/bindings')
+    const bindings = (await res.json()) as Array<{ id: number; key: string; dependencies: number[] }>
+    const keyOf = new Map(bindings.map(binding => [binding.id, binding.key]))
+    const pets = bindings.find(binding => binding.key === 'PetsRepository')!
+
+    // Prisma's client class is minified to `t`; a binding under it would read as `t` in the table.
+    expect(pets.dependencies.map(id => keyOf.get(id))).toEqual(['Symbol(prisma.client)'])
+  })
 })
