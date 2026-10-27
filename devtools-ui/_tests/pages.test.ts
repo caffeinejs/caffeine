@@ -147,6 +147,24 @@ describe('devtools UI', () => {
     expect(await res.text()).toContain("querySelectorAll('.di-graph')")
   })
 
+  it('marks every page with the CaffeineJS icon, and serves it', async () => {
+    const page = await html(client.get())
+
+    expect(page).toContain('<link rel="icon" href="/static/brand/logo.svg" type="image/svg+xml"')
+    expect(page).toMatch(/<a class="brand" href="\/">\s*<img class="brand-mark" src="\/static\/brand\/logo.svg"/)
+
+    for (const [path, type] of [
+      ['/static/brand/logo.svg', 'image/svg+xml'],
+      ['/static/brand/favicon-32.png', 'image/png'],
+      ['/static/brand/apple-touch-icon.png', 'image/png'],
+    ] as const) {
+      const res = await client.$fetch(path)
+
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toContain(type)
+    }
+  })
+
   it('shows configuration values masked as the devtools masked them', async () => {
     const page = await html(client.config.get())
 

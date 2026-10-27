@@ -31,12 +31,20 @@ export function Layout(props: LayoutProps): JSX.Element {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="referrer" content="no-referrer" />
         <title safe>{`${props.title} · Caffeine devtools`}</title>
+        <link rel="icon" href="/static/brand/logo.svg" type="image/svg+xml" />
+        <link rel="icon" href="/static/brand/favicon-32.png" type="image/png" sizes="32x32" />
+        <link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png" />
         <link rel="stylesheet" href="/static/site.css" />
       </head>
       <body>
         <header class="top">
           <a class="brand" href="/">
-            Caffeine devtools
+            {/* Decorative: the wordmark beside it names the link. */}
+            <img class="brand-mark" src="/static/brand/logo.svg" width="24" height="24" alt="" />
+            <span class="wordmark">
+              caffeine<span class="wordmark-js">js</span>
+            </span>
+            <span class="brand-product">devtools</span>
           </a>
           <span class="target" safe>
             {props.target}

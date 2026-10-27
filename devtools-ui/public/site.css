@@ -11,6 +11,8 @@
   --bad-bg: #fee2e2;
   --warn: #92400e;
   --warn-bg: #fef3c7;
+  /* The CaffeineJS mark's colours: the mug and the "js" of the wordmark. */
+  --brand: #d9622f;
   color-scheme: light dark;
 }
 
@@ -58,15 +60,38 @@ pre {
 .top {
   display: flex;
   gap: 16px;
-  align-items: baseline;
+  align-items: center;
   padding: 12px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
 
 .brand {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text);
+  font-size: 16px;
   font-weight: 700;
   text-decoration: none;
+}
+
+.brand-mark {
+  display: block;
+}
+
+/* The wordmark as the brand sets it: lowercase, tight, "js" in the mug's colour. */
+.wordmark {
+  letter-spacing: -0.03em;
+}
+
+.wordmark-js {
+  color: var(--brand);
+}
+
+.brand-product {
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .target {
@@ -96,6 +121,10 @@ pre {
 .side a.active,
 .side a:hover {
   background: var(--line);
+}
+
+.side a.active {
+  box-shadow: inset 3px 0 0 var(--brand);
 }
 
 main {
