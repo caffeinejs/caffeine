@@ -12,8 +12,9 @@ import type { Logger } from './logger.js'
  * }
  * ```
  *
- * Always resolves: `Application` binds a bare `ConsoleLogger` the moment it constructs, whether or not
- * `.logger(...)` was called.
+ * Always resolves once the container has initialized: `Application` binds the logger `.logger(...)` or
+ * `ApplicationOptions.logger` configured, else a bare `ConsoleLogger`, during `bootstrap()`. Binding it yourself
+ * fails with `ErrDuplicateBinding`.
  */
 export function logToken() {
   return token<Logger>(Symbol.for('@caffeinejs/application:logger'))

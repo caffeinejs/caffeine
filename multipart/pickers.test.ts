@@ -3,7 +3,7 @@ import { createWebApplication } from '@caffeinejs/http/fastify'
 import { KiB } from '@caffeinejs/std/bytes'
 import { describe, expect, it } from 'vitest'
 
-import { $multipart, multipartPlugin } from './index.js'
+import { $multipart, multipart } from './index.js'
 
 const BOUNDARY = '----TestBoundary123'
 
@@ -34,7 +34,7 @@ describe('$multipart on a decorated route', () => {
 
     void [LimitedUploadController]
 
-    const app = createWebApplication({}).with(() => multipartPlugin())
+    const app = createWebApplication({}).with(multipart())
     await app.bootstrap()
 
     const post = (bytes: number) =>

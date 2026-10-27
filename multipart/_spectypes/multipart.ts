@@ -5,7 +5,7 @@ import type { MultipartOptions } from '../multipart_plugin.js'
 
 /**
  * The schema of the multipart configuration block, satisfying `@fastify/multipart`'s options. Hand the node to
- * the plugin: `.with(({ config }) => multipartPlugin(...))`.
+ * the plugin: `.with(multipart(({ config }) => config.app.multipart))`.
  *
  * Only the limits a deployment tunes are here. `attachFieldsToBody` changes how the upload pickers read a body,
  * so it is code's choice, and the hooks are functions.

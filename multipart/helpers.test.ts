@@ -9,7 +9,7 @@ import type { Context } from '@caffeinejs/http/fastify'
 import { KiB } from '@caffeinejs/std/bytes'
 import { describe, it, expect } from 'vitest'
 
-import { multipart, multipartPlugin, type MultipartContext, type MultipartOptions } from './index.js'
+import { formData, multipart, type MultipartContext, type MultipartOptions } from './index.js'
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 
 const BOUNDARY = '----TestBoundary123'
@@ -17,7 +17,7 @@ const BOUNDARY = '----TestBoundary123'
 type ME = { name: string; value: string } | { name: string; filename: string; content: string; mime?: string }
 
 function multipartApp() {
-  return createWebApplication({}).with(() => multipartPlugin())
+  return createWebApplication({}).with(multipart())
 }
 
 function multipartBody(entries: Array<ME>): Uint8Array {
@@ -85,13 +85,13 @@ async function upload(router: Router, path: string, entries: Array<ME>) {
   }
 }
 
-describe('multipart(ctx) on a programmatic route', () => {
+describe('formData(ctx) on a programmatic route', () => {
   it('file() — buffers the first file, whatever field it was sent under', async () => {
     let received: File | undefined
 
     const router = new Router('/hf1')
     router.post('/upload').handler(async ctx => {
-      received = await multipart(ctx).file()
+      received = await formData(ctx).file()
       return {}
     })
 
@@ -111,7 +111,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf2')
     router.post('/upload').handler(async ctx => {
-      received = await multipart(ctx).file('document')
+      received = await formData(ctx).file('document')
       return {}
     })
 
@@ -130,7 +130,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf3')
     router.post('/upload').handler(async ctx => {
-      received = await multipart(ctx).file('missing')
+      received = await formData(ctx).file('missing')
       return {}
     })
 
@@ -147,7 +147,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf4')
     router.post('/upload').handler(async ctx => {
-      received = await multipart(ctx).files()
+      received = await formData(ctx).files()
       return {}
     })
 
@@ -166,7 +166,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf14')
     router.post('/upload').handler(async ctx => {
-      received = await multipart(ctx).files()
+      received = await formData(ctx).files()
       return {}
     })
 
@@ -180,12 +180,12 @@ describe('multipart(ctx) on a programmatic route', () => {
     expect(received.map(f => f.name)).toEqual(['a.txt', 'b.txt'])
   })
 
-  it('formData() — collects fields and files into one FormData', async () => {
+  it('form() — collects fields and files into one FormData', async () => {
     let received: FormData | undefined
 
     const router = new Router('/hf5')
     router.post('/upload').handler(async ctx => {
-      received = await multipart(ctx).formData()
+      received = await formData(ctx).form()
       return {}
     })
 
@@ -206,7 +206,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf6')
     router.post('/upload').handler(async ctx => {
-      const [first] = await readStream(multipart(ctx).webStreamFile('document'))
+      const [first] = await readStream(formData(ctx).webStreamFile('document'))
       received = first
       bytes = await readFileBytes(first.stream)
       return {}
@@ -230,7 +230,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf7')
     router.post('/upload').handler(async ctx => {
-      received = await readStream(multipart(ctx).webStreamFile('missing'))
+      received = await readStream(formData(ctx).webStreamFile('missing'))
       return {}
     })
 
@@ -247,7 +247,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf8')
     router.post('/upload').handler(async ctx => {
-      const files = multipart(ctx).webStreamFiles()
+      const files = formData(ctx).webStreamFiles()
       const reader = files.getReader()
       while (true) {
         const { value, done } = await reader.read()
@@ -274,7 +274,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf9')
     router.post('/upload').handler(async ctx => {
-      const parts = multipart(ctx).webStreamParts()
+      const parts = formData(ctx).webStreamParts()
       const reader = parts.getReader()
       while (true) {
         const { value, done } = await reader.read()
@@ -305,7 +305,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf10')
     router.post('/upload').handler(async ctx => {
-      for await (const chunk of multipart(ctx).streamFile('document')) {
+      for await (const chunk of formData(ctx).streamFile('document')) {
         received = chunk as MultipartFileNode
         for await (const _ of received.stream) {
           /* drain so busboy can advance */
@@ -329,7 +329,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf11')
     router.post('/upload').handler(async ctx => {
-      for await (const chunk of multipart(ctx).streamFiles()) {
+      for await (const chunk of formData(ctx).streamFiles()) {
         const node = chunk as MultipartFileNode
         received.push(node)
         for await (const _ of node.stream) {
@@ -353,7 +353,7 @@ describe('multipart(ctx) on a programmatic route', () => {
 
     const router = new Router('/hf12')
     router.post('/upload').handler(async ctx => {
-      for await (const chunk of multipart(ctx).streamParts()) {
+      for await (const chunk of formData(ctx).streamParts()) {
         const part = chunk as MultipartFileNode | MultipartField
         received.push(part)
         if (part.type === 'file') {
@@ -383,7 +383,7 @@ describe('multipart(ctx) on a programmatic route', () => {
     const router = new Router('/hf13')
     router.post('/:owner/upload').handler(async ctx => {
       owner = ctx.req.param('owner')
-      received = await multipart(ctx).file('avatar')
+      received = await formData(ctx).file('avatar')
       return {}
     })
 
@@ -397,7 +397,7 @@ describe('multipart(ctx) on a programmatic route', () => {
   })
 })
 
-describe('multipart(ctx) on a decorated route', () => {
+describe('formData(ctx) on a decorated route', () => {
   it('reads the upload from a handler that took the context', async () => {
     let received: File | undefined
 
@@ -406,7 +406,7 @@ describe('multipart(ctx) on a decorated route', () => {
       @Post('/upload')
       @Args([$p.context()])
       async upload(ctx: Context) {
-        received = await multipart(ctx).file('avatar')
+        received = await formData(ctx).file('avatar')
         return {}
       }
     }
@@ -438,7 +438,7 @@ describe('a route declaring its upload with $t.File', () => {
       .post('/upload')
       .schema({ body: $t.Object({ avatar: $t.File() }) })
       .handler(async ctx => {
-        received = await multipart(ctx).file('avatar')
+        received = await formData(ctx).file('avatar')
         return {}
       })
 
@@ -456,7 +456,7 @@ describe('a route declaring its upload with $t.File', () => {
       .post('/upload')
       .schema({ querystring: $t.Object({ owner: $t.String() }), body: $t.Object({ avatar: $t.File() }) })
       .handler(async ctx => {
-        await multipart(ctx).file('avatar')
+        await formData(ctx).file('avatar')
         return {}
       })
 
@@ -474,13 +474,13 @@ type Reader = (ctx: MultipartContext) => Promise<number[]>
 // cut short shows as a smaller size, rather than passing as whole.
 const readers: Record<string, Reader> = {
   'file()': async ctx => {
-    const file = await multipart(ctx).file()
+    const file = await formData(ctx).file()
     return file === undefined ? [] : [file.size]
   },
-  'files()': async ctx => (await multipart(ctx).files()).map(file => file.size),
-  'formData()': async ctx => {
+  'files()': async ctx => (await formData(ctx).files()).map(file => file.size),
+  'form()': async ctx => {
     const sizes: number[] = []
-    const form = await multipart(ctx).formData()
+    const form = await formData(ctx).form()
     form.forEach(value => {
       if (typeof value !== 'string') {
         sizes.push(value.size)
@@ -490,7 +490,7 @@ const readers: Record<string, Reader> = {
   },
   'streamFile()': async ctx => {
     const sizes: number[] = []
-    for await (const node of multipart(ctx).streamFile()) {
+    for await (const node of formData(ctx).streamFile()) {
       let size = 0
       for await (const chunk of (node as MultipartFileNode).stream) {
         size += (chunk as Buffer).length
@@ -501,7 +501,7 @@ const readers: Record<string, Reader> = {
   },
   'webStreamFile()': async ctx => {
     const sizes: number[] = []
-    for (const file of await readStream(multipart(ctx).webStreamFile())) {
+    for (const file of await readStream(formData(ctx).webStreamFile())) {
       sizes.push((await readFileBytes(file.stream)).length)
     }
     return sizes
@@ -518,7 +518,7 @@ function uploadApp(read: Reader, limit?: number, options?: MultipartOptions) {
   route.handler(async ctx => ({ sizes: await read(ctx) }))
 
   return createWebApplication({})
-    .with(() => multipartPlugin(options))
+    .with(multipart(() => options ?? {}))
     .mount(router)
 }
 
@@ -574,7 +574,7 @@ function chunked(app: { address?: { origin: string } }, body: Uint8Array, held?:
   } as RequestInit)
 }
 
-describe('multipart(ctx) on a route that declares a bodyLimit', () => {
+describe('formData(ctx) on a route that declares a bodyLimit', () => {
   // A route that lowers its limit to refuse large uploads must refuse them, whichever reader its handler uses.
   it.each(Object.entries(readers))(
     "%s refuses an upload over the route's limit with 413, as a JSON body over it is refused",
@@ -611,7 +611,7 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
       .post('/upload')
       .bodyLimit(1 * KiB)
       .handler(async ctx => {
-        const form = await multipart(ctx).formData()
+        const form = await formData(ctx).form()
         return { caption: form.get('caption'), size: (form.get('upload') as File).size }
       })
 
@@ -688,7 +688,7 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
     // A field is handed over only once it has been read to its end, so a limit checked only part by part would wait
     // for the rest of an oversized one; the client here never sends it.
     it('answers 413 once a field passes the limit, without waiting for the field to end', async () => {
-      const app = uploadApp(readers['formData()'], 1 * KiB).server(listen)
+      const app = uploadApp(readers['form()'], 1 * KiB).server(listen)
       await app.run()
 
       let release!: () => void
@@ -712,7 +712,7 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
     // The parser stops at the file it was writing, but the client goes on sending: only closing the connection stops
     // the server reading, or waiting for, the rest of an upload it already refused.
     it('closes the connection of an upload it refused while the client is still sending', async () => {
-      const app = uploadApp(readers['formData()'], 1 * KiB).server(listen)
+      const app = uploadApp(readers['form()'], 1 * KiB).server(listen)
       await app.run()
 
       const opened = new TextEncoder().encode(
@@ -759,7 +759,7 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
     // call is refused once the request has passed it, rather than given a limit of its own.
     it('holds the upload to the limit across the reader calls made on it', async () => {
       const app = uploadApp(async ctx => {
-        const upload = multipart(ctx)
+        const upload = formData(ctx)
         const a = await upload.file('a')
         const b = await upload.file('b')
         return [a?.size ?? 0, b?.size ?? 0]
@@ -787,18 +787,18 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
   })
 })
 
-describe('multipart(ctx) on a route that declares no bodyLimit', () => {
+describe('formData(ctx) on a route that declares no bodyLimit', () => {
   const cutAt = { limits: { fileSize: 1 * KiB } }
 
   // An application that raised the plugin's `fileSize` for its uploads keeps it on every route that declares no
   // limit: the server's own limit, kept low for JSON, does not reach them.
   it("leaves a route that declares no limit to the plugin's limits, not the server's", async () => {
     const router = new Router('/unlimited')
-    router.post('/upload').handler(async ctx => ({ sizes: (await multipart(ctx).files()).map(f => f.size) }))
+    router.post('/upload').handler(async ctx => ({ sizes: (await formData(ctx).files()).map(f => f.size) }))
 
     const app = createWebApplication({})
       .server(() => ({ factory: { bodyLimit: 1 * KiB } }))
-      .with(() => multipartPlugin({ limits: { fileSize: 16 * KiB } }))
+      .with(multipart(() => ({ limits: { fileSize: 16 * KiB } })))
       .mount(router)
     await app.bootstrap()
 

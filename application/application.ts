@@ -31,7 +31,7 @@ import { ApplicationHealth } from './health/health.js'
 import { loadHealthIndicators } from './health/load.js'
 import { defaultHealthRegistryOptions, kHealthRegistryOptions } from './health/options.js'
 import { HealthRegistry } from './health/registry.js'
-import { logToken, LoggerBuilder, type Logger } from './logger/index.js'
+import { Log, LoggerBuilder, type Logger } from './logger/index.js'
 import { $t } from './schema/t.js'
 import { ErrShutdownTimeout } from './shutdown/errors.js'
 import { GracefulShutdown } from './shutdown/shutdown.js'
@@ -210,11 +210,11 @@ export class Application<TConfig = unknown> {
   readonly #shutdownBuilder = new ShutdownBuilder<TConfig>()
 
   // Registered unconditionally, like #shutdownBuilder: a `.logger(...)` call is deferred to this Feature's own
-  // `configure()`, during `bootstrap()`, so it sees resolved configuration. `#logger` (not just the builder) is
-  // held too, seeded here in the constructor, so `log` answers before `bootstrap()` without touching the
-  // container — refreshed again once this builder's `configure()` has run.
+  // `configure()`, during `bootstrap()`, so it sees resolved configuration, and binds `logToken()` there.
+  // `#logger` is `ApplicationOptions.logger` until then, and unset without one: setup logs through the global
+  // `Log` until the builder has configured.
   readonly #loggerBuilder = new LoggerBuilder<TConfig>()
-  #logger: Logger
+  #logger: Logger | undefined
 
   #banner: Banner<TConfig> | undefined
   #store: ConfigStore<unknown> | undefined
@@ -257,14 +257,15 @@ export class Application<TConfig = unknown> {
     this.#register(this.#loggerBuilder)
 
     // Seeds the builder from the simple, eager path; `.logger(configure)` layers on top of this during
-    // `bootstrap()`. Bound here so `logToken()` resolves even for an application that never calls `.logger()`.
+    // `bootstrap()`.
     if (options.logger === false) {
       this.#loggerBuilder.disable(true)
     } else if (options.logger !== undefined) {
       this.#loggerBuilder.use(options.logger)
     }
-    this.#logger = this.#loggerBuilder.logger
-    this.#container.bind(logToken(), t => t.toValue(this.#logger))
+    if (options.logger !== undefined) {
+      this.#logger = this.#loggerBuilder.logger
+    }
   }
 
   get container(): Container {
@@ -398,9 +399,12 @@ export class Application<TConfig = unknown> {
     return this
   }
 
-  /** The application's logger. Always answers — a bare `ConsoleLogger` until something is configured. */
+  /**
+   * The application's logger. Always answers: before `bootstrap()` has configured it, the `ApplicationOptions.logger`
+   * given, else a child of the global {@link Log} named `caffeine`.
+   */
   get log(): Logger {
-    return this.#logger
+    return this.#logger ?? Log.for('caffeine')
   }
 
   /**
@@ -491,7 +495,7 @@ export class Application<TConfig = unknown> {
     // Not started yet: every feature configures against one revision, and the triggers arm once this is done.
     const store = await loadConfig(this.#definition, {
       profiles: [...this.#container.profiles, ...this.#optionProfiles],
-      logger: () => this.#logger,
+      logger: () => this.log,
       start: false,
     })
     const profiles = store.profiles
@@ -574,13 +578,13 @@ export class Application<TConfig = unknown> {
         await Promise.all(configurePending)
       }
 
-      // LoggerBuilder's own `configure()` already rebound `logToken()`; `#logger` is refreshed here too so
-      // `.log` reflects a `.logger(configure)` call without going through the container, which isn't
-      // initialized yet.
-      this.#logger = this.#loggerBuilder.logger
+      // LoggerBuilder's own `configure()` already bound `logToken()`; `#logger` is set here too so `.log` reflects
+      // a `.logger(configure)` call without going through the container, which is not initialized yet.
+      const logger = this.#loggerBuilder.logger
+      this.#logger = logger
 
       // The logger is configured from configuration, so the load could not be reported until now.
-      logConfigLoaded(this.#logger, store)
+      logConfigLoaded(logger, store)
 
       await this.#container.init()
     } catch (error) {
@@ -718,7 +722,7 @@ export class Application<TConfig = unknown> {
     this.#availability.beginDrain()
 
     for (const error of await this.#teardown(this.shutdownOptions().shutdownTimeout)) {
-      this.#logger.error({ err: error }, 'cannot tear down what a failed bootstrap() brought up')
+      this.log.error({ err: error }, 'cannot tear down what a failed bootstrap() brought up')
     }
 
     this.#availability.markBroken('closed')
@@ -888,7 +892,7 @@ export class Application<TConfig = unknown> {
       config: this.configSnapshot,
       store: this.configStore,
       // Refreshed once every feature configured, so this is the logger `.logger(...)` asked for.
-      logger: this.#logger,
+      logger: this.log,
     }
   }
 

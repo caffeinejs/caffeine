@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import { multipart, multipartPlugin } from '@caffeinejs/multipart'
+import { formData, multipart } from '@caffeinejs/multipart'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { brewer, ErrBrewFollowUpNotSent, type Authenticator, type BrewClient, type BrewOptions } from '../index.js'
@@ -88,7 +88,7 @@ const files = new Router('/files')
   .post('/form')
   .handler(async ctx => {
     const parts: Part[] = []
-    for (const [field, value] of await multipart(ctx).formData()) {
+    for (const [field, value] of await formData(ctx).form()) {
       parts.push(
         typeof value === 'string'
           ? { field, value }
@@ -142,7 +142,7 @@ const files = new Router('/files')
 
 const app = createWebApplication()
   .server(() => ({ factory: { connectionTimeout: 1000 } }))
-  .with(() => multipartPlugin({ limits: { fileSize: LARGE } }))
+  .with(multipart(() => ({ limits: { fileSize: LARGE } })))
   .mount(files)
 
 let origin: string

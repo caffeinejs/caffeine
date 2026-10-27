@@ -6,7 +6,7 @@ import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
 import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
 import { createWebApplication, authentication, healthProbes } from '@caffeinejs/http/fastify'
-import { multipartPlugin } from '@caffeinejs/multipart'
+import { multipart } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
 import { Second } from '@caffeinejs/std/duration'
@@ -139,7 +139,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       .install(DevTools((d, { config }) => d.config(config.devtools).showConfigValues()))
       // JSX server-side rendering. Registering it is optional — `HTML(...)` renders without it — and what it
       // configures is whether the markup is prefixed with a doctype.
-      .with(() => html())
+      .with(html())
       .with(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
       // The document is generated from the routes themselves — @Schema, @Status, @Authorize, the $p pickers and
       // the routers' own `.schema()` are the source, and @APIGroup/@Operation (with their `apiGroup()` and
@@ -171,7 +171,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             .errorSchema(APIErrorSchema),
         ),
       )
-      .with(() => multipartPlugin())
+      .with(multipart())
       // Kubernetes probes: /livez, /readyz, /startupz.
       .with(healthProbes())
       // The two features written as routers rather than controllers. Mounting is what carries their route types

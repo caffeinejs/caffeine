@@ -9,12 +9,12 @@ import type { MultipartField, MultipartFileNode, WebMultipartFile } from './mult
 // The multipart readers, over the Fastify request. Both public surfaces are thin wrappers: `pickers.ts` for a
 // decorated handler's arguments, `helpers.ts` for a handler that only receives the context.
 
-// Decorated by `multipartPlugin`: false when its `throwFileSizeLimit: false` asks for a file over `fileSize` to be
-// handed over cut short.
+// Decorated by the `multipart()` plugin: false when its `throwFileSizeLimit: false` asks for a file over `fileSize`
+// to be handed over cut short.
 export const kThrowFileSizeLimit = Symbol.for('@caffeinejs/multipart:throwFileSizeLimit')
 
-// Decorated onto every request by `multipartPlugin`: the request's `Count`, once a reader on a route with a limit
-// starts one.
+// Decorated onto every request by the `multipart()` plugin: the request's `Count`, once a reader on a route with a
+// limit starts one.
 export const kCount = Symbol.for('@caffeinejs/multipart:count')
 
 // The request's parts, held to the `bodyLimit` the route declared, on itself or on its group, as a JSON or a raw body
