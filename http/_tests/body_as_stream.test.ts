@@ -32,7 +32,7 @@ describe('BodyAsStream', () => {
 
     const payload = Buffer.from('hello stream world')
 
-    const res = await app.fetch('/stream/upload', {
+    const res = await app.request('/stream/upload', {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
       body: payload,
@@ -65,7 +65,7 @@ describe('BodyAsStream', () => {
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
 
-    const res = await app.fetch('/stream-binary/data', {
+    const res = await app.request('/stream-binary/data', {
       method: 'POST',
       headers: { 'content-type': 'application/octet-stream' },
       body: payload,
@@ -97,7 +97,7 @@ describe('BodyAsStream', () => {
 
     const jsonStr = JSON.stringify({ key: 'value' })
 
-    const res = await app.fetch('/stream-json/data', {
+    const res = await app.request('/stream-json/data', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: jsonStr,
@@ -129,13 +129,13 @@ describe('BodyAsStream', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const streamRes = await app.fetch('/stream-mixed/raw', {
+    const streamRes = await app.request('/stream-mixed/raw', {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
       body: 'hello',
     })
 
-    const parsedRes = await app.fetch('/stream-mixed/parsed', {
+    const parsedRes = await app.request('/stream-mixed/parsed', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ x: 1 }),
@@ -179,7 +179,7 @@ describe('BodyAsStream', () => {
     await app.bootstrap()
 
     const upload = (bytes: number) =>
-      app.fetch('/stream-limited/upload', {
+      app.request('/stream-limited/upload', {
         method: 'POST',
         headers: { 'content-type': 'application/octet-stream' },
         body: Buffer.alloc(bytes),
@@ -211,7 +211,7 @@ describe('BodyAsStream', () => {
     await app.bootstrap()
 
     const upload = (bytes: number) =>
-      app.fetch('/stream-server-limited/upload', {
+      app.request('/stream-server-limited/upload', {
         method: 'POST',
         headers: { 'content-type': 'text/plain' },
         body: Buffer.alloc(bytes),

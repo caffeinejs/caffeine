@@ -107,7 +107,7 @@ describe('healthProbes() and Health()', () => {
 
     await app.run()
 
-    expect((await app.fetch('/readyz')).status).toBe(200)
+    expect((await app.request('/readyz')).status).toBe(200)
   })
 
   it('mounts nothing when never installed', async () => {
@@ -115,7 +115,7 @@ describe('healthProbes() and Health()', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/readyz')).status).toBe(404)
+    expect((await app.request('/readyz')).status).toBe(404)
   })
 
   it('lets the environment switch the probes off even though installing opted in', async () => {
@@ -127,7 +127,7 @@ describe('healthProbes() and Health()', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/readyz')).status).toBe(404)
+    expect((await app.request('/readyz')).status).toBe(404)
   })
 
   // The key has to be the one its variable folds to: spelled `cacheTTL`, no variable could reach it, and the
@@ -219,7 +219,7 @@ describe('healthProbes() and Health()', () => {
 
     await app.run()
 
-    expect((await app.fetch('/readyz')).status).toBe(200)
+    expect((await app.request('/readyz')).status).toBe(200)
   })
 
   it('does not follow a config refresh after the options are resolved', async () => {
@@ -232,13 +232,13 @@ describe('healthProbes() and Health()', () => {
     await app.run()
 
     // Not verbose yet, so `?verbose` is ignored and the body stays the terse form.
-    expect(await (await app.fetch('/readyz?verbose')).text()).toBe('ok')
+    expect(await (await app.request('/readyz?verbose')).text()).toBe('ok')
 
     data = { indicatorTimeout: '30ms', cacheTtl: '12s', verbose: true }
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     // The options were read once, when the plugin registered — a refresh afterward does not reach them.
-    expect(await (await app.fetch('/readyz?verbose')).text()).toBe('ok')
+    expect(await (await app.request('/readyz?verbose')).text()).toBe('ok')
   })
 
   // health() reads the application's own ApplicationAvailability off the container rather than a fresh one —
@@ -248,10 +248,10 @@ describe('healthProbes() and Health()', () => {
 
     await app.run()
 
-    expect((await app.fetch('/livez')).status).toBe(200)
+    expect((await app.request('/livez')).status).toBe(200)
 
     app.availability.markBroken('test')
 
-    expect((await app.fetch('/livez')).status).toBe(503)
+    expect((await app.request('/livez')).status).toBe(503)
   })
 })

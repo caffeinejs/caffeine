@@ -28,8 +28,8 @@ describe('@Args builder signature', () => {
     await app.bootstrap()
 
     try {
-      const fn = await app.fetch('/pb/fn/42?q=hello')
-      const arr = await app.fetch('/pb/arr/42?q=hello')
+      const fn = await app.request('/pb/fn/42?q=hello')
+      const arr = await app.request('/pb/arr/42?q=hello')
 
       expect(fn.status).toBe(200)
       expect(await fn.json()).toEqual({ id: '42', q: 'hello' })

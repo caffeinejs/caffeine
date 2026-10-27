@@ -53,8 +53,8 @@ describe('ctx.platform', () => {
 
     const expected = { name: 'fastify', ownRequest: true, ownReply: true }
 
-    expect(await (await app.fetch('/platform/handler')).json()).toEqual(expected)
-    expect(await (await app.fetch('/platform/responder')).json()).toEqual(expected)
+    expect(await (await app.request('/platform/handler')).json()).toEqual(expected)
+    expect(await (await app.request('/platform/responder')).json()).toEqual(expected)
     expect(fromMiddleware).toEqual(expected)
   })
 })

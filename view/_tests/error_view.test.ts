@@ -39,7 +39,7 @@ describe('error handler returning a View()', () => {
       .with(view(v => v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))))
     await app.bootstrap()
 
-    const res = await app.fetch('/err-return-view/view')
+    const res = await app.request('/err-return-view/view')
 
     expect(res.status).toBe(404)
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)

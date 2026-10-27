@@ -21,7 +21,7 @@ describe('CSRF protection', () => {
   afterAll(async () => await app.close())
 
   function login(headers: Record<string, string>): Promise<Response> {
-    return app.fetch('/auth/login', {
+    return app.request('/auth/login', {
       method: 'POST',
       headers: { ...headers, 'content-type': 'application/json' },
       body: JSON.stringify({ username: 'user', password: 'user123' }),
@@ -56,7 +56,7 @@ describe('CSRF protection', () => {
     const crossSiteLink = { ...NAVIGATION, 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' }
 
     for (const path of ['/', '/login', '/livez']) {
-      const res = await app.fetch(path, { headers: crossSiteLink })
+      const res = await app.request(path, { headers: crossSiteLink })
       expect(res.status, path).not.toBe(403)
     }
   })
@@ -65,13 +65,13 @@ describe('CSRF protection', () => {
   // its form post. The check refuses it, since same-site is not same-origin.
   it('refuses a form posted from a sibling subdomain, with the session cookie attached', async () => {
     const member = await signIn(app, 'user', 'user123')
-    const res = await app.fetch('/auth/logout', {
+    const res = await app.request('/auth/logout', {
       method: 'POST',
       headers: { ...CROSS_SITE, origin: 'http://blog.localhost', 'sec-fetch-site': 'same-site', cookie: member.cookie },
     })
 
     expect(res.status).toBe(403)
     // Refused before the handler ran: the session is still there.
-    expect((await app.fetch('/auth/me', { headers: { ...XHR, cookie: member.cookie } })).status).toBe(200)
+    expect((await app.request('/auth/me', { headers: { ...XHR, cookie: member.cookie } })).status).toBe(200)
   })
 })

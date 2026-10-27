@@ -188,7 +188,7 @@ describe('the server .server(...) configures', () => {
 
     await app.bootstrap()
 
-    const res = await app.fetch('/adapter-server/ping/')
+    const res = await app.request('/adapter-server/ping/')
     expect(res.status).toBe(200)
   })
 
@@ -220,7 +220,7 @@ describe('the server .server(...) configures', () => {
     app = createWebApplication()
 
     expect(() => app!.instance).toThrow(ErrApplicationNotReady)
-    await expect(app.fetch('/adapter-server/ping')).rejects.toThrow(ErrApplicationNotReady)
+    await expect(app.request('/adapter-server/ping')).rejects.toThrow(ErrApplicationNotReady)
     expect(app.address).toBeUndefined()
 
     // Closing what never readied is fine: there is nothing to tear down.

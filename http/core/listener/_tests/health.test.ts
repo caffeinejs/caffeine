@@ -5,7 +5,6 @@ import {
   Authentication,
   Authorization,
   BaseAuthenticationHandler,
-  Listener,
   bindTo,
   type WebApplication,
 } from '../../../index.js'
@@ -43,7 +42,7 @@ describe('health probes on a listener', () => {
 
   it("serves the three probes on the server that registered them, and not on the application's own", async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener })).with(healthProbes())))
+      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
       .server(() => ({ listener })) as WebApplication
 
     await app.run()
@@ -60,7 +59,7 @@ describe('health probes on a listener', () => {
     const probes = healthProbes()
 
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener })).with(probes)))
+      .listener('admin', l => l.server(() => ({ listener })).with(probes))
       .with(probes)
       .server(() => ({ listener })) as WebApplication
 
@@ -74,13 +73,11 @@ describe('health probes on a listener', () => {
     app = createWebApplication()
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme()).default('Nobody')))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
-      .install(
-        Listener('admin', l =>
-          l
-            .server(() => ({ listener }))
-            .with(authentication())
-            .with(healthProbes()),
-        ),
+      .listener('admin', l =>
+        l
+          .server(() => ({ listener }))
+          .with(authentication())
+          .with(healthProbes()),
       )
       .mount(
         newRouter('/jobs')
@@ -97,7 +94,7 @@ describe('health probes on a listener', () => {
 
   it('checks probe paths only against the routes of the server serving them', async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener })).with(healthProbes())))
+      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
       .server(() => ({ listener }))
       .mount(newRouter().get('/livez', () => ({ mine: true }))) as WebApplication
 
@@ -109,7 +106,7 @@ describe('health probes on a listener', () => {
 
   it('refuses a route of the server serving the probes that takes a probe path', async () => {
     app = createWebApplication()
-      .install(Listener('admin', l => l.server(() => ({ listener })).with(healthProbes())))
+      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
       .mount(
         newRouter()
           .extend(bindTo('admin'))

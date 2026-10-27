@@ -96,12 +96,12 @@ function github(accepted: unknown[], router = newRouter('/webhooks')) {
 
 const ok = () => ({ ok: true })
 
-interface Fetching {
-  fetch(url: string, init?: RequestInit): Promise<Response>
+interface Requesting {
+  request(url: string, init?: RequestInit): Promise<Response>
 }
 
-function deliver(app: Fetching, path: string, body: string, headers: Record<string, string>, method = 'POST') {
-  return app.fetch(path, { method, headers, body })
+function deliver(app: Requesting, path: string, body: string, headers: Record<string, string>, method = 'POST') {
+  return app.request(path, { method, headers, body })
 }
 
 describe('csrf() in front of a webhook receiver', () => {

@@ -27,7 +27,7 @@ describe('static feature', () => {
     app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
     await app.bootstrap()
 
-    const res = await app.fetch('/static/hello.txt')
+    const res = await app.request('/static/hello.txt')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/^text\/plain/)
@@ -38,7 +38,7 @@ describe('static feature', () => {
     app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/assets' })))
     await app.bootstrap()
 
-    const res = await app.fetch('/assets/style.css')
+    const res = await app.request('/assets/style.css')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/text\/css/)
@@ -48,7 +48,7 @@ describe('static feature', () => {
     app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
     await app.bootstrap()
 
-    const res = await app.fetch('/static/nope.txt')
+    const res = await app.request('/static/nope.txt')
 
     expect(res.status).toBe(404)
   })
@@ -59,8 +59,8 @@ describe('static feature', () => {
     )
     await app.bootstrap()
 
-    const one = await app.fetch('/one/hello.txt')
-    const two = await app.fetch('/two/other.txt')
+    const one = await app.request('/one/hello.txt')
+    const two = await app.request('/two/other.txt')
 
     expect(one.status).toBe(200)
     expect(await one.text()).toContain('hello static world')
@@ -96,7 +96,7 @@ describe('static feature configured from the tree', () => {
     )
     await app.bootstrap()
 
-    const res = await app.fetch('/from-config/hello.txt')
+    const res = await app.request('/from-config/hello.txt')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('hello static world')
@@ -108,7 +108,7 @@ describe('static feature configured from the tree', () => {
     )
     await app.bootstrap()
 
-    expect((await app.fetch('/coded/other.txt')).status).toBe(200)
-    expect((await app.fetch('/from-config/hello.txt')).status).toBe(404)
+    expect((await app.request('/coded/other.txt')).status).toBe(200)
+    expect((await app.request('/from-config/hello.txt')).status).toBe(404)
   })
 })

@@ -12,7 +12,6 @@ import {
   Claim,
   type IContext,
   Identity,
-  Listener,
   Principal,
   bindTo,
   type WebApplication,
@@ -64,18 +63,14 @@ const operator = { 'x-ops': 'alice:operator' }
 function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; adminPlugin?: HTTPPluginFactory } = {}) {
   return createWebApplication()
     .install(Authentication(a => a.addStrategy('Ops', new OpsScheme()).default('Ops')))
-    .install(
-      Listener('admin', l => {
-        l.server(() => ({ factory: { bodyLimit: 64 }, listener })).with(authentication())
+    .listener('admin', l => {
+      l.server(() => ({ factory: { bodyLimit: 64 }, listener })).with(authentication())
 
-        if (adminPlugin !== undefined) {
-          l.with(adminPlugin)
-        }
-      }),
-    )
-    .install(
-      Listener('metrics', l => l.server(() => ({ listener: { ...listener, port: metricsPort } })).with(healthProbes())),
-    )
+      if (adminPlugin !== undefined) {
+        l.with(adminPlugin)
+      }
+    })
+    .listener('metrics', l => l.server(() => ({ listener: { ...listener, port: metricsPort } })).with(healthProbes()))
     .server(() => ({ listener }))
     .mount(
       newRouter('/admin')
@@ -214,8 +209,9 @@ describe('several listeners with different settings', () => {
   })
 
   it('refuses two listeners of one name', () => {
-    expect(() => createWebApplication().install(Listener('admin')).install(Listener('admin'))).toThrow(
-      /Cannot install feature "listener:admin": it is already installed/,
-    )
+    const twice = () => createWebApplication().listener('admin').listener('admin')
+
+    expect(twice).toThrow(expect.objectContaining({ name: 'ErrConfiguration', code: 'ERR_CONFIGURATION' }))
+    expect(twice).toThrow(/^Cannot add listener "admin": a listener named "admin" is already added/)
   })
 })

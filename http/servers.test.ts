@@ -25,7 +25,7 @@ describe('ServerSet', () => {
     try {
       await app.bootstrap()
 
-      const res = await app.fetch('/limited', {
+      const res = await app.request('/limited', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ longer: 'than eight bytes' }),

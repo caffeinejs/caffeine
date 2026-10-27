@@ -102,7 +102,7 @@ describe('ErrHTTP envelope fallback', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/http-err/conflict')
+    const res = await app.request('/http-err/conflict')
 
     expect(res.status).toBe(409)
     // `error` is the status phrase, `message` the detail — the two are not interchangeable.
@@ -120,7 +120,7 @@ describe('ErrHTTP envelope fallback', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/http-err/zero-body')
+    const res = await app.request('/http-err/zero-body')
 
     expect(res.status).toBe(400)
     expect(await res.text()).toBe('0')
@@ -134,7 +134,7 @@ describe('ErrHTTP envelope fallback', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/http-err/with-headers')
+    const res = await app.request('/http-err/with-headers')
 
     expect(res.status).toBe(400)
     expect(res.headers.get('x-detail')).toBe('why')
@@ -148,7 +148,7 @@ describe('ErrHTTP envelope fallback', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/http-err/conflict')
+    const res = await app.request('/http-err/conflict')
 
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ code: 'ERR_HTTP_CONFLICT' })
@@ -160,7 +160,7 @@ describe('ErrHTTP envelope fallback', () => {
     const app = createWebApplication().errorHandling(e => e.globalHandlers(NeverEnrolledHandler))
     await app.bootstrap()
 
-    const res = await app.fetch('/http-err/conflict')
+    const res = await app.request('/http-err/conflict')
 
     expect(res.status).toBe(418)
     expect(await res.json()).toEqual({ enrolled: true })
@@ -177,7 +177,7 @@ describe('an unexpected failure', () => {
     const app = loggingTo(logged)
     await app.bootstrap()
 
-    const res = await app.fetch('/unexpected/boom')
+    const res = await app.request('/unexpected/boom')
     const text = await res.text()
 
     expect(res.status).toBe(500)
@@ -202,7 +202,7 @@ describe('an unexpected failure', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/unexpected/unavailable')
+    const res = await app.request('/unexpected/unavailable')
     const text = await res.text()
 
     expect(res.status).toBe(503)
@@ -224,7 +224,7 @@ describe('an unexpected failure', () => {
     const app = loggingTo(logged)
     await app.bootstrap()
 
-    const res = await app.fetch('/unexpected/validated', {
+    const res = await app.request('/unexpected/validated', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: '' }),
@@ -247,7 +247,7 @@ describe('exposeStacktrace', () => {
     const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
     await app.bootstrap()
 
-    const body = await bodyOf(await app.fetch('/unexpected/boom'))
+    const body = await bodyOf(await app.request('/unexpected/boom'))
 
     // The envelope a client parses does not change shape with a server setting.
     expect(body.message).toBe('Internal Server Error')
@@ -262,7 +262,7 @@ describe('exposeStacktrace', () => {
     const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
     await app.bootstrap()
 
-    const body = await bodyOf(await app.fetch('/unexpected/wrapped'))
+    const body = await bodyOf(await app.request('/unexpected/wrapped'))
 
     expect(body.stacktrace).toContain('fetch failed')
     expect(body.stacktrace).toContain('Caused by:')
@@ -275,11 +275,11 @@ describe('exposeStacktrace', () => {
     const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
     await app.bootstrap()
 
-    const conflict = await bodyOf(await app.fetch('/http-err/conflict'))
+    const conflict = await bodyOf(await app.request('/http-err/conflict'))
     expect(conflict.message).toBe('nope')
     expect(conflict.stacktrace).toContain('ErrHTTPConflict')
 
-    const upstream = await bodyOf(await app.fetch('/unexpected/upstream'))
+    const upstream = await bodyOf(await app.request('/unexpected/upstream'))
     expect(upstream.message).toBe('Upstream is unavailable')
     expect(upstream.stacktrace).toContain('idp.internal')
 
@@ -291,7 +291,7 @@ describe('exposeStacktrace', () => {
     const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
     await app.bootstrap()
 
-    expect(await (await app.fetch('/http-err/zero-body')).text()).toBe('0')
+    expect(await (await app.request('/http-err/zero-body')).text()).toBe('0')
 
     await app.close()
   })
@@ -300,9 +300,9 @@ describe('exposeStacktrace', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    expect((await bodyOf(await app.fetch('/unexpected/boom'))).stacktrace).toBeUndefined()
-    expect((await bodyOf(await app.fetch('/http-err/conflict'))).stacktrace).toBeUndefined()
-    expect((await bodyOf(await app.fetch('/unexpected/upstream'))).stacktrace).toBeUndefined()
+    expect((await bodyOf(await app.request('/unexpected/boom'))).stacktrace).toBeUndefined()
+    expect((await bodyOf(await app.request('/http-err/conflict'))).stacktrace).toBeUndefined()
+    expect((await bodyOf(await app.request('/unexpected/upstream'))).stacktrace).toBeUndefined()
 
     await app.close()
   })

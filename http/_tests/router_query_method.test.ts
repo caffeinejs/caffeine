@@ -15,7 +15,7 @@ describe('Router.query()', () => {
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(routes)
     await app.bootstrap()
 
-    const res = await app.fetch('/query-test', {
+    const res = await app.request('/query-test', {
       method: 'QUERY',
       body: JSON.stringify({ term: 'cats' }),
       headers: { 'content-type': 'application/json' },

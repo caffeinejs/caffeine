@@ -62,7 +62,7 @@ function lateRoute(): HTTPPluginFactory {
 
 /** The status and body of a request: JSON when the response is, its text otherwise. */
 async function get(app: WebApplication, url: string, init?: RequestInit) {
-  const res = await app.fetch(url, init)
+  const res = await app.request(url, init)
   const json = res.headers.get('content-type')?.includes('application/json') === true
   return { status: res.status, body: json ? await res.json() : await res.text() }
 }
@@ -251,7 +251,7 @@ describe('an application under a base path', () => {
       app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
       await app.bootstrap()
 
-      expect((await app.fetch('/api/pets', { method: 'HEAD' })).status).toBe(200)
+      expect((await app.request('/api/pets', { method: 'HEAD' })).status).toBe(200)
     })
 
     it('keeps the query, and the full URL as the request arrived', async () => {
@@ -372,24 +372,24 @@ describe('an application under a base path', () => {
       app = redirecting()
       await app.bootstrap()
 
-      const under = await app.fetch('/api/go')
+      const under = await app.request('/api/go')
       expect(under.status).toBe(303)
       expect(under.headers.get('location')).toBe('/api/done')
-      expect((await app.fetch('/go')).headers.get('location')).toBe('/done')
+      expect((await app.request('/go')).headers.get('location')).toBe('/done')
     })
 
     it('sends any other URL as it is written', async () => {
       app = redirecting()
       await app.bootstrap()
 
-      expect((await app.fetch('/api/verbatim')).headers.get('location')).toBe('/done')
+      expect((await app.request('/api/verbatim')).headers.get('location')).toBe('/done')
     })
 
     it('never resolves "~//" into a URL that leaves the origin', async () => {
       app = redirecting()
       await app.bootstrap()
 
-      expect((await app.fetch('/api/escape')).headers.get('location')).toBe('~//evil.example')
+      expect((await app.request('/api/escape')).headers.get('location')).toBe('~//evil.example')
     })
   })
 

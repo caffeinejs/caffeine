@@ -65,23 +65,23 @@ describe('what a route may ask of the cache, checked while it registers', () => 
   it('takes a route without tags, and one whose tags are an empty list', async () => {
     const app = await startWith({ ttl: 60 * Second, tags: [] })
 
-    await app.fetch('/attach/data')
+    await app.request('/attach/data')
 
-    expect((await app.fetch('/attach/data')).headers.get('x-cache')).toBe('HIT')
+    expect((await app.request('/attach/data')).headers.get('x-cache')).toBe('HIT')
   })
 
   it('takes a sharedMaxAge of zero, which tells shared caches not to keep the response', async () => {
     const app = await startWith({ ttl: 60 * Second, sharedMaxAge: 0 })
 
-    expect((await app.fetch('/attach/data')).headers.get('cache-control')).toBe('public, max-age=60, s-maxage=0')
+    expect((await app.request('/attach/data')).headers.get('cache-control')).toBe('public, max-age=60, s-maxage=0')
   })
 
   it('reads the methods a route lists whatever their case', async () => {
     const app = await startWith({ ttl: 60 * Second, methods: ['get'] })
 
-    await app.fetch('/attach/data')
+    await app.request('/attach/data')
 
-    expect((await app.fetch('/attach/data')).headers.get('x-cache')).toBe('HIT')
+    expect((await app.request('/attach/data')).headers.get('x-cache')).toBe('HIT')
   })
 })
 
@@ -143,9 +143,9 @@ describe('constrained routes that share a URL', () => {
       versioned({ ttl: 60 * Second, vary: ['Accept-Version'] }, { ttl: 60 * Second, vary: ['accept-version'] }),
     )
 
-    const v1 = await app.fetch('/pets-versioned', { headers: { 'accept-version': '1.x' } })
-    const v2 = await app.fetch('/pets-versioned', { headers: { 'accept-version': '2.x' } })
-    const v2Again = await app.fetch('/pets-versioned', { headers: { 'accept-version': '2.x' } })
+    const v1 = await app.request('/pets-versioned', { headers: { 'accept-version': '1.x' } })
+    const v2 = await app.request('/pets-versioned', { headers: { 'accept-version': '2.x' } })
+    const v2Again = await app.request('/pets-versioned', { headers: { 'accept-version': '2.x' } })
 
     expect(await v1.json()).toEqual({ v: 1 })
     expect(await v2.json()).toEqual({ v: 2 })
@@ -158,8 +158,8 @@ describe('constrained routes that share a URL', () => {
       versioned({ ttl: 60 * Second, key: req => `v1:${req.url}` }, { ttl: 60 * Second, key: req => `v2:${req.url}` }),
     )
 
-    await app.fetch('/pets-versioned', { headers: { 'accept-version': '1.x' } })
-    const v2 = await app.fetch('/pets-versioned', { headers: { 'accept-version': '2.x' } })
+    await app.request('/pets-versioned', { headers: { 'accept-version': '1.x' } })
+    const v2 = await app.request('/pets-versioned', { headers: { 'accept-version': '2.x' } })
 
     expect(v2.headers.get('x-cache')).toBe('MISS')
     expect(await v2.json()).toEqual({ v: 2 })

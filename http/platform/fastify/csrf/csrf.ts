@@ -30,7 +30,7 @@ import { protocolOf } from '../protocol.js'
  *
  * A route is left alone when it is marked with `@CSRFExempt()`, `csrfExempt()` or `csrfExemptConfig()`, or, unmarked,
  * when its registered path is under `.exclude(...)`. A URL no route matched is the not-found handler's. A listener
- * is covered by its own `Listener(name, l => l.with(csrf()))`, a route group by
+ * is covered by its own `.listener(name, l => l.with(csrf()))`, a route group by
  * `router.with(csrf(c => c.name('admin')))`.
  *
  * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path not starting

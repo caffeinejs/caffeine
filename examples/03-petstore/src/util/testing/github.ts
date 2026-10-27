@@ -1,4 +1,4 @@
-import type { Fetchable } from '@caffeinejs/brewer'
+import type { Requestable } from '@caffeinejs/brewer'
 import { vi } from 'vitest'
 
 import { GITHUB_SESSION_COOKIE, GITHUB_STATE_COOKIE } from '../../app.config.js'
@@ -29,7 +29,7 @@ const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails'
 export const NAVIGATION = { 'sec-fetch-mode': 'navigate' }
 
 /**
- * Stubs GitHub's token/user/emails endpoints. `app.fetch` drives the app through light-my-request, so only
+ * Stubs GitHub's token/user/emails endpoints. `app.request` drives the app through light-my-request, so only
  * the handler's own outbound fetch is replaced here — the request pipeline is untouched.
  *
  * The `/user` body is deliberately realistic: GitHub returns ~30 fields, many of them long `*_url` strings.
@@ -114,10 +114,10 @@ export function setCookie(res: Response, name: string): string {
  *
  * Call `stubGithub()` first, and remember to `vi.unstubAllGlobals()` afterwards.
  */
-export async function signInWithGithub(app: Fetchable): Promise<string> {
+export async function signInWithGithub(app: Requestable): Promise<string> {
   // Sign-in is a browser navigation, and the challenge answers a non-navigation with 401 instead of the
   // 302 this helper follows — so say what this is.
-  const login = await app.fetch('/login/github', { headers: NAVIGATION })
+  const login = await app.request('/login/github', { headers: NAVIGATION })
   const state = new URL(login.headers.get('location')!).searchParams.get('state')!
 
   // The state cookie is named per flow — `<base>.<state>` — so two sign-ins in flight at once get a
@@ -125,7 +125,7 @@ export async function signInWithGithub(app: Fetchable): Promise<string> {
   const stateCookieName = `${GITHUB_STATE_COOKIE}.${state}`
   const stateCookie = setCookie(login, stateCookieName)
 
-  const callback = await app.fetch(`/login/github/callback?code=fake-code&state=${state}`, {
+  const callback = await app.request(`/login/github/callback?code=fake-code&state=${state}`, {
     headers: { cookie: `${stateCookieName}=${stateCookie}` },
   })
 

@@ -7,7 +7,7 @@ import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Listener, bindTo, csrfExempt, type OriginPredicate, type WebApplication } from '../../../index.js'
+import { bindTo, csrfExempt, type OriginPredicate, type WebApplication } from '../../../index.js'
 import { createWebApplication, csrf, newRouter } from '../../../platform/fastify/index.js'
 
 /**
@@ -33,12 +33,12 @@ const ok = () => ({ ok: true })
 /** `POST /echo`. */
 const echo = () => newRouter('/echo').post('/', ok)
 
-interface Fetching {
-  fetch(url: string, init?: RequestInit): Promise<Response>
+interface Requesting {
+  request(url: string, init?: RequestInit): Promise<Response>
 }
 
-function post(app: Fetching, path: string, headers: Record<string, string> = {}): Promise<Response> {
-  return app.fetch(path, { method: 'POST', headers })
+function post(app: Requesting, path: string, headers: Record<string, string> = {}): Promise<Response> {
+  return app.request(path, { method: 'POST', headers })
 }
 
 /** Posts to `/echo` over a socket, headers as written: `fetch` would fold a header sent twice into one. */
@@ -175,7 +175,7 @@ describe('csrf() at the edges', () => {
           })
           .with(csrf()),
       )
-      const res = await app.fetch('/search', {
+      const res = await app.request('/search', {
         method: 'QUERY',
         headers: { ...CROSS_SITE, 'content-type': 'application/json' },
         body: '{"q":"x"}',
@@ -195,7 +195,7 @@ describe('csrf() at the edges', () => {
           .with(csrf()),
       )
 
-      expect((await app.fetch('/dav', { method: 'PROPFIND', headers: CROSS_SITE })).status).toBe(403)
+      expect((await app.request('/dav', { method: 'PROPFIND', headers: CROSS_SITE })).status).toBe(403)
     })
   })
 
@@ -366,7 +366,7 @@ describe('csrf() at the edges', () => {
 
     it('never refuses a preflight', async () => {
       const app = await ready(createWebApplication().with(cors).with(csrf()).mount(echo()))
-      const res = await app.fetch('/echo', {
+      const res = await app.request('/echo', {
         method: 'OPTIONS',
         headers: { ...fromFront, 'access-control-request-method': 'POST' },
       })
@@ -394,7 +394,7 @@ describe('csrf() at the edges', () => {
     it("leaves the application server's paths to its own plugin, whatever a listener excludes", async () => {
       const app = (await running(
         createWebApplication()
-          .install(Listener('admin', l => l.server(() => ({ listener })).with(csrf(c => c.exclude('/hooks')))))
+          .listener('admin', l => l.server(() => ({ listener })).with(csrf(c => c.exclude('/hooks'))))
           .server(() => ({ listener }))
           .with(csrf())
           .mount(newRouter('/hooks').extend(bindTo('admin')).post('/', ok), newRouter('/hooks').post('/', ok)),

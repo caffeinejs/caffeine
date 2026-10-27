@@ -39,7 +39,7 @@ describe('ctx.config', () => {
 
     await app.bootstrap()
 
-    expect(await (await app.fetch('/catalog/page-size')).json()).toEqual({ pageSize: 25 })
+    expect(await (await app.request('/catalog/page-size')).json()).toEqual({ pageSize: 25 })
 
     await app.close()
   })
@@ -74,13 +74,13 @@ describe('ctx.config', () => {
 
     await app.bootstrap()
 
-    expect(await (await app.fetch('/catalog/page-size')).json()).toEqual({ pageSize: 25 })
+    expect(await (await app.request('/catalog/page-size')).json()).toEqual({ pageSize: 25 })
     // The handler was served the very object the middleware took, not a second snapshot of the same values.
     expect(seen[0]).toBe(seen[1])
 
     // The refresh was real: the next request is configured by what it resolved.
     expect(app.container.get(conf.liveConfigToken).get().catalog.pageSize).toBe(100)
-    expect(await (await app.fetch('/catalog/page-size')).json()).toEqual({ pageSize: 100 })
+    expect(await (await app.request('/catalog/page-size')).json()).toEqual({ pageSize: 100 })
 
     await app.close()
   })
@@ -94,7 +94,7 @@ describe('ctx.config', () => {
 
     // No `config` constructor option, so there is no application config key to resolve — and the context still reads.
     // It is empty: no source, and no feature adds a field to the configuration an application reads.
-    expect(await (await app.fetch('/plain')).json()).toEqual({ keys: [] })
+    expect(await (await app.request('/plain')).json()).toEqual({ keys: [] })
 
     await app.close()
   })
@@ -120,7 +120,7 @@ describe('ctx.config', () => {
 
     await app.bootstrap()
 
-    expect(await (await app.fetch('/catalog/write')).json()).toEqual({ threw: true })
+    expect(await (await app.request('/catalog/write')).json()).toEqual({ threw: true })
 
     await app.close()
   })
@@ -202,7 +202,7 @@ describe('ctx.config with an application schema', () => {
 
     await app.bootstrap()
 
-    expect(await (await app.fetch('/catalog')).json()).toEqual({ pageSize: 25, host: '0.0.0.0' })
+    expect(await (await app.request('/catalog')).json()).toEqual({ pageSize: 25, host: '0.0.0.0' })
 
     await app.close()
   })
@@ -223,7 +223,7 @@ describe('ctx.config with an application schema', () => {
 
     await app.bootstrap()
 
-    expect(await (await app.fetch('/catalog')).json()).toEqual({ host: '0.0.0.0' })
+    expect(await (await app.request('/catalog')).json()).toEqual({ host: '0.0.0.0' })
 
     await app.close()
   })
@@ -243,7 +243,7 @@ describe('ctx.config with an application schema', () => {
 
     await app.bootstrap()
 
-    expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['catalog'] })
+    expect(await (await app.request('/plain')).json()).toEqual({ keys: ['catalog'] })
 
     await app.close()
   })

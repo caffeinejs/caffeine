@@ -46,7 +46,7 @@ describe('view feature', () => {
     app = viewApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/view-model/show')
+    const res = await app.request('/view-model/show')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
@@ -67,7 +67,7 @@ describe('view feature', () => {
     app = viewApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/view-plain/show')
+    const res = await app.request('/view-plain/show')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('Static page, no model')
@@ -91,7 +91,7 @@ describe('view feature', () => {
     )
     await app.bootstrap()
 
-    const res = await app.fetch('/view-context/show')
+    const res = await app.request('/view-context/show')
 
     expect(await res.text()).toContain('Caffeine')
   })
@@ -112,7 +112,7 @@ describe('view feature', () => {
     )
     await app.bootstrap()
 
-    const res = await app.fetch('/view-namespaced/show')
+    const res = await app.request('/view-namespaced/show')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('Deeply Nested')
@@ -132,7 +132,7 @@ describe('view feature', () => {
     app = viewApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/view-async/show')
+    const res = await app.request('/view-async/show')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('Hello Grace')
@@ -152,7 +152,7 @@ describe('view feature', () => {
     app = viewApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/view-layout/show')
+    const res = await app.request('/view-layout/show')
     const body = await res.text()
 
     expect(res.status).toBe(200)
@@ -175,7 +175,7 @@ describe('view feature', () => {
     app = viewApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/view-json/show')
+    const res = await app.request('/view-json/show')
 
     expect(res.headers.get('content-type')).toMatch(/^application\/json/)
     expect(await res.json()).toEqual({ ok: true })
@@ -195,7 +195,7 @@ describe('view feature', () => {
     app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/view-unconfigured/show')
+    const res = await app.request('/view-unconfigured/show')
 
     expect(res.status).toBe(500)
   })
@@ -214,7 +214,7 @@ describe('view feature', () => {
     app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/view-unconfigured-async/show')
+    const res = await app.request('/view-unconfigured-async/show')
 
     expect(res.status).toBe(500)
   })
@@ -245,8 +245,8 @@ describe('view feature', () => {
     )
     await app.bootstrap()
 
-    const hbs = await app.fetch('/multi/hbs')
-    const ejsRes = await app.fetch('/multi/ejs')
+    const hbs = await app.request('/multi/hbs')
+    const ejsRes = await app.request('/multi/ejs')
 
     expect(hbs.status).toBe(200)
     expect(await hbs.text()).toContain('Hello Ada')
@@ -281,8 +281,8 @@ describe('view feature', () => {
     )
     await app.bootstrap()
 
-    const plain = await app.fetch('/same-engine/plain')
-    const alt = await app.fetch('/same-engine/alt')
+    const plain = await app.request('/same-engine/plain')
+    const alt = await app.request('/same-engine/alt')
 
     const plainBody = await plain.text()
     const altBody = await alt.text()
@@ -309,7 +309,7 @@ describe('view feature', () => {
     app = viewApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/multi-missing/show')
+    const res = await app.request('/multi-missing/show')
 
     expect(res.status).toBe(500)
   })
@@ -434,7 +434,7 @@ describe('ViewEngineBuilder', () => {
     try {
       await app.bootstrap()
 
-      const res = await app.fetch('/view-configured/show')
+      const res = await app.request('/view-configured/show')
 
       expect(res.status).toBe(200)
       expect(await res.text()).toContain('Hello Grace')

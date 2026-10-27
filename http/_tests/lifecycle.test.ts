@@ -30,7 +30,7 @@ describe('Adapter Lifecycle', () => {
 
     await app.bootstrap()
 
-    const res = await app.fetch('/lc/ping')
+    const res = await app.request('/lc/ping')
 
     expect(res.status).toBe(200)
     expect(order).toEqual(['bootstrap', 'request'])
@@ -78,11 +78,11 @@ describe('Adapter Lifecycle', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const beforeClose = await app.fetch('/lc4/ping')
+    const beforeClose = await app.request('/lc4/ping')
     expect(beforeClose.status).toBe(200)
 
     await app.close()
 
-    await expect(app.fetch('/lc4/ping')).rejects.toThrow()
+    await expect(app.request('/lc4/ping')).rejects.toThrow()
   })
 })

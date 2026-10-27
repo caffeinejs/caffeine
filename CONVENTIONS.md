@@ -162,6 +162,7 @@ throw new ErrConfiguration(`Cannot set the base path: "${value}" does not start 
 
 - A solution is one action the reader can take now: imperative, naming the exact method, option or decorator, most likely fix first. `Check your configuration` is not a solution.
 - No leading dash and no trailing period: the builder writes the bullets.
+- A solution never proposes or mentions `rebind()`: it is for the framework and `@caffeinejs/testing`, not for applications. A duplicate binding is fixed by removing it, binding it under its own key or name, `.primary()`, a profile or a condition.
 - Fixed, context-free solutions go in the constructor. Solutions that depend on the call go at the throw site. A class whose first line is fixed takes the site's solutions as a rest parameter and builds the message itself, as `ErrFeatureNotInstalled(feature, ...solutions)` does; a class that takes a free-form message takes it finished.
 - Every first-party error message carries `.reference(package, ErrClass)`, added where the message is written: in the constructor of a class that writes its own text, at the construction site or the factory of a class that takes a message. `package` is the package that defines the class, not the one throwing it. Nothing is printed until the error pages are published. A warning takes none.
 - An `ErrHTTP` message is the response body a client reads, so neither an `ErrHTTP` nor any subclass of it (`ErrCSRFCrossOrigin`, `ErrRefreshTokenRejected`) carries solutions or a reference.

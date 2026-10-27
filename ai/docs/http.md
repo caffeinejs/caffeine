@@ -227,7 +227,7 @@ newRouter('/hooks').extend(csrfExempt()) // the programmatic form; csrfExempt(fa
 - The check is a root `onRequest` hook of the server it is registered on, ahead of body parsing, in the slot
   `.with(csrf())` was written in: ahead of `.with(authentication())`, a cross-origin request is refused before anyone
   is authenticated; behind it, an anonymous one meets the challenge first. A [listener](#listeners) is covered by its
-  own `Listener('admin', l => l.with(csrf()))`, a route group alone by `router.with(csrf(c => c.name('admin')))`.
+  own `.listener('admin', l => l.with(csrf()))`, a route group alone by `router.with(csrf(c => c.name('admin')))`.
 - From the environment, under whatever prefix the block has in the application's schema: `CSRF__ENABLED`,
   `CSRF__TRUSTED_ORIGINS__0`, `CSRF__EXCLUDE__0`. `c.enabled(false)` registers nothing, and says so once, at `warn`,
   as the server starts.
@@ -510,7 +510,7 @@ export function metrics(): AdapterExtensionFactory<HTTPPlugin> {
 }
 
 app.with(metrics()) // the application's own server
-app.install(Listener('admin', l => l.with(metrics()))) // that listener alone
+app.listener('admin', l => l.with(metrics())) // that listener alone
 newRouter('/api').with(metrics()) // that router alone: /api/metrics
 ```
 
@@ -591,13 +591,13 @@ const readiness = await app.health.readiness() // { ok, checks, outcomes }
 - Readiness and startup fail until `run()` marks the application started. Under Watt, answer its checks from
   `app.health` as [docs/watt.md](../../docs/watt.md) shows.
 - To serve the probes on a [listener](#listeners), register the plugin there:
-  `Listener('admin', l => l.with(healthProbes()))`. They stay exempt from authentication there, and the
+  `.listener('admin', l => l.with(healthProbes()))`. They stay exempt from authentication there, and the
   application's own server serves them only if its `.with(...)` registers them too.
 
 ## Listeners
 
 A listener is one more port, serving only the routers bound to it: metrics, probes or an admin API kept off the
-public one. Each is named, and an application may install several.
+public one. Each is named, and an application may add several.
 
 ```ts
 const app = createWebApplication({ config })
@@ -609,14 +609,12 @@ const app = createWebApplication({ config })
         .default('api'),
     ),
   )
-  .install(
-    Listener('admin', (l, { config }) =>
-      l
-        .server(() => ({ listener: config.app.admin }))
-        .with(authentication())
-        .with(healthProbes())
-        .use(AuditLog),
-    ),
+  .listener('admin', (l, { config }) =>
+    l
+      .server(() => ({ listener: config.app.admin }))
+      .with(authentication())
+      .with(healthProbes())
+      .use(AuditLog),
   )
   .with(authentication())
   .mount(
@@ -633,6 +631,18 @@ export class MetricsController {}
 await app.run()
 app.listeners.get('admin')?.address // { host, port, path, origin }
 ```
+
+- **Adding one.** `.listener(name, configure)` takes the name at once and refuses one already added. `configure`
+  runs at start-up with the builder and the context a plugin factory gets (`config`, `logger`, `container`), so the
+  example above reads `config.app.admin` there.
+- **From a feature.** A feature adds a listener from its configure step with `listenersOf(kit).add(name, configure)`,
+  which takes the same arguments; `listenersOf` refuses an application that is not a web application.
+
+  ```ts
+  protected configure(kit: FeatureConfigureKit<C>): void {
+    listenersOf(kit).add('metrics', l => l.server(() => ({ listener: { port: this.#port } })).with(metrics()))
+  }
+  ```
 
 - **Binding is per router.** `@BindTo(name)` on a controller and `router.extend(bindTo(name))` bind every route under
   it. A router nested in a bound one is served where its parent is: binding it to another server is refused at
@@ -662,7 +672,7 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   server first, so probes and metrics answer through the drain.
 - **Clients and tests.** A typed client reaches a listener's routes given its origin:
   `brewer<App>(app.listeners.get('admin')!.address!.origin)`. A test injects with
-  `app.listeners.get('admin')!.fetch('/jobs')`; `app.fetch(...)` reaches the application's own server only. Each
+  `app.listeners.get('admin')!.request('/jobs')`; `app.request(...)` reaches the application's own server only. Each
   listener is an `IServer`, as the application is for its own server.
 - **OpenAPI.** `@caffeinejs/openapi` documents the server it is registered on, so routes bound to a listener are
   left out of the main document.
@@ -696,7 +706,7 @@ await client.pets.post({ body: { name: 'Rex' } })
 - The routes are the ones the application declares. An application served under a `.basePath(...)` puts the base
   in the URL — `brewer<App>('https://gateway.example/api')` — which the path is joined onto, never resolved
   against.
-- Given the application instead of a URL, requests go through its own `fetch` and never reach a socket — which is
+- Given the application instead of a URL, requests go through its own `request` and never reach a socket — which is
   how to test one. Both the routes and the transport come from the argument, so neither the type argument nor the
   URL is written. The application must be `bootstrap()` first, or every call rejects with `ErrApplicationNotReady`:
 
@@ -708,7 +718,7 @@ await client.pets.post({ body: { name: 'Rex' } })
   brewer<typeof petsRouter>(app) // one router's surface, driven through the application
   ```
 
-  The target is structural — anything with a matching `fetch` works, a stub included — and `options.fetch` still
+  The target is structural — anything with a matching `request` works, a stub included — and `options.fetch` still
   wins over it.
 
 - Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a

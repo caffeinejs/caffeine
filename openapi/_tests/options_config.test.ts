@@ -96,9 +96,9 @@ describe('openapi() configured from the tree', () => {
     ) as WebApplication
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/spec.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/spec.json')).json()) as OpenAPIDocument
 
     expect(document.info).toEqual({ title: 'From config', version: '2.0.0' })
-    expect((await app.fetch('/docs')).status).toBe(404)
+    expect((await app.request('/docs')).status).toBe(404)
   })
 })

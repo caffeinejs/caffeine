@@ -78,10 +78,10 @@ describe('a handler that outlives its timeout', () => {
       close = () => app.close()
       await app.bootstrap()
 
-      const slow = await app.fetch('/timed/slow')
+      const slow = await app.request('/timed/slow')
       expect(slow.status).toBe(503)
 
-      const fast = await app.fetch('/timed/fast')
+      const fast = await app.request('/timed/fast')
       expect(fast.status).toBe(200)
       expect(await fast.text()).toBe('ok')
     })
@@ -108,7 +108,7 @@ describe('a handler that outlives its timeout', () => {
       close = () => app.close()
       await app.bootstrap()
 
-      const slow = await app.fetch('/timed-route/slow')
+      const slow = await app.request('/timed-route/slow')
       expect(slow.status).toBe(503)
     })
 
@@ -138,7 +138,7 @@ describe('a handler that outlives its timeout', () => {
       close = () => app.close()
       await app.bootstrap()
 
-      const slow = await app.fetch('/timed-responder/slow')
+      const slow = await app.request('/timed-responder/slow')
       expect(slow.status).toBe(503)
       expect(slow.headers.get('content-type')).not.toBe('text/plain')
     })
@@ -165,7 +165,7 @@ describe('a handler that outlives its timeout', () => {
       close = () => app.close()
       await app.bootstrap()
 
-      const slow = await app.fetch('/timed-reject/slow')
+      const slow = await app.request('/timed-reject/slow')
       expect(slow.status).toBe(503)
     })
 
@@ -186,7 +186,7 @@ describe('a route timeout that is not a whole number of milliseconds', () => {
     try {
       await app.bootstrap()
 
-      const answer = await app.fetch('/fractional/answer')
+      const answer = await app.request('/fractional/answer')
       expect(answer.status).toBe(200)
       expect(await answer.text()).toBe('ok')
     } finally {

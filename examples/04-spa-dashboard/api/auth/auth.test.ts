@@ -23,7 +23,7 @@ describe('cookie authentication', () => {
   describe('signing in', () => {
     it('accepts the demo accounts and reports the principal', async () => {
       const member = await signIn(app, 'user', 'user123')
-      const me = await app.fetch('/auth/me', { headers: { ...XHR, cookie: member.cookie } })
+      const me = await app.request('/auth/me', { headers: { ...XHR, cookie: member.cookie } })
 
       expect(me.status).toBe(200)
       expect(await me.json()).toEqual({ sub: 'user', name: 'Ulric User', roles: ['member'] })
@@ -31,13 +31,13 @@ describe('cookie authentication', () => {
 
     it('carries the roles that gate the admin routes', async () => {
       const admin = await signIn(app, 'admin', 'admin123')
-      const me = await app.fetch('/auth/me', { headers: { ...XHR, cookie: admin.cookie } })
+      const me = await app.request('/auth/me', { headers: { ...XHR, cookie: admin.cookie } })
 
       expect(await me.json()).toEqual({ sub: 'admin', name: 'Ada Admin', roles: ['admin', 'member'] })
     })
 
     it('refuses a wrong password without saying which half was wrong', async () => {
-      const res = await app.fetch('/auth/login', {
+      const res = await app.request('/auth/login', {
         method: 'POST',
         headers: { ...XHR, 'content-type': 'application/json' },
         body: JSON.stringify({ username: 'user', password: 'wrong' }),
@@ -50,7 +50,7 @@ describe('cookie authentication', () => {
     // `persist` writes the cookie for the *next* request; it does not re-authenticate this one. The response
     // therefore describes what was just verified, not `ctx.user` — which is still anonymous here.
     it('describes the principal in the login response itself', async () => {
-      const res = await app.fetch('/auth/login', {
+      const res = await app.request('/auth/login', {
         method: 'POST',
         headers: { ...XHR, 'content-type': 'application/json' },
         body: JSON.stringify({ username: 'admin', password: 'admin123' }),
@@ -64,7 +64,7 @@ describe('cookie authentication', () => {
 
   describe('the session cookie', () => {
     it('is HttpOnly, SameSite=Lax and path-wide', async () => {
-      const res = await app.fetch('/auth/login', {
+      const res = await app.request('/auth/login', {
         method: 'POST',
         headers: { ...XHR, 'content-type': 'application/json' },
         body: JSON.stringify({ username: 'user', password: 'user123' }),
@@ -88,7 +88,7 @@ describe('cookie authentication', () => {
     })
 
     it('treats a tampered cookie as anonymous rather than erroring', async () => {
-      const res = await app.fetch('/auth/me', { headers: { ...XHR, cookie: `${SESSION_COOKIE}=not-a-real-session` } })
+      const res = await app.request('/auth/me', { headers: { ...XHR, cookie: `${SESSION_COOKIE}=not-a-real-session` } })
 
       expect(res.status).toBe(401)
     })
@@ -97,14 +97,14 @@ describe('cookie authentication', () => {
   // The reason one scheme can serve both halves.
   describe('the challenge adapts to the caller', () => {
     it('redirects a browser navigation to the sign-in page, carrying the return path', async () => {
-      const res = await app.fetch('/dashboard', { headers: NAVIGATION })
+      const res = await app.request('/dashboard', { headers: NAVIGATION })
 
       expect(res.status).toBe(302)
       expect(res.headers.get('location')).toBe('/login?returnUrl=%2Fdashboard')
     })
 
     it('answers a fetch with 401 and never a document', async () => {
-      const res = await app.fetch('/api/profile', { headers: XHR })
+      const res = await app.request('/api/profile', { headers: XHR })
 
       expect(res.status).toBe(401)
       expect(res.headers.get('content-type') ?? '').not.toMatch(/text\/html/)
@@ -115,7 +115,7 @@ describe('cookie authentication', () => {
     it('ends the session', async () => {
       const member = await signIn(app, 'user', 'user123')
 
-      const out = await app.fetch('/auth/logout', {
+      const out = await app.request('/auth/logout', {
         method: 'POST',
         headers: { ...XHR, cookie: member.cookie },
       })
@@ -128,7 +128,7 @@ describe('cookie authentication', () => {
 
     // Anonymous, so that signing out twice — or from a tab whose session already expired — is not a 401.
     it('is anonymous', async () => {
-      const res = await app.fetch('/auth/logout', { method: 'POST', headers: XHR })
+      const res = await app.request('/auth/logout', { method: 'POST', headers: XHR })
 
       expect(res.status).toBe(200)
     })

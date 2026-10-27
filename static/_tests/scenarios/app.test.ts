@@ -128,11 +128,11 @@ describe('a realistic application: controllers, a router, health and a single-pa
     app = application()
     await app.bootstrap()
 
-    const asMember = await app.fetch('/auth/login', { method: 'POST' })
+    const asMember = await app.request('/auth/login', { method: 'POST' })
     expect(asMember.status).toBe(200)
     member = sessionCookie(asMember)
 
-    const asAdmin = await app.fetch('/auth/login', { method: 'POST', headers: { 'x-roles': 'admin' } })
+    const asAdmin = await app.request('/auth/login', { method: 'POST', headers: { 'x-roles': 'admin' } })
     admin = sessionCookie(asAdmin)
   })
 
@@ -141,7 +141,7 @@ describe('a realistic application: controllers, a router, health and a single-pa
   describe('the API, untouched by the single-page application', () => {
     it('routes every controller', async () => {
       for (const path of ['/api/pets', '/api/pets/7', '/api/orders', '/api/users/me']) {
-        const res = await app.fetch(path, { headers: { ...XHR, cookie: member } })
+        const res = await app.request(path, { headers: { ...XHR, cookie: member } })
         expect(res.status, path).toBe(200)
       }
     })
@@ -149,17 +149,17 @@ describe('a realistic application: controllers, a router, health and a single-pa
     // One `apiMisses` line covers three controllers and every future one.
     it('keeps an API miss a JSON 404 for a navigation as much as for a fetch', async () => {
       for (const path of ['/api/typo', '/api/pets/1/2/3']) {
-        await expectNotFoundJSON(await app.fetch(path, { headers: { ...NAVIGATION, cookie: member } }))
-        await expectNotFoundJSON(await app.fetch(path, { headers: { ...XHR, cookie: member } }))
+        await expectNotFoundJSON(await app.request(path, { headers: { ...NAVIGATION, cookie: member } }))
+        await expectNotFoundJSON(await app.request(path, { headers: { ...XHR, cookie: member } }))
       }
     })
 
     it('gates the controllers under the fallback policy', async () => {
-      expect((await app.fetch('/api/pets', { headers: XHR })).status).toBe(401)
+      expect((await app.request('/api/pets', { headers: XHR })).status).toBe(401)
     })
 
     it('leaves the health probes to the health plugin', async () => {
-      const res = await app.fetch('/livez', { headers: PROBE })
+      const res = await app.request('/livez', { headers: PROBE })
       expect(res.status).toBe(200)
       expect(await res.text()).toBe('ok')
     })
@@ -168,7 +168,7 @@ describe('a realistic application: controllers, a router, health and a single-pa
   describe('public client routes', () => {
     it('serves the shell anonymously, under authenticate-by-default', async () => {
       for (const path of ['/', '/index.html', '/about', '/pricing']) {
-        const res = await app.fetch(path, { headers: NAVIGATION })
+        const res = await app.request(path, { headers: NAVIGATION })
         expect(res.status, path).toBe(200)
         expect(await res.text(), path).toContain('<div id="root">')
       }
@@ -176,26 +176,26 @@ describe('a realistic application: controllers, a router, health and a single-pa
 
     // Gating the sign-in page would redirect it to itself.
     it('serves the sign-in page anonymously and does not redirect', async () => {
-      const res = await app.fetch('/login', { headers: NAVIGATION })
+      const res = await app.request('/login', { headers: NAVIGATION })
       expect(res.status).toBe(200)
     })
 
     // A path the application declared answers any client, which is what a load balancer probe needs.
     it('answers a declared path to a client that is not a browser', async () => {
       for (const headers of [CURL, PROBE]) {
-        expect((await app.fetch('/', { headers })).status).toBe(200)
-        expect((await app.fetch('/index.html', { headers })).status).toBe(200)
+        expect((await app.request('/', { headers })).status).toBe(200)
+        expect((await app.request('/index.html', { headers })).status).toBe(200)
       }
     })
 
     it('does not answer a wildcard client route to a client that is not a browser', async () => {
-      await expectNotFoundJSON(await app.fetch('/pricing', { headers: CURL }))
+      await expectNotFoundJSON(await app.request('/pricing', { headers: CURL }))
     })
   })
 
   describe('protected client routes', () => {
     it('redirects an anonymous navigation to the sign-in page, carrying the return path', async () => {
-      const res = await app.fetch('/dashboard', { headers: NAVIGATION })
+      const res = await app.request('/dashboard', { headers: NAVIGATION })
 
       expect(res.status).toBe(302)
       const location = res.headers.get('location') ?? ''
@@ -204,7 +204,7 @@ describe('a realistic application: controllers, a router, health and a single-pa
     })
 
     it('answers an anonymous fetch of a protected route with 401, never a document', async () => {
-      const res = await app.fetch('/dashboard', { headers: XHR })
+      const res = await app.request('/dashboard', { headers: XHR })
 
       expect(res.status).toBe(401)
       expect(res.headers.get('content-type') ?? '').not.toMatch(/text\/html/)
@@ -212,25 +212,25 @@ describe('a realistic application: controllers, a router, health and a single-pa
 
     // Authorization runs before the handler's document decision.
     it('redirects an anonymous navigation deep inside a protected subtree', async () => {
-      expect((await app.fetch('/dashboard/deep', { headers: NAVIGATION })).status).toBe(302)
+      expect((await app.request('/dashboard/deep', { headers: NAVIGATION })).status).toBe(302)
     })
 
     it('serves the shell to a signed-in member, across a subtree', async () => {
       for (const path of ['/dashboard', '/settings/profile', '/orders/42']) {
-        const res = await app.fetch(path, { headers: { ...NAVIGATION, cookie: member } })
+        const res = await app.request(path, { headers: { ...NAVIGATION, cookie: member } })
         expect(res.status, path).toBe(200)
         expect(await res.text(), path).toContain('<div id="root">')
       }
     })
 
     it('keeps the declared-versus-wildcard rule inside a protected tier', async () => {
-      expect((await app.fetch('/dashboard', { headers: { ...CURL, cookie: member } })).status).toBe(200)
-      await expectNotFoundJSON(await app.fetch('/dashboard/deep', { headers: { ...CURL, cookie: member } }))
+      expect((await app.request('/dashboard', { headers: { ...CURL, cookie: member } })).status).toBe(200)
+      await expectNotFoundJSON(await app.request('/dashboard/deep', { headers: { ...CURL, cookie: member } }))
     })
 
     it('refuses a role-gated page to a signed-in member, as an error and not as the page', async () => {
       for (const path of ['/admin', '/admin/users']) {
-        const res = await app.fetch(path, { headers: { ...NAVIGATION, cookie: member } })
+        const res = await app.request(path, { headers: { ...NAVIGATION, cookie: member } })
         expect(res.status, path).toBe(403)
         expect(res.headers.get('content-type') ?? '', path).not.toMatch(/text\/html/)
       }
@@ -238,7 +238,7 @@ describe('a realistic application: controllers, a router, health and a single-pa
 
     it('serves the role-gated pages to an administrator', async () => {
       for (const path of ['/admin', '/admin/users']) {
-        const res = await app.fetch(path, { headers: { ...NAVIGATION, cookie: admin } })
+        const res = await app.request(path, { headers: { ...NAVIGATION, cookie: admin } })
         expect(res.status, path).toBe(200)
         expect(await res.text(), path).toContain('<div id="root">')
       }
@@ -246,26 +246,26 @@ describe('a realistic application: controllers, a router, health and a single-pa
 
     // It matches `/*`, not `/dashboard`: an unknown client route is not a protected one.
     it('answers an unknown route near a protected one with the public shell', async () => {
-      const res = await app.fetch('/dashboard-typo', { headers: NAVIGATION })
+      const res = await app.request('/dashboard-typo', { headers: NAVIGATION })
       expect(res.status).toBe(200)
     })
 
     it('never answers a non-GET with a document', async () => {
-      await expectNotFoundJSON(await app.fetch('/dashboard', { method: 'POST', headers: NAVIGATION }))
+      await expectNotFoundJSON(await app.request('/dashboard', { method: 'POST', headers: NAVIGATION }))
     })
   })
 
   describe('assets', () => {
     // One bundle serves the public and the protected routes alike, and the sign-in page needs it.
     it('serves the bundle anonymously even though client routes are gated', async () => {
-      const res = await app.fetch('/assets/app-eZr2sdaR.js', { headers: SCRIPT })
+      const res = await app.request('/assets/app-eZr2sdaR.js', { headers: SCRIPT })
 
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
     })
 
     it('keeps a missing asset a JSON 404 rather than a page', async () => {
-      await expectNotFoundJSON(await app.fetch('/assets/missing.js', { headers: NAVIGATION }))
+      await expectNotFoundJSON(await app.request('/assets/missing.js', { headers: NAVIGATION }))
     })
   })
 })

@@ -28,7 +28,7 @@ export interface BrewOptions extends Omit<RequestInit, 'method' | 'body' | 'head
    * It is called with the URL and the init, or, on a client with interceptors or an authenticator, with one `Request`
    * carrying both.
    */
-  fetch?: Fetchable['fetch']
+  fetch?: Requestable['request']
 
   /**
    * Run around every request, the first listed seeing the request first and the response last.
@@ -49,16 +49,17 @@ export interface BrewOptions extends Omit<RequestInit, 'method' | 'body' | 'head
 }
 
 /**
- * Anything that answers a request the way `fetch` does — a running application, or a stub standing in for one.
+ * Anything that answers a request in process, taking `fetch`'s arguments — a running application, or a stub standing
+ * in for one.
  *
  * Structural on purpose: this package does not depend on the server, so a `WebApplication` satisfies it by having
  * the method rather than by being imported.
  */
-export interface Fetchable {
-  fetch(input: Request | string | URL, options?: RequestInit): Promise<Response>
+export interface Requestable {
+  request(input: Request | string | URL, options?: RequestInit): Promise<Response>
 }
 
-/** Where a client built over a {@link Fetchable} addresses its requests, since there is no origin to speak of. */
+/** Where a client built over a {@link Requestable} addresses its requests, since there is no origin to speak of. */
 const IN_PROCESS_ORIGIN = 'http://localhost'
 
 /** What the root answers beside its routes, under the names `FileHelpers` gives them. */
@@ -91,7 +92,7 @@ interface RequestArgs {
  * }
  * ```
  *
- * Given the application itself rather than a URL, requests go through its own `fetch` and never reach a socket —
+ * Given the application itself rather than a URL, requests go through its own `request` and never reach a socket —
  * which is what a test wants. A redirect then comes back as the application wrote it, whatever the call's `redirect`
  * says. Both the routes and the transport come from the one argument, so neither the type argument nor the URL is
  * written:
@@ -107,15 +108,15 @@ interface RequestArgs {
  * @param options - `fetch` overrides the transport, an application target included.
  */
 export function brewer<T>(baseURL: string, options?: BrewOptions): BrewClient<T>
-export function brewer<T extends Fetchable>(target: T, options?: BrewOptions): BrewClient<T>
-export function brewer<T>(target: Fetchable, options?: BrewOptions): BrewClient<T>
-export function brewer<T>(target: string | Fetchable, options: BrewOptions = {}): BrewClient<T> {
+export function brewer<T extends Requestable>(target: T, options?: BrewOptions): BrewClient<T>
+export function brewer<T>(target: Requestable, options?: BrewOptions): BrewClient<T>
+export function brewer<T>(target: string | Requestable, options: BrewOptions = {}): BrewClient<T> {
   if (typeof target === 'string') {
     return node(target, options, [], undefined) as BrewClient<T>
   }
 
-  // Bound because an application's `fetch` reads its adapter off `this`.
-  const resolved: BrewOptions = { ...options, fetch: options.fetch ?? target.fetch.bind(target) }
+  // Bound, because a target's `request` may read what it serves off `this`.
+  const resolved: BrewOptions = { ...options, fetch: options.fetch ?? target.request.bind(target) }
 
   return node(IN_PROCESS_ORIGIN, resolved, [], undefined) as BrewClient<T>
 }

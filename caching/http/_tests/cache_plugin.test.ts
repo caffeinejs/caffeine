@@ -57,8 +57,8 @@ describe('cache plugin wiring', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    expect((await app.fetch('/group-install/data')).headers.get('x-cache')).toBe('MISS')
-    expect((await app.fetch('/group-install/data')).headers.get('x-cache')).toBe('HIT')
+    expect((await app.request('/group-install/data')).headers.get('x-cache')).toBe('MISS')
+    expect((await app.request('/group-install/data')).headers.get('x-cache')).toBe('HIT')
   })
 
   // An install belongs to its group: two groups, two stores, and an entry of one is never found in the other,
@@ -82,8 +82,8 @@ describe('cache plugin wiring', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/group-own-pets/data')
-    const owners = await app.fetch('/group-own-owners/data')
+    await app.request('/group-own-pets/data')
+    const owners = await app.request('/group-own-owners/data')
 
     expect(owners.headers.get('x-cache')).toBe('MISS')
     expect(await owners.json()).toEqual({ name: 'owners' })

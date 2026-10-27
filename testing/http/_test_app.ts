@@ -89,9 +89,9 @@ export class Harness {
     return this.#ready
   }
 
-  async fetch(input: Request | string | URL, init?: RequestInit): Promise<Response> {
+  async request(input: Request | string | URL, init?: RequestInit): Promise<Response> {
     await this.bootstrap()
-    return this.app.fetch(input, init)
+    return this.app.request(input, init)
   }
 
   /** Closes the application and puts the container back the way it was found. */

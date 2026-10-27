@@ -110,7 +110,7 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.info({ title: 'Petstore', version: '1.0.0' }).docs(false).public())
     await app.bootstrap()
 
-    const res = await app.fetch('/openapi.json')
+    const res = await app.request('/openapi.json')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/^application\/json/)
@@ -124,7 +124,7 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.docs(false).public())
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
     expect(Object.keys(document.paths ?? {}).sort()).toEqual(['/pets', '/pets/{id}', '/pets/{id}/images'])
     expect(operationAt(document, '/pets')?.operationId).toBe('listPets')
@@ -136,7 +136,7 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.docs(false).public())
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
     expect(document.components?.schemas?.Pet).toMatchObject({ type: 'object' })
     expect(operationAt(document, '/pets/{id}')?.responses?.['200'].content?.['application/json'].schema).toEqual({
@@ -148,7 +148,7 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.docs(false).public())
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
     const body = operationAt(document, '/pets/{id}/images', 'post')?.requestBody
 
     expect(body?.content['multipart/form-data'].schema).toMatchObject({
@@ -162,7 +162,7 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.docs(false).public())
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
     expect(Object.keys(document.paths ?? {})).not.toContain('/openapi.json')
   })
@@ -182,7 +182,7 @@ describe('openapi endpoints', () => {
     }) as WebApplication
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
     expect(Object.keys(document.paths ?? {})).toContain('/late/hello')
   })
@@ -203,7 +203,7 @@ describe('openapi endpoints', () => {
     }) as WebApplication
     await app.bootstrap()
 
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
     expect(Object.keys(document.paths ?? {})).not.toContain('/{wildcard}')
     expect(Object.keys(document.paths ?? {})).toContain('/pets')
@@ -213,7 +213,7 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.info({ title: 'Petstore', version: '1.0.0' }).docs(false).public())
     await app.bootstrap()
 
-    const res = await app.fetch('/openapi.yaml')
+    const res = await app.request('/openapi.yaml')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/yaml/)
@@ -224,22 +224,22 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.yaml(false).docs(false).public())
     await app.bootstrap()
 
-    expect((await app.fetch('/openapi.yaml')).status).toBe(404)
+    expect((await app.request('/openapi.yaml')).status).toBe(404)
   })
 
   it('mounts everything under a configured base', async () => {
     app = buildApp(o => o.base('/internal').docs(false).public())
     await app.bootstrap()
 
-    expect((await app.fetch('/internal/openapi.json')).status).toBe(200)
-    expect((await app.fetch('/openapi.json')).status).toBe(404)
+    expect((await app.request('/internal/openapi.json')).status).toBe(200)
+    expect((await app.request('/openapi.json')).status).toBe(404)
   })
 
   it('serves the documentation page and its bundle from the same origin', async () => {
     app = buildApp(o => o.info({ title: 'Petstore', version: '1.0.0' }).public())
     await app.bootstrap()
 
-    const page = await app.fetch('/docs')
+    const page = await app.request('/docs')
     expect(page.status).toBe(200)
     expect(page.headers.get('content-type')).toMatch(/^text\/html/)
 
@@ -248,7 +248,7 @@ describe('openapi endpoints', () => {
     expect(html).toContain('<title>Petstore</title>')
     expect(html).not.toMatch(/https?:\/\/(cdn|unpkg|jsdelivr)/)
 
-    const asset = await app.fetch('/docs/_scalar.js')
+    const asset = await app.request('/docs/_scalar.js')
     expect(asset.status).toBe(200)
     expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
   })
@@ -263,7 +263,7 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.public())
     await app.bootstrap()
 
-    const html = await (await app.fetch('/docs')).text()
+    const html = await (await app.request('/docs')).text()
 
     expect(html).toContain('data-configuration="{&quot;proxyUrl&quot;:&quot;&quot;}"')
     expect(html).not.toContain('proxy.scalar.com')
@@ -273,7 +273,7 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.public().ui({ layout: 'classic', darkMode: true }))
     await app.bootstrap()
 
-    const html = await (await app.fetch('/docs')).text()
+    const html = await (await app.request('/docs')).text()
     const configuration = JSON.parse(/data-configuration="([^"]*)"/.exec(html)![1].replaceAll('&quot;', '"')) as Record<
       string,
       unknown
@@ -287,7 +287,7 @@ describe('openapi endpoints', () => {
     app = buildApp(o => o.public().ui({ proxyUrl: 'https://relay.internal' }))
     await app.bootstrap()
 
-    const html = await (await app.fetch('/docs')).text()
+    const html = await (await app.request('/docs')).text()
 
     expect(html).toContain('https://relay.internal')
   })
@@ -307,7 +307,7 @@ describe('openapi under a base path', () => {
   })
 
   async function documentOf(running: WebApplication, url = '/api/openapi.json'): Promise<OpenAPIDocument> {
-    const res = await running.fetch(url)
+    const res = await running.request(url)
     expect(res.status).toBe(200)
     return (await res.json()) as OpenAPIDocument
   }
@@ -354,13 +354,13 @@ describe('openapi under a base path', () => {
     app = newBuilder(o => o.public()).basePath('/api') as WebApplication
     await app.bootstrap()
 
-    const html = await (await app.fetch('/api/docs')).text()
+    const html = await (await app.request('/api/docs')).text()
 
     expect(html).toContain('data-url="/api/openapi.json"')
     expect(html).toContain('src="/api/docs/_scalar.js"')
     // Followed through the gateway, and just as well straight to the application.
     for (const url of ['/api/openapi.json', '/api/docs/_scalar.js', '/openapi.json', '/docs/_scalar.js']) {
-      expect((await app.fetch(url)).status).toBe(200)
+      expect((await app.request(url)).status).toBe(200)
     }
   })
 
@@ -368,7 +368,7 @@ describe('openapi under a base path', () => {
     app = newBuilder(o => o.base('/internal').public()).basePath('/api') as WebApplication
     await app.bootstrap()
 
-    const html = await (await app.fetch('/api/internal/docs')).text()
+    const html = await (await app.request('/api/internal/docs')).text()
 
     expect(html).toContain('data-url="/api/internal/openapi.json"')
     expect(html).toContain('src="/api/internal/docs/_scalar.js"')
@@ -389,17 +389,17 @@ describe('openapi endpoint protection', () => {
     app = buildApp(o => o.docs(false).public())
     await app.bootstrap()
 
-    expect((await app.fetch('/openapi.json')).status).toBe(200)
+    expect((await app.request('/openapi.json')).status).toBe(200)
   })
 
   it('requires authentication once secured, even naming only a scheme', async () => {
     app = buildApp(o => o.docs(false).secure(s => s.schemes('Bearer')))
     await app.bootstrap()
 
-    expect((await app.fetch('/openapi.json')).status).toBe(401)
+    expect((await app.request('/openapi.json')).status).toBe(401)
 
     const token = await signToken({ sub: 'reader' })
-    const authorized = await app.fetch('/openapi.json', {
+    const authorized = await app.request('/openapi.json', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(authorized.status).toBe(200)
@@ -412,7 +412,7 @@ describe('openapi endpoint protection', () => {
     const withoutRole = await signToken({ sub: 'reader' })
     expect(
       (
-        await app.fetch('/openapi.json', {
+        await app.request('/openapi.json', {
           headers: { authorization: `Bearer ${withoutRole}` },
         })
       ).status,
@@ -421,7 +421,7 @@ describe('openapi endpoint protection', () => {
     const withRole = await signToken({ sub: 'reader', roles: ['ops'] })
     expect(
       (
-        await app.fetch('/openapi.json', {
+        await app.request('/openapi.json', {
           headers: { authorization: `Bearer ${withRole}` },
         })
       ).status,
@@ -484,8 +484,8 @@ describe('multiple applications in one process', () => {
     await second.bootstrap()
 
     try {
-      const a = (await (await first.fetch('/openapi.json')).json()) as OpenAPIDocument
-      const b = (await (await second.fetch('/openapi.json')).json()) as OpenAPIDocument
+      const a = (await (await first.request('/openapi.json')).json()) as OpenAPIDocument
+      const b = (await (await second.request('/openapi.json')).json()) as OpenAPIDocument
 
       expect(a.info.title).toBe('First')
       expect(b.info.title).toBe('Second')

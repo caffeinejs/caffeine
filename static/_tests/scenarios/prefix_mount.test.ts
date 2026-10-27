@@ -43,7 +43,7 @@ describe('an application mounted under a prefix', () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.fetch('/', { headers: NAVIGATION })
+    const res = await app.request('/', { headers: NAVIGATION })
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('<h1>home</h1>')
@@ -54,7 +54,7 @@ describe('an application mounted under a prefix', () => {
     await app.bootstrap()
 
     for (const path of ['/app', '/app/', '/app/settings', '/app/orders/42']) {
-      const res = await app.fetch(path, { headers: NAVIGATION })
+      const res = await app.request(path, { headers: NAVIGATION })
 
       expect(res.status, path).toBe(200)
       expect(await res.text(), path).toContain('<div id="root">')
@@ -65,7 +65,7 @@ describe('an application mounted under a prefix', () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.fetch('/app/assets/app-eZr2sdaR.js', { headers: SCRIPT })
+    const res = await app.request('/app/assets/app-eZr2sdaR.js', { headers: SCRIPT })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
@@ -75,14 +75,14 @@ describe('an application mounted under a prefix', () => {
     app = site()
     await app.bootstrap()
 
-    expect((await app.fetch('/static/hello.txt')).status).toBe(200)
-    await expectNotFoundJSON(await app.fetch('/static/missing.txt', { headers: NAVIGATION }))
+    expect((await app.request('/static/hello.txt')).status).toBe(200)
+    await expectNotFoundJSON(await app.request('/static/missing.txt', { headers: NAVIGATION }))
   })
 
   it('does not answer outside its prefix', async () => {
     app = site()
     await app.bootstrap()
 
-    await expectNotFoundJSON(await app.fetch('/settings', { headers: NAVIGATION }))
+    await expectNotFoundJSON(await app.request('/settings', { headers: NAVIGATION }))
   })
 })

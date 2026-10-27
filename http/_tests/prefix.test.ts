@@ -19,8 +19,8 @@ describe('Prefix', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const hit = await app.fetch('/v1/users/list')
-    const miss = await app.fetch('/users/list')
+    const hit = await app.request('/v1/users/list')
+    const miss = await app.request('/users/list')
 
     expect(hit.status).toBe(200)
     expect(miss.status).toBe(404)
@@ -50,8 +50,8 @@ describe('Prefix', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const v1 = await app.fetch('/v1/items/all')
-    const v2 = await app.fetch('/v2/items/all')
+    const v1 = await app.request('/v1/items/all')
+    const v2 = await app.request('/v2/items/all')
 
     expect(v1.status).toBe(200)
     expect(v2.status).toBe(200)

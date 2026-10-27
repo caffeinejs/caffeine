@@ -35,15 +35,15 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const miss = await app.fetch('/resp-status/missing')
-    const hit = await app.fetch('/resp-status/missing')
+    const miss = await app.request('/resp-status/missing')
+    const hit = await app.request('/resp-status/missing')
 
     expect(miss.status).toBe(404)
     expect(hit.headers.get('x-cache')).toBe('HIT')
     expect(hit.status).toBe(404)
 
     // RFC 9110 §13.2.1: a precondition is ignored where the answer is not a 2xx.
-    const conditional = await app.fetch('/resp-status/missing', {
+    const conditional = await app.request('/resp-status/missing', {
       headers: { 'if-none-match': hit.headers.get('etag') ?? '*' },
     })
     expect(conditional.status).toBe(404)
@@ -75,17 +75,17 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const failed = await app.fetch('/resp-noncacheable/boom')
+    const failed = await app.request('/resp-noncacheable/boom')
     expect(failed.status).toBe(500)
     expect(failed.headers.get('cache-control')).toBeNull()
     expect(failed.headers.get('etag')).toBeNull()
 
-    const gateway = await app.fetch('/resp-noncacheable/ok', { headers: { 'cache-control': 'only-if-cached' } })
+    const gateway = await app.request('/resp-noncacheable/ok', { headers: { 'cache-control': 'only-if-cached' } })
     expect(gateway.status).toBe(504)
     expect(gateway.headers.get('cache-control')).toBeNull()
 
-    expect((await app.fetch('/resp-noncacheable/create', { method: 'POST' })).headers.get('cache-control')).toBeNull()
-    expect((await app.fetch('/resp-noncacheable/ok')).headers.get('cache-control')).toBe('public, max-age=60')
+    expect((await app.request('/resp-noncacheable/create', { method: 'POST' })).headers.get('cache-control')).toBeNull()
+    expect((await app.request('/resp-noncacheable/ok')).headers.get('cache-control')).toBe('public, max-age=60')
   })
 
   it('keeps no-store on the error of a route that stores nothing', async () => {
@@ -103,7 +103,7 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const failed = await app.fetch('/resp-nostore/boom')
+    const failed = await app.request('/resp-nostore/boom')
 
     expect(failed.status).toBe(500)
     expect(failed.headers.get('cache-control')).toBe('no-store')
@@ -134,8 +134,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const ok = await app.fetch('/resp-nostore-handler/ok')
-    const missing = await app.fetch('/resp-nostore-handler/missing')
+    const ok = await app.request('/resp-nostore-handler/ok')
+    const missing = await app.request('/resp-nostore-handler/missing')
 
     expect(ok.headers.get('cache-control')).toBe('no-store')
     expect(missing.status).toBe(404)
@@ -161,8 +161,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const first = await app.fetch('/resp-handler-cc/secret')
-    const second = await app.fetch('/resp-handler-cc/secret')
+    const first = await app.request('/resp-handler-cc/secret')
+    const second = await app.request('/resp-handler-cc/secret')
 
     expect(first.headers.get('cache-control')).toBe('private, no-store')
     expect(second.headers.get('x-cache')).toBe('MISS')
@@ -186,15 +186,15 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const miss = await app.fetch('/resp-handler-validators/doc')
+    const miss = await app.request('/resp-handler-validators/doc')
     expect(miss.headers.get('etag')).toBe('"v42"')
     expect(miss.headers.get('last-modified')).toBe('Mon, 01 Jan 2024 00:00:00 GMT')
 
-    const hit = await app.fetch('/resp-handler-validators/doc')
+    const hit = await app.request('/resp-handler-validators/doc')
     expect(hit.headers.get('x-cache')).toBe('HIT')
     expect(hit.headers.get('etag')).toBe('"v42"')
 
-    const revalidated = await app.fetch('/resp-handler-validators/doc', { headers: { 'if-none-match': '"v42"' } })
+    const revalidated = await app.request('/resp-handler-validators/doc', { headers: { 'if-none-match': '"v42"' } })
     expect(revalidated.status).toBe(304)
   })
 
@@ -216,8 +216,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const miss = await app.fetch('/resp-headers/list')
-    const hit = await app.fetch('/resp-headers/list')
+    const miss = await app.request('/resp-headers/list')
+    const hit = await app.request('/resp-headers/list')
 
     expect(hit.headers.get('x-cache')).toBe('HIT')
     expect(hit.headers.get('x-total-count')).toBe('42')
@@ -245,8 +245,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/resp-cookie/start')
-    const second = await app.fetch('/resp-cookie/start')
+    await app.request('/resp-cookie/start')
+    const second = await app.request('/resp-cookie/start')
 
     expect(second.headers.get('x-cache')).toBe('MISS')
     expect(second.headers.get('set-cookie')).toBe('session=1')
@@ -274,8 +274,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/resp-ctx-cookie/start')
-    const second = await app.fetch('/resp-ctx-cookie/start')
+    await app.request('/resp-ctx-cookie/start')
+    const second = await app.request('/resp-ctx-cookie/start')
 
     expect(second.headers.get('x-cache')).toBe('MISS')
     expect(second.headers.get('set-cookie')).toBe('session=2; Path=/; SameSite=Lax')
@@ -299,8 +299,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const miss = await app.fetch('/resp-cookie-public/list')
-    const hit = await app.fetch('/resp-cookie-public/list')
+    const miss = await app.request('/resp-cookie-public/list')
+    const hit = await app.request('/resp-cookie-public/list')
 
     expect(miss.headers.get('set-cookie')).toBe('visit=1')
     expect(hit.headers.get('x-cache')).toBe('HIT')
@@ -330,10 +330,10 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const miss = await app.fetch('/resp-vary/page', { headers: { origin: 'https://a.example' } })
+    const miss = await app.request('/resp-vary/page', { headers: { origin: 'https://a.example' } })
     expect(miss.headers.get('vary')).toBe('Origin, Accept-Language')
 
-    const hit = await app.fetch('/resp-vary/page', { headers: { origin: 'https://b.example' } })
+    const hit = await app.request('/resp-vary/page', { headers: { origin: 'https://b.example' } })
     expect(hit.headers.get('x-cache')).toBe('HIT')
     expect(hit.headers.get('vary')).toBe('Origin, Accept-Language')
     expect(hit.headers.get('access-control-allow-origin')).toBe('https://b.example')
@@ -355,8 +355,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const get = await app.fetch('/resp-head/data')
-    const head = await app.fetch('/resp-head/data', { method: 'HEAD' })
+    const get = await app.request('/resp-head/data')
+    const head = await app.request('/resp-head/data', { method: 'HEAD' })
 
     expect(head.headers.get('x-cache')).toBe('HIT')
     expect(head.headers.get('content-length')).toBe(get.headers.get('content-length'))
@@ -386,8 +386,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const head = await app.fetch('/resp-head-own/data', { method: 'HEAD' })
-    const get = await app.fetch('/resp-head-own/data')
+    const head = await app.request('/resp-head-own/data', { method: 'HEAD' })
+    const get = await app.request('/resp-head-own/data')
 
     expect(head.headers.get('x-cache')).toBe('MISS')
     expect(head.headers.get('cache-control')).toBe('public, max-age=60')
@@ -411,8 +411,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const etag = (await app.fetch('/resp-304/data')).headers.get('etag') as string
-    const res = await app.fetch('/resp-304/data', { headers: { 'if-none-match': etag } })
+    const etag = (await app.request('/resp-304/data')).headers.get('etag') as string
+    const res = await app.request('/resp-304/data', { headers: { 'if-none-match': etag } })
 
     expect(res.status).toBe(304)
     expect(res.headers.get('x-cache')).toBe('HIT')
@@ -440,8 +440,8 @@ describe('what the cache says about a response', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const etag = (await app.fetch('/resp-304-fresh/data')).headers.get('etag') as string
-    const res = await app.fetch('/resp-304-fresh/data', { headers: { 'if-none-match': etag } })
+    const etag = (await app.request('/resp-304-fresh/data')).headers.get('etag') as string
+    const res = await app.request('/resp-304-fresh/data', { headers: { 'if-none-match': etag } })
 
     expect(res.status).toBe(304)
     expect(res.headers.get('x-cache')).toBe('MISS')
@@ -499,15 +499,15 @@ describe('a request authenticated without an Authorization header', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const alice = await app.fetch('/auth-private/me', { headers: { cookie: 'session=alice' } })
+    const alice = await app.request('/auth-private/me', { headers: { cookie: 'session=alice' } })
     expect(alice.headers.get('cache-control')).toBe('private, max-age=60')
     expect(alice.headers.get('x-cache')).toBe('BYPASS')
 
-    const bob = await app.fetch('/auth-private/me', { headers: { cookie: 'session=bob' } })
+    const bob = await app.request('/auth-private/me', { headers: { cookie: 'session=bob' } })
     expect(await bob.json()).toEqual({ n: 2 })
 
     // Nothing of theirs reached the store: an anonymous request misses.
-    const anonymous = await app.fetch('/auth-private/me')
+    const anonymous = await app.request('/auth-private/me')
     expect(anonymous.headers.get('x-cache')).toBe('MISS')
     expect(bypasses.map(event => event.reason)).toEqual(['authenticated', 'authenticated'])
   })
@@ -529,8 +529,8 @@ describe('a request authenticated without an Authorization header', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/auth-public/catalog', { headers: { cookie: 'session=alice' } })
-    const second = await app.fetch('/auth-public/catalog', { headers: { cookie: 'session=bob' } })
+    await app.request('/auth-public/catalog', { headers: { cookie: 'session=alice' } })
+    const second = await app.request('/auth-public/catalog', { headers: { cookie: 'session=bob' } })
 
     expect(second.headers.get('x-cache')).toBe('HIT')
     expect(calls).toBe(1)

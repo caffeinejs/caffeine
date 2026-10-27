@@ -143,7 +143,7 @@ describe('guard', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/guard-allow')
+    const res = await built.request('/guard-allow')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
 
@@ -154,7 +154,7 @@ describe('guard', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/guard-allow/result')
+    const res = await built.request('/guard-allow/result')
     expect(res.status).toBe(200)
 
     await built.close()
@@ -164,7 +164,7 @@ describe('guard', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/guard-allow/async')
+    const res = await built.request('/guard-allow/async')
     expect(res.status).toBe(200)
 
     await built.close()
@@ -174,7 +174,7 @@ describe('guard', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/guard-deny')
+    const res = await built.request('/guard-deny')
     expect(res.status).toBe(403)
 
     await built.close()
@@ -184,7 +184,7 @@ describe('guard', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/guard-deny/result')
+    const res = await built.request('/guard-deny/result')
     expect(res.status).toBe(403)
 
     await built.close()
@@ -194,7 +194,7 @@ describe('guard', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/guard-deny/async')
+    const res = await built.request('/guard-deny/async')
     expect(res.status).toBe(403)
 
     await built.close()
@@ -204,7 +204,7 @@ describe('guard', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/guard-deny/async-result')
+    const res = await built.request('/guard-deny/async-result')
     expect(res.status).toBe(403)
     expect(await res.json()).toMatchObject({ message: 'later' })
 
@@ -333,7 +333,7 @@ describe('use_guards', () => {
     const app = createWebApplication().install(Guards(g => g.global(GlobalGuard)))
     await app.bootstrap()
 
-    const res = await app.fetch('/use-guards/both')
+    const res = await app.request('/use-guards/both')
     expect(res.status).toBe(200)
     expect(order).toEqual(['global', 'controller', 'method'])
 
@@ -345,7 +345,7 @@ describe('use_guards', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/use-guards-multi/multi')
+    const res = await app.request('/use-guards-multi/multi')
     expect(res.status).toBe(403)
     expect(order).toEqual(['first', 'deny'])
 
@@ -357,7 +357,7 @@ describe('use_guards', () => {
     const app = createWebApplication().install(Guards(g => g.global(RepeatedGuard)))
     await app.bootstrap()
 
-    const res = await app.fetch('/use-guards-repeated')
+    const res = await app.request('/use-guards-repeated')
     expect(res.status).toBe(200)
     expect(order).toEqual(['repeated', 'method'])
 
@@ -369,7 +369,7 @@ describe('use_guards', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/use-guards-multi/after-async')
+    const res = await app.request('/use-guards-multi/after-async')
     expect(res.status).toBe(403)
     expect(order).toEqual(['async', 'deny'])
 
@@ -419,7 +419,7 @@ describe('builder', () => {
     const app = createWebApplication().install(Guards(g => g.global(ListedGuard)))
     await app.bootstrap()
 
-    const res = await app.fetch('/builder-ok')
+    const res = await app.request('/builder-ok')
     expect(res.status).toBe(200)
 
     await app.close()
@@ -429,7 +429,7 @@ describe('builder', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/builder-use')
+    const res = await app.request('/builder-use')
     expect(res.status).toBe(200)
 
     await app.close()
@@ -470,7 +470,7 @@ describe('builder', () => {
     const app = createWebApplication({ container }).mount(router) as WebApplication
     await app.bootstrap()
 
-    const res = await app.fetch('/abstract-guard')
+    const res = await app.request('/abstract-guard')
     expect(res.status).toBe(403)
 
     await app.close()
@@ -581,7 +581,7 @@ describe('denial', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/denial/false')
+    const res = await built.request('/denial/false')
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({
       statusCode: 403,
@@ -597,7 +597,7 @@ describe('denial', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/denial/reason')
+    const res = await built.request('/denial/reason')
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({
       statusCode: 403,
@@ -614,7 +614,7 @@ describe('denial', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/denial/unauthenticated')
+    const res = await built.request('/denial/unauthenticated')
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({
       statusCode: 401,
@@ -630,7 +630,7 @@ describe('denial', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/denial/unauthenticated-no-reason')
+    const res = await built.request('/denial/unauthenticated-no-reason')
     expect(res.status).toBe(401)
     expect(await res.json()).toMatchObject({ code: 'ERR_HTTP_UNAUTHORIZED', message: 'Unauthorized' })
 
@@ -641,7 +641,7 @@ describe('denial', () => {
     const built = buildApp().errorHandling(e => e.globalHandlers(UnauthorizedCatch))
     await built.bootstrap()
 
-    const res = await built.fetch('/denial/unauthenticated')
+    const res = await built.request('/denial/unauthenticated')
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ caught: true, message: 'session expired' })
 
@@ -652,7 +652,7 @@ describe('denial', () => {
     const built = buildApp().errorHandling(e => e.globalHandlers(UnauthorizedCatch))
     await built.bootstrap()
 
-    const res = await built.fetch('/denial/401')
+    const res = await built.request('/denial/401')
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ caught: true, message: 'Unauthorized' })
 
@@ -663,7 +663,7 @@ describe('denial', () => {
     const built = buildApp()
     await built.bootstrap()
 
-    const res = await built.fetch('/denial/faulty')
+    const res = await built.request('/denial/faulty')
     expect(res.status).toBe(500)
 
     await built.close()
@@ -704,14 +704,14 @@ describe('on_request', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const denied = await app.fetch('/on-request/echo', {
+    const denied = await app.request('/on-request/echo', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ secret: 1 }),
     })
     expect(denied.status).toBe(403)
 
-    const allowed = await app.fetch('/on-request/echo', {
+    const allowed = await app.request('/on-request/echo', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-token': 'ok' },
       body: JSON.stringify({ secret: 1 }),
@@ -748,7 +748,7 @@ describe('target', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/target/one')
+    const res = await app.request('/target/one')
     expect(res.status).toBe(200)
     expect(seen?.clazz).toBe(TargetController)
     expect(seen?.handler).toBe('one')
@@ -839,7 +839,7 @@ describe('authorization', () => {
   it('rejects a missing token with 401', async () => {
     const app = await ready()
 
-    const res = await app.fetch('/cats', { method: 'POST' })
+    const res = await app.request('/cats', { method: 'POST' })
     expect(res.status).toBe(401)
 
     await app.close()
@@ -848,7 +848,7 @@ describe('authorization', () => {
   it('rejects a user without the required role with 403', async () => {
     const app = await ready()
 
-    const res = await app.fetch('/cats', {
+    const res = await app.request('/cats', {
       method: 'POST',
       headers: { authorization: 'Bearer user' },
     })
@@ -860,7 +860,7 @@ describe('authorization', () => {
   it('allows an admin to create', async () => {
     const app = await ready()
 
-    const res = await app.fetch('/cats', {
+    const res = await app.request('/cats', {
       method: 'POST',
       headers: { authorization: 'Bearer admin' },
     })
@@ -873,7 +873,7 @@ describe('authorization', () => {
   it('allows any authenticated caller on a route with no @Roles', async () => {
     const app = await ready()
 
-    const res = await app.fetch('/cats', {
+    const res = await app.request('/cats', {
       headers: { authorization: 'Bearer user' },
     })
     expect(res.status).toBe(200)
@@ -935,8 +935,8 @@ describe('scope', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    await app.fetch('/scope-req')
-    await app.fetch('/scope-req')
+    await app.request('/scope-req')
+    await app.request('/scope-req')
     expect(requestScoped).toBe(2)
 
     await app.close()
@@ -950,8 +950,8 @@ describe('scope', () => {
     const constructedAtReady = singleton
     expect(constructedAtReady).toBeGreaterThanOrEqual(1)
 
-    await app.fetch('/scope-single')
-    await app.fetch('/scope-single')
+    await app.request('/scope-single')
+    await app.request('/scope-single')
     expect(singleton).toBe(constructedAtReady)
 
     await app.close()
@@ -1037,7 +1037,7 @@ describe('structural_guard', () => {
     const app = buildApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/bare-guard')
+    const res = await app.request('/bare-guard')
     expect(res.status).toBe(403)
 
     await app.close()

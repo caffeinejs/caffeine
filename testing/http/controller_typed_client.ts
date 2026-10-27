@@ -1,4 +1,4 @@
-import type { Fetchable } from '@caffeinejs/brewer'
+import type { Requestable } from '@caffeinejs/brewer'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { controllerClient } from './controller_client.js'
@@ -13,7 +13,7 @@ export type ControllerTypedTestClient<C extends RouterCtor> = {
 
 export function controllerTypedClient<C extends RouterCtor>(
   routerRef: C,
-  target: string | URL | Fetchable,
+  target: string | URL | Requestable,
 ): ControllerTypedTestClient<C> {
   const raw = controllerClient(routerRef, target)
   const typed: Record<string | symbol, (input?: Request | RequestInit) => Promise<unknown>> = {}

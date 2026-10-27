@@ -113,7 +113,7 @@ class RecordingServer<T extends IAdapterTypes> implements IAdapterServer<T> {
     return Promise.resolve()
   }
 
-  fetch(): Promise<Response> {
+  request(): Promise<Response> {
     return Promise.resolve(new Response(null, { status: 501 }))
   }
 

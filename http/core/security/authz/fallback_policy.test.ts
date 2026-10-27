@@ -88,7 +88,7 @@ describe('fallbackPolicy', () => {
     app = buildApp(false)
     await app.bootstrap()
 
-    expect((await app.fetch('/undecorated')).status).toBe(200)
+    expect((await app.request('/undecorated')).status).toBe(200)
   })
 
   it('gates an undecorated route once configured', async () => {
@@ -97,14 +97,14 @@ describe('fallbackPolicy', () => {
     app = buildApp(true)
     await app.bootstrap()
 
-    expect((await app.fetch('/undecorated')).status).toBe(401)
-    expect((await app.fetch('/undecorated', { headers: { 'x-user': 'alice' } })).status).toBe(200)
+    expect((await app.request('/undecorated')).status).toBe(401)
+    expect((await app.request('/undecorated', { headers: { 'x-user': 'alice' } })).status).toBe(200)
   })
 
   it('honours @AllowAnonymous as the opt-out', async () => {
     app = buildApp(true)
     await app.bootstrap()
 
-    expect((await app.fetch('/opted-out')).status).toBe(200)
+    expect((await app.request('/opted-out')).status).toBe(200)
   })
 })

@@ -736,7 +736,7 @@ export class CaffeineIoC implements Container {
    * The binding is registered when the container compiles, not when `bind()` returns: until then {@link has},
    * {@link getBindings} and {@link entries} do not see it, and an invalid binding is reported by {@link compile}. A key
    * takes one binding, so binding a key that ends up with another binding, decorated or bound, fails the compilation.
-   * Use {@link rebind} to replace one.
+   * Remove the duplicate, bind each implementation under its own key, or give one of them a profile or a condition.
    *
    * Decorators are not read: a decorated class bound here gets only what its binding declares.
    *
@@ -830,7 +830,8 @@ export class CaffeineIoC implements Container {
    * Replaces whatever answers to the given key with a new binding: the binding registered under it, however it was
    * made, and the bindings answering to it through a name or a base, which stay registered under their own keys.
    *
-   * It is the one way to replace a binding. Called before the container compiles, the replacement is applied once
+   * It is meant for the framework and `@caffeinejs/testing`: an application fixes a duplicate binding at its source
+   * instead. Called before the container compiles, the replacement is applied once
    * the decorated bindings, the ones bound by hand and the modules' are registered, so it replaces any of them. A key
    * with no binding is simply bound.
    *

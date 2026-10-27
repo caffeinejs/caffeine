@@ -314,7 +314,7 @@ function assertEveryRouterServed<R>(routing: Routing<R>, installed: readonly str
   }
 
   const name = String(boundTo(unserved.spec.labels))
-  const fixes = [`Install it: ".install(Listener('${name}', ...))"`]
+  const fixes = [`Add it: ".listener('${name}', ...)"`]
 
   if (installed.length > 0) {
     const names = installed.map(candidate => `"${candidate}"`).join(', ')

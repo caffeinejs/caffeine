@@ -12,15 +12,15 @@ afterEach(async () => {
 })
 
 describe('WebApplication', () => {
-  // A client that takes a `fetch` of its own calls it as a bare function, with no `this`.
-  it('answers through fetch handed on as a bare function', async () => {
+  // A client handed the method alone, as a `fetch` of its own, calls it with no `this`.
+  it('answers through request handed on as a bare function', async () => {
     const router = new Router('/detached')
     router.get('/').handler(() => ({ ok: true }))
     app = createWebApplication().mount(router) as WebApplication
     await app.bootstrap()
 
-    const { fetch } = app
+    const { request } = app
 
-    expect(await (await fetch(new Request('http://localhost/detached'))).json()).toEqual({ ok: true })
+    expect(await (await request(new Request('http://localhost/detached'))).json()).toEqual({ ok: true })
   })
 })
