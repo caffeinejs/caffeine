@@ -5,7 +5,7 @@ import type { HTMLDefaults } from '../config.js'
 
 /**
  * The schema of the HTML configuration block, satisfying {@link HTMLDefaults}. Hand the node to the plugin:
- * `.with(({ config }) => html(...))`.
+ * `.with(html(({ config }) => ...))`.
  */
 export const HTMLConfigSchema = $t.Object({
   autoDoctype: $t.Optional($t.Boolean()),

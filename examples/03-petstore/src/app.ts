@@ -139,7 +139,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       .install(DevTools((d, { config }) => d.config(config.devtools).showConfigValues()))
       // JSX server-side rendering. Registering it is optional — `HTML(...)` renders without it — and what it
       // configures is whether the markup is prefixed with a doctype.
-      .with(() => html())
+      .with(html())
       .with(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
       // The document is generated from the routes themselves — @Schema, @Status, @Authorize, the $p pickers and
       // the routers' own `.schema()` are the source, and @APIGroup/@Operation (with their `apiGroup()` and

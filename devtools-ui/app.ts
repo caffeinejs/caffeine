@@ -50,7 +50,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       // `/livez`, `/readyz` and `/startupz`, for an orchestrator: they say whether the UI serves, whatever the devtools
       // it reads answer.
       .with(healthProbes())
-      .with(() => html())
+      .with(html())
       .with(staticFiles(s => s.serve(join(root, 'public'), { prefix: '/static' })))
       .mount(
         homeRouter,
