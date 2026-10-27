@@ -452,6 +452,47 @@ describe('devtools UI without devtools to read', () => {
       vi.unstubAllEnvs()
     }
   })
+
+  // Behind a container's published port a request arrives on the container's own address, not on loopback, so the
+  // name it carries is all there is to tell a DNS-rebinding page from a person.
+  it("refuses another site's name whatever address the request came in on", async () => {
+    vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__URL', 'http://127.0.0.1:1/devtools')
+    const ui = buildApp({ logger: false })
+    await ui.bootstrap()
+
+    try {
+      const status = async (host: string, path = '/'): Promise<number> =>
+        (await ui.request(path, { headers: { host } })).status
+
+      expect(await status('evil.example:9091')).toBe(421)
+      expect(await status('localhost:9091')).toBe(502)
+      expect(await status('127.0.0.1:9091')).toBe(502)
+      expect(await status('[::1]:9091')).toBe(502)
+      // A kubelet probes the pod's address.
+      expect(await status('10.1.2.3:9091', '/livez')).toBe(200)
+    } finally {
+      await ui.close()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('answers the names CAFFEINE_DEVTOOLS_ALLOWED_HOSTS lists, as a proxy in front of it forwards them', async () => {
+    vi.stubEnv('CAFFEINE_DEVTOOLS_TARGET__URL', 'http://127.0.0.1:1/devtools')
+    vi.stubEnv('CAFFEINE_DEVTOOLS_ALLOWED_HOSTS', 'devtools.internal,Ops.Example')
+    const ui = buildApp({ logger: false })
+    await ui.bootstrap()
+
+    try {
+      const status = async (host: string): Promise<number> => (await ui.request('/', { headers: { host } })).status
+
+      expect(await status('devtools.internal')).toBe(502)
+      expect(await status('ops.example:443')).toBe(502)
+      expect(await status('evil.example')).toBe(421)
+    } finally {
+      await ui.close()
+      vi.unstubAllEnvs()
+    }
+  })
 })
 
 /** Authenticates `Bearer <user>:<role>` as that user, holding that role. */

@@ -266,6 +266,7 @@ jobs:
           curl -fsS -o /dev/null http://127.0.0.1:9091/static/site.css
           [ "$(curl -s -o page.html -w '%{http_code}' http://127.0.0.1:9091/)" = 502 ]
           grep -q 'Cannot reach the devtools at http://127.0.0.1:9090/devtools' page.html
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' http://127.0.0.1:9091/)" = 421 ]
           docker stop devtools-ui
           [ "$(docker inspect -f '{{.State.ExitCode}}' devtools-ui)" = 0 ]
 

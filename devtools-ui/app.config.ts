@@ -19,6 +19,8 @@ export const ConfigSchema = $t.Object({
     /** Sent as `Authorization` with every request, for devtools behind `authorize(...)`: `Bearer <token>`. */
     authorization: $t.Optional($t.Secret($t.String({ minLength: 1 }))),
   }),
+  /** Host names the UI answers besides loopback ones, such as the name a proxy in front of it forwards. */
+  allowedHosts: $t.List($t.String({ minLength: 1 }), { default: [] }),
   log: $t.Object({
     level: $t.String({ default: 'info' }),
   }),
@@ -28,6 +30,9 @@ export type Config = InferConfig<typeof ConfigSchema>
 
 /** The environment variable naming the devtools the UI reads, for the pages that say how to change it. */
 export const TARGET_URL_VARIABLE = 'CAFFEINE_DEVTOOLS_TARGET__URL'
+
+/** The environment variable listing the host names the UI answers besides loopback ones. */
+export const ALLOWED_HOSTS_VARIABLE = 'CAFFEINE_DEVTOOLS_ALLOWED_HOSTS'
 
 /** The environment variable carrying the `Authorization` header the UI sends. */
 export const TARGET_AUTHORIZATION_VARIABLE = 'CAFFEINE_DEVTOOLS_TARGET__AUTHORIZATION'

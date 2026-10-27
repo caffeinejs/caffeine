@@ -32,10 +32,12 @@ It reads environment variables prefixed `CAFFEINE_DEVTOOLS_`:
 | `CAFFEINE_DEVTOOLS_TARGET__AUTHORIZATION` | unset                            | The `Authorization` header sent with each request, such as `Bearer <token>`, for devtools behind `authorize(...)` |
 | `CAFFEINE_DEVTOOLS_SERVER__HOST`          | `127.0.0.1`                      | The address the UI listens on                                                                                     |
 | `CAFFEINE_DEVTOOLS_SERVER__PORT`          | `9091`                           | The port the UI listens on                                                                                        |
+| `CAFFEINE_DEVTOOLS_ALLOWED_HOSTS`         | unset                            | Host names the UI answers besides loopback ones, comma-separated                                                  |
 | `CAFFEINE_DEVTOOLS_LOG__LEVEL`            | `info`                           | The log level                                                                                                     |
 
 Keep the UI on loopback. Anyone who reaches it sees what the devtools show, using the credentials the UI was given.
-On a loopback address it answers loopback host names alone, so a page using DNS rebinding cannot read it.
+It answers loopback host names alone, and those `CAFFEINE_DEVTOOLS_ALLOWED_HOSTS` lists, so a page using DNS
+rebinding cannot read it. The probes answer any name.
 
 ## Run it in a container
 
