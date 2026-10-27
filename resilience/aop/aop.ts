@@ -67,7 +67,7 @@ export class ResilienceAspect implements MethodAspect {
    */
   prepare(cls: AnyClass): void {
     for (const [annotation, decorator] of ANNOTATIONS) {
-      const [member] = reflect.members(cls, annotation, { static: true }).keys()
+      const member = reflect.members(cls, annotation, { static: true }).keys().next().value
       if (member !== undefined) {
         throw new ErrInvalidOption(
           errMessage(
