@@ -1,6 +1,7 @@
 import type { AnySchema } from '@caffeinejs/application/schema'
 import type { IRoute, IRouteGroup } from '@caffeinejs/http'
 
+import { DEFAULT_DOCUMENT_NAME } from './_default_name.js'
 import {
   defaultOpenAPIOptions,
   type ErrorStatusOptions,
@@ -47,8 +48,14 @@ type FluentOptions = Partial<Omit<OpenAPIOptions, 'routes' | 'infer' | 'errors'>
  * What a fluent method sets is final: {@link config} fills in only what no method set.
  */
 export class OpenAPIOptionsBuilder {
+  readonly #name: string
   readonly #options: FluentOptions = {}
   #config: Partial<OpenAPIConfig> | undefined
+
+  /** @param name - The document the options are for, which decides its default paths. */
+  constructor(name: string = DEFAULT_DOCUMENT_NAME) {
+    this.#name = name
+  }
 
   /**
    * Reads the settings from a node of the configuration tree, e.g. `config.app.openapi`.
@@ -123,8 +130,11 @@ export class OpenAPIOptionsBuilder {
     return this
   }
 
-  /** Where the JSON document is served. */
-  json(path: string): this {
+  /**
+   * Where the JSON document is served; `false` disables it. A document none of whose endpoints is served is still
+   * generated, for a consumer that reads it through `OpenAPIProvider`.
+   */
+  json(path: string | false): this {
     this.#options.routes = { ...this.#options.routes, json: path }
     return this
   }
@@ -209,6 +219,21 @@ export class OpenAPIOptionsBuilder {
     return this
   }
 
+  /**
+   * Describes only the routes `fn` accepts, which is how one server's routes are split across several documents:
+   *
+   * ```ts
+   * .with(openapi('admin', o => o.include((group, route) => group.path.startsWith('/admin'))))
+   * ```
+   *
+   * `@Operation({ hidden: true })`, `@APIGroup({ hidden: true })` and `@Schema({ hide: true })` still apply to what
+   * it accepts.
+   */
+  include(fn: (router: IRouteGroup<unknown>, route: IRoute<unknown>) => boolean): this {
+    this.#options.include = fn
+    return this
+  }
+
   /** Overrides the derived `operationId`. */
   operationId(fn: (router: IRouteGroup<unknown>, route: IRoute<unknown>) => string): this {
     this.#options.operationId = fn
@@ -279,7 +304,7 @@ export class OpenAPIOptionsBuilder {
   }
 
   [kBuild](): OpenAPIOptions {
-    const defaults = defaultOpenAPIOptions()
+    const defaults = defaultOpenAPIOptions(this.#name)
     const config = this.#config ?? {}
     const options = this.#options
     const routes = { ...defaults.routes, ...config.routes, ...options.routes }
@@ -303,7 +328,7 @@ export class OpenAPIOptionsBuilder {
         options.deriveSecuritySchemes ?? config.deriveSecuritySchemes ?? defaults.deriveSecuritySchemes,
       routes: {
         base: routes.base,
-        json: routes.json,
+        json: routes.json === false ? undefined : routes.json,
         yaml: routes.yaml === false ? undefined : routes.yaml,
         docs: routes.docs === false ? undefined : routes.docs,
       },

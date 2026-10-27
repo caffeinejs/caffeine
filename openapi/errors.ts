@@ -1,6 +1,8 @@
 import { ErrCaffeineWebApplication } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/err'
 
+import { DEFAULT_DOCUMENT_NAME } from './_default_name.js'
+
 /**
  * A configuration that cannot produce a correct document, detected while the application is starting.
  *
@@ -51,5 +53,65 @@ export class ErrOpenAPISchemaConflict extends ErrCaffeineWebApplication {
       'ERR_OPENAPI_SCHEMA_CONFLICT',
     )
     this.name = 'ErrOpenAPISchemaConflict'
+  }
+}
+
+/**
+ * `OpenAPIProvider.docs(name)` named a document no `openapi(...)` plugin registered.
+ *
+ * The message lists the names that are registered, since the usual cause is a typo or a plugin added to another
+ * application.
+ */
+export class ErrOpenAPIDocumentNotFound extends ErrCaffeineWebApplication {
+  constructor(name: string, registered: readonly string[]) {
+    super(
+      errMessage(`Cannot find the OpenAPI document "${name}": no openapi() plugin has registered it`)
+        .solutions(
+          registered.length === 0
+            ? `Register it with .with(openapi(${name === DEFAULT_DOCUMENT_NAME ? '' : `"${name}"`})) on the application`
+            : `Ask for one of the registered documents: ${registered.map(n => `"${n}"`).join(', ')}`,
+          'Read it after await app.bootstrap() or app.run() resolves, once every plugin has registered its document',
+        )
+        .reference('@caffeinejs/openapi', ErrOpenAPIDocumentNotFound)
+        .build(),
+      'ERR_OPENAPI_DOCUMENT_NOT_FOUND',
+    )
+    this.name = 'ErrOpenAPIDocumentNotFound'
+  }
+}
+
+/**
+ * `OpenAPIProvider.docs(name)` was called before the server finished starting.
+ *
+ * A document is generated once every route has registered, when the server is ready, so it does not exist while
+ * the application is still being set up.
+ */
+export class ErrOpenAPIDocumentNotReady extends ErrCaffeineWebApplication {
+  constructor(name: string) {
+    super(
+      errMessage(`Cannot read the OpenAPI document "${name}": it is generated when the server is ready`)
+        .solutions('Read it after await app.bootstrap() or app.run() resolves')
+        .reference('@caffeinejs/openapi', ErrOpenAPIDocumentNotReady)
+        .build(),
+      'ERR_OPENAPI_DOCUMENT_NOT_READY',
+    )
+    this.name = 'ErrOpenAPIDocumentNotReady'
+  }
+}
+
+/**
+ * `OpenAPIProvider.docs()` was called without a name while several documents, none of them `default`, are
+ * registered. Returning any one of them would be a guess.
+ */
+export class ErrOpenAPIDocumentAmbiguous extends ErrCaffeineWebApplication {
+  constructor(registered: readonly string[]) {
+    super(
+      errMessage(`Cannot choose an OpenAPI document: ${registered.length} are registered and none is named "default"`)
+        .solutions(`Name the one to read: ${registered.map(n => `docs("${n}")`).join(', ')}`)
+        .reference('@caffeinejs/openapi', ErrOpenAPIDocumentAmbiguous)
+        .build(),
+      'ERR_OPENAPI_DOCUMENT_AMBIGUOUS',
+    )
+    this.name = 'ErrOpenAPIDocumentAmbiguous'
   }
 }

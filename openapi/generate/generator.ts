@@ -44,7 +44,8 @@ export interface GenerateInput {
  *
  * The package's own document-serving routes reach `routeGroups` like any other registered route; their group
  * is marked hidden, so it is skipped here the way any hidden group is. A group or route another feature marked
- * `detail.http.internal` — a single-page application's shell — is skipped the same way.
+ * `detail.http.internal` — a single-page application's shell — is skipped the same way, and so is a route whose
+ * schema says `hide: true`.
  */
 export function generateDocument(input: GenerateInput): OpenAPIDocument {
   const { options } = input
@@ -69,7 +70,7 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
 
     for (const route of router.routes) {
       const detail = route.detail?.openapi
-      if (detail?.hidden === true || route.detail?.http?.internal === true) {
+      if (detail?.hidden === true || route.schema?.hide === true || route.detail?.http?.internal === true) {
         continue
       }
 

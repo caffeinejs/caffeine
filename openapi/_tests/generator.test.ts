@@ -474,6 +474,20 @@ describe('decorator detail', () => {
     expect(Object.keys(document.paths ?? {})).toEqual(['/pets'])
   })
 
+  it('omits a route whose schema says hide: true', () => {
+    const router = fixtureRouter('/pets', r =>
+      r.routes([
+        fixtureRoute('GET', '/', 'list'),
+        fixtureRoute('POST', '/', 'create').schema({ hide: true, body: petSchema }),
+      ]),
+    )
+
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
+
+    expect(Object.keys(document.paths?.['/pets'] ?? {})).toEqual(['get'])
+    expect(document.components).toBe(undefined)
+  })
+
   it('omits a whole controller marked hidden', () => {
     const router = fixtureRouter('/internal', r => {
       r.detail('openapi', { hidden: true })

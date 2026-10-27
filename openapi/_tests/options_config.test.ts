@@ -6,6 +6,7 @@ import { type WebApplication } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { OpenAPI } from '../feature.js'
 import { openapi } from '../openapi.js'
 import type { OpenAPIConfig } from '../options.js'
 import { kBuild, OpenAPIOptionsBuilder } from '../options_builder.js'
@@ -91,9 +92,9 @@ describe('openapi() configured from the tree', () => {
       )
       .build().config
 
-    app = createWebApplication({ config: conf }).with(
-      openapi<InferConfig<typeof schema>>((o, { config }) => o.config(config.openapi).public()),
-    ) as WebApplication
+    app = createWebApplication({ config: conf })
+      .install(OpenAPI())
+      .with(openapi<InferConfig<typeof schema>>((o, { config }) => o.config(config.openapi).public())) as WebApplication
     await app.bootstrap()
 
     const document = (await (await app.request('/spec.json')).json()) as OpenAPIDocument

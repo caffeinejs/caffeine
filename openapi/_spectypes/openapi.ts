@@ -31,8 +31,8 @@ export const OpenAPIConfigSchema = $t.Object({
   routes: $t.Optional(
     $t.Object({
       base: $t.Optional($t.String()),
-      json: $t.Optional($t.String()),
       // `false` switches the endpoint off.
+      json: $t.Optional($t.Union([$t.String(), $t.Literal(false)])),
       yaml: $t.Optional($t.Union([$t.String(), $t.Literal(false)])),
       docs: $t.Optional($t.Union([$t.String(), $t.Literal(false)])),
     }),

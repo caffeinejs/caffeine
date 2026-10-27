@@ -91,6 +91,33 @@ describe('OpenAPIOptionsBuilder', () => {
     expect(options.routes).toEqual({ base: '/', json: '/openapi.json', yaml: undefined, docs: undefined })
   })
 
+  // Two documents on one server must not both claim /openapi.json by default.
+  it('moves a named document to paths of its own', () => {
+    const options = new OpenAPIOptionsBuilder('admin')[kBuild]()
+
+    expect(options.routes).toEqual({
+      base: '/',
+      json: '/openapi/admin.json',
+      yaml: '/openapi/admin.yaml',
+      docs: '/docs/admin',
+    })
+  })
+
+  it('keeps the classic paths for the default document', () => {
+    expect(new OpenAPIOptionsBuilder('default')[kBuild]().routes.json).toBe('/openapi.json')
+  })
+
+  it('switches the JSON endpoint off with false, in code and from the configuration', () => {
+    expect(new OpenAPIOptionsBuilder().json(false)[kBuild]().routes.json).toBe(undefined)
+    expect(new OpenAPIOptionsBuilder().config({ routes: { json: false } })[kBuild]().routes.json).toBe(undefined)
+  })
+
+  it('keeps the route selector it was given', () => {
+    const include = () => true
+
+    expect(new OpenAPIOptionsBuilder().include(include)[kBuild]().include).toBe(include)
+  })
+
   describe('secure', () => {
     it('takes a scheme name as shorthand', () => {
       const options = new OpenAPIOptionsBuilder().secure('Basic')[kBuild]()

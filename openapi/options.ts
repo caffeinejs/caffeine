@@ -2,6 +2,7 @@ import type { ReadonlyConfig } from '@caffeinejs/application/config'
 import type { AnySchema } from '@caffeinejs/application/schema'
 import type { IRoute, RouteAuthzOptions, IRouteGroup } from '@caffeinejs/http'
 
+import { DEFAULT_DOCUMENT_NAME } from './_default_name.js'
 import type {
   ComponentsObject,
   ExternalDocumentationObject,
@@ -65,10 +66,13 @@ export interface OpenAPIOptions {
   /** Whether to derive `securitySchemes` from the application's registered authentication schemes. */
   deriveSecuritySchemes: boolean
 
-  /** Where the document and the UI are served. A path of `undefined` disables that endpoint. */
+  /**
+   * Where the document and the UI are served. A path of `undefined` disables that endpoint; with all three off the
+   * document is still generated and readable through `OpenAPIProvider`.
+   */
   routes: {
     base: string
-    json: string
+    json: string | undefined
     yaml: string | undefined
     docs: string | undefined
   }
@@ -94,6 +98,9 @@ export interface OpenAPIOptions {
 
   /** Structurally deduplicate repeated anonymous schemas into `components.schemas`. Off by default. */
   dedupeComponents: boolean
+
+  /** Which of the server's routes this document describes. Every route when absent. */
+  include?: (router: IRouteGroup<unknown>, route: IRoute<unknown>) => boolean
 
   /** Overrides the derived `operationId`. */
   operationId?: (router: IRouteGroup<unknown>, route: IRoute<unknown>) => string
@@ -129,10 +136,10 @@ export interface OpenAPIOptions {
  * What `OpenAPIOptionsBuilder.config` accepts: the part of {@link OpenAPIOptions} that can live in a configuration
  * tree.
  *
- * Absent: everything that is a function (`operationId`, `tagFor`, `schemaName`, `transformDocument`), a schema
- * (`errorSchema`), a document to serve, and the security policy the endpoints are compiled against (`secure`).
+ * Absent: everything that is a function (`include`, `operationId`, `tagFor`, `schemaName`, `transformDocument`), a
+ * schema (`errorSchema`), a document to serve, and the security policy the endpoints are compiled against (`secure`).
  *
- * `yaml` and `docs` accept `false` to switch an endpoint off. The specification's objects are read-only here,
+ * `json`, `yaml` and `docs` accept `false` to switch an endpoint off. The specification's objects are read-only here,
  * as a configuration tree hands them over.
  */
 export interface OpenAPIConfig {
@@ -146,7 +153,7 @@ export interface OpenAPIConfig {
   deriveSecuritySchemes?: boolean
   routes?: {
     base?: string
-    json?: string
+    json?: string | false
     yaml?: string | false
     docs?: string | false
   }
@@ -163,7 +170,16 @@ export type OpenAPISource = { kind: 'document'; document: OpenAPIDocument } | { 
 /** Everything the generator needs, with nothing left to default. */
 export const DEFAULT_OPENAPI_VERSION: OpenAPIVersion = '3.1.1'
 
-export function defaultOpenAPIOptions(): OpenAPIOptions {
+/**
+ * The options a document starts from.
+ *
+ * The default document is served at `/openapi.json`, `/openapi.yaml` and `/docs`. A named one moves to
+ * `/openapi/<name>.json`, `/openapi/<name>.yaml` and `/docs/<name>`, so two documents on one server never collide
+ * unless both are given the same path.
+ */
+export function defaultOpenAPIOptions(name: string = DEFAULT_DOCUMENT_NAME): OpenAPIOptions {
+  const named = name !== DEFAULT_DOCUMENT_NAME
+
   return {
     version: DEFAULT_OPENAPI_VERSION,
     info: { title: 'API', version: '0.0.0' },
@@ -173,9 +189,9 @@ export function defaultOpenAPIOptions(): OpenAPIOptions {
     deriveSecuritySchemes: true,
     routes: {
       base: '/',
-      json: '/openapi.json',
-      yaml: '/openapi.yaml',
-      docs: '/docs',
+      json: named ? `/openapi/${name}.json` : '/openapi.json',
+      yaml: named ? `/openapi/${name}.yaml` : '/openapi.yaml',
+      docs: named ? `/docs/${name}` : '/docs',
     },
     ui: undefined,
     secure: undefined,

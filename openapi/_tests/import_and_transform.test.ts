@@ -18,6 +18,7 @@ import type { FastifyInstance } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from '../errors.js'
+import { OpenAPI } from '../feature.js'
 import { openapi } from '../openapi.js'
 import type { OpenAPIOptionsBuilder } from '../options_builder.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
@@ -46,12 +47,14 @@ const HAND_WRITTEN: OpenAPIDocument = {
 }
 
 function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication {
-  return createWebApplication({}).with(
-    openapi(o => {
-      o.docs(false).public()
-      configure(o)
-    }),
-  ) as WebApplication
+  return createWebApplication({})
+    .install(OpenAPI())
+    .with(
+      openapi(o => {
+        o.docs(false).public()
+        configure(o)
+      }),
+    ) as WebApplication
 }
 
 async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {
@@ -278,7 +281,9 @@ describe('openapi without authentication', () => {
   // Nothing is secured, so a public document hides nothing and is not worth a line of output.
   it('serves the document publicly without a warning', async () => {
     const warnings = await warningsDuring(async () => {
-      app = createWebApplication({}).with(openapi(o => o.docs(false))) as WebApplication
+      app = createWebApplication({})
+        .install(OpenAPI())
+        .with(openapi(o => o.docs(false))) as WebApplication
       await app.bootstrap()
     })
 
@@ -288,7 +293,9 @@ describe('openapi without authentication', () => {
 
   // Securing the endpoints with no scheme registered would protect them with nothing; the fix is to register one.
   it('refuses to secure the document, pointing at Authentication(...)', async () => {
-    app = createWebApplication({}).with(openapi(o => o.docs(false).secure('Basic'))) as WebApplication
+    app = createWebApplication({})
+      .install(OpenAPI())
+      .with(openapi(o => o.docs(false).secure('Basic'))) as WebApplication
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined
@@ -304,6 +311,7 @@ describe('openapi without authentication', () => {
   it('emits the warnings generation collected once the server is ready', async () => {
     const warnings = await warningsDuring(async () => {
       app = createWebApplication({})
+        .install(OpenAPI())
         .with(openapi(o => o.docs(false)))
         .with(() => async (instance: FastifyInstance) => {
           instance.$route('search', router => {
