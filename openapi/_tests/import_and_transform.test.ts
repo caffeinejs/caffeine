@@ -3,10 +3,21 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { $t } from '@caffeinejs/application/schema'
-import { AllowAnonymous, Controller, Get, Header, Produces, Schema, WebApplication } from '@caffeinejs/http'
+import {
+  AllowAnonymous,
+  Controller,
+  Get,
+  Header,
+  Produces,
+  RouteBuilder,
+  Schema,
+  WebApplication,
+} from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import type { FastifyInstance } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { ErrOpenAPIConfiguration } from '../errors.js'
 import { openapi } from '../openapi.js'
 import type { OpenAPIOptionsBuilder } from '../options_builder.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
@@ -106,6 +117,18 @@ describe('imported specifications', () => {
     app = build(o => o.specification({ path }))
 
     await expect(app.bootstrap()).rejects.toThrow(/Cannot parse the OpenAPI specification/)
+    app = undefined
+  })
+
+  // The extension decides the parser, and the message must name the one that failed.
+  it('names YAML as the format that failed for a .yaml file', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'openapi-'))
+    const path = join(dir, 'spec.yaml')
+    writeFileSync(path, 'openapi: [unclosed')
+
+    app = build(o => o.specification({ path }))
+
+    await expect(app.bootstrap()).rejects.toThrow(`Cannot parse the OpenAPI specification at "${path}" as YAML`)
     app = undefined
   })
 
@@ -221,5 +244,80 @@ describe('derived response detail', () => {
     expect(components?.parameters?.page).toMatchObject({ name: 'page', in: 'query' })
     // The generated schemas survive the merge.
     expect(Object.keys(components?.schemas ?? {})).toEqual(['Widget'])
+  })
+})
+
+// Here rather than in `openapi.test.ts`: that file's controllers carry `@Roles`, and every application built in it
+// must install authentication to start, which is exactly what these tests leave out.
+describe('openapi without authentication', () => {
+  let app: WebApplication | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+  })
+
+  async function warningsDuring(run: () => Promise<void>): Promise<string[]> {
+    const warnings: string[] = []
+    const capture = (warning: Error | string) => {
+      warnings.push(typeof warning === 'string' ? warning : warning.message)
+    }
+    process.on('warning', capture)
+
+    try {
+      await run()
+      // process warnings are delivered on the next tick.
+      await new Promise(resolve => setImmediate(resolve))
+    } finally {
+      process.off('warning', capture)
+    }
+
+    return warnings
+  }
+
+  // Nothing is secured, so a public document hides nothing and is not worth a line of output.
+  it('serves the document publicly without a warning', async () => {
+    const warnings = await warningsDuring(async () => {
+      app = createWebApplication({}).with(openapi(o => o.docs(false))) as WebApplication
+      await app.bootstrap()
+    })
+
+    expect((await app!.request('/openapi.json')).status).toBe(200)
+    expect(warnings).toEqual([])
+  })
+
+  // Securing the endpoints with no scheme registered would protect them with nothing; the fix is to register one.
+  it('refuses to secure the document, pointing at Authentication(...)', async () => {
+    app = createWebApplication({}).with(openapi(o => o.docs(false).secure('Basic'))) as WebApplication
+
+    const failure = await app.bootstrap().catch((error: unknown) => error)
+    app = undefined
+
+    expect(failure).toBeInstanceOf(ErrOpenAPIConfiguration)
+    expect((failure as Error).message).toContain(
+      'Cannot secure the OpenAPI endpoints: no authentication scheme named "Basic" is registered',
+    )
+    expect((failure as Error).message).toContain('Register a scheme with .install(Authentication(')
+  })
+
+  // A route the document cannot represent is dropped, and the operator must hear about it at start-up.
+  it('emits the warnings generation collected once the server is ready', async () => {
+    const warnings = await warningsDuring(async () => {
+      app = createWebApplication({})
+        .with(openapi(o => o.docs(false)))
+        .with(() => async (instance: FastifyInstance) => {
+          instance.$route('search', router => {
+            router.path('/search').routes([
+              new RouteBuilder()
+                .method('QUERY')
+                .path('/')
+                .handle(() => []),
+            ])
+          })
+        }) as WebApplication
+      await app.bootstrap()
+    })
+
+    expect(warnings.filter(w => w.includes('OpenAPI 3.1.1 cannot represent the "QUERY" method'))).toHaveLength(1)
   })
 })
