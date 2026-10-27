@@ -117,7 +117,7 @@ void [HTMLController, HTMLErrorController]
 function htmlApp(defaults?: Partial<HTMLDefaults>) {
   return createWebApplication({})
     .errorHandling(e => e.globalHandlers(RenderHTMLHandler))
-    .with(() => html(defaults))
+    .with(defaults === undefined ? html() : html(() => defaults))
 }
 
 describe('HTML', () => {
@@ -203,7 +203,7 @@ describe('HTML', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ html: { autoDoctype: false } }))
       .build().config
-    const app = createWebApplication({ config: conf }).with(({ config }) => html(config.html))
+    const app = createWebApplication({ config: conf }).with(html(({ config }) => config.html))
 
     await app.bootstrap()
 
