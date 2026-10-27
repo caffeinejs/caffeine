@@ -13,7 +13,7 @@ COPY --from=manifests /manifests ./
 RUN --mount=type=cache,target=/root/.npm \
   npm ci --ignore-scripts --no-audit --no-fund --workspace=@caffeinejs/devtools-ui --include-workspace-root
 COPY . .
-RUN npx tsc --build devtools-ui/tsconfig.build.json
+RUN node_modules/.bin/tsc --build devtools-ui/tsconfig.build.json
 
 # Copies each linked workspace package as published: its `files` plus any nested node_modules.
 RUN --mount=type=cache,target=/root/.npm \
@@ -27,7 +27,9 @@ RUN mkdir /app \
       const dir = relative(".", realpathSync(join("node_modules/@caffeinejs", name))); \
       const { files } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")); \
       for (const file of [...files, "node_modules"]) { \
-        if (existsSync(join(dir, file))) cpSync(join(dir, file), join("/app", dir, file), { recursive: true, verbatimSymlinks: true }); \
+        if (existsSync(join(dir, file))) { \
+          cpSync(join(dir, file), join("/app", dir, file), { recursive: true, verbatimSymlinks: true }); \
+        } \
       } \
     }'
 
