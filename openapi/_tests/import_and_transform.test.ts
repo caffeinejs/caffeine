@@ -18,6 +18,7 @@ import type { FastifyInstance } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from '../errors.js'
+import { OpenAPI } from '../feature.js'
 import { openapi } from '../openapi.js'
 import type { OpenAPIOptionsBuilder } from '../options_builder.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
@@ -46,12 +47,14 @@ const HAND_WRITTEN: OpenAPIDocument = {
 }
 
 function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication {
-  return createWebApplication({}).with(
-    openapi(o => {
-      o.docs(false).public()
-      configure(o)
-    }),
-  ) as WebApplication
+  return createWebApplication({})
+    .install(OpenAPI())
+    .with(
+      openapi(o => {
+        o.docs(false).public()
+        configure(o)
+      }),
+    ) as WebApplication
 }
 
 async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {
@@ -120,6 +123,41 @@ describe('imported specifications', () => {
     app = undefined
   })
 
+  // A YAML alias inside its own anchor parses as a cycle, which no JSON endpoint and no consumer can serialize.
+  it('fails at boot, naming where, when the document refers back to itself', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'openapi-'))
+    const path = join(dir, 'spec.yaml')
+    writeFileSync(path, 'openapi: 3.1.1\ninfo: &info\n  title: Loop\n  version: 1.0.0\n  x-self: *info\npaths: {}\n')
+
+    app = build(o => o.specification({ path }))
+    const failure = await app.bootstrap().catch((error: unknown) => error)
+    app = undefined
+
+    expect(failure).toBeInstanceOf(ErrOpenAPIConfiguration)
+    expect((failure as Error).message).toContain(
+      'Cannot publish the OpenAPI document "default": it refers back to itself at "#/info/x-self"',
+    )
+  })
+
+  // One anchor aliased twice is a shared object, not a cycle, and is published as two copies.
+  it('serves a document that reuses one object in two places', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'openapi-'))
+    const path = join(dir, 'spec.yaml')
+    writeFileSync(
+      path,
+      'openapi: 3.1.1\ninfo:\n  title: Shared\n  version: 1.0.0\npaths:\n' +
+        '  /a:\n    get:\n      responses: &ok\n        "200":\n          description: OK\n' +
+        '  /b:\n    get:\n      responses: *ok\n',
+    )
+
+    app = build(o => o.specification({ path }))
+    await app.bootstrap()
+
+    const document = await documentOf(app)
+
+    expect(document.paths?.['/b']?.get?.responses).toEqual({ 200: { description: 'OK' } })
+  })
+
   // The extension decides the parser, and the message must name the one that failed.
   it('names YAML as the format that failed for a .yaml file', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'openapi-'))
@@ -171,6 +209,18 @@ describe('transformDocument', () => {
     await app.bootstrap()
 
     expect((await documentOf(app)).info.title).toBe('Patched')
+  })
+
+  // A function cannot be copied into the published document, and would vanish from the JSON endpoint if it could.
+  it('fails at boot when it returns a value JSON cannot hold', async () => {
+    app = build(o => o.transformDocument(doc => ({ ...doc, info: { ...doc.info, toJSON: () => ({}) } })))
+    const failure = await app.bootstrap().catch((error: unknown) => error)
+    app = undefined
+
+    expect(failure).toBeInstanceOf(ErrOpenAPIConfiguration)
+    expect((failure as Error).message).toContain(
+      'Cannot publish the OpenAPI document "default": it holds a value that is not plain data',
+    )
   })
 
   // The answer to the generator's blind spot: a route registered straight onto the server never reaches the
@@ -278,7 +328,9 @@ describe('openapi without authentication', () => {
   // Nothing is secured, so a public document hides nothing and is not worth a line of output.
   it('serves the document publicly without a warning', async () => {
     const warnings = await warningsDuring(async () => {
-      app = createWebApplication({}).with(openapi(o => o.docs(false))) as WebApplication
+      app = createWebApplication({})
+        .install(OpenAPI())
+        .with(openapi(o => o.docs(false))) as WebApplication
       await app.bootstrap()
     })
 
@@ -288,7 +340,9 @@ describe('openapi without authentication', () => {
 
   // Securing the endpoints with no scheme registered would protect them with nothing; the fix is to register one.
   it('refuses to secure the document, pointing at Authentication(...)', async () => {
-    app = createWebApplication({}).with(openapi(o => o.docs(false).secure('Basic'))) as WebApplication
+    app = createWebApplication({})
+      .install(OpenAPI())
+      .with(openapi(o => o.docs(false).secure('Basic'))) as WebApplication
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined
@@ -304,6 +358,7 @@ describe('openapi without authentication', () => {
   it('emits the warnings generation collected once the server is ready', async () => {
     const warnings = await warningsDuring(async () => {
       app = createWebApplication({})
+        .install(OpenAPI())
         .with(openapi(o => o.docs(false)))
         .with(() => async (instance: FastifyInstance) => {
           instance.$route('search', router => {

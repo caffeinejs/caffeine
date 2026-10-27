@@ -227,6 +227,32 @@ const app = createWebApplication().basePath(() => getBasePath({ throwOnMissing: 
 `.basePath(...)` drops the trailing slash. The example's `web` is served under `/shop` this way. See
 [Serving under a base path](../ai/docs/http.md#serving-under-a-base-path).
 
+## Handing Watt the OpenAPI document
+
+A Watt gateway composes the APIs it fronts from the OpenAPI documents its applications hand over with
+`setOpenapiSchema` from `@platformatic/globals`. `@caffeinejs/openapi` generates the document when the server is
+ready and keeps it in `OpenAPIProvider`, so read it once `bootstrap()` has resolved:
+
+```ts
+const app = createWebApplication()
+  .install(OpenAPI())
+  .with(openapi(o => o.info({ title: 'Orders', version: '1.0.0' }).json(false).yaml(false).docs(false)))
+  .mount(routes)
+
+export async function create(): Promise<FastifyInstance> {
+  await app.bootstrap()
+  registerWattChecks(app)
+  setOpenapiSchema(app.container.get(OpenAPIProvider).docs())
+  app.availability.markStarted().acceptTraffic()
+
+  return app.instance
+}
+```
+
+`json(false).yaml(false).docs(false)` serves no endpoint, so the gateway is the only place the document is published.
+Leave them on to serve it from the application too. With several documents, name the one to hand over:
+`docs('public')`. The example's `orders` does this, and Watt's `getApplicationOpenapiSchema('orders')` returns it.
+
 ## What Caffeine is missing
 
 What an application under Watt still writes by hand, or cannot do at all, and where each fix belongs. Unlike the
@@ -240,9 +266,6 @@ A package on top cannot close these.
   and `run()` listens. In factory mode Watt does the listening, so `create()` calls
   `app.availability.markStarted().acceptTraffic()` by hand, and an application that forgets never passes readiness.
   Missing: a step that does what `run()` does except listen, under the same rules: once, and never after `close()`.
-- **Handing over the OpenAPI document.** `@caffeinejs/openapi` generates its document when the server is ready, and
-  only serves it over HTTP. Giving it to Watt's `setOpenapiSchema`, so a Watt gateway can compose it, needs an
-  accessor or an event. Today only `transformDocument` sees the document, and that hook is there to patch it.
 
 ### For a package on top
 
@@ -280,6 +303,7 @@ These need no change to Caffeine, only code that knows Watt: the next section.
 - **Calls between applications.** `fetch` and `@caffeinejs/brewer` reach `http://<id>.plt.local` in process.
 - **Closing twice.** Watt's own close, after yours, does nothing.
 - **The base path,** through `getBasePath`.
+- **The OpenAPI document,** through `OpenAPIProvider` and `setOpenapiSchema`.
 
 ## A `@caffeinejs/platformatic` package
 

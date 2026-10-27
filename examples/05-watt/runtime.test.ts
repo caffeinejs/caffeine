@@ -59,6 +59,17 @@ describe('the example under Watt', () => {
     expect(await response.json()).toEqual([{ id: 1, item: 'espresso' }])
   })
 
+  // A Watt gateway composes the APIs it fronts from the documents its applications hand over.
+  it('hands Watt the OpenAPI document of the internal application', async () => {
+    const document = (await runtime!.getApplicationOpenapiSchema('orders')) as {
+      info: { title: string }
+      paths: Record<string, unknown>
+    }
+
+    expect(document.info.title).toBe('Orders')
+    expect(Object.keys(document.paths)).toEqual(['/orders'])
+  })
+
   it('answers Watt readiness and liveness from every application, the headless worker included', async () => {
     const checked = runtime as unknown as CheckedRuntime
     const everyone = { 'web:0': { status: true }, 'orders:0': { status: true }, 'worker:0': { status: true } }

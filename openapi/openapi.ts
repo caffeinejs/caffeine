@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { extname, resolve } from 'node:path'
 
+import { ErrFeatureNotInstalled } from '@caffeinejs/application'
 import {
   AuthenticationSchemeProvider,
   AuthenticationService,
@@ -16,11 +17,13 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
 
+import { DEFAULT_DOCUMENT_NAME } from './_default_name.js'
 import { ErrOpenAPIConfiguration } from './errors.js'
 import { generateDocument, validateDocument } from './generate/generator.js'
 import { joinPaths } from './generate/paths.js'
-import { toRouteAuthz, type OpenAPIOptions, type OpenAPISource } from './options.js'
+import { defaultOpenAPIOptions, toRouteAuthz, type OpenAPIOptions, type OpenAPISource } from './options.js'
 import { kBuild, OpenAPIOptionsBuilder } from './options_builder.js'
+import { kPublish, kReserve, OpenAPIProvider } from './provider.js'
 import type { OpenAPIDocument } from './spec/spec.js'
 import { readScalarBundle, scalarPage } from './ui/scalar.js'
 
@@ -33,25 +36,61 @@ const ASSET_SEGMENT = '/_scalar.js'
 /** A year. The bundle is immutable at this URL for the process's lifetime. */
 const ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable'
 
+/** What a document name may hold: it becomes part of the default paths and of a route group's name. */
+const DOCUMENT_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
+
 interface EndpointPaths {
-  json: string
+  json: string | undefined
   yaml: string | undefined
   docs: string | undefined
   asset: string | undefined
 }
 
 /**
- * Generates and serves an OpenAPI document, as an ordinary Fastify plugin factory: `.with(openapi(o => ...))`.
+ * Generates an OpenAPI document, registers it with `OpenAPIProvider`, and serves it, as an ordinary Fastify plugin
+ * factory: `.with(openapi(o => ...))`. Needs `.install(OpenAPI())` on the application.
  *
  * Most of what ends up in the document is not configured here at all — it is read from the routes the
  * application already declares. The builder covers the document-level facts nothing else can know (title,
  * version, servers), where the document is served, and who may read it.
+ *
+ * Without a name the document is `default`. Name each one to register several, on one server or one per listener:
+ *
+ * ```ts
+ * .install(OpenAPI())
+ * .with(openapi('public', o => o.include((group, route, path) => !path.startsWith('/admin'))))
+ * .with(openapi('admin', o => o.include((group, route, path) => path.startsWith('/admin'))))
+ * ```
+ *
+ * @throws ErrOpenAPIConfiguration when the name is not letters, digits, `-` and `_`, starting with a letter or digit.
  */
-export function openapi<C = unknown>(configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C> {
+export function openapi<C = unknown>(configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C>
+export function openapi<C = unknown>(name: string, configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C>
+export function openapi<C = unknown>(
+  nameOrConfigure?: string | OpenAPIConfigurer<C>,
+  maybeConfigure?: OpenAPIConfigurer<C>,
+): HTTPPluginFactory<C> {
+  const named = typeof nameOrConfigure === 'string'
+  const name = named ? nameOrConfigure : DEFAULT_DOCUMENT_NAME
+  const configure = named ? maybeConfigure : nameOrConfigure
+
+  assertDocumentName(name)
+
   return context => {
-    const builder = new OpenAPIOptionsBuilder()
+    // Factories run at start-up: a plugin with nowhere to register its document is a boot failure naming the fix.
+    if (!context.hasFeature('openapi')) {
+      throw new ErrFeatureNotInstalled('openapi', 'Install it with .install(OpenAPI()) on the application')
+    }
+
+    const builder = new OpenAPIOptionsBuilder(name)
     configure?.(builder, context)
-    return openapiPlugin(builder[kBuild]())
+    const options = builder[kBuild]()
+    assertUIHasDocument(name, options)
+
+    const provider = context.container.get(OpenAPIProvider)
+    provider[kReserve](name)
+
+    return openapiPlugin(name, options, provider)
   }
 }
 
@@ -65,11 +104,17 @@ export function openapi<C = unknown>(configure?: OpenAPIConfigurer<C>): HTTPPlug
  * time, and one that silently omits routes is worse than one that never shipped; the framework already
  * refuses to start on an unconvertible route schema, and this matches it.
  */
-function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
+function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIProvider): FastifyPluginAsync {
+  const label = name === DEFAULT_DOCUMENT_NAME ? 'openapi' : `openapi:${name}`
+  const paths = resolvePaths(options)
+  const served = paths.json !== undefined || paths.yaml !== undefined || paths.docs !== undefined
+
   const plugin: FastifyPluginAsync = async instance => {
     const descriptors = instance.$container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
     assertSchemesExist(instance, options)
-    warnIfUnprotected(instance, options)
+    if (served) {
+      warnIfUnprotected(instance, name, options)
+    }
 
     const routeGroups = collectRouteGroups(instance)
 
@@ -92,32 +137,42 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
       // The transform runs in both modes, so it is equally the way to patch a generated document and to adjust
       // an imported one. Mutating in place and returning nothing is supported because it is the obvious thing
       // to reach for.
-      document = options.transformDocument?.(generated) ?? generated
+      const transformed = options.transformDocument?.(generated) ?? generated
 
       // A generated document is validated by default; an imported one is not, because a hand-written spec may
       // legitimately use constructs the validator rejects. `.validate(true)` opts one back in.
       if (options.validate ?? options.source === undefined) {
-        validateDocument(document)
+        validateDocument(transformed)
       }
 
       for (const warning of warnings) {
-        process.emitWarning(warning, 'CaffeineOpenAPIWarning')
+        process.emitWarning(
+          name === DEFAULT_DOCUMENT_NAME ? warning : `OpenAPI document "${name}": ${warning}`,
+          'CaffeineOpenAPIWarning',
+        )
       }
 
+      document = publishable(name, transformed)
       yaml = toYAML(document)
+      provider[kPublish](name, document)
     })
 
-    const paths = resolvePaths(options)
+    if (!served) {
+      return
+    }
+
     const { docsPage, asset } = ui(options, paths, instance.$basePath)
 
     const authz = options.secure === undefined ? undefined : toRouteAuthz(options.secure)
 
-    instance.$route('openapi', router => {
+    instance.$route(label, router => {
       router.path(options.routes.base)
       router.detail('openapi', { hidden: true })
       router.routes(
         [
-          route('GET', paths.json, 'application/json', authz).handle(() => document),
+          paths.json === undefined
+            ? undefined
+            : route('GET', paths.json, 'application/json', authz).handle(() => document),
           paths.yaml === undefined ? undefined : route('GET', paths.yaml, 'application/yaml', authz).handle(() => yaml),
           paths.docs === undefined ? undefined : route('GET', paths.docs, 'text/html', authz).handle(() => docsPage),
           paths.asset === undefined
@@ -130,7 +185,86 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
     })
   }
 
-  return fp(plugin, { name: 'openapi' })
+  return fp(plugin, { name: label })
+}
+
+/**
+ * A deep-frozen copy of the document, so freezing it touches none of the objects the application handed the
+ * builder, and no consumer of the provider can change what the endpoints serve.
+ *
+ * Refused here rather than at the first request: a value `structuredClone` cannot copy, and a cycle, which a YAML
+ * alias inside its own anchor produces and which neither the JSON endpoint nor a consumer can serialize.
+ */
+function publishable(name: string, document: OpenAPIDocument): OpenAPIDocument {
+  let copy: OpenAPIDocument
+  try {
+    copy = structuredClone(document)
+  } catch (cause) {
+    throw new ErrOpenAPIConfiguration(
+      errMessage(
+        `Cannot publish the OpenAPI document "${name}": it holds a value that is not plain data: ${describe(cause)}`,
+      )
+        .solutions('Return only objects, arrays, strings, numbers, booleans and null from transformDocument')
+        .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+        .build(),
+    )
+  }
+
+  deepFreeze(name, copy, '#', new Set())
+  return copy
+}
+
+// `ancestors` holds the objects on the path from the root: meeting one again is a cycle. An object already frozen
+// was walked in full where it was first met, which a shared, non-cyclic object reached twice relies on.
+function deepFreeze(name: string, value: unknown, pointer: string, ancestors: Set<object>): void {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
+    return
+  }
+
+  if (ancestors.has(value)) {
+    throw new ErrOpenAPIConfiguration(
+      errMessage(`Cannot publish the OpenAPI document "${name}": it refers back to itself at "${pointer}"`)
+        .solutions('Replace the repeated object with a $ref to a component, such as "#/components/schemas/Node"')
+        .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+        .build(),
+    )
+  }
+
+  ancestors.add(value)
+  for (const [key, child] of Object.entries(value)) {
+    deepFreeze(name, child, `${pointer}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`, ancestors)
+  }
+  ancestors.delete(value)
+  Object.freeze(value)
+}
+
+function assertDocumentName(name: string): void {
+  if (!DOCUMENT_NAME.test(name)) {
+    throw new ErrOpenAPIConfiguration(
+      errMessage(
+        `Cannot register the OpenAPI document "${name}": a name holds only letters, digits, "-" and "_", ` +
+          'and starts with a letter or a digit',
+      )
+        .solutions('Name it like a path segment, such as openapi("admin-api", o => ...)')
+        .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+        .build(),
+    )
+  }
+}
+
+/** The page loads the JSON document, so a UI without one would render an error in every browser that opens it. */
+function assertUIHasDocument(name: string, options: OpenAPIOptions): void {
+  if (options.routes.docs !== undefined && options.routes.json === undefined) {
+    throw new ErrOpenAPIConfiguration(
+      errMessage(`Cannot serve the documentation UI of the OpenAPI document "${name}": its JSON endpoint is off`)
+        .solutions(
+          `Serve the JSON document with .json("${defaultOpenAPIOptions(name).routes.json}")`,
+          'Call .docs(false) to serve no UI',
+        )
+        .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+        .build(),
+    )
+  }
 }
 
 /**
@@ -196,7 +330,8 @@ function ui(options: OpenAPIOptions, paths: EndpointPaths, basePath: string): { 
   return {
     docsPage: scalarPage({
       title: options.info.title,
-      specURL: basePath + publicURL(base, json),
+      // Present: `assertUIHasDocument` refused a UI without a JSON endpoint before the plugin was built.
+      specURL: basePath + publicURL(base, json!),
       assetURL: basePath + publicURL(base, asset),
       configuration: options.ui,
     }),
@@ -242,7 +377,7 @@ function assertSchemesExist(instance: FastifyInstance, options: OpenAPIOptions):
  * is exactly that. But an unlisted description of every endpoint and every auth scheme is worth one line of
  * output when nobody stated it was intended, and `.public()` silences it.
  */
-function warnIfUnprotected(instance: FastifyInstance, options: OpenAPIOptions): void {
+function warnIfUnprotected(instance: FastifyInstance, name: string, options: OpenAPIOptions): void {
   if (options.secureExplicit || options.secure !== undefined) {
     return
   }
@@ -253,8 +388,10 @@ function warnIfUnprotected(instance: FastifyInstance, options: OpenAPIOptions): 
     return
   }
 
+  const document = name === DEFAULT_DOCUMENT_NAME ? 'The OpenAPI document' : `The OpenAPI document "${name}"`
+
   process.emitWarning(
-    errMessage('The OpenAPI document is served publicly while authentication is configured')
+    errMessage(`${document} is served publicly while authentication is configured`)
       .solutions(
         'Call .secure(s => s.schemes("Bearer")) on the OpenAPI builder to require authentication',
         'Call .public() to state that public access is intended and silence this warning',

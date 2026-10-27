@@ -4,6 +4,7 @@ import { constraints, createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apiGroup, operation } from '../decorators/index.js'
+import { OpenAPI } from '../feature.js'
 import { openapi } from '../openapi.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
@@ -40,6 +41,7 @@ describe('openapi from a programmatic router', () => {
       .handler(() => ({}))
 
     app = createWebApplication({})
+      .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 
@@ -62,6 +64,7 @@ describe('openapi from a programmatic router', () => {
     stores.get('/').handler(() => [])
 
     app = createWebApplication({})
+      .install(OpenAPI())
       .with(openapi(o => o.docs(false).public()))
       .mount(stores) as WebApplication
     await app.bootstrap()
@@ -91,6 +94,7 @@ describe('openapi from a programmatic router', () => {
       .handler(ctx => ctx.body(ctx.req.body()))
 
     app = createWebApplication({})
+      .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 
@@ -116,6 +120,7 @@ describe('openapi from a programmatic router', () => {
     geo.get('/near/:lat-:lng').handler(() => ({ near: true }))
 
     app = createWebApplication({})
+      .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Geo', version: '1.0.0' }).docs(false).public()))
       .mount(geo) as WebApplication
 
@@ -138,6 +143,7 @@ describe('openapi from a programmatic router', () => {
 
     app = createWebApplication({})
       .with(() => constraints())
+      .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 

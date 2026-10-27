@@ -474,6 +474,42 @@ describe('decorator detail', () => {
     expect(Object.keys(document.paths ?? {})).toEqual(['/pets'])
   })
 
+  it('omits a route whose schema says hide: true', () => {
+    const router = fixtureRouter('/pets', r =>
+      r.routes([
+        fixtureRoute('GET', '/', 'list'),
+        fixtureRoute('POST', '/', 'create').schema({ hide: true, body: petSchema }),
+      ]),
+    )
+
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
+
+    expect(Object.keys(document.paths?.['/pets'] ?? {})).toEqual(['get'])
+    expect(document.components).toBe(undefined)
+  })
+
+  // A caller generating a document by hand must get the same selection the plugin serves.
+  it('describes only the routes include selects, with no tag for a controller it leaves empty', () => {
+    const pets = fixtureRouter('/pets', r => {
+      r.detail('openapi', { name: 'Pets' })
+      r.routes([fixtureRoute('GET', '/', 'list'), fixtureRoute('POST', '/', 'create').schema({ body: petSchema })])
+    })
+    const admin = fixtureRouter('/admin', r => {
+      r.detail('openapi', { name: 'Admin' })
+      r.routes([fixtureRoute('GET', '/', 'orders')])
+    })
+
+    const document = generateDocument({
+      routeGroups: [pets, admin],
+      options: fixtureOptions({ include: (group, route) => group.path === '/pets' && route.method[0] === 'GET' }),
+    })
+
+    expect(Object.keys(document.paths ?? {})).toEqual(['/pets'])
+    expect(Object.keys(document.paths?.['/pets'] ?? {})).toEqual(['get'])
+    expect(document.components).toBe(undefined)
+    expect(document.tags?.map(t => t.name)).toEqual(['Pets'])
+  })
+
   it('omits a whole controller marked hidden', () => {
     const router = fixtureRouter('/internal', r => {
       r.detail('openapi', { hidden: true })

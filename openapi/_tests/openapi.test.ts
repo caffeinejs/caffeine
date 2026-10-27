@@ -25,6 +25,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { APIGroup, Operation } from '../decorators/index.js'
 import { ErrOpenAPIConfiguration } from '../errors.js'
+import { OpenAPI } from '../feature.js'
 import { openapi, type OpenAPIConfigurer } from '../openapi.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
@@ -87,6 +88,7 @@ function buildApp(configure: OpenAPIConfigurer = () => {}): WebApplication {
 // exercises the securityScheme derivation rather than only the unauthenticated path.
 function newBuilder(configure?: OpenAPIConfigurer) {
   return createWebApplication({})
+    .install(OpenAPI())
     .with(openapi(configure))
     .install(Authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())))
     .with(authentication())

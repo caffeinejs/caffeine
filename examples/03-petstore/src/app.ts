@@ -7,7 +7,7 @@ import { html } from '@caffeinejs/html'
 import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
 import { createWebApplication, authentication, healthProbes } from '@caffeinejs/http/fastify'
 import { multipart } from '@caffeinejs/multipart'
-import { openapi } from '@caffeinejs/openapi'
+import { OpenAPI, openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
 import { Second } from '@caffeinejs/std/duration'
 
@@ -141,6 +141,8 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       // configures is whether the markup is prefixed with a doctype.
       .with(html())
       .with(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
+      // Holds the generated documents, so a component other than the HTTP endpoints can read them.
+      .install(OpenAPI())
       // The document is generated from the routes themselves — @Schema, @Status, @Authorize, the $p pickers and
       // the routers' own `.schema()` are the source, and @APIGroup/@Operation (with their `apiGroup()` and
       // `operation()` twins) add only what those cannot say. 3.2.0 because QUERY /pets needs it: a 3.1 path item

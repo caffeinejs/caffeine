@@ -2,7 +2,7 @@ import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
 import { Authentication, Authorization } from '@caffeinejs/http'
 import { createWebApplication, authentication, csrf, healthProbes } from '@caffeinejs/http/fastify'
-import { openapi } from '@caffeinejs/openapi'
+import { OpenAPI, openapi } from '@caffeinejs/openapi'
 import { Second } from '@caffeinejs/std/duration'
 
 import { SESSION_COOKIE, configuration } from './app.config.js'
@@ -79,6 +79,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
 
       .with(site)
+      .install(OpenAPI())
       .with(
         openapi(o =>
           o

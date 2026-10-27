@@ -675,7 +675,9 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   `app.listeners.get('admin')!.request('/jobs')`; `app.request(...)` reaches the application's own server only. Each
   listener is an `IServer`, as the application is for its own server.
 - **OpenAPI.** `@caffeinejs/openapi` documents the server it is registered on, so routes bound to a listener are
-  left out of the main document.
+  left out of the main document. A listener gets one of its own with a named plugin,
+  `.listener('admin', l => l.with(openapi('admin')))`, served at `/openapi/admin.json` and read from code with
+  `container.get(OpenAPIProvider).docs('admin')`. Both need `.install(OpenAPI())` on the application.
 
 ## Typed client — `@caffeinejs/brewer`
 
