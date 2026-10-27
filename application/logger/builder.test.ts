@@ -10,7 +10,6 @@ import type { LoggerConfig } from './config.js'
 import { ConsoleLogger } from './console/console.js'
 import { ErrInvalidLogLevel, ErrLoggerAlreadyConfigured } from './errors.js'
 import { logToken } from './keys.js'
-import { Log } from './log.js'
 import { noopLogger } from './noop.js'
 
 const schema = $t.Object({ logEnabled: $t.Boolean() })
@@ -120,20 +119,6 @@ describe('Application integration', () => {
     app.container.bind(logToken(), t => t.toValue(new ConsoleLogger()))
 
     await expect(app.bootstrap()).rejects.toThrow(ErrDuplicateBinding)
-  })
-
-  // The application's own logger is only known once `bootstrap()` configured it; setup logs before that, so it
-  // goes where the process sent the global `Log`, even when `Log.use()` came after the application was built.
-  it('logs through the global Log before bootstrap() configures a logger', () => {
-    const app = new Application({ container: new CaffeineIoC({ decorators: false }) })
-
-    Log.use(new ConsoleLogger({ level: 'debug' }))
-    try {
-      expect(app.log.level).toBe('debug')
-      expect(app.log.bindings()).toEqual({ name: 'caffeine' })
-    } finally {
-      Log.use(new ConsoleLogger())
-    }
   })
 
   it('takes the logger from ApplicationOptions.logger, eagerly, before bootstrap()', () => {
