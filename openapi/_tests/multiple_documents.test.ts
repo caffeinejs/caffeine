@@ -31,7 +31,8 @@ function backOffice() {
   return router
 }
 
-const isAdmin = (group: { path: string }) => group.path.startsWith('/admin')
+const isAdmin = (_group: unknown, _route: unknown, path: string) => path.startsWith('/admin')
+const isStorefront = (_group: unknown, _route: unknown, path: string) => !path.startsWith('/admin')
 
 async function json(response: Response): Promise<OpenAPIDocument> {
   return (await response.json()) as OpenAPIDocument
@@ -67,7 +68,7 @@ describe('several OpenAPI documents in one application', () => {
   it('splits one server between documents with include, each describing only its own routes', async () => {
     app = createWebApplication({})
       .install(OpenAPI())
-      .with(openapi('storefront', o => o.info({ title: 'Storefront', version: '1.0.0' }).include(g => !isAdmin(g))))
+      .with(openapi('storefront', o => o.info({ title: 'Storefront', version: '1.0.0' }).include(isStorefront)))
       .with(openapi('back-office', o => o.info({ title: 'Back office', version: '1.0.0' }).include(isAdmin)))
       .mount(catalog(), backOffice()) as WebApplication
     await app.bootstrap()
@@ -89,7 +90,7 @@ describe('several OpenAPI documents in one application', () => {
   it('serves each named document at its own paths, UI included', async () => {
     app = createWebApplication({})
       .install(OpenAPI())
-      .with(openapi('storefront', o => o.include(g => !isAdmin(g))))
+      .with(openapi('storefront', o => o.include(isStorefront)))
       .with(openapi('back-office', o => o.include(isAdmin)))
       .mount(catalog(), backOffice()) as WebApplication
     await app.bootstrap()
@@ -158,7 +159,7 @@ describe('several OpenAPI documents in one application', () => {
         )
         .with(authentication())
         .install(OpenAPI())
-        .with(openapi('storefront', o => o.docs(false).include(g => !isAdmin(g))))
+        .with(openapi('storefront', o => o.docs(false).include(isStorefront)))
         .with(openapi('back-office', o => o.docs(false).include(isAdmin).secure('Basic')))
         .mount(
           catalog().authorize({ allowAnonymous: true }),
@@ -234,7 +235,7 @@ describe('several OpenAPI documents in one application', () => {
     app = createWebApplication({})
       .basePath('/shop')
       .install(OpenAPI())
-      .with(openapi('storefront', o => o.include(g => !isAdmin(g))))
+      .with(openapi('storefront', o => o.include(isStorefront)))
       .with(openapi('back-office', o => o.include(isAdmin)))
       .mount(catalog(), backOffice()) as WebApplication
     await app.bootstrap()

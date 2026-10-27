@@ -58,8 +58,8 @@ interface EndpointPaths {
  *
  * ```ts
  * .install(OpenAPI())
- * .with(openapi('public', o => o.include((group, route) => !group.path.startsWith('/admin'))))
- * .with(openapi('admin', o => o.include((group, route) => group.path.startsWith('/admin'))))
+ * .with(openapi('public', o => o.include((group, route, path) => !path.startsWith('/admin'))))
+ * .with(openapi('admin', o => o.include((group, route, path) => path.startsWith('/admin'))))
  * ```
  *
  * @throws ErrOpenAPIConfiguration when the name is not letters, digits, `-` and `_`, starting with a letter or digit.
@@ -152,9 +152,7 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
         )
       }
 
-      // A copy, so freezing it touches none of the objects the application handed the builder; frozen, so no
-      // consumer of the provider can change what the endpoints serve.
-      document = deepFreeze(structuredClone(transformed))
+      document = publishable(name, transformed)
       yaml = toYAML(document)
       provider[kPublish](name, document)
     })
@@ -190,16 +188,54 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
   return fp(plugin, { name: label })
 }
 
-/** The route groups narrowed to the routes `include` accepts, dropping a group left with none. */
-function deepFreeze<T>(value: T): T {
-  if (typeof value === 'object' && value !== null) {
-    for (const child of Object.values(value)) {
-      deepFreeze(child)
-    }
-    Object.freeze(value)
+/**
+ * A deep-frozen copy of the document, so freezing it touches none of the objects the application handed the
+ * builder, and no consumer of the provider can change what the endpoints serve.
+ *
+ * Refused here rather than at the first request: a value `structuredClone` cannot copy, and a cycle, which a YAML
+ * alias inside its own anchor produces and which neither the JSON endpoint nor a consumer can serialize.
+ */
+function publishable(name: string, document: OpenAPIDocument): OpenAPIDocument {
+  let copy: OpenAPIDocument
+  try {
+    copy = structuredClone(document)
+  } catch (cause) {
+    throw new ErrOpenAPIConfiguration(
+      errMessage(
+        `Cannot publish the OpenAPI document "${name}": it holds a value that is not plain data: ${describe(cause)}`,
+      )
+        .solutions('Return only objects, arrays, strings, numbers, booleans and null from transformDocument')
+        .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+        .build(),
+    )
   }
 
-  return value
+  deepFreeze(name, copy, '#', new Set())
+  return copy
+}
+
+// `ancestors` holds the objects on the path from the root: meeting one again is a cycle. An object already frozen
+// was walked in full where it was first met, which a shared, non-cyclic object reached twice relies on.
+function deepFreeze(name: string, value: unknown, pointer: string, ancestors: Set<object>): void {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
+    return
+  }
+
+  if (ancestors.has(value)) {
+    throw new ErrOpenAPIConfiguration(
+      errMessage(`Cannot publish the OpenAPI document "${name}": it refers back to itself at "${pointer}"`)
+        .solutions('Replace the repeated object with a $ref to a component, such as "#/components/schemas/Node"')
+        .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+        .build(),
+    )
+  }
+
+  ancestors.add(value)
+  for (const [key, child] of Object.entries(value)) {
+    deepFreeze(name, child, `${pointer}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`, ancestors)
+  }
+  ancestors.delete(value)
+  Object.freeze(value)
 }
 
 function assertDocumentName(name: string): void {

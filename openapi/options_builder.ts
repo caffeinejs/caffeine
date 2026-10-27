@@ -223,13 +223,16 @@ export class OpenAPIOptionsBuilder {
    * Describes only the routes `fn` accepts, which is how one server's routes are split across several documents:
    *
    * ```ts
-   * .with(openapi('admin', o => o.include((group, route) => group.path.startsWith('/admin'))))
+   * .with(openapi('admin', o => o.include((group, route, path) => path.startsWith('/admin'))))
    * ```
+   *
+   * `path` is the route's path as the document lists it, without the base path and in Fastify syntax
+   * (`/admin/orders/:id`). Match on it rather than on `group.path`, which leaves out a `@Prefix`.
    *
    * `@Operation({ hidden: true })`, `@APIGroup({ hidden: true })` and `@Schema({ hide: true })` still apply to what
    * it accepts.
    */
-  include(fn: (router: IRouteGroup<unknown>, route: IRoute<unknown>) => boolean): this {
+  include(fn: (router: IRouteGroup<unknown>, route: IRoute<unknown>, path: string) => boolean): this {
     this.#options.include = fn
     return this
   }

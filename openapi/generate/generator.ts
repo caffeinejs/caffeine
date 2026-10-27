@@ -64,7 +64,10 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
     }
 
     const { include } = options
-    const routes = include === undefined ? router.routes : router.routes.filter(route => include(router, route))
+    const routes =
+      include === undefined
+        ? router.routes
+        : router.routes.filter(route => include(router, route, routeURL(router.prefix, router.path, route.path)))
     if (routes.length === 0 && include !== undefined) {
       continue
     }

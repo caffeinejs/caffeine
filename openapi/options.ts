@@ -100,7 +100,7 @@ export interface OpenAPIOptions {
   dedupeComponents: boolean
 
   /** Which of the server's routes this document describes. Every route when absent. */
-  include?: (router: IRouteGroup<unknown>, route: IRoute<unknown>) => boolean
+  include?: (router: IRouteGroup<unknown>, route: IRoute<unknown>, path: string) => boolean
 
   /** Overrides the derived `operationId`. */
   operationId?: (router: IRouteGroup<unknown>, route: IRoute<unknown>) => string
