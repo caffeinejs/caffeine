@@ -4,9 +4,9 @@ import { config as loadEnv } from 'dotenv'
 import swc from 'unplugin-swc'
 import { defineConfig } from 'vitest/config'
 
-// Load the repo-root .env (where the PETSTORE_AUTH__GITHUB__* credentials live) and hand the
+// Load the repo-root .env (where the PETSTORE_GITHUB_* credentials live) and hand the
 // parsed values to the test workers via `test.env`. Vitest runs specs in worker threads, so a bare
-// `dotenv/config` in this config file would not reach them. Absent .env → {} → the schema's own defaults
+// `dotenv/config` in this config file would not reach them. Absent .env → {} → the placeholders' fallbacks
 // apply, so the suite stays green offline. Real creds only matter for manual runs;
 // GitHub's interactive login cannot complete in an automated test (the flow spec stubs GitHub).
 const rootEnv = loadEnv({ path: fileURLToPath(new URL('../../.env', import.meta.url)) }).parsed ?? {}
@@ -60,8 +60,8 @@ export default defineConfig({
   },
   test: {
     name: 'example-petstore',
-    // An OS-assigned port for the devtools: a test that runs the application must not collide with another on 9090.
-    env: { ...rootEnv, PETSTORE_DEVTOOLS__PORT: '0' },
+    // The `test` profile layers config/application-test.yaml, with OS-assigned ports, over the base file.
+    env: { ...rootEnv, CAFFEINE_PROFILES: 'test' },
     globalSetup: ['./vitest.globalsetup.ts'],
     include: ['**/*.test.ts'],
     environment: 'node',
