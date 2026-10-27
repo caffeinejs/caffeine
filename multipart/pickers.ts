@@ -30,7 +30,7 @@ export interface MultipartPickers {
  * Import from `@caffeinejs/multipart` and pass into `@Args([...])`.
  *
  * A handler that receives only the context — every programmatic route, since the router owns that route's
- * parameters — reads the same parts through `multipart(ctx)` instead.
+ * parameters — reads the same parts through `formData(ctx)` instead.
  */
 export const $multipart: MultipartPickers = {
   webStreamParts: <R = unknown>(): ParameterPickOptions<R> => ({

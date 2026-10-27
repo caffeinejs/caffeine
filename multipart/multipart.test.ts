@@ -4,7 +4,7 @@ import { Controller, Post, Args, $p } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { describe, it, expect } from 'vitest'
 
-import { $multipart, multipartPlugin } from './index.js'
+import { $multipart, multipart } from './index.js'
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 
 const BOUNDARY = '----TestBoundary123'
@@ -12,7 +12,7 @@ const BOUNDARY = '----TestBoundary123'
 type ME = { name: string; value: string } | { name: string; filename: string; content: string; mime?: string }
 
 function multipartApp() {
-  return createWebApplication({}).with(() => multipartPlugin())
+  return createWebApplication({}).with(multipart())
 }
 
 function multipartBody(entries: Array<ME>): Uint8Array {
@@ -462,7 +462,7 @@ describe('Multipart file upload', () => {
     expect(received[1].name).toBe('b.txt')
   })
 
-  it('formData() — returns FormData with fields and files', async () => {
+  it('form() — returns FormData with fields and files', async () => {
     let received: FormData | undefined
 
     @Controller('/wf5')

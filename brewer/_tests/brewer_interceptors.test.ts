@@ -3,7 +3,7 @@ import { createHash, createHmac } from 'node:crypto'
 import { $t } from '@caffeinejs/application/schema'
 import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import { multipart, multipartPlugin } from '@caffeinejs/multipart'
+import { formData, multipart } from '@caffeinejs/multipart'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { brewer, type BrewOptions, type Interceptor } from '../index.js'
@@ -168,7 +168,7 @@ const forms: Part[][] = []
 
 const uploads = new Router('/uploads').post('/form').handler(async ctx => {
   const parts: Part[] = []
-  for (const [field, value] of await multipart(ctx).formData()) {
+  for (const [field, value] of await formData(ctx).form()) {
     parts.push(
       typeof value === 'string'
         ? { field, value }
@@ -184,7 +184,7 @@ const uploads = new Router('/uploads').post('/form').handler(async ctx => {
 // close would otherwise wait out: a connection quiet for a second is dropped instead.
 const app = createWebApplication()
   .server(() => ({ factory: { connectionTimeout: 1000 } }))
-  .with(() => multipartPlugin({ limits: { fileSize: 64 * 1024 } }))
+  .with(multipart(() => ({ limits: { fileSize: 64 * 1024 } })))
   .mount(api, uploads)
 
 let origin: string

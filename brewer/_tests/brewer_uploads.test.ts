@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { $t } from '@caffeinejs/application/schema'
 import { Router, bodyAsStream } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import { multipart, multipartPlugin } from '@caffeinejs/multipart'
+import { formData, multipart } from '@caffeinejs/multipart'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
@@ -48,9 +48,9 @@ let reading: { received: () => void; broken: () => void } | undefined
 const uploads = new Router('/uploads')
   .post('/profile')
   .schema({ body: $t.Object({ caption: $t.String(), avatar: $t.File(), photos: $t.Optional($t.Files()) }) })
-  .handler(async ctx => ({ parts: await partsOf(await multipart(ctx).formData()) }))
+  .handler(async ctx => ({ parts: await partsOf(await formData(ctx).form()) }))
   .post('/files')
-  .handler(async ctx => ({ parts: await partsOf(await multipart(ctx).formData()) }))
+  .handler(async ctx => ({ parts: await partsOf(await formData(ctx).form()) }))
   .post('/raw')
   .extend(bodyAsStream())
   .bodyLimit(2 * LARGE)
@@ -85,7 +85,7 @@ const uploads = new Router('/uploads')
 // would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
 const app = createWebApplication()
   .server(() => ({ factory: { forceCloseConnections: true } }))
-  .with(() => multipartPlugin({ limits: { fileSize: 2 * LARGE } }))
+  .with(multipart(() => ({ limits: { fileSize: 2 * LARGE } })))
   .mount(uploads)
 
 let origin: string

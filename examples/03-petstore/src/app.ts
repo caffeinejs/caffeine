@@ -6,7 +6,7 @@ import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
 import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
 import { createWebApplication, authentication, healthProbes } from '@caffeinejs/http/fastify'
-import { multipartPlugin } from '@caffeinejs/multipart'
+import { multipart } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
 import { Second } from '@caffeinejs/std/duration'
@@ -171,7 +171,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             .errorSchema(APIErrorSchema),
         ),
       )
-      .with(() => multipartPlugin())
+      .with(multipart())
       // Kubernetes probes: /livez, /readyz, /startupz.
       .with(healthProbes())
       // The two features written as routers rather than controllers. Mounting is what carries their route types
