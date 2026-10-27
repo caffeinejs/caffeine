@@ -57,6 +57,21 @@ describe('openapi from a programmatic router', () => {
     expect(document.paths?.['/documented-pets/hidden']).toBeUndefined()
   })
 
+  it('takes a bare tag name for apiGroup', async () => {
+    const stores = new Router('/named-stores').name('NamedStores').extend(apiGroup('Stores'))
+    stores.get('/').handler(() => [])
+
+    app = createWebApplication({})
+      .with(openapi(o => o.docs(false).public()))
+      .mount(stores) as WebApplication
+    await app.bootstrap()
+
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
+
+    expect(operationAt(document, '/named-stores')?.tags).toEqual(['Stores'])
+    expect(document.tags).toContainEqual({ name: 'Stores' })
+  })
+
   it("describes routes declared with a router the same way it describes a controller's", async () => {
     const pets = new Router('/programmatic-pets').name('ProgrammaticPets')
 
