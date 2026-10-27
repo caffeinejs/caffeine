@@ -66,7 +66,7 @@ describe('request scope lifetime', () => {
     const app = newApp().mount(router)
     await app.bootstrap()
 
-    const res = await app.fetch('/scope-await')
+    const res = await app.request('/scope-await')
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ same: true, destroyed: false })
@@ -108,7 +108,7 @@ describe('request scope lifetime', () => {
     await app.bootstrap()
 
     const teardown = nextTeardown()
-    const res = await app.fetch('/scope-stream')
+    const res = await app.request('/scope-stream')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('1:false:true\n1:false:true\n1:false:true\n')
@@ -135,12 +135,12 @@ describe('request scope lifetime', () => {
     await app.bootstrap()
 
     let teardown = nextTeardown()
-    expect(await (await app.fetch('/scope-once')).json()).toEqual({ id: 1 })
+    expect(await (await app.request('/scope-once')).json()).toEqual({ id: 1 })
     await teardown
     expect(teardowns).toEqual([1])
 
     teardown = nextTeardown()
-    expect(await (await app.fetch('/scope-once')).json()).toEqual({ id: 2 })
+    expect(await (await app.request('/scope-once')).json()).toEqual({ id: 2 })
     await teardown
     expect(teardowns).toEqual([1, 2])
 
@@ -163,7 +163,7 @@ describe('request scope lifetime', () => {
     await app.bootstrap()
 
     const teardown = nextTeardown()
-    const res = await app.fetch('/scope-throws')
+    const res = await app.request('/scope-throws')
 
     expect(res.status).toBe(500)
 
@@ -204,7 +204,7 @@ describe('request scope lifetime', () => {
       .mount(router)
     await app.bootstrap()
 
-    const res = await app.fetch('/scope-teardown-fails')
+    const res = await app.request('/scope-teardown-fails')
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ id: 1 })

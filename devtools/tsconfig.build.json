@@ -12,6 +12,9 @@
     },
     {
       "path": "../application/tsconfig.build.json"
+    },
+    {
+      "path": "../std/tsconfig.build.json"
     }
   ],
   "exclude": [
@@ -24,7 +27,6 @@
     "**/*.spec.ts",
     "**/*.testkit.ts",
     "**/*.e2e.ts",
-    "vitest.config.ts",
-    "ui"
+    "vitest.config.ts"
   ]
 }

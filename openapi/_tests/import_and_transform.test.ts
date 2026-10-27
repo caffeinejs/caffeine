@@ -44,7 +44,7 @@ function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication {
 }
 
 async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {
-  return (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+  return (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 }
 
 describe('imported specifications', () => {
@@ -113,7 +113,7 @@ describe('imported specifications', () => {
     app = build(o => o.document(HAND_WRITTEN))
     await app.bootstrap()
 
-    const res = await app.fetch('/openapi.yaml')
+    const res = await app.request('/openapi.yaml')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('title: Hand written')

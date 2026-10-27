@@ -97,7 +97,7 @@ describe('OIDC integration', () => {
 
     // A navigation, so the challenge redirects. Without the header this is a 401 carrying the same URL —
     // see "answers 401 rather than redirecting a caller that is not a browser navigation" below.
-    const res = await app.fetch('/oidc-int-challenge', { headers: { 'sec-fetch-mode': 'navigate' } })
+    const res = await app.request('/oidc-int-challenge', { headers: { 'sec-fetch-mode': 'navigate' } })
     expect(res.status).toBe(302)
     const location = res.headers.get('location')!
     expect(location).toContain(`${ISSUER}/auth`)
@@ -119,8 +119,8 @@ describe('OIDC integration', () => {
       const app = makeOIDCApp(undefined, { gate: g => g.oidcRoutes(false) })
       await app.bootstrap()
 
-      expect((await app.fetch(`${CALLBACK_PATH}/login?returnTo=/x`)).status).toBe(404)
-      expect((await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`)).status).toBe(404)
+      expect((await app.request(`${CALLBACK_PATH}/login?returnTo=/x`)).status).toBe(404)
+      expect((await app.request(`${CALLBACK_PATH}?code=code&state=oidc-st`)).status).toBe(404)
     })
 
     it('leaves them to a later gate when the root gate opts out', async () => {
@@ -131,7 +131,7 @@ describe('OIDC integration', () => {
       const app = makeOIDCApp(undefined, { gate: g => g.oidcRoutes(false) }).mount(scoped)
       await app.bootstrap()
 
-      const res = await app.fetch(`${CALLBACK_PATH}/login?returnTo=/x`)
+      const res = await app.request(`${CALLBACK_PATH}/login?returnTo=/x`)
 
       expect(res.status).toBe(302)
       expect(res.headers.get('location')).toContain(`${ISSUER}/auth`)
@@ -190,7 +190,7 @@ describe('OIDC integration', () => {
       const app = makeOIDCApp(jwksResolver)
       await app.bootstrap()
 
-      const res = await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
+      const res = await app.request(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
         headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` },
       })
 
@@ -218,7 +218,7 @@ describe('OIDC integration', () => {
         const app = basedApp()
         await app.bootstrap()
 
-        const res = await app.fetch(`/api${CALLBACK_PATH}?code=code&state=oidc-st`, {
+        const res = await app.request(`/api${CALLBACK_PATH}?code=code&state=oidc-st`, {
           headers: stateCookieHeader(await makeStateCookie(nonce, 'oidc-st', '/api/dashboard')),
         })
 
@@ -237,7 +237,7 @@ describe('OIDC integration', () => {
         const app = basedApp()
         await app.bootstrap()
 
-        const res = await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
+        const res = await app.request(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
           headers: stateCookieHeader(await makeStateCookie(nonce, 'oidc-st', '/api/dashboard')),
         })
 
@@ -251,7 +251,7 @@ describe('OIDC integration', () => {
         const app = basedApp()
         await app.bootstrap()
 
-        const res = await app.fetch(`/api${CALLBACK_PATH}?code=code&state=oidc-st`, {
+        const res = await app.request(`/api${CALLBACK_PATH}?code=code&state=oidc-st`, {
           headers: stateCookieHeader(await makeStateCookie(nonce, 'oidc-st', '//evil.example/phish')),
         })
 
@@ -267,14 +267,14 @@ describe('OIDC integration', () => {
         )
         await app.bootstrap()
 
-        const navigation = await app.fetch('/api/based-private', { headers: { 'sec-fetch-mode': 'navigate' } })
+        const navigation = await app.request('/api/based-private', { headers: { 'sec-fetch-mode': 'navigate' } })
         expect(navigation.status).toBe(302)
         expect(new URL(navigation.headers.get('location')!).searchParams.get('redirect_uri')).toBe(BASED_CALLBACK_URL)
         // The state cookie has to reach the callback wherever `callbackURL` puts it, so it stays at `/`.
         const state = navigation.headers.getSetCookie().find(cookie => cookie.startsWith('__Host-oidc_Google_state.'))
         expect(state).toMatch(/;\s*Path=\/(;|$)/i)
 
-        const script = await app.fetch('/api/based-private', { headers: { accept: 'application/json' } })
+        const script = await app.request('/api/based-private', { headers: { accept: 'application/json' } })
         expect(script.status).toBe(401)
         expect(script.headers.get('location')).toBe(
           `${BASED_CALLBACK_URL}/login?returnTo=${encodeURIComponent('/api/based-private')}`,
@@ -285,7 +285,7 @@ describe('OIDC integration', () => {
         const app = basedApp()
         await app.bootstrap()
 
-        const res = await app.fetch('/api/oidc/callback/login?returnTo=/api/x')
+        const res = await app.request('/api/oidc/callback/login?returnTo=/api/x')
 
         expect(res.status).toBe(302)
         expect(res.headers.get('location')).toContain(`${ISSUER}/auth`)
@@ -296,8 +296,8 @@ describe('OIDC integration', () => {
         await app.bootstrap()
 
         // No state cookie: the route answers with its own refusal, which is what shows it is there.
-        expect((await app.fetch('/apix/cb?code=code&state=oidc-st')).status).toBe(400)
-        expect((await app.fetch('/cb?code=code&state=oidc-st')).status).toBe(404)
+        expect((await app.request('/apix/cb?code=code&state=oidc-st')).status).toBe(400)
+        expect((await app.request('/cb?code=code&state=oidc-st')).status).toBe(404)
       })
 
       it('refuses a route of the application at the callback path, both being relative to it', async () => {
@@ -314,7 +314,7 @@ describe('OIDC integration', () => {
 
       // Planted under the name the *query* state derives, so the lookup succeeds and the sealed-vs-parameter
       // comparison is what rejects it rather than the cookie simply being absent.
-      const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=wrong-state`, {
+      const res = await app.request(`${CALLBACK_PATH}?code=c&state=wrong-state`, {
         headers: { cookie: `__Host-oidc_Google_state.wrong-state=${stateCookie}` },
       })
 
@@ -327,7 +327,7 @@ describe('OIDC integration', () => {
       const app = makeOIDCApp(jwksResolver)
       await app.bootstrap()
 
-      const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
+      const res = await app.request(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
         headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` },
       })
 
@@ -340,7 +340,7 @@ describe('OIDC integration', () => {
       const app = makeOIDCApp(jwksResolver)
       await app.bootstrap()
 
-      const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
+      const res = await app.request(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
         headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` },
       })
       const body = await res.text()
@@ -372,7 +372,7 @@ describe('OIDC integration', () => {
     const app = makeOIDCApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/oidc-int-session', {
+    const res = await app.request('/oidc-int-session', {
       headers: { cookie: `__Host-oidc_Google_session=${sessionJWT}` },
     })
 
@@ -401,7 +401,10 @@ describe('OIDC integration', () => {
     const app = makeOIDCApp()
     await app.bootstrap()
 
-    const [pub, prot] = await Promise.all([app.fetch('/oidc-int-anon/public'), app.fetch('/oidc-int-anon/protected')])
+    const [pub, prot] = await Promise.all([
+      app.request('/oidc-int-anon/public'),
+      app.request('/oidc-int-anon/protected'),
+    ])
 
     expect(pub.status).toBe(200)
     // 401 rather than 302: neither request claims to be a browser navigation, and the point here is that the
@@ -429,7 +432,7 @@ describe('OIDC integration', () => {
     const app = makeOIDCApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/oidc-int-xhr', { headers: { accept: 'application/json' } })
+    const res = await app.request('/oidc-int-xhr', { headers: { accept: 'application/json' } })
 
     expect(res.status).toBe(401)
     expect(res.headers.get('location')).toBe(
@@ -440,7 +443,7 @@ describe('OIDC integration', () => {
 
     // Sending the browser to that URL is what starts the sign-in: a state cookie named per flow —
     // `<base>.<state>` — and the way to the provider. No policy stands in front of the route.
-    const start = await app.fetch(`${CALLBACK_PATH}/login?returnTo=${encodeURIComponent('/oidc-int-xhr')}`)
+    const start = await app.request(`${CALLBACK_PATH}/login?returnTo=${encodeURIComponent('/oidc-int-xhr')}`)
 
     expect(start.status).toBe(302)
     expect(start.headers.get('location')).toContain(`${ISSUER}/auth`)
@@ -463,7 +466,7 @@ describe('OIDC integration', () => {
     const app = makeOIDCApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/oidc-int-role-ok', {
+    const res = await app.request('/oidc-int-role-ok', {
       headers: { cookie: `__Host-oidc_Google_session=${sessionJWT}` },
     })
     expect(res.status).toBe(200)
@@ -487,7 +490,7 @@ describe('OIDC integration', () => {
     const app = makeOIDCApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/oidc-int-role-403', {
+    const res = await app.request('/oidc-int-role-403', {
       headers: { cookie: `__Host-oidc_Google_session=${sessionJWT}` },
     })
     expect(res.status).toBe(403)

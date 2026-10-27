@@ -3,7 +3,7 @@ import { Value } from '@sinclair/typebox/value'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type { InferSchema } from './schema.js'
-import { $t, hasFileSchema } from './t.js'
+import { $t, hasFileSchema, isSecretSchema } from './t.js'
 
 describe('$t', () => {
   it('produces plain JSON Schema, with TypeBox markers hidden behind symbols', () => {
@@ -338,5 +338,23 @@ describe('hasFileSchema', () => {
 
   it('does not confuse a binary-formatted field with the format keyword elsewhere', () => {
     expect(hasFileSchema($t.Object({ when: $t.String({ format: 'date-time' }) }))).toBe(false)
+  })
+})
+
+describe('$t.Secret', () => {
+  it('marks a value a reader must not show, with a keyword JSON Schema already has', () => {
+    const schema = $t.Object({ password: $t.Secret($t.String()), user: $t.String() })
+
+    expect(isSecretSchema(schema.properties.password)).toBe(true)
+    expect(isSecretSchema(schema.properties.user)).toBe(false)
+    expect(JSON.parse(JSON.stringify(schema.properties.password))).toEqual({ type: 'string', writeOnly: true })
+  })
+
+  it('validates and decodes as the schema it marks', () => {
+    const schema = $t.Object({ ttl: $t.Secret($t.Duration()), pin: $t.Optional($t.Secret($t.Integer())) })
+
+    expect(Value.Decode(schema, { ttl: '5s' })).toEqual({ ttl: 5000 })
+    expect(Value.Check(schema, { ttl: '5s', pin: 'x' })).toBe(false)
+    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ ttl: number; pin?: number }>()
   })
 })

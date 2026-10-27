@@ -33,7 +33,7 @@ describe('authorization installation', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/authz-none-needed')
+    const res = await app.request('/authz-none-needed')
     expect(res.status).toBe(200)
   })
 
@@ -53,7 +53,7 @@ describe('authorization installation', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/authz-anon-only')
+    const res = await app.request('/authz-anon-only')
     expect(res.status).toBe(200)
   })
 
@@ -72,7 +72,7 @@ describe('authorization installation', () => {
     app.install(Authorization(authz => authz.addPolicy('SignedIn', p => p.requireAuthenticated())))
     await app.bootstrap()
 
-    const res = await app.fetch('/authz-standalone')
+    const res = await app.request('/authz-standalone')
     expect(res.status).toBe(200)
   })
 
@@ -141,7 +141,7 @@ describe('authorization installation', () => {
         .with(authentication())
     })
 
-    const res = await app.fetch('/authz-from-ready-callback')
+    const res = await app.request('/authz-from-ready-callback')
     expect(res.status).toBe(401)
     await app.close()
   })

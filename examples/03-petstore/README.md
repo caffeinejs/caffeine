@@ -23,6 +23,9 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** specificat
   and the client reads it through the driver adapter.
 - **Structured logging** with pino, at a level the configuration chooses.
 - **Kubernetes probes** via `.with(healthProbes())`: `/livez`, `/readyz`, `/startupz`, and a database readiness indicator.
+- **Devtools** via `.install(DevTools())`, on a port of their own (`127.0.0.1:9090`): bindings and the dependency
+  graph, configuration with secrets masked, every route and what protects it, health and more. See
+  [Devtools](#devtools).
 - **Graceful shutdown** via `.shutdown()`: a drain that refuses readiness before it stops listening.
 - **Dockerised**: `docker-compose` brings up Postgres + the app, runs migrations, seeds demo data.
 
@@ -131,6 +134,7 @@ path segments, and each segment folds to lower case, which is why the keys are s
 | `PETSTORE_DOCS__USER` / `__PASSWORD`  | the Basic credentials             |
 | `PETSTORE_AUTH__GITHUB__CLIENT_ID`    | `auth.github.clientId`            |
 | `PETSTORE_AUTH__GITHUB__CALLBACK_URL` | `auth.github.callbackUrl`         |
+| `PETSTORE_DEVTOOLS__HOST` / `__PORT`  | where the devtools listen         |
 | `DATABASE_URL`                        | Prisma CLI and the driver adapter |
 
 > Earlier revisions of this example used a `PETSTOREDEMO_AUTH_GITHUB_*` prefix with single underscores. If you
@@ -257,6 +261,19 @@ npm start -w @caffeinejs/example-petstore
 The generated module graph (`src/**/*.gen.mod.ts`) is **committed**, so a clone builds without running the CLI.
 Re-run `npm run generate -w @caffeinejs/example-petstore` after adding, moving or removing a file that declares an
 injectable, and commit what changes.
+
+## Devtools
+
+The devtools listen on a server of their own, `127.0.0.1:9090` by default, and never on the port users reach.
+With the application running (`make example:petstore`), start the UI that reads them:
+
+```sh
+make example:petstore-devtools   # http://127.0.0.1:9091
+```
+
+The endpoints answer JSON on their own too: `curl http://127.0.0.1:9090/devtools/routes`. In Docker, the devtools
+listen on the container's loopback, so the host does not reach them. Set `PETSTORE_DEVTOOLS__HOST=0.0.0.0` and
+publish the port only on a machine you trust.
 
 ## Out of scope / Limitations
 

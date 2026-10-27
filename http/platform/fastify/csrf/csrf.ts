@@ -4,7 +4,7 @@ import fp from 'fastify-plugin'
 import type { IContext } from '../../../context.js'
 import { CSRFBuilder, kBuild } from '../../../core/csrf/csrf.js'
 import { ErrCSRFCrossOrigin } from '../../../core/csrf/errors.js'
-import { isExcluded, type CSRFOptions } from '../../../core/csrf/options.js'
+import { isExcluded, type CSRFOptions, type ExcludedPath } from '../../../core/csrf/options.js'
 import { checkOrigin, SAFE_METHODS, type OriginCheckAskable, type OriginCheckInput } from '../../../core/csrf/origin.js'
 import { csrfMarkOf } from '../../../core/csrf/route.js'
 import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
@@ -30,7 +30,7 @@ import { protocolOf } from '../protocol.js'
  *
  * A route is left alone when it is marked with `@CSRFExempt()`, `csrfExempt()` or `csrfExemptConfig()`, or, unmarked,
  * when its registered path is under `.exclude(...)`. A URL no route matched is the not-found handler's. A listener
- * is covered by its own `Listener(name, l => l.with(csrf()))`, a route group by
+ * is covered by its own `.listener(name, l => l.with(csrf()))`, a route group by
  * `router.with(csrf(c => c.name('admin')))`.
  *
  * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path not starting
@@ -51,6 +51,8 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
         instance.log.warn({ plugin: name }, 'Cross-origin protection is turned off')
         return
       }
+
+      recordCover(instance, options.exclude)
 
       // Callback style, not `async`: most requests are decided without a promise, and a check's own promise is
       // followed with `then`.
@@ -101,6 +103,29 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
 
     return fp(plugin, { name })
   }
+}
+
+/** What each enabled `csrf()` leaves alone, by the server context it installed on. */
+const covers = new WeakMap<object, Array<readonly ExcludedPath[]>>()
+
+function recordCover(context: object, exclude: readonly ExcludedPath[]): void {
+  const recorded = covers.get(context) ?? []
+  recorded.push(exclude)
+  covers.set(context, recorded)
+}
+
+/**
+ * The `exclude(...)` list of every enabled `csrf()` that covers a route registered on `context`: one installed on
+ * that context or on one above it. Empty when none covers it.
+ */
+export function csrfCovering(context: object): Array<readonly ExcludedPath[]> {
+  const found: Array<readonly ExcludedPath[]> = []
+
+  for (let at: object | null = context; at !== null; at = Object.getPrototypeOf(at) as object | null) {
+    found.push(...(covers.get(at) ?? []))
+  }
+
+  return found
 }
 
 type Question = () => boolean | PromiseLike<boolean>

@@ -100,7 +100,7 @@ describe('the authentication gate and routes registered straight on the server',
         .with(plainRoutes()),
     )
 
-    expect((await app.fetch('/admin-ui/users')).status).toBe(200)
+    expect((await app.request('/admin-ui/users')).status).toBe(200)
   })
 
   describe('under a fallback policy', () => {
@@ -120,21 +120,21 @@ describe('the authentication gate and routes registered straight on the server',
     it('gates them as it gates a compiled route that declares nothing', async () => {
       const running = await build()
 
-      expect((await running.fetch('/compiled')).status).toBe(401)
-      expect((await running.fetch('/admin-ui/users')).status).toBe(401)
-      expect((await running.fetch('/admin-ui/users', signedIn)).status).toBe(200)
+      expect((await running.request('/compiled')).status).toBe(401)
+      expect((await running.request('/admin-ui/users')).status).toBe(401)
+      expect((await running.request('/admin-ui/users', signedIn)).status).toBe(200)
     })
 
     it('leaves open the prefixes the application excepted, matched on the path the route was registered under', async () => {
       const running = await build()
 
-      expect((await running.fetch('/assets/app.js')).status).toBe(200)
-      expect((await running.fetch('/assets-but-not-really')).status).toBe(401)
+      expect((await running.request('/assets/app.js')).status).toBe(200)
+      expect((await running.request('/assets-but-not-really')).status).toBe(401)
     })
 
     it('does not run at all for a route marked exempt, so no principal is established either', async () => {
       const running = await build()
-      const response = await running.fetch('/metrics', signedIn)
+      const response = await running.request('/metrics', signedIn)
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ user: null })
@@ -143,16 +143,16 @@ describe('the authentication gate and routes registered straight on the server',
     it('leaves the health probes to the orchestrator', async () => {
       const running = await build()
 
-      expect((await running.fetch('/livez')).status).toBe(200)
+      expect((await running.request('/livez')).status).toBe(200)
       // Not ready, since this application is never run — and that is the probe's own answer, not the gate's.
-      expect((await running.fetch('/readyz')).status).toBe(503)
+      expect((await running.request('/readyz')).status).toBe(503)
     })
 
     // The not-found handler is where a single-page application's shell is served from.
     it('answers 404, not 401, for a URL no route matches', async () => {
       const running = await build()
 
-      expect((await running.fetch('/no-such-route')).status).toBe(404)
+      expect((await running.request('/no-such-route')).status).toBe(404)
     })
 
     // The not-found context is the one route config no `onRoute` hook reaches, so the gate finds no `$caffeine`
@@ -175,8 +175,8 @@ describe('the authentication gate and routes registered straight on the server',
           ),
       )
 
-      expect(await (await app.fetch('/no-such-route', signedIn)).json()).toEqual({ user: true })
-      expect(await (await app.fetch('/no-such-route')).json()).toEqual({ user: false })
+      expect(await (await app.request('/no-such-route', signedIn)).json()).toEqual({ user: true })
+      expect(await (await app.request('/no-such-route')).json()).toEqual({ user: false })
     })
   })
 
@@ -191,8 +191,8 @@ describe('the authentication gate and routes registered straight on the server',
         .mount(newRouter('/compiled').get('/', ok)),
     )
 
-    expect((await app.fetch('/compiled')).status).toBe(500)
-    expect((await app.fetch('/livez')).status).toBe(200)
+    expect((await app.request('/compiled')).status).toBe(500)
+    expect((await app.request('/livez')).status).toBe(200)
   })
 
   // A prefix is a run of whole path segments. Read as a run of characters, `/assets` would also open
@@ -208,10 +208,10 @@ describe('the authentication gate and routes registered straight on the server',
         .with(plainRoutes()),
     )
 
-    expect((await app.fetch('/assets/app.js')).status).toBe(200)
-    expect((await app.fetch('/assets-but-not-really')).status).toBe(401)
+    expect((await app.request('/assets/app.js')).status).toBe(200)
+    expect((await app.request('/assets-but-not-really')).status).toBe(401)
     // The prefix itself is a path too.
-    expect((await app.fetch('/admin-ui/users')).status).toBe(200)
+    expect((await app.request('/admin-ui/users')).status).toBe(200)
   })
 
   // The server takes the base path off a request before routing, so a route is registered where the application
@@ -227,11 +227,11 @@ describe('the authentication gate and routes registered straight on the server',
         .with(plainRoutes()),
     )
 
-    expect((await app.fetch('/api/assets/app.js')).status).toBe(200)
-    expect((await app.fetch('/api/admin-ui/users')).status).toBe(401)
-    expect((await app.fetch('/api/admin-ui/users', signedIn)).status).toBe(200)
+    expect((await app.request('/api/assets/app.js')).status).toBe(200)
+    expect((await app.request('/api/admin-ui/users')).status).toBe(401)
+    expect((await app.request('/api/admin-ui/users', signedIn)).status).toBe(200)
     // The probes are still the orchestrator's.
-    expect((await app.fetch('/api/livez')).status).not.toBe(401)
+    expect((await app.request('/api/livez')).status).not.toBe(401)
   })
 
   it('refuses a path to except that is not absolute', () => {
@@ -289,7 +289,7 @@ describe('the challenge of a route that names several schemes', () => {
   it('advertises every one of them', async () => {
     const app = await build(['Basic', 'Bearer'])
 
-    const response = await app.fetch('/named')
+    const response = await app.request('/named')
 
     expect(response.status).toBe(401)
     expect(response.headers.get('www-authenticate')).toBe('Basic realm="Docs", charset="UTF-8", Bearer')
@@ -299,7 +299,7 @@ describe('the challenge of a route that names several schemes', () => {
   it('loses none of them when there are more than two', async () => {
     const app = await build(['Basic', 'Bearer', 'Key'])
 
-    const response = await app.fetch('/named')
+    const response = await app.request('/named')
 
     expect(response.status).toBe(401)
     expect(response.headers.get('www-authenticate')).toBe(
@@ -310,7 +310,7 @@ describe('the challenge of a route that names several schemes', () => {
   it('stops at the scheme that answers with a redirect, instead of turning it back into a 401', async () => {
     const app = await build(['Cookie', 'Basic'])
 
-    const response = await app.fetch('/named', { headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' } })
+    const response = await app.request('/named', { headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' } })
 
     expect(response.status).toBe(302)
     expect(response.headers.get('location')).toBe('/login?returnUrl=%2Fnamed')
@@ -320,7 +320,7 @@ describe('the challenge of a route that names several schemes', () => {
   it('still advertises the schemes listed before the one that answers the request itself', async () => {
     const app = await build(['Basic', 'Cookie'])
 
-    const response = await app.fetch('/named', { headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' } })
+    const response = await app.request('/named', { headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' } })
 
     expect(response.status).toBe(302)
     expect(response.headers.get('www-authenticate')).toBe('Basic realm="Docs", charset="UTF-8"')
@@ -356,7 +356,7 @@ describe('an application whose scheme reads cookies', () => {
 
     await app.bootstrap()
 
-    const response = await app.fetch('/seen', { headers: { cookie: 'probe=yes' } })
+    const response = await app.request('/seen', { headers: { cookie: 'probe=yes' } })
 
     expect(await response.json()).toEqual({ seen: 'yes' })
     await app.close()

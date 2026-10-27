@@ -1,0 +1,544 @@
+import { Readable } from 'node:stream'
+
+import { Millisecond, Second } from '@caffeinejs/std/duration'
+import { describe, expect, it, vi } from 'vitest'
+
+import { newClient } from '../client_builder.js'
+import { API } from '../decorators/api.js'
+import { Params } from '../decorators/params.js'
+import { Body } from '../decorators/params/body.js'
+import { Param } from '../decorators/params/param.js'
+import { SignalParam } from '../decorators/params/signal_param.js'
+import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
+import { GET, POST, PUT } from '../decorators/verbs.js'
+import { ErrFetchyHTTP } from '../errors.js'
+import { noop } from '../noop.js'
+import { RawRequestBodyConverter } from '../request_body_converter.js'
+import { fakeJSONResponse, TestTransportFactory } from '../test_transport_factory.testkit.js'
+import { Retry, NoRetry, RetryInterceptor } from './index.js'
+
+interface User {
+  id: string
+}
+
+@API('/users')
+class RetryAPI {
+  @GET('/{id}')
+  @Retry({ delay: 5 * Millisecond })
+  @Params([Param('id')])
+  getUser(_id: string): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @Params([Param('id')])
+  getUserNoRetryDecorator(_id: string): Promise<User> {
+    return noop()
+  }
+
+  @PUT('/{id}')
+  @Retry({ delay: 5 * Millisecond })
+  @Params([Param('id'), Body()])
+  putUser(_id: string, _body: unknown): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @Retry({ delay: 5 * Millisecond, methods: ['PUT'] })
+  @Params([Param('id')])
+  getUserWrongMethod(_id: string): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @Retry({ delay: 5 * Millisecond, statusCodes: [404] })
+  @Params([Param('id')])
+  getUserWrongStatus(_id: string): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @Retry({ delay: 200 * Millisecond })
+  @Params([Param('id'), SignalParam()])
+  getUserSlow(_id: string, _signal: AbortSignal): Promise<User> {
+    return noop()
+  }
+}
+
+@API('/users')
+@Retry({ delay: 5 * Millisecond })
+class RetryClassDefaultAPI {
+  @GET('/{id}')
+  @Params([Param('id')])
+  getUser(_id: string): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @Retry({ statusCodes: [404], delay: 5 * Millisecond })
+  @Params([Param('id')])
+  overwriteDefaults(_id: string): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @NoRetry()
+  @Params([Param('id')])
+  noRetry(_id: string): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @NoRetry()
+  @Params([Param('id')])
+  noRetryField!: (id: string) => Promise<User>
+}
+
+function buildClient(TargetAPI: new () => object, transportFactory: TestTransportFactory): any {
+  const client = newClient()
+    .baseURL('http://example.test')
+    .transportFactory(transportFactory)
+    .addInterceptor(RetryInterceptor.INSTANCE)
+    .build()
+
+  return client.create(TargetAPI)
+}
+
+describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
+  it('retries a failing response until it succeeds, per @Retry() defaults', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport
+      .willRespond(fakeJSONResponse(500, { error: true }))
+      .willRespond(fakeJSONResponse(500, { error: true }))
+      .willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    const result = await api.getUser('1')
+
+    expect(result).toEqual({ id: '1' })
+  })
+
+  it('does not retry a method without @Retry()', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
+
+    await expect(api.getUserNoRetryDecorator('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
+  })
+
+  it('resends an intact request body on a retried attempt', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    const result = await api.putUser('1', { name: 'Ada' })
+
+    expect(result).toEqual({ id: '1' })
+    expect(JSON.parse(String(transport.lastRequest?.body))).toEqual({ name: 'Ada' })
+  })
+
+  it('does not retry when the request method is not in the configured methods list', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
+
+    await expect(api.getUserWrongMethod('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
+  })
+
+  it('does not retry when the response status is not in the configured statusCodes list', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
+
+    await expect(api.getUserWrongStatus('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
+  })
+
+  // Cancelled as its failure arrived, the call has nothing left to wait for: it must not sit out the retry delay first.
+  it('rejects at once when the call is aborted before its retry waits', async () => {
+    @API('/users')
+    class PatientAPI {
+      @GET('/{id}')
+      @Retry({ delay: 60 * Second })
+      @Params([Param('id'), SignalParam()])
+      getUser(_id: string, _signal: AbortSignal): Promise<User> {
+        return noop()
+      }
+    }
+
+    const controller = new AbortController()
+    const reason = new Error('navigated away')
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory({
+        provide: () => ({
+          send() {
+            controller.abort(reason)
+            return Promise.resolve(new Response(null, { status: 503 }))
+          },
+        }),
+      })
+      .addInterceptor(RetryInterceptor.INSTANCE)
+      .build()
+      .create(PatientAPI)
+
+    await expect(api.getUser('1', controller.signal)).rejects.toBe(reason)
+  })
+
+  it('rejects and stops retrying once the request is aborted during the delay', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    transportFactory.transports[0]
+      .willRespond(fakeJSONResponse(500, { error: true }))
+      .willRespond(fakeJSONResponse(200, {}))
+
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(new Error('aborted')), 10)
+
+    await expect(api.getUserSlow('1', controller.signal)).rejects.toThrow()
+  })
+
+  it('inherits the class-level @Retry() default', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryClassDefaultAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    const result = await api.getUser('1')
+
+    expect(result).toEqual({ id: '1' })
+  })
+
+  it('a method-level @Retry() fully overrides the class-level default', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryClassDefaultAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
+
+    await expect(api.overwriteDefaults('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
+  })
+
+  // A response being retried is thrown away. When its body cannot be cancelled, as one whose connection broke mid-body,
+  // the retry still goes out: there is nothing left to free.
+  it('retries a failing response whose body cannot be cancelled', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    const broken = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error('socket reset'))
+        },
+      }),
+      { status: 503 },
+    )
+    transport.willRespond(broken).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUser('1')).resolves.toEqual({ id: '1' })
+    expect(transport.sendCount).toBe(2)
+  })
+
+  it('@NoRetry() cancels the inherited class-level default', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryClassDefaultAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
+
+    await expect(api.noRetry('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
+  })
+
+  it('@NoRetry() cancels the class-level default for a field-declared operation too', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryClassDefaultAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
+
+    await expect(api.noRetryField('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
+    expect(transportFactory.transports[0].sendCount).toBe(1)
+  })
+})
+
+@API('/users')
+class NetworkRetryAPI {
+  @GET('/{id}')
+  @Retry({ delay: 1 * Millisecond })
+  @Params([Param('id')])
+  getUser(_id: string): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @Retry({ delay: 1 * Millisecond })
+  @Params([Param('id'), SignalParam()])
+  getUserWithSignal(_id: string, _signal: AbortSignal): Promise<User> {
+    return noop()
+  }
+
+  @POST('/')
+  @Retry({ delay: 1 * Millisecond })
+  @Params([Body()])
+  createUser(_user: User): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @Retry({ delay: 1 * Millisecond, errorCodes: [] })
+  @Params([Param('id')])
+  getUserWithoutNetworkRetry(_id: string): Promise<User> {
+    return noop()
+  }
+}
+
+// How each transport reports the same failure: `fetch` wraps it in a `TypeError`, undici's own API does not.
+function fetchFailure(code: string): TypeError {
+  return new TypeError('fetch failed', { cause: Object.assign(new Error(`connect ${code}`), { code }) })
+}
+
+function undiciFailure(code: string): Error {
+  return Object.assign(new Error('other side closed'), { code })
+}
+
+describe('RetryInterceptor on network failures', () => {
+  // A connection reset or refused on an idempotent request is the transient failure retrying exists for.
+  it('retries a fetch failure whose cause carries a transient code, until it succeeds', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport
+      .willFail(fetchFailure('ECONNRESET'))
+      .willFail(fetchFailure('ECONNREFUSED'))
+      .willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUser('1')).resolves.toEqual({ id: '1' })
+    expect(transport.sendCount).toBe(3)
+  })
+
+  it('retries an undici failure that carries the code itself', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willFail(undiciFailure('UND_ERR_SOCKET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUser('1')).resolves.toEqual({ id: '1' })
+    expect(transport.sendCount).toBe(2)
+  })
+
+  // A POST may have reached the server before the connection dropped. Sending it again could apply it twice.
+  it('does not retry a network failure of a POST', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willFail(fetchFailure('ECONNRESET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.createUser({ id: '1' })).rejects.toBeInstanceOf(TypeError)
+    expect(transport.sendCount).toBe(1)
+  })
+
+  it('gives up after the attempt limit, with the last failure', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    const last = undiciFailure('ECONNRESET')
+    transport.willFail(undiciFailure('ECONNRESET')).willFail(undiciFailure('ECONNRESET')).willFail(last)
+
+    await expect(api.getUser('1')).rejects.toBe(last)
+    expect(transport.sendCount).toBe(3)
+  })
+
+  // The caller has given up on the request, so nobody waits for another attempt.
+  it('does not retry a request whose signal is aborted', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    const controller = new AbortController()
+    controller.abort()
+    transport.willFail(fetchFailure('ECONNRESET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUserWithSignal('1', controller.signal)).rejects.toBeInstanceOf(TypeError)
+    expect(transport.sendCount).toBe(1)
+  })
+
+  it('does not retry network failures when errorCodes is empty', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willFail(fetchFailure('ECONNRESET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUserWithoutNetworkRetry('1')).rejects.toBeInstanceOf(TypeError)
+    expect(transport.sendCount).toBe(1)
+  })
+
+  // An error without a code is no transport failure, more likely a bug in an interceptor, and a retry would hide it.
+  it('does not retry an error that carries no code', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    const bug = new Error('interceptor bug')
+    transport.willFail(bug).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUser('1')).rejects.toBe(bug)
+    expect(transport.sendCount).toBe(1)
+  })
+})
+
+@API('/files')
+class UploadAPI {
+  @PUT('/{id}')
+  @Retry({ delay: 1 * Millisecond })
+  @UseRequestBodyConverter(RawRequestBodyConverter)
+  @Params([Param('id'), Body()])
+  upload(_id: string, _content: unknown): Promise<unknown> {
+    return noop()
+  }
+}
+
+const content = new TextEncoder().encode('content')
+
+function webStream(): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(content)
+      controller.close()
+    },
+  })
+}
+
+describe('RetryInterceptor on a body that can be read only once', () => {
+  // Every attempt shares the one body, and the first may have read it. undici then sends what is left, which is
+  // nothing, and a server answers 200 to the empty PUT: the retry would empty the resource and report success.
+  it.each([
+    ['a web ReadableStream', webStream],
+    ['a Node Readable', (): unknown => Readable.from([content])],
+    [
+      'an async generator',
+      (): unknown =>
+        (async function* () {
+          yield content
+        })(),
+    ],
+    // The form-data package's streams carry the FormData tag without being one: a FormData's methods tell them apart.
+    [
+      "a stream that calls itself FormData, as the form-data package's do",
+      (): unknown =>
+        Object.assign(Object.defineProperty(Readable.from([content]), Symbol.toStringTag, { value: 'FormData' }), {
+          append(): void {},
+        }),
+    ],
+  ])('does not retry a network failure when the body is %s', async (_kind, body) => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(UploadAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    const failure = undiciFailure('UND_ERR_SOCKET')
+    transport.willFail(failure).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.upload('1', body())).rejects.toBe(failure)
+    expect(transport.sendCount).toBe(1)
+  })
+
+  it('does not retry a failing response when the body is a stream', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(UploadAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.upload('1', webStream())).rejects.toBeInstanceOf(ErrFetchyHTTP)
+    expect(transport.sendCount).toBe(1)
+  })
+
+  // Bytes held in memory are sent whole on every attempt, so they stay as retryable as a string.
+  it('still retries a body held in memory', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(UploadAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willFail(undiciFailure('UND_ERR_SOCKET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.upload('1', content)).resolves.toEqual({ id: '1' })
+    expect(transport.sendCount).toBe(2)
+    expect(transport.lastRequest?.body).toBe(content)
+  })
+})
+
+@API('/users')
+class AttemptsAPI {
+  @GET('/{id}')
+  @Retry({ delay: Second })
+  @Params([Param('id')])
+  getUser!: (id: string) => Promise<User>
+
+  @GET('/{id}')
+  @Retry({ limit: 2, delay: 1 * Millisecond })
+  @Params([Param('id')])
+  getUserTwice!: (id: string) => Promise<User>
+
+  @POST('/')
+  @Retry({ delay: 1 * Millisecond })
+  @Params([Body()])
+  createUser!: (user: unknown) => Promise<User>
+}
+
+describe('RetryInterceptor on the attempts it makes', () => {
+  // The delay spaces attempts out so that a struggling server can recover: the retry does not go out a moment sooner.
+  it('sends the next attempt once the delay has elapsed, not before', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    try {
+      const transportFactory = new TestTransportFactory()
+      const api = buildClient(AttemptsAPI, transportFactory)
+      const transport = transportFactory.transports[0]
+      transport.willRespond(fakeJSONResponse(503, {})).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+      const call = api.getUser('1')
+
+      await vi.advanceTimersByTimeAsync(999)
+      expect(transport.sendCount).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(call).resolves.toEqual({ id: '1' })
+      expect(transport.sendCount).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Past the limit the call fails with the answer to its last attempt, so the caller sees what the server said.
+  it('gives up after the attempt limit on a status, with the last response', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(AttemptsAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport
+      .willRespond(fakeJSONResponse(503, { attempt: 1 }))
+      .willRespond(fakeJSONResponse(503, { attempt: 2 }))
+      .willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUserTwice('1')).rejects.toMatchObject({
+      name: 'ErrFetchyHTTP',
+      status: 503,
+      body: { attempt: 2 },
+    })
+    expect(transport.sendCount).toBe(2)
+  })
+
+  // A POST may have been applied before its 503, and sending it again could apply it twice.
+  it('does not retry a POST answered with a retryable status', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(AttemptsAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(503, {})).willRespond(fakeJSONResponse(201, { id: '1' }))
+
+    await expect(api.createUser({ name: 'Ada' })).rejects.toMatchObject({ name: 'ErrFetchyHTTP', status: 503 })
+    expect(transport.sendCount).toBe(1)
+  })
+
+  // @Retry() only declares the policy. RetryInterceptor, added to the client, is what carries it out.
+  it('makes one attempt on a client without RetryInterceptor', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(AttemptsAPI)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(503, {})).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUserTwice('1')).rejects.toMatchObject({ name: 'ErrFetchyHTTP', status: 503 })
+    expect(transport.sendCount).toBe(1)
+  })
+})

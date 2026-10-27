@@ -2,7 +2,7 @@ import type { ParamDescriptor } from '../../internal/param_descriptor.js'
 import type { RequestBodyConverter } from '../../request_body_converter.js'
 import type { ResponseConverter } from '../../response_converter.js'
 import type { ResponseHandler } from '../../response_handler.js'
-import type { RetryOptions } from '../../retry_options.js'
+import type { RetryOptions } from '../../retry/options.js'
 
 export interface ClassSpec {
   path: string | undefined

@@ -2,10 +2,14 @@
 // Regenerate: caffeine generate modules
 
 import { mod, type Module } from '@caffeinejs/di'
+import { utilModule } from '../util/util.gen.mod.js'
 import { DatabaseHealth } from './db.health.js'
 
 export const healthModule: Module = mod({
   name: 'health',
+  needs: () => [
+    utilModule,
+  ],
   provides: () => [
     DatabaseHealth,
   ],

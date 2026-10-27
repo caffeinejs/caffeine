@@ -4,7 +4,7 @@ import type { MethodSpec } from '../decorators/registrar/index.js'
 import { ErrFetchyInvalidRoute } from '../errors.js'
 import { JSONResponseConverter, RawResponseConverter } from '../response_converter.js'
 import { buildInvoker } from '../service_invoker.js'
-import { fakeJSONResponse, TestTransport } from './test_transport_factory.js'
+import { fakeJSONResponse, TestTransport } from '../test_transport_factory.testkit.js'
 
 function methodSpec(overrides: Partial<MethodSpec> = {}): MethodSpec {
   return {

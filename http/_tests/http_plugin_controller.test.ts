@@ -91,23 +91,23 @@ describe('HTTPPlugin on a controller', () => {
     app = createWebApplication()
     await app.bootstrap()
 
-    const sub = await app.fetch('/ctl/sub')
+    const sub = await app.request('/ctl/sub')
     expect(sub.headers.get('x-all')).toBe('yes')
     expect(sub.headers.get('x-sub')).toBe('yes')
     // A Fastify plugin on the same controller still installs, ahead of the middleware.
     expect(sub.headers.get('x-fastify')).toBe('yes')
 
-    const other = await app.fetch('/ctl/other')
+    const other = await app.request('/ctl/other')
     expect(other.headers.get('x-all')).toBe('yes')
     expect(other.headers.get('x-sub')).toBeNull()
 
-    expect((await app.fetch('/plain')).headers.get('x-all')).toBeNull()
+    expect((await app.request('/plain')).headers.get('x-all')).toBeNull()
   })
 
   it("starts a relative path at the controller's prefix", async () => {
     app = createWebApplication()
     await app.bootstrap()
 
-    expect((await app.fetch('/v1/prefixed/sub')).headers.get('x-sub')).toBe('yes')
+    expect((await app.request('/v1/prefixed/sub')).headers.get('x-sub')).toBe('yes')
   })
 })

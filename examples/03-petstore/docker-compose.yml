@@ -13,7 +13,7 @@ services:
       timeout: 5s
       retries: 10
     volumes:
-      - petstore-pgdata:/var/lib/postgresql/data
+      - petstore-pgdata:/var/lib/postgresql
 
   petstore:
     # Docker's built-in init (tini) becomes PID 1: it forwards SIGTERM to the entrypoint and reaps zombies. Without

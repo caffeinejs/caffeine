@@ -24,7 +24,7 @@ describe('BodyLimit', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const over = await app.fetch('/limited/data', {
+    const over = await app.request('/limited/data', {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
       body: 'x'.repeat(20),
@@ -57,9 +57,9 @@ describe('BodyLimit', () => {
     const body = 'x'.repeat(50)
     const headers = { 'content-type': 'text/plain' }
 
-    const classRes = await app.fetch('/mixed-limit/class-limit', { method: 'POST', headers, body: body })
+    const classRes = await app.request('/mixed-limit/class-limit', { method: 'POST', headers, body: body })
 
-    const routeRes = await app.fetch('/mixed-limit/route-limit', { method: 'POST', headers, body: body })
+    const routeRes = await app.request('/mixed-limit/route-limit', { method: 'POST', headers, body: body })
 
     expect(classRes.status).toBe(200)
     expect(routeRes.status).toBe(413)
@@ -81,8 +81,8 @@ describe('BodyLimit', () => {
     await app.bootstrap()
 
     const headers = { 'content-type': 'text/plain' }
-    const atLimit = await app.fetch('/kib-limit/data', { method: 'POST', headers, body: 'x'.repeat(1024) })
-    const over = await app.fetch('/kib-limit/data', { method: 'POST', headers, body: 'x'.repeat(1025) })
+    const atLimit = await app.request('/kib-limit/data', { method: 'POST', headers, body: 'x'.repeat(1024) })
+    const over = await app.request('/kib-limit/data', { method: 'POST', headers, body: 'x'.repeat(1025) })
 
     expect(atLimit.status).toBe(200)
     expect(over.status).toBe(413)

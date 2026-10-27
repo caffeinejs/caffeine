@@ -87,7 +87,7 @@ describe('registerRouteGroup', () => {
     app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/programmatic.json')
+    const res = await app.request('/programmatic.json')
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
@@ -104,11 +104,11 @@ describe('registerRouteGroup', () => {
     app = builder
     await app.bootstrap()
 
-    const anonymous = await app.fetch('/programmatic.json')
+    const anonymous = await app.request('/programmatic.json')
     expect(anonymous.status).toBe(401)
 
     const token = await signToken({ sub: 'user-1' })
-    const authenticated = await app.fetch('/programmatic.json', {
+    const authenticated = await app.request('/programmatic.json', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(authenticated.status).toBe(200)
@@ -127,13 +127,13 @@ describe('registerRouteGroup', () => {
     await app.bootstrap()
 
     const withoutRole = await signToken({ sub: 'user-1' })
-    const denied = await app.fetch('/programmatic.json', {
+    const denied = await app.request('/programmatic.json', {
       headers: { authorization: `Bearer ${withoutRole}` },
     })
     expect(denied.status).toBe(403)
 
     const withRole = await signToken({ sub: 'user-1', roles: ['ops'] })
-    const allowed = await app.fetch('/programmatic.json', {
+    const allowed = await app.request('/programmatic.json', {
       headers: { authorization: `Bearer ${withRole}` },
     })
     expect(allowed.status).toBe(200)

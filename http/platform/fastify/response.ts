@@ -136,19 +136,14 @@ function unwrap(reply: Reply, response: Response, keepStatus: boolean): unknown 
   }
 
   const headers = response.headers
-  const connection = headers.get('connection')
-  const named = connection === null ? undefined : new Set(connection.split(',').map(name => name.trim().toLowerCase()))
+  const describesConnection = connectionFields(headers)
   // A body `fetch` decoded: its coding and its encoded length describe bytes this body no longer holds.
   const decoded =
     (response.type === 'basic' || response.type === 'cors') && decodedByFetch(headers.get('content-encoding'))
 
   // Fastify's own copy otherwise: `set-cookie` is appended, every other header replaced.
   for (const [name, value] of headers) {
-    if (
-      HOP_BY_HOP.has(name) ||
-      named?.has(name) ||
-      (decoded && (name === 'content-encoding' || name === 'content-length'))
-    ) {
+    if (describesConnection(name) || (decoded && (name === 'content-encoding' || name === 'content-length'))) {
       continue
     }
 
@@ -162,6 +157,17 @@ function unwrap(reply: Reply, response: Response, keepStatus: boolean): unknown 
   defaultType(reply, MediaType.APPLICATION_OCTET_STREAM)
 
   return response.body
+}
+
+/**
+ * Whether a field of `headers` describes the one connection it came over, and so is never forwarded: a field RFC 9110
+ * §7.6.1 names, or one the `Connection` field lists.
+ */
+export function connectionFields(headers: Headers): (name: string) => boolean {
+  const connection = headers.get('connection')
+  const named = connection === null ? undefined : new Set(connection.split(',').map(name => name.trim().toLowerCase()))
+
+  return name => HOP_BY_HOP.has(name) || named?.has(name) === true
 }
 
 /** Whether every coding `contentEncoding` lists is one `fetch` decoded: it decodes all of them or none. */

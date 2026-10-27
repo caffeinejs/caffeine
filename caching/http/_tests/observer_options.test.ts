@@ -43,7 +43,7 @@ describe('HTTPCaching observer option', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/obs-opt-token/data')
+    await app.request('/obs-opt-token/data')
 
     expect((app.container.get(MissCounter) as MissCounter).misses).toHaveLength(1)
   })
@@ -84,7 +84,7 @@ describe('HTTPCaching observer option', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/obs-opt-object/data')
+    await app.request('/obs-opt-object/data')
 
     expect(observer.misses).toHaveLength(1)
   })

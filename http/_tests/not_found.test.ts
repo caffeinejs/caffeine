@@ -23,8 +23,8 @@ describe('unmatched routes', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const thrown = (await (await app.fetch('/pets/42')).json()) as Record<string, unknown>
-    const unmatched = (await (await app.fetch('/no-such-route')).json()) as Record<string, unknown>
+    const thrown = (await (await app.request('/pets/42')).json()) as Record<string, unknown>
+    const unmatched = (await (await app.request('/no-such-route')).json()) as Record<string, unknown>
 
     // Same keys, same values — only the detail differs.
     expect(Object.keys(unmatched).sort()).toEqual(Object.keys(thrown).sort())
@@ -51,7 +51,7 @@ describe('unmatched routes', () => {
     const app = createWebApplication().with(() => shell)
     await app.bootstrap()
 
-    const res = await app.fetch('/client/route?a=b')
+    const res = await app.request('/client/route?a=b')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('<p>shell</p>')
@@ -70,7 +70,7 @@ describe('unmatched routes', () => {
     const app = createWebApplication().with(() => partial)
     await app.bootstrap()
 
-    const res = await app.fetch('/nope')
+    const res = await app.request('/nope')
 
     expect(res.status).toBe(404)
     expect(res.headers.get('content-type')).toMatch(/^application\/json/)
@@ -87,7 +87,7 @@ describe('unmatched routes', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/nope')
+    const res = await app.request('/nope')
 
     expect(res.status).toBe(418)
     expect(await res.json()).toEqual({ mine: true })

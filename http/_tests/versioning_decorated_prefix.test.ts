@@ -25,7 +25,7 @@ describe('API versioning — decorated controllers', () => {
     const app = createWebApplication({ container })
     await app.bootstrap()
 
-    expect(await (await app.fetch('/v1/pets')).json()).toEqual({ prefixed: true })
+    expect(await (await app.request('/v1/pets')).json()).toEqual({ prefixed: true })
 
     await app.close()
   })

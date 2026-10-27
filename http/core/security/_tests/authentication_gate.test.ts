@@ -111,7 +111,7 @@ describe('authentication gate — requests', () => {
     await app.bootstrap()
 
     // The body is invalid against the schema, so a validation-first pipeline would answer 400 here.
-    const res = await app.fetch('/mw-auth-body', {
+    const res = await app.request('/mw-auth-body', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 42 }),
@@ -137,12 +137,12 @@ describe('authentication gate — requests', () => {
     await app.bootstrap()
 
     // Anonymous: both named schemes advertise how to authenticate.
-    expect((await app.fetch('/mw-auth-multi')).status).toBe(401)
+    expect((await app.request('/mw-auth-multi')).status).toBe(401)
     expect(first.challenges).toBe(1)
     expect(second.challenges).toBe(1)
 
     // Authenticated but lacking the role: one decision, taken once.
-    const denied = await app.fetch('/mw-auth-multi', { headers: { 'x-first': 'someone' } })
+    const denied = await app.request('/mw-auth-multi', { headers: { 'x-first': 'someone' } })
     expect(denied.status).toBe(403)
     expect(first.forbids).toBe(1)
     expect(second.forbids).toBe(0)
@@ -170,7 +170,7 @@ describe('authentication gate — requests', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/mw-auth-anon/open', { headers: { 'x-default': 'someone' } })
+    const res = await app.request('/mw-auth-anon/open', { headers: { 'x-default': 'someone' } })
 
     expect(res.status).toBe(200)
     expect(seen!.authenticated).toBe(true)
@@ -197,7 +197,7 @@ describe('authentication gate — requests', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/mw-auth-open')
+    const res = await app.request('/mw-auth-open')
 
     expect(res.status).toBe(200)
     expect(seen!.authenticated).toBe(false)

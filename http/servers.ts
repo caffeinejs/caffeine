@@ -13,6 +13,7 @@ import { normalizeBasePath } from './base_path.js'
 import { boundTo, kBindTo } from './binding.js'
 import { ErrConfiguration } from './core/error/common.js'
 import type { RouteGroupCompiler, RouteGroupMeta } from './core/routing/compile.js'
+import { kCompleteInventory, kRecordServer, type RouteInventory } from './core/routing/inventory.js'
 import type { Router } from './core/routing/programmatic/programmatic.js'
 import type { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './core/routing/programmatic/source.js'
@@ -44,6 +45,8 @@ export interface ServerSetupInput<T extends IAdapterTypes> {
   readonly plugins: ScopedPlugins<T>
   /** The compiler every group went through, for a group `$route` adds. */
   readonly compileRouteGroup: RouteGroupCompiler
+  /** Where each server's routes are recorded, complete once every server is built. */
+  readonly inventory: RouteInventory
 }
 
 /**
@@ -102,6 +105,8 @@ export class ServerSet<T extends IAdapterTypes> {
     for (const entry of this.#entries) {
       entry.server = await this.#build(entry, adapter, input)
     }
+
+    input.inventory[kCompleteInventory]()
   }
 
   async #build(entry: Entry<T>, adapter: IAdapter<T>, input: ServerSetupInput<T>): Promise<IAdapterServer<T>> {
@@ -134,6 +139,8 @@ export class ServerSet<T extends IAdapterTypes> {
       server,
       customize: foldCustomizers(definition.customizers),
       basePath,
+      recordRoutes: routes =>
+        input.inventory[kRecordServer]({ server: definition.name, basePath: basePath ?? '', routes }),
     })
   }
 
@@ -314,7 +321,7 @@ function assertEveryRouterServed<R>(routing: Routing<R>, installed: readonly str
   }
 
   const name = String(boundTo(unserved.spec.labels))
-  const fixes = [`Install it: ".install(Listener('${name}', ...))"`]
+  const fixes = [`Add it: ".listener('${name}', ...)"`]
 
   if (installed.length > 0) {
     const names = installed.map(candidate => `"${candidate}"`).join(', ')

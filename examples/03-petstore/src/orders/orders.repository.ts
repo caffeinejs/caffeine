@@ -1,7 +1,8 @@
 import { Injectable } from '@caffeinejs/di'
 import { ErrHTTPNotFound } from '@caffeinejs/http'
 
-import { Prisma, PrismaClient, type Order as OrderRow } from '../../generated/prisma/client.js'
+import { Prisma, type PrismaClient, type Order as OrderRow } from '../../generated/prisma/client.js'
+import { kPrisma } from '../util/db/prisma.js'
 import type { CreateOrderDTO, OrderDTO } from './orders.schemas.js'
 
 /** Maps a Prisma row to the API DTO: Decimal to string, Date to RFC 3339. */
@@ -28,7 +29,7 @@ export class ErrPetNotFound extends ErrHTTPNotFound {
   }
 }
 
-@Injectable([PrismaClient])
+@Injectable([kPrisma])
 export class OrdersRepository {
   constructor(private readonly prisma: PrismaClient) {}
 

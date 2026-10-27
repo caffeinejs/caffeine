@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 const root = fileURLToPath(new URL('..', import.meta.url))
 
 // Not library packages: their output is not a published surface.
-const NOT_LIBRARIES = ['benchmarks/**', 'examples/**', 'di/examples/**', 'devtools/ui/**', '**/node_modules/**']
+const NOT_LIBRARIES = ['benchmarks/**', 'examples/**', 'di/examples/**', 'devtools-ui/**', '**/node_modules/**']
 
 // `import { A, type B } from '…'`, `import type { A } from '…'`, `export * from '…'`: a statement that names
 // something. A bare `import '…'` does not match.

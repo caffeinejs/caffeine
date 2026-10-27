@@ -61,14 +61,7 @@ export function assertRoutesGated(container: Container, registered: readonly Reg
       continue
     }
 
-    const owner = meta?.gateOwner
-    const covered = gates.some(
-      gate =>
-        (gate.context === context || Object.prototype.isPrototypeOf.call(gate.context, context)) &&
-        (owner === undefined || owner === gate.id),
-    )
-
-    if (!covered) {
+    if (gateCovering(gates, context, meta?.gateOwner) === undefined) {
       const methods = ungated.get(url) ?? new Set<string>()
       for (const name of [method].flat()) {
         methods.add(name)
@@ -86,6 +79,22 @@ export function assertRoutesGated(container: Container, registered: readonly Reg
   }
 
   throw new ErrAuthenticationGateRequired(Array.from(ungated, ([url, methods]) => `${[...methods].join('|')} ${url}`))
+}
+
+/**
+ * The gate that covers a route registered on `context`: one installed on that context or on one above it, and the
+ * route's `owner` when a gate stamped one. `undefined` when none does.
+ */
+export function gateCovering<G extends AuthenticationGates['installed'][number]>(
+  gates: readonly G[],
+  context: object,
+  owner: symbol | undefined,
+): G | undefined {
+  return gates.find(
+    gate =>
+      (gate.context === context || Object.prototype.isPrototypeOf.call(gate.context, context)) &&
+      (owner === undefined || owner === gate.id),
+  )
 }
 
 /**
@@ -161,7 +170,7 @@ export function authentication<C = unknown>(
       }
 
       // Where this gate reaches, for the start-up check that refuses a protected route no gate covers.
-      gates.installed.push({ id: gateID, context: instance })
+      gates.installed.push({ id: gateID, label, context: instance })
 
       // The routes register once, claimed by the first gate to install — with a root gate that is always the
       // root, since root slots load before any route group registers.
@@ -225,7 +234,7 @@ export function authentication<C = unknown>(
 }
 
 /** The fallback policy as it applies to a route the application's router did not compile. */
-interface Fallback {
+export interface Fallback {
   /** For the route a request matched. */
   for(request: FastifyRequest): GatedRoute | undefined
   /** For the route registered under `path`, which is how start-up asks. */
@@ -245,7 +254,7 @@ function cookieSchemeOf(container: Container): string | undefined {
 }
 
 /** The application's {@link Fallback}, or `undefined` when it set no fallback policy. */
-function fallbackFor(container: Container): Fallback | undefined {
+export function fallbackFor(container: Container): Fallback | undefined {
   const options = container.getOptional(kAuthzOpts)
   if (options?.fallbackPolicy === undefined) {
     return undefined

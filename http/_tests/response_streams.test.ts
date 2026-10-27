@@ -92,7 +92,7 @@ describe('a stream a handler returns goes out labelled as bytes, unless somethin
     ['a Readable an async generator feeds', '/streams/generator'],
     ['a Response built around a stream', '/streams/response'],
   ])('sends %s as application/octet-stream, as Fastify sends bytes', async (_kind, path) => {
-    const res = await app.fetch(path)
+    const res = await app.request(path)
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe(OCTET)
@@ -100,14 +100,14 @@ describe('a stream a handler returns goes out labelled as bytes, unless somethin
   })
 
   it('sends a Readable of strings as application/octet-stream too: nothing declared it text', async () => {
-    const res = await app.fetch('/streams/strings')
+    const res = await app.request('/streams/strings')
 
     expect(res.headers.get('content-type')).toBe(OCTET)
     expect(await res.text()).toBe('region,total\nnorth,12\n')
   })
 
   it('sends a stream that yields nothing as an empty body', async () => {
-    const res = await app.fetch('/streams/empty')
+    const res = await app.request('/streams/empty')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe(OCTET)
@@ -119,28 +119,28 @@ describe('a stream a handler returns goes out labelled as bytes, unless somethin
     ['a Node Readable', '/streams/produces-node'],
     ['a Response built around a stream', '/streams/produces-response'],
   ])("sends %s under the route's declared type", async (_kind, path) => {
-    const res = await app.fetch(path)
+    const res = await app.request(path)
 
     expect(res.headers.get('content-type')).toMatch(/^text\/csv/)
     await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('sends a stream under the type its handler set on the reply', async () => {
-    const res = await app.fetch('/streams/handler-type')
+    const res = await app.request('/streams/handler-type')
 
     expect(res.headers.get('content-type')).toBe('text/event-stream')
     await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('keeps the type a Response was built with', async () => {
-    const res = await app.fetch('/streams/response-typed')
+    const res = await app.request('/streams/response-typed')
 
     expect(res.headers.get('content-type')).toBe('text/csv')
     await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('keeps the type a Response takes from the Blob it was built around', async () => {
-    const res = await app.fetch('/streams/response-blob')
+    const res = await app.request('/streams/response-blob')
 
     expect(res.headers.get('content-type')).toBe('application/pdf')
     await expectPatternedBody(res, 0, BYTES.length)
@@ -149,7 +149,7 @@ describe('a stream a handler returns goes out labelled as bytes, unless somethin
   it('releases the stream behind a HEAD request instead of reading it: a cursor or an upstream call can close', async () => {
     cancelled.length = 0
 
-    const res = await app.fetch('/streams/cancellable', { method: 'HEAD' })
+    const res = await app.request('/streams/cancellable', { method: 'HEAD' })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe(OCTET)

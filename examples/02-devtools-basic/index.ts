@@ -1,90 +1,140 @@
-import { DevtoolsModule, DevtoolsServer } from '@caffeinejs/devtools'
-import { CaffeineIoC, Injectable } from '@caffeinejs/di'
-import { Controller, Delete, Get, Post, Args, $p } from '@caffeinejs/http'
+import { newConfiguration } from '@caffeinejs/application'
+import { EnvConfigSource } from '@caffeinejs/application/config/env'
+import { $t } from '@caffeinejs/application/schema'
+import { DevTools } from '@caffeinejs/devtools'
+import { Injectable } from '@caffeinejs/di'
+import {
+  $p,
+  Args,
+  AuthenticateResult,
+  Authentication,
+  AuthenticationTicket,
+  BaseAuthenticationHandler,
+  Claim,
+  Controller,
+  Delete,
+  Get,
+  Identity,
+  Post,
+  Principal,
+  type IContext,
+} from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+
+// --- configuration ---
+
+// `TASKS_DB__PASSWORD` and `TASKS_DEVTOOLS__TOKEN` are secrets: `$t.Secret` keeps them masked in the devtools even
+// though this application shows its configuration values there.
+const ConfigSchema = $t.Object({
+  server: $t.Object({ host: $t.String({ default: '127.0.0.1' }), port: $t.Integer({ default: 3000 }) }),
+  db: $t.Object({
+    url: $t.String({ default: 'postgres://tasks@localhost:5432/tasks' }),
+    password: $t.Secret($t.String({ default: 'tasks-dev-password' })),
+  }),
+  devtools: $t.Object({
+    port: $t.Integer({ default: 9090 }),
+    token: $t.Secret($t.String({ default: 'dev-token' })),
+  }),
+})
+
+const configuration = newConfiguration(ConfigSchema)
+  .source(new EnvConfigSource({ prefix: 'TASKS_' }))
+  .build().config
 
 // --- services ---
 
+interface Task {
+  id: number
+  name: string
+}
+
 @Injectable()
 class TaskStore {
-  #tasks: { id: number; name: string }[] = []
+  #tasks: Task[] = []
   #next = 1
 
-  add(name: string): { id: number; name: string } {
+  add(name: string): Task {
     const task = { id: this.#next++, name }
     this.#tasks.push(task)
     return task
   }
 
-  list(): { id: number; name: string }[] {
+  list(): Task[] {
     return this.#tasks
   }
 
   remove(id: number): void {
-    this.#tasks = this.#tasks.filter(t => t.id !== id)
-  }
-}
-
-@Injectable([TaskStore])
-class TaskLogger {
-  #store: TaskStore
-
-  constructor(store: TaskStore) {
-    this.#store = store
-  }
-
-  log(action: string, id?: number): void {
-    const count = this.#store.list().length
-    console.log(`[tasks] ${action}${id !== undefined ? ` id=${id}` : ''} (total=${count})`)
+    this.#tasks = this.#tasks.filter(task => task.id !== id)
   }
 }
 
 // --- controller ---
 
-@Controller('/tasks', [TaskStore, TaskLogger])
+@Controller('/tasks', [TaskStore])
 class TaskController {
-  #store: TaskStore
-  #log: TaskLogger
-
-  constructor(store: TaskStore, log: TaskLogger) {
-    this.#store = store
-    this.#log = log
-  }
+  constructor(private readonly store: TaskStore) {}
 
   @Get('/')
-  list() {
-    return this.#store.list()
+  list(): Task[] {
+    return this.store.list()
   }
 
   @Post('/')
   @Args([$p.body()])
-  create(data: { name: string }) {
-    const task = this.#store.add(data.name)
-    this.#log.log('create', task.id)
-    return task
+  create(data: { name: string }): Task {
+    return this.store.add(data.name)
   }
 
   @Delete('/:id')
   @Args([$p.param('id')])
-  remove(id: string) {
-    const numId = Number(id)
-    this.#store.remove(numId)
-    this.#log.log('delete', numId)
+  remove(id: string): { ok: true } {
+    this.store.remove(Number(id))
     return { ok: true }
   }
 }
 
-void [TaskStore, TaskLogger, TaskController]
+void [TaskController]
+
+// --- authentication: the devtools answer `Authorization: Bearer <devtools.token>` and nothing else ---
+
+class DevToolsToken extends BaseAuthenticationHandler<object> {
+  constructor(private readonly token: string) {
+    super({})
+  }
+
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
+    if (ctx.req.header('authorization') !== `Bearer ${this.token}`) {
+      return AuthenticateResult.none()
+    }
+
+    const ops = new Identity('Token', true, [new Claim('sub', 'ops', ''), new Claim('roles', 'ops', '')])
+
+    return AuthenticateResult.success(new AuthenticationTicket(new Principal(true, [ops]), 'Token'))
+  }
+}
 
 // --- bootstrap ---
 
-const container = new CaffeineIoC({ modules: [DevtoolsModule({ port: 9229 })] })
-const app = createWebApplication({ container })
-await app.bootstrap()
+const app = createWebApplication({ config: configuration })
+  .server(({ config }) => ({ listener: config.server }))
+  .install(Authentication((a, { config }) => a.addStrategy('Token', new DevToolsToken(config.devtools.token))))
+  // The devtools on a server of their own, on loopback, for an `ops` principal alone. The tasks API stays open: no
+  // route of it declares anything, and the application sets no fallback policy.
+  .install(
+    DevTools((d, { config }) =>
+      d
+        .port(config.devtools.port)
+        .authorize({ roles: ['ops'] })
+        .showConfigValues(),
+    ),
+  )
 
-const devtools = container.get(DevtoolsServer)
-devtools.attach(app).start()
+const { address } = await app.run()
+const devtools = app.listeners.get('devtools')!.address!.origin
 
-await app.run({ port: 3000, host: '127.0.0.1' })
-console.log('[app] HTTP server at http://localhost:3000')
-console.log('[app] Devtools at http://localhost:9229')
+console.log(`[app] Tasks API at ${address.origin}/tasks`)
+console.log(`[app] Devtools at ${devtools}/devtools`)
+console.log(`[app] Try: curl -H "Authorization: Bearer dev-token" ${devtools}/devtools/routes`)
+console.log(
+  `[app] UI:  CAFFEINE_DEVTOOLS_TARGET__URL=${devtools}/devtools CAFFEINE_DEVTOOLS_TARGET__AUTHORIZATION="Bearer dev-token" make devtools`,
+)

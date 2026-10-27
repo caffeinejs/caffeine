@@ -27,8 +27,8 @@ describe('Timeout', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const slowRes = await app.fetch('/timed-class/slow')
-    const fastRes = await app.fetch('/timed-class/fast-enough')
+    const slowRes = await app.request('/timed-class/slow')
+    const fastRes = await app.request('/timed-class/fast-enough')
 
     expect(slowRes.status).toBe(503)
     expect(fastRes.status).toBe(200)
@@ -51,7 +51,7 @@ describe('Timeout', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/timed/slow')
+    const res = await app.request('/timed/slow')
 
     expect(res.status).toBe(503)
   })

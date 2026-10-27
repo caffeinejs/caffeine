@@ -163,8 +163,11 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A core interface that an adapter implements or extends is named `I` plus its full, unabbreviated name
   (`IContext`, `IRequest`, `IRouteGroup`, `IAdapterTypes`), leaving the plain name to the adapter's own type. No
   other interface takes the prefix.
-- No server decoration holds the route table; a plugin needing routes adds an `onRoute` hook
-  (`collectRouteGroups(instance)`), not a scan in the adapter.
+- Every route of every server, raw ones and plugin groups included, is in `RouteInventory`
+  (`core/routing/inventory.ts`): plain data the adapter builds in its first `onReady` hook from what its root
+  `onRoute` hook recorded, readable once every server is built. Nothing else writes it, and no server decoration
+  holds the route table. A plugin needing its own server's compiled groups at start-up still adds an `onRoute` hook
+  (`collectRouteGroups(instance)`); nothing scans the instance for routes.
 - `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
   plugins, or a listener's. A later call is recorded and thrown from `onReady`: avvio does not catch a
   callback-style plugin's throw. It adds the group to the server whose plugin calls it, and refuses a group bound to
@@ -181,8 +184,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `teardown` and `forceTeardown`. `app.listeners` hands out a view per listener (`core/listener/servers.ts`) delegating
   to its `IAdapterServer`, never the server cast to `IServer`, so only `ServerSet` runs or tears one down.
 - Every server, the application's own included, is a `ServerDefinition` (`server_definition.ts`) built by one path,
-  `ServerSet` (`servers.ts`), through `setup(input)`. `WebApplication` fills its own; `Listener(...)` binds one
-  per name. Nothing in that path is listener-specific: a server differs only by its name, which routers bind to.
+  `ServerSet` (`servers.ts`), through `setup(input)`. `WebApplication` fills its own and keeps the listeners' in
+  a `Listeners` list (`core/listener/listener.ts`), filled by `.listener(...)` and a feature's
+  `listenersOf(kit).add(...)`, never through the container. Nothing in that path is listener-specific: a server
+  differs only by its name, which routers bind to.
 - The application's own server listens first, since Watt takes over the first listen to complete. It also closes
   first, so listeners answer through the drain.
 - Which server serves a router is decided once, in `buildRouting`, from its labels. A source declares groups; it

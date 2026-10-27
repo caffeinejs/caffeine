@@ -10,14 +10,14 @@ import { Param } from '../decorators/params/param.js'
 import type { MethodSpec } from '../decorators/registrar/index.js'
 import { getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { UseResponseConverter } from '../decorators/response_converter.js'
-import { Retry } from '../decorators/retry.js'
 import { GET, POST } from '../decorators/verbs.js'
 import { ErrFetchyInvalidRoute } from '../errors.js'
 import { noop } from '../noop.js'
 import type { FetchyRequest } from '../request.js'
 import type { ResponseConverter } from '../response_converter.js'
+import { Retry } from '../retry/index.js'
+import { fakeJSONResponse, TestTransportFactory } from '../test_transport_factory.testkit.js'
 import { captureMetadata } from './capture_metadata.js'
-import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 interface User {
   id: string

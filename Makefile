@@ -1,4 +1,5 @@
 .ONESHELL:
+.SHELLFLAGS := -ec
 .DEFAULT_GOAL := help
 
 CLI_SRCS := $(shell find cli -name '*.ts' ! -path '*/dist/*' ! -name '*.test.ts' ! -path '*/templates/*')
@@ -88,7 +89,7 @@ lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 
 # make matches a pattern with no slash against only the part of a goal after its last slash, so lint:% never matches a
 # nested workspace such as lint:fetchy/fetchy. A pattern that names the parent directory is matched whole.
-NESTED_WORKSPACE_PARENTS := integrations fetchy devtools di/examples examples plugins
+NESTED_WORKSPACE_PARENTS := integrations fetchy di/examples examples plugins
 
 define lint_nested
 lint\:$(1)/%:
@@ -109,9 +110,9 @@ bench\:%: ## build and run a benchmark (e.g. bench:helloworld)
 	@npm run bench:$* -w @caffeinejs/benchmarks
 
 .PHONY: devtools
-devtools:
+devtools: ## build and run the devtools UI, reading the devtools at CAFFEINE_DEVTOOLS_TARGET__URL
 	@npm run build
-	@npm run dev -w @caffeinejs/devtools-ui
+	@npm start -w @caffeinejs/devtools-ui
 
 # .
 # End-to-End Toolchain
@@ -151,7 +152,7 @@ redis-down: ## stop Redis and Valkey
 
 .PHONY: test-e2e
 test-e2e: oauthserver-up configserver-up redis-up ## run the e2e against a real Spring Authorization Server, Config Server, Redis and Valkey
-	@npm run test:e2e; status=$$?; \
+	@status=0; npm run test:e2e || status=$$?; \
 		docker compose -f test/services/oauthserver/docker-compose.yml down; \
 		docker compose -f test/services/configserver/docker-compose.yml down; \
 		docker compose -f test/services/redis/docker-compose.yml down; \
@@ -170,7 +171,7 @@ kafka-down: ## stop the local Kafka broker
 
 .PHONY: test-kafka
 test-kafka: kafka-up ## run the kafka integration tests against a real broker
-	@npx vitest run --project kafka; status=$$?; docker compose -f kafka/docker-compose.yml down; exit $$status
+	@status=0; npx vitest run --project kafka || status=$$?; docker compose -f kafka/docker-compose.yml down; exit $$status
 
 # .
 # Miscellaneous

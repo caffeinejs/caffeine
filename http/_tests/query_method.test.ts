@@ -21,7 +21,7 @@ describe('@Query verb (OpenAPI 3.2 QUERY method)', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/query-test', {
+    const res = await app.request('/query-test', {
       method: 'QUERY',
       body: JSON.stringify({ term: 'cats' }),
       headers: { 'content-type': 'application/json' },

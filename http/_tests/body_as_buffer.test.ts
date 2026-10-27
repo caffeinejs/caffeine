@@ -23,7 +23,7 @@ describe('BodyAsBuffer', () => {
 
     const payload = Buffer.from('hello raw world')
 
-    const res = await app.fetch('/raw/upload', {
+    const res = await app.request('/raw/upload', {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
       body: payload,
@@ -51,7 +51,7 @@ describe('BodyAsBuffer', () => {
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
 
-    const res = await app.fetch('/raw-binary/data', {
+    const res = await app.request('/raw-binary/data', {
       method: 'POST',
       headers: { 'content-type': 'application/octet-stream' },
       body: payload,
@@ -79,7 +79,7 @@ describe('BodyAsBuffer', () => {
 
     const jsonStr = JSON.stringify({ key: 'value' })
 
-    const res = await app.fetch('/raw-json/data', {
+    const res = await app.request('/raw-json/data', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: jsonStr,
@@ -111,13 +111,13 @@ describe('BodyAsBuffer', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const rawRes = await app.fetch('/raw-mixed/raw', {
+    const rawRes = await app.request('/raw-mixed/raw', {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
       body: 'hello',
     })
 
-    const parsedRes = await app.fetch('/raw-mixed/parsed', {
+    const parsedRes = await app.request('/raw-mixed/parsed', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ x: 1 }),
@@ -152,7 +152,7 @@ describe('BodyAsBuffer', () => {
     await app.bootstrap()
 
     const upload = (bytes: number) =>
-      app.fetch('/raw-limited/upload', {
+      app.request('/raw-limited/upload', {
         method: 'POST',
         headers: { 'content-type': 'application/octet-stream' },
         body: Buffer.alloc(bytes),
@@ -186,7 +186,7 @@ describe('BodyAsBuffer', () => {
     await app.bootstrap()
 
     const upload = (bytes: number) =>
-      app.fetch('/raw-server-limited/upload', {
+      app.request('/raw-server-limited/upload', {
         method: 'POST',
         headers: { 'content-type': 'text/plain' },
         body: Buffer.alloc(bytes),

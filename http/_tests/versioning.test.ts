@@ -26,8 +26,8 @@ describe('API versioning', () => {
     const app = petsV1AndV2()
     await app.bootstrap()
 
-    expect(await (await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
-    expect(await (await app.fetch('/pets', { headers: { 'accept-version': '2.x' } })).json()).toEqual({ v: 2 })
+    expect(await (await app.request('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
+    expect(await (await app.request('/pets', { headers: { 'accept-version': '2.x' } })).json()).toEqual({ v: 2 })
 
     await app.close()
   })
@@ -36,7 +36,7 @@ describe('API versioning', () => {
     const app = petsV1AndV2()
     await app.bootstrap()
 
-    expect((await app.fetch('/pets')).status).toBe(404)
+    expect((await app.request('/pets')).status).toBe(404)
 
     await app.close()
   })
@@ -44,7 +44,7 @@ describe('API versioning', () => {
   it('sets Vary: Accept-Version on a versioned response, and nothing when no route is constrained', async () => {
     const app = petsV1AndV2()
     await app.bootstrap()
-    const versioned = await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })
+    const versioned = await app.request('/pets', { headers: { 'accept-version': '1.x' } })
     expect(versioned.headers.get('vary')?.toLowerCase()).toContain('accept-version')
     await app.close()
 
@@ -52,7 +52,7 @@ describe('API versioning', () => {
     plain.get('/').handler(() => ({ ok: true }))
     const plainApp = createWebApplication({ container: new CaffeineIoC() }).mount(plain)
     await plainApp.bootstrap()
-    const res = await plainApp.fetch('/plain')
+    const res = await plainApp.request('/plain')
     expect(res.headers.get('vary')?.toLowerCase() ?? '').not.toContain('accept-version')
     await plainApp.close()
   })
@@ -68,10 +68,10 @@ describe('API versioning', () => {
       .mount(plain, versioned)
     await app.bootstrap()
 
-    expect(await (await app.fetch('/shop', { headers: { 'accept-version': '1.x' } })).json()).toEqual({
+    expect(await (await app.request('/shop', { headers: { 'accept-version': '1.x' } })).json()).toEqual({
       kind: 'versioned',
     })
-    expect(await (await app.fetch('/shop')).json()).toEqual({ kind: 'plain' })
+    expect(await (await app.request('/shop')).json()).toEqual({ kind: 'plain' })
 
     await app.close()
   })
@@ -100,7 +100,7 @@ describe('API versioning', () => {
       .mount(v1)
     await app.bootstrap()
 
-    expect((await app.fetch('/livez')).status).toBe(200)
+    expect((await app.request('/livez')).status).toBe(200)
 
     await app.close()
   })

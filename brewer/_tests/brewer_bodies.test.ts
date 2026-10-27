@@ -562,7 +562,7 @@ describe('brewer sending a body', () => {
     })
 
     // A file that cannot be opened fails the call: it must not go out as an empty upload under its name.
-    it('should reject with what the function throws, in process', async () => {
+    it('should reject with what the function throws as its cause, in process', async () => {
       const client = brewer(app)
 
       await expect(
@@ -571,7 +571,7 @@ describe('brewer sending a body', () => {
             throw new Error('the file is gone')
           },
         }),
-      ).rejects.toThrow('the file is gone')
+      ).rejects.toMatchObject({ name: 'TypeError', cause: { message: 'the file is gone' } })
     })
 
     it('should reject with what the function throws as its cause, over a socket', async () => {

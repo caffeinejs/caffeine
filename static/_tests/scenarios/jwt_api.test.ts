@@ -69,7 +69,7 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    const res = await app.fetch('/settings', { headers: NAVIGATION })
+    const res = await app.request('/settings', { headers: NAVIGATION })
 
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('<div id="root">')
@@ -79,7 +79,7 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    const res = await app.fetch('/api/me', { headers: XHR })
+    const res = await app.request('/api/me', { headers: XHR })
 
     expect(res.status).toBe(401)
     expect(res.headers.get('www-authenticate')).toMatch(/^Bearer/)
@@ -89,7 +89,7 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    const res = await app.fetch('/api/me', { headers: { ...XHR, authorization: user } })
+    const res = await app.request('/api/me', { headers: { ...XHR, authorization: user } })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ sub: 'bob' })
@@ -99,11 +99,11 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    const forbidden = await app.fetch('/api/admin', { headers: { ...XHR, authorization: user } })
+    const forbidden = await app.request('/api/admin', { headers: { ...XHR, authorization: user } })
     expect(forbidden.status).toBe(403)
     expect(forbidden.headers.get('content-type') ?? '').not.toMatch(/text\/html/)
 
-    expect((await app.fetch('/api/admin', { headers: { ...XHR, authorization: admin } })).status).toBe(200)
+    expect((await app.request('/api/admin', { headers: { ...XHR, authorization: admin } })).status).toBe(200)
   })
 
   // A bearer scheme has nowhere to redirect to, and the page must not step in for a URL the API owns.
@@ -111,7 +111,7 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    expect((await app.fetch('/api/admin', { headers: NAVIGATION })).status).toBe(401)
+    expect((await app.request('/api/admin', { headers: NAVIGATION })).status).toBe(401)
   })
 
   // The one `/api/*` line keeps every miss under the API away from the page. It sits inside the authorized
@@ -121,10 +121,10 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    await expectNotFoundJSON(await app.fetch('/api/typo', { headers: { ...XHR, authorization: user } }))
-    await expectNotFoundJSON(await app.fetch('/api/typo', { headers: { ...NAVIGATION, authorization: user } }))
+    await expectNotFoundJSON(await app.request('/api/typo', { headers: { ...XHR, authorization: user } }))
+    await expectNotFoundJSON(await app.request('/api/typo', { headers: { ...NAVIGATION, authorization: user } }))
 
-    const anonymous = await app.fetch('/api/typo', { headers: NAVIGATION })
+    const anonymous = await app.request('/api/typo', { headers: NAVIGATION })
     expect(anonymous.status).toBe(401)
     expect(anonymous.headers.get('content-type') ?? '').not.toMatch(/text\/html/)
   })
@@ -133,14 +133,14 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    await expectNotFoundJSON(await app.fetch('/settings', { headers: XHR }))
+    await expectNotFoundJSON(await app.request('/settings', { headers: XHR }))
   })
 
   it('does not take a bare wildcard Accept for a document request', async () => {
     app = publicSPA()
     await app.bootstrap()
 
-    await expectNotFoundJSON(await app.fetch('/settings', { headers: CURL }))
+    await expectNotFoundJSON(await app.request('/settings', { headers: CURL }))
   })
 
   // A declared path is a request for the document itself, so it answers a client that is not a browser.
@@ -148,15 +148,15 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    expect((await app.fetch('/', { headers: CURL })).status).toBe(200)
-    expect((await app.fetch('/index.html', { headers: CURL })).status).toBe(200)
+    expect((await app.request('/', { headers: CURL })).status).toBe(200)
+    expect((await app.request('/index.html', { headers: CURL })).status).toBe(200)
   })
 
   it('serves the shell into an iframe', async () => {
     app = publicSPA()
     await app.bootstrap()
 
-    const res = await app.fetch('/settings', { headers: IFRAME })
+    const res = await app.request('/settings', { headers: IFRAME })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
@@ -166,7 +166,7 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    const res = await app.fetch('/settings', { method: 'HEAD', headers: NAVIGATION })
+    const res = await app.request('/settings', { method: 'HEAD', headers: NAVIGATION })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
@@ -177,11 +177,11 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    const first = await app.fetch('/settings', { headers: NAVIGATION })
+    const first = await app.request('/settings', { headers: NAVIGATION })
     const etag = first.headers.get('etag')
     expect(etag).not.toBeNull()
 
-    const second = await app.fetch('/settings', { headers: { ...NAVIGATION, 'if-none-match': etag! } })
+    const second = await app.request('/settings', { headers: { ...NAVIGATION, 'if-none-match': etag! } })
 
     expect(second.status).toBe(304)
     expect(await second.text()).toBe('')
@@ -191,10 +191,10 @@ describe('public single-page application with a bearer-token API', () => {
     app = publicSPA()
     await app.bootstrap()
 
-    const asset = await app.fetch('/assets/app-eZr2sdaR.js')
+    const asset = await app.request('/assets/app-eZr2sdaR.js')
     expect(asset.status).toBe(200)
     expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
 
-    await expectNotFoundJSON(await app.fetch('/assets/app-deadbeef.js', { headers: NAVIGATION }))
+    await expectNotFoundJSON(await app.request('/assets/app-deadbeef.js', { headers: NAVIGATION }))
   })
 })

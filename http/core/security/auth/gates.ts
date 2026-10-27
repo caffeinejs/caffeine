@@ -6,5 +6,5 @@
  * installed on and of the contexts beneath it; `id` is what it stamps on the routes it owns.
  */
 export class AuthenticationGates {
-  readonly installed: Array<{ readonly id: symbol; readonly context: object }> = []
+  readonly installed: Array<{ readonly id: symbol; readonly label: string; readonly context: object }> = []
 }

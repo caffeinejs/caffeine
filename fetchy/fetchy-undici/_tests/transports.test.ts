@@ -38,7 +38,6 @@ import {
   Query,
   RawRequestBodyConverter,
   RawResponse,
-  Retry,
   SignalParam,
   TextResponseConverter,
   type TransportFactory,
@@ -46,7 +45,7 @@ import {
   UseResponseConverter,
 } from '@caffeinejs/fetchy'
 import { FetchTransportFactory } from '@caffeinejs/fetchy/fetch'
-import { RetryInterceptor } from '@caffeinejs/fetchy/retry'
+import { Retry, RetryInterceptor } from '@caffeinejs/fetchy/retry'
 import { Client, FormData as UndiciFormData } from 'undici'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 

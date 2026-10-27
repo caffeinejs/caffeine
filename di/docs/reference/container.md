@@ -174,7 +174,8 @@ registers right away.
 
 A key takes one binding. Binding a key that ends up with another binding — bound by hand,
 bound by a module or decorated — fails the compilation with `ErrDuplicateBinding`, unless
-profiles or conditions leave only one of them. Use `rebind()` to replace a binding.
+profiles or conditions leave only one of them. Remove the duplicate, bind each implementation
+under its own key, or give one of them a profile or a condition.
 
 Decorators are not read: a decorated class bound here gets only what its binding declares.
 
@@ -193,7 +194,8 @@ made, and any binding named after it or extending it, whether or not it carries 
 Those keep resolving under their own keys. `configure` receives the same `BindingSpec` that
 `bind()` provides.
 
-It is the one way to replace a binding. Called before the container compiles, the replacement
+It is meant for the framework and `@caffeinejs/testing`: an application fixes a duplicate
+binding at its source instead. Called before the container compiles, the replacement
 is applied after the decorated bindings, the ones bound by hand and the modules' are
 registered, so it replaces any of them. A key with no binding is simply bound. Rebinding a
 `@Configuration` class replaces it, conditions included: the `@Provides` it declares stay,

@@ -50,8 +50,8 @@ describe('what a request may ask of the cache', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/req-no-store/data', { headers: { 'cache-control': 'No-Store' } })
-    const next = await app.fetch('/req-no-store/data')
+    await app.request('/req-no-store/data', { headers: { 'cache-control': 'No-Store' } })
+    const next = await app.request('/req-no-store/data')
 
     expect(next.headers.get('x-cache')).toBe('MISS')
     expect(await next.json()).toEqual({ n: 2 })
@@ -74,8 +74,8 @@ describe('what a request may ask of the cache', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/req-case/data')
-    const fresh = await app.fetch('/req-case/data', { headers: { 'cache-control': 'No-Cache' } })
+    await app.request('/req-case/data')
+    const fresh = await app.request('/req-case/data', { headers: { 'cache-control': 'No-Cache' } })
 
     expect(fresh.headers.get('x-cache')).toBe('BYPASS')
     expect(await fresh.json()).toEqual({ n: 2 })
@@ -97,8 +97,10 @@ describe('what a request may ask of the cache', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/req-pragma/data')
-    const res = await app.fetch('/req-pragma/data', { headers: { pragma: 'no-cache', 'cache-control': 'max-age=60' } })
+    await app.request('/req-pragma/data')
+    const res = await app.request('/req-pragma/data', {
+      headers: { pragma: 'no-cache', 'cache-control': 'max-age=60' },
+    })
 
     expect(res.headers.get('x-cache')).toBe('HIT')
   })
@@ -123,9 +125,9 @@ describe('what a request may ask of the cache', () => {
 
     // Only the clock the cache reads an entry's age from is moved; the store's own ttl runs on another.
     vi.useFakeTimers({ toFake: ['Date'] })
-    await app.fetch('/req-only-if-cached/data')
+    await app.request('/req-only-if-cached/data')
     vi.setSystemTime(Date.now() + 2100)
-    const res = await app.fetch('/req-only-if-cached/data', {
+    const res = await app.request('/req-only-if-cached/data', {
       headers: { 'cache-control': 'only-if-cached, max-age=1' },
     })
 
@@ -170,8 +172,8 @@ describe('what of the query the key carries', () => {
   }
   void [QueryController]
 
-  const status = async (app: { fetch(url: string): Promise<Response> }, url: string) =>
-    (await app.fetch(url)).headers.get('x-cache')
+  const status = async (app: { request(url: string): Promise<Response> }, url: string) =>
+    (await app.request(url)).headers.get('x-cache')
 
   it('keeps the parameters a route lists and drops the rest, in any order', async () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
@@ -264,10 +266,10 @@ describe('a response left out of the store', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const first = await app.fetch('/skip/large')
-    const second = await app.fetch('/skip/large')
-    await app.fetch('/skip/small')
-    const small = await app.fetch('/skip/small')
+    const first = await app.request('/skip/large')
+    const second = await app.request('/skip/large')
+    await app.request('/skip/small')
+    const small = await app.request('/skip/small')
 
     expect(first.status).toBe(200)
     expect(await first.text()).toBe('x'.repeat(200))
@@ -287,7 +289,7 @@ describe('a response left out of the store', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/skip/cookie')
+    await app.request('/skip/cookie')
 
     expect(skips).toMatchObject([{ route: { url: '/skip/cookie' }, reason: 'set-cookie', size: 11 }])
   })
@@ -302,8 +304,8 @@ describe('a response left out of the store', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const first = await app.fetch('/skip/stream')
-    const second = await app.fetch('/skip/stream')
+    const first = await app.request('/skip/stream')
+    const second = await app.request('/skip/stream')
 
     expect(await first.text()).toBe('stream')
     expect(second.headers.get('x-cache')).toBe('MISS')
@@ -331,8 +333,8 @@ describe('a response left out of the store', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const first = await app.fetch('/skip/empty')
-    const second = await app.fetch('/skip/empty')
+    const first = await app.request('/skip/empty')
+    const second = await app.request('/skip/empty')
 
     expect(first.status).toBe(200)
     expect(await first.text()).toBe('')
@@ -356,8 +358,8 @@ describe('a response left out of the store', () => {
     await app.bootstrap()
 
     for (const path of ['/skip/stream', '/skip/empty']) {
-      await app.fetch(path)
-      const bypassed = await app.fetch(path, { headers: { 'cache-control': 'no-cache' } })
+      await app.request(path)
+      const bypassed = await app.request(path, { headers: { 'cache-control': 'no-cache' } })
       expect(bypassed.headers.get('x-cache')).toBe('BYPASS')
     }
 
@@ -395,8 +397,8 @@ describe('a response left out of the store', () => {
     await app.bootstrap()
 
     // `/skip/small` answers 20 bytes.
-    await app.fetch('/skip/small')
-    expect((await app.fetch('/skip/small')).headers.get('x-cache')).toBe('HIT')
+    await app.request('/skip/small')
+    expect((await app.request('/skip/small')).headers.get('x-cache')).toBe('HIT')
     expect(skips).toEqual([])
 
     await app.close()
@@ -411,8 +413,8 @@ describe('a response left out of the store', () => {
     close = () => tighter.close()
     await tighter.bootstrap()
 
-    await tighter.fetch('/skip/small')
-    expect((await tighter.fetch('/skip/small')).headers.get('x-cache')).toBe('MISS')
+    await tighter.request('/skip/small')
+    expect((await tighter.request('/skip/small')).headers.get('x-cache')).toBe('MISS')
     expect(skips).toMatchObject([
       { reason: 'entry-too-large', size: 20 },
       { reason: 'entry-too-large', size: 20 },
@@ -490,18 +492,18 @@ describe('a store that rejects', () => {
     await app.bootstrap()
 
     store.failPut = true
-    const written = await app.fetch('/store-down/data')
+    const written = await app.request('/store-down/data')
     expect(written.status).toBe(200)
     expect(await written.json()).toEqual({ ok: true })
 
     store.failGet = true
-    const read = await app.fetch('/store-down/data')
+    const read = await app.request('/store-down/data')
     expect(read.status).toBe(200)
     expect(read.headers.get('x-cache')).toBe('MISS')
     expect(await read.json()).toEqual({ ok: true })
 
     store.failEvict = true
-    const mutated = await app.fetch('/store-down/data', { method: 'POST' })
+    const mutated = await app.request('/store-down/data', { method: 'POST' })
     expect(mutated.status).toBe(201)
     expect(await mutated.json()).toEqual({ created: true })
 
@@ -521,8 +523,8 @@ describe('a store that rejects', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/store-down/data')
-    await app.fetch('/store-down/data')
+    await app.request('/store-down/data')
+    await app.request('/store-down/data')
 
     const reports = log.written.filter(w => String(w.args[1]).includes('Cache store "get" failed'))
     expect(reports).toHaveLength(1)
@@ -542,7 +544,7 @@ describe('a store that rejects', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.fetch('/store-down/data')
+    await app.request('/store-down/data')
 
     expect(errors).toHaveLength(1)
     expect(log.written.filter(w => String(w.args[1]).includes('Cache store'))).toEqual([])
@@ -604,8 +606,8 @@ describe('a store that never answers', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const read = await app.fetch('/store-hung/data')
-    const evicted = await app.fetch('/store-hung/data', { method: 'POST' })
+    const read = await app.request('/store-hung/data')
+    const evicted = await app.request('/store-hung/data', { method: 'POST' })
 
     expect(read.status).toBe(200)
     expect(read.headers.get('x-cache')).toBe('MISS')
@@ -666,7 +668,7 @@ describe('an entry the application put in the store itself', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
     close = () => app.close()
     await app.bootstrap()
-    const res = await app.fetch('/store-warm/data')
+    const res = await app.request('/store-warm/data')
 
     expect(res.headers.get('x-cache')).toBe('HIT')
     expect(res.headers.get('age')).toBe('0')
@@ -709,9 +711,9 @@ describe('a store that hands back an entry past the route ttl', () => {
 
     // `allowStale` hands the entry back whatever its age, so the clock the cache reads is the only one to move.
     vi.useFakeTimers({ toFake: ['Date'] })
-    await app.fetch('/store-stale/data')
+    await app.request('/store-stale/data')
     vi.setSystemTime(Date.now() + 2100)
-    const res = await app.fetch('/store-stale/data')
+    const res = await app.request('/store-stale/data')
 
     expect(await res.json()).toEqual({ n: 2 })
     expect(res.headers.get('x-cache')).toBe('MISS')

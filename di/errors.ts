@@ -97,8 +97,8 @@ export class ErrDuplicateBinding extends CaffeineIoCError {
     super(
       errMessage(`Cannot register "${keyStr(key)}": a binding is already registered under this key`)
         .solutions(
-          `Use rebind() to replace the binding of "${keyStr(key)}" deliberately`,
           `Remove the bind() of a class that is already decorated, or set the "decorators" option to false`,
+          `Bind each implementation under its own key, share one with .extends() or .names(), and mark the default with .primary()`,
           `Give one of the bindings a profile or a condition, so that only one of them is registered`,
         )
         .reference('@caffeinejs/di', ErrDuplicateBinding)
@@ -205,6 +205,23 @@ export class ErrIllegalScopeState extends CaffeineIoCError {
   constructor(message: string) {
     super(message, 'ERR_ILLEGAL_SCOPE_STATE')
     this.name = 'ErrIllegalScopeState'
+  }
+}
+
+/**
+ * ErrNotRefreshable is thrown when a binding handed to `refresher.refresh(binding)` is not refresh-scoped: a refresh
+ * never reaches it.
+ */
+export class ErrNotRefreshable extends CaffeineIoCError {
+  constructor(name: string) {
+    super(
+      errMessage(`Cannot refresh "${name}": it is not refresh-scoped`)
+        .solutions(`Give it the refresh scope: ".lifetime(Scopes.REFRESH)" or "@Lifetime(Scopes.REFRESH)"`)
+        .reference('@caffeinejs/di', ErrNotRefreshable)
+        .build(),
+      'ERR_NOT_REFRESHABLE',
+    )
+    this.name = 'ErrNotRefreshable'
   }
 }
 

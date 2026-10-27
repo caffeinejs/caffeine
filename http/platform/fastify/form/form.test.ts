@@ -26,7 +26,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormObjectController)
-    const res = await app.fetch('/form-object/echo', {
+    const res = await app.request('/form-object/echo', {
       method: 'POST',
       headers: { 'content-type': FORM },
       body: 'name=ada&age=36',
@@ -47,7 +47,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormArrayController)
-    const res = await app.fetch('/form-array/echo', {
+    const res = await app.request('/form-array/echo', {
       method: 'POST',
       headers: { 'content-type': FORM },
       body: 'tag=a&tag=b',
@@ -67,7 +67,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormDecodeController)
-    const res = await app.fetch('/form-decode/echo', {
+    const res = await app.request('/form-decode/echo', {
       method: 'POST',
       headers: { 'content-type': FORM },
       body: 'msg=hello+world%21',
@@ -87,7 +87,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormCharsetController)
-    const res = await app.fetch('/form-charset/echo', {
+    const res = await app.request('/form-charset/echo', {
       method: 'POST',
       headers: { 'content-type': `${FORM}; charset=utf-8` },
       body: 'name=ada',
@@ -108,7 +108,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormProtoController)
-    const res = await app.fetch('/form-proto/echo', {
+    const res = await app.request('/form-proto/echo', {
       method: 'POST',
       headers: { 'content-type': FORM },
       body: '__proto__[polluted]=yes&__proto__=yes',
@@ -130,7 +130,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormEmptyController)
-    const res = await app.fetch('/form-empty/echo', { method: 'POST', headers: { 'content-type': FORM }, body: '' })
+    const res = await app.request('/form-empty/echo', { method: 'POST', headers: { 'content-type': FORM }, body: '' })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({})
@@ -147,7 +147,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormBareKeyController)
-    const res = await app.fetch('/form-bare-key/echo', {
+    const res = await app.request('/form-bare-key/echo', {
       method: 'POST',
       headers: { 'content-type': FORM },
       body: 'ok',
@@ -168,7 +168,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(Form415Controller)
-    const res = await app.fetch('/form-415/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'ok=1' })
+    const res = await app.request('/form-415/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'ok=1' })
 
     expect(res.status).not.toBe(415)
     expect(res.status).toBe(200)
@@ -186,7 +186,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormRouteLimitController)
-    const res = await app.fetch('/form-route-limit/echo', {
+    const res = await app.request('/form-route-limit/echo', {
       method: 'POST',
       headers: { 'content-type': FORM },
       body: `name=${'x'.repeat(20)}`,
@@ -208,7 +208,7 @@ describe('form url-encoded body', () => {
 
     const app = await appWith(FormRouteRaisedController)
     const value = 'x'.repeat(1 * MiB)
-    const res = await app.fetch('/form-route-raised/echo', {
+    const res = await app.request('/form-route-raised/echo', {
       method: 'POST',
       headers: { 'content-type': FORM },
       body: `name=${value}`,
@@ -230,7 +230,7 @@ describe('form url-encoded body', () => {
 
     const app = await appWith(FormDefaultLimitController)
     const post = (body: string) =>
-      app.fetch('/form-default-limit/echo', { method: 'POST', headers: { 'content-type': FORM }, body })
+      app.request('/form-default-limit/echo', { method: 'POST', headers: { 'content-type': FORM }, body })
     const field = 'name='
 
     const atLimit = await post(field + 'x'.repeat(1 * MiB - field.length))

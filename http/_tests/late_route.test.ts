@@ -42,7 +42,7 @@ describe('$route', () => {
     )
     await app.bootstrap()
 
-    const res = await app.fetch('/late/hello')
+    const res = await app.request('/late/hello')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
   })
@@ -88,7 +88,7 @@ describe('$route', () => {
     )
     await app.bootstrap()
 
-    const res = await app.fetch('/late/closed')
+    const res = await app.request('/late/closed')
     expect(res.status).toBe(403)
   })
 

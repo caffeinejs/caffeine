@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@caffeinejs/application": "*",
+    "@caffeinejs/devtools": "*",
     "@caffeinejs/di": "*",
     "@caffeinejs/html": "*",
     "@caffeinejs/http": "*",

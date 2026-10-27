@@ -1,4 +1,4 @@
-import { Listener, Router, bindTo } from '@caffeinejs/http'
+import { Router, bindTo } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -19,7 +19,7 @@ const metrics = new Router('/metrics')
 const pets = new Router('/pets').get('/').handler(() => [{ id: 1 }])
 
 const app = createWebApplication()
-  .install(Listener('admin', l => l.server(() => ({ listener }))))
+  .listener('admin', l => l.server(() => ({ listener })))
   .server(() => ({ listener }))
   .mount(pets, metrics)
 

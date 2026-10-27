@@ -49,13 +49,13 @@ describe('a single-page application next to the plugins an application runs in p
     app = isolated().with(healthProbes()).with(files()).mount(api(), pages()) as WebApplication
     await app.bootstrap()
 
-    const live = await app.fetch('/livez', { headers: PROBE })
+    const live = await app.request('/livez', { headers: PROBE })
     expect(live.status).toBe(200)
     expect(await live.text()).toBe('ok')
     expect(live.headers.get('cache-control')).toBe('no-store')
 
-    expect((await app.fetch('/livez', { method: 'HEAD', headers: PROBE })).status).toBe(200)
-    await expectNotFoundJSON(await app.fetch('/livez/extra', { headers: PROBE }))
+    expect((await app.request('/livez', { method: 'HEAD', headers: PROBE })).status).toBe(200)
+    await expectNotFoundJSON(await app.request('/livez/extra', { headers: PROBE }))
   })
 
   // A probe is not a browser: a disabled probe path is a 404 the orchestrator can act on, not a page.
@@ -66,7 +66,7 @@ describe('a single-page application next to the plugins an application runs in p
       .mount(api(), pages()) as WebApplication
     await app.bootstrap()
 
-    await expectNotFoundJSON(await app.fetch('/livez', { headers: PROBE }))
+    await expectNotFoundJSON(await app.request('/livez', { headers: PROBE }))
   })
 
   it('coexists with a CORS plugin', async () => {
@@ -80,14 +80,14 @@ describe('a single-page application next to the plugins an application runs in p
       .mount(api(), pages()) as WebApplication
     await app.bootstrap()
 
-    const preflight = await app.fetch('/api/pets', {
+    const preflight = await app.request('/api/pets', {
       method: 'OPTIONS',
       headers: { origin: 'https://app.example', 'access-control-request-method': 'GET' },
     })
     expect(preflight.status).toBe(204)
     expect(preflight.headers.get('access-control-allow-origin')).toBe('https://app.example')
 
-    const page = await app.fetch('/dashboard', { headers: NAVIGATION })
+    const page = await app.request('/dashboard', { headers: NAVIGATION })
     expect(page.status).toBe(200)
     expect(await page.text()).toContain('<div id="root">')
   })
@@ -103,7 +103,7 @@ describe('a single-page application next to the plugins an application runs in p
       .mount(api(), pages()) as WebApplication
     await app.bootstrap()
 
-    const res = await app.fetch('/dashboard', { headers: { ...NAVIGATION, 'accept-encoding': 'gzip' } })
+    const res = await app.request('/dashboard', { headers: { ...NAVIGATION, 'accept-encoding': 'gzip' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-encoding')).toBe('gzip')
@@ -123,9 +123,9 @@ describe('a single-page application next to the plugins an application runs in p
       .mount(api(), pages()) as WebApplication
     await app.bootstrap()
 
-    expect((await app.fetch('/nope', { method: 'POST' })).status).toBe(418)
+    expect((await app.request('/nope', { method: 'POST' })).status).toBe(418)
 
-    const page = await app.fetch('/dashboard', { headers: NAVIGATION })
+    const page = await app.request('/dashboard', { headers: NAVIGATION })
     expect(page.status).toBe(200)
     expect(await page.text()).toContain('<div id="root">')
   })
@@ -145,13 +145,13 @@ describe('a single-page application next to the plugins an application runs in p
       .mount(api(), pages()) as WebApplication
     await app.bootstrap()
 
-    const metrics = await app.fetch('/metrics', { headers: PROBE })
+    const metrics = await app.request('/metrics', { headers: PROBE })
     expect(metrics.status).toBe(200)
     expect(await metrics.text()).toBe('up 1')
 
     // An exact URL that matched a route never reaches the client-route wildcard; a miss beside it does, and
     // a probe is not a browser.
-    await expectNotFoundJSON(await app.fetch('/metrics/x', { headers: PROBE }))
+    await expectNotFoundJSON(await app.request('/metrics/x', { headers: PROBE }))
   })
 
   // `@fastify/static`'s default wildcard registers `GET /*`, which is the application's own client-route
@@ -185,7 +185,7 @@ describe('a single-page application next to the plugins an application runs in p
       .with(staticFiles(s => s.serve(fixtures, { prefix: '/bundle' }, { anonymous: true }))) as WebApplication
     await app.bootstrap()
 
-    const asset = await app.fetch('/bundle/hello.txt', { headers: PROBE })
+    const asset = await app.request('/bundle/hello.txt', { headers: PROBE })
 
     expect(asset.status).toBe(200)
     expect(await asset.text()).toContain('hello static world')

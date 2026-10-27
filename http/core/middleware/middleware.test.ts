@@ -81,7 +81,7 @@ describe('middleware pipeline', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/mw/echo')
+    const res = await app.request('/mw/echo')
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
@@ -97,7 +97,7 @@ describe('middleware pipeline', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/mw/echo')
+    const res = await app.request('/mw/echo')
 
     expect(res.status).toBe(401)
     expect(res.headers.get('x-tag')).toBe('one-argument')
@@ -125,7 +125,7 @@ describe('middleware pipeline', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/mw/echo')
+    const res = await app.request('/mw/echo')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('x-tag')).toBe('from-config')
@@ -141,7 +141,7 @@ describe('middleware pipeline', () => {
     app.use(Tagger)
     await app.bootstrap()
 
-    const res = await app.fetch('/mw/echo')
+    const res = await app.request('/mw/echo')
 
     expect(res.headers.get('x-tag')).toBe('injected')
     await app.close()
@@ -155,7 +155,7 @@ describe('middleware pipeline', () => {
     app.use(kTagger)
     await app.bootstrap()
 
-    const res = await app.fetch('/mw/echo')
+    const res = await app.request('/mw/echo')
 
     expect(res.headers.get('x-tag')).toBe('by-key')
     await app.close()
@@ -170,8 +170,8 @@ describe('middleware pipeline', () => {
     scoped.use(Counter)
     await scoped.bootstrap()
 
-    const first = await scoped.fetch('/mw/echo')
-    const second = await scoped.fetch('/mw/echo')
+    const first = await scoped.request('/mw/echo')
+    const second = await scoped.request('/mw/echo')
     expect(first.headers.get('x-instance')).not.toBe(second.headers.get('x-instance'))
     await scoped.close()
 
@@ -181,8 +181,8 @@ describe('middleware pipeline', () => {
     singleton.use(Counter)
     await singleton.bootstrap()
 
-    const third = await singleton.fetch('/mw/echo')
-    const fourth = await singleton.fetch('/mw/echo')
+    const third = await singleton.request('/mw/echo')
+    const fourth = await singleton.request('/mw/echo')
     expect(third.headers.get('x-instance')).toBe(fourth.headers.get('x-instance'))
     await singleton.close()
   })
@@ -204,7 +204,7 @@ describe('middleware pipeline', () => {
     )
     await app.bootstrap()
 
-    await app.fetch('/mw/echo')
+    await app.request('/mw/echo')
 
     expect(order).toEqual(['onRequest', 'preHandler'])
     await app.close()
@@ -226,7 +226,7 @@ describe('middleware pipeline', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/mw/echo')
+    const res = await app.request('/mw/echo')
 
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'anonymous' })
@@ -241,7 +241,7 @@ describe('middleware pipeline', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/mw/echo')
+    const res = await app.request('/mw/echo')
 
     expect(res.status).toBe(418)
     expect(await res.json()).toEqual({ answered: 'directly' })
@@ -272,7 +272,7 @@ describe('middleware pipeline', () => {
     })
     await app.bootstrap()
 
-    const res = await app.fetch('/mw/echo')
+    const res = await app.request('/mw/echo')
 
     expect(res.status).toBe(418)
     expect(await res.json()).toEqual({ answered: 'early' })
@@ -286,7 +286,7 @@ describe('middleware pipeline', () => {
     app.use(cors({ origin: 'http://example.com' }))
     await app.bootstrap()
 
-    const res = await app.fetch('/mw/echo', { headers: { Origin: 'http://example.com' } })
+    const res = await app.request('/mw/echo', { headers: { Origin: 'http://example.com' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('access-control-allow-origin')).toBe('http://example.com')
@@ -300,8 +300,8 @@ describe('middleware pipeline', () => {
     app.use('/api', cors({ origin: 'http://example.com' }))
     await app.bootstrap()
 
-    const inside = await app.fetch('/api/echo', { headers: { Origin: 'http://example.com' } })
-    const outside = await app.fetch('/mw/echo', { headers: { Origin: 'http://example.com' } })
+    const inside = await app.request('/api/echo', { headers: { Origin: 'http://example.com' } })
+    const outside = await app.request('/mw/echo', { headers: { Origin: 'http://example.com' } })
 
     expect(inside.status).toBe(200)
     expect(inside.headers.get('access-control-allow-origin')).toBe('http://example.com')
@@ -342,7 +342,7 @@ describe('middleware pipeline', () => {
     app.use(Hinted)
     await app.bootstrap()
 
-    await app.fetch('/mw/echo')
+    await app.request('/mw/echo')
 
     expect(order).toEqual(['onRequest', 'hinted'])
     await app.close()
@@ -372,7 +372,7 @@ describe('middleware pipeline', () => {
     })
     await app.bootstrap()
 
-    await app.fetch('/mw/echo')
+    await app.request('/mw/echo')
 
     expect(order).toEqual(['hinted', 'second'])
     await app.close()
@@ -390,7 +390,7 @@ describe('middleware pipeline', () => {
     app.use(node)
     await app.bootstrap()
 
-    await app.fetch('/mw/echo', { headers: { 'x-forwarded-proto': 'HTTPS' } })
+    await app.request('/mw/echo', { headers: { 'x-forwarded-proto': 'HTTPS' } })
 
     expect(protocol).toBe('https')
     await app.close()
@@ -482,7 +482,7 @@ describe('application middleware registration with a path', () => {
 
         for (let request = 0; request < 2; request++) {
           order.length = 0
-          const response = await server.fetch('/api/orders')
+          const response = await server.request('/api/orders')
           expect(response.status).toBe(200)
           expect(await response.json()).toEqual({ ok: true })
           expect(response.headers.get('x-tag')).toBe(
@@ -498,7 +498,7 @@ describe('application middleware registration with a path', () => {
           )
           expect(order).toEqual(['onRequest', `${hook}:/orders`, 'handler'])
         }
-        const sibling = await server.fetch('/apiary/orders')
+        const sibling = await server.request('/apiary/orders')
         expect(sibling.status).toBe(200)
         expect(await sibling.json()).toEqual({ public: true })
         expect(sibling.headers.get('x-tag')).toBeNull()
@@ -531,7 +531,7 @@ describe('application middleware registration with a path', () => {
         ['/', undefined],
       ] as const) {
         seen.length = 0
-        const response = await server.fetch(url)
+        const response = await server.request(url)
         expect(response.status, url).toBe(200)
         expect(await response.json(), url).toEqual({ url })
         expect(seen, url).toEqual(mounted === undefined ? [] : [mounted])
@@ -573,7 +573,7 @@ describe('application middleware registration with a path', () => {
       ['/internalized/jobs', []],
     ] as const) {
       seen.length = 0
-      const response = await server.fetch(url)
+      const response = await server.request(url)
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ ok: true })
       expect(seen).toEqual([...expected, `global:${url}`, `handler:${url}`])
@@ -607,7 +607,7 @@ describe('application middleware registration with a path', () => {
     const tenants = ['acme', 'globex']
     const responses = await Promise.all(
       tenants.map(tenant =>
-        server.fetch(`/tenants/${tenant}/orders?tenant=${tenant}`, { headers: { 'x-tenant': tenant } }),
+        server.request(`/tenants/${tenant}/orders?tenant=${tenant}`, { headers: { 'x-tenant': tenant } }),
       ),
     )
     for (const [index, response] of responses.entries()) {
@@ -658,11 +658,11 @@ describe('application middleware registration with a path', () => {
       )
       await server.bootstrap()
 
-      const denied = await server.fetch('/private/data')
+      const denied = await server.request('/private/data')
       expect(denied.status).toBe(403)
       expect(await denied.json()).toMatchObject({ message: 'Access denied' })
       expect(reached).toEqual([])
-      const allowed = await server.fetch('/public')
+      const allowed = await server.request('/public')
       expect(allowed.status).toBe(200)
       expect(await allowed.json()).toEqual({ public: true })
       expect(reached).toEqual([])
@@ -703,7 +703,7 @@ describe('application middleware registration with a path', () => {
       )
       await server.bootstrap()
 
-      const response = await server.fetch('/private/data')
+      const response = await server.request('/private/data')
       expect(response.status).toBe(401)
       expect(await response.text()).toBe('blocked')
       expect(reached).toEqual([])

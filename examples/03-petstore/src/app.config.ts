@@ -28,6 +28,12 @@ export const ConfigSchema = $t.Object({
   log: $t.Object({
     level: $t.String({ default: 'info' }),
   }),
+  // The devtools, on a server of their own: loopback by default, so nothing outside this machine reaches them.
+  // `make example:petstore-devtools` starts the UI that reads them.
+  devtools: $t.Object({
+    host: $t.String({ default: '127.0.0.1' }),
+    port: $t.Integer({ default: 9090, minimum: 0, maximum: 65_535 }),
+  }),
   // Basic credentials for the API documentation. Demo defaults so the example runs with no setup.
   docs: $t.Object({
     user: $t.String({ default: 'admin' }),
