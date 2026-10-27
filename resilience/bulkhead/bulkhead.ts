@@ -2,7 +2,7 @@ import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { abortReason } from '../abort.js'
-import { settled } from '../compose.js'
+import { settled, type RawNext } from '../compose.js'
 import { Emitter } from '../emitter.js'
 import { ErrCallRefused, ErrInvalidOption, restoreStacks, suppressStacks } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
@@ -67,7 +67,7 @@ export interface BulkheadEvents {
 
 interface QueuedCall<T> extends Waiter {
   readonly ctx: ExecutionContext
-  readonly run: Next<T>
+  readonly run: RawNext<T>
   readonly resolve: (value: T) => void
   readonly reject: (reason: unknown) => void
   readonly since: number
@@ -174,7 +174,7 @@ export class Bulkhead implements StrategyObject {
       // a helper that called it would add a frame to every stack trace.
       let pending: Promise<T>
       try {
-        pending = settled(next(ctx))
+        pending = settled((next as RawNext<T>)(ctx))
       } catch (error) {
         pending = Promise.reject(error)
       }

@@ -2,7 +2,7 @@ import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { abortReason } from '../abort.js'
-import { settled } from '../compose.js'
+import { settled, type RawNext } from '../compose.js'
 import { Emitter } from '../emitter.js'
 import { ErrCallRefused, ErrInvalidOption, restoreStacks, suppressStacks } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
@@ -61,7 +61,7 @@ export interface RateLimiterEvents {
 
 interface WaitingCall<T> extends Waiter {
   readonly ctx: ExecutionContext
-  readonly run: Next<T>
+  readonly run: RawNext<T>
   readonly resolve: (value: T) => void
   readonly reject: (reason: unknown) => void
   readonly since: number
@@ -193,7 +193,7 @@ export class RateLimiter implements StrategyObject {
       // `run` is public, so `next` may be one the chain never normalised. It is called inside this frame's own `try`:
       // a helper that called it would add a frame to every stack trace.
       try {
-        return settled(next(ctx))
+        return settled((next as RawNext<T>)(ctx))
       } catch (error) {
         return Promise.reject(error)
       }

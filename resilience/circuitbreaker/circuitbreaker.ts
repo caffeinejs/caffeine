@@ -2,7 +2,7 @@ import { type Duration, formatDuration, Minute, Second } from '@caffeinejs/std/d
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { Backoff } from '../backoff.js'
-import { settled } from '../compose.js'
+import { settled, type RawNext } from '../compose.js'
 import { Emitter } from '../emitter.js'
 import { ErrCallRefused, ErrInvalidOption, restoreStacks, suppressStacks } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
@@ -365,7 +365,7 @@ export class CircuitBreaker implements StrategyObject {
     const state = this.#state
     if (state === DISABLED) {
       try {
-        return settled(next(ctx))
+        return settled((next as RawNext<T>)(ctx))
       } catch (error) {
         return Promise.reject(error)
       }
@@ -400,7 +400,7 @@ export class CircuitBreaker implements StrategyObject {
     // helper that called it would add a frame to every stack trace.
     let pending: Promise<T>
     try {
-      pending = settled(next(ctx))
+      pending = settled((next as RawNext<T>)(ctx))
     } catch (error) {
       pending = Promise.reject(error)
     }

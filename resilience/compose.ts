@@ -48,6 +48,10 @@ export function settled<T>(result: T | Promise<T>): Promise<T> {
   return result instanceof Promise ? result : Promise.resolve(result)
 }
 
+// The `next` a public `run` receives, typed as what it may do: one the chain never normalised can return a plain value
+// or throw. A built-in strategy calls it as this inside its own `try`.
+export type RawNext<T> = (ctx: ExecutionContext) => T | Promise<T>
+
 // Stands in for the first strategy when there is none, so the entry always calls one.
 const passThrough: StrategyFn = (ctx, next) => next(ctx)
 
