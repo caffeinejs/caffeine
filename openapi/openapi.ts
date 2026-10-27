@@ -127,7 +127,7 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
       const generated =
         options.source === undefined
           ? generateDocument({
-              routeGroups: included(routeGroups() as Array<IRouteGroup<unknown>>, options),
+              routeGroups: routeGroups() as Array<IRouteGroup<unknown>>,
               options: withBasePathServer(options, instance.$basePath),
               schemes: descriptors,
               onWarning: message => warnings.push(message),
@@ -191,17 +191,6 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
 }
 
 /** The route groups narrowed to the routes `include` accepts, dropping a group left with none. */
-function included(groups: Array<IRouteGroup<unknown>>, options: OpenAPIOptions): Array<IRouteGroup<unknown>> {
-  const { include } = options
-  if (include === undefined) {
-    return groups
-  }
-
-  return groups
-    .map(group => ({ ...group, routes: group.routes.filter(r => include(group, r)) }))
-    .filter(group => group.routes.length > 0)
-}
-
 function deepFreeze<T>(value: T): T {
   if (typeof value === 'object' && value !== null) {
     for (const child of Object.values(value)) {
