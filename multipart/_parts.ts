@@ -13,6 +13,10 @@ import type { MultipartField, MultipartFileNode, WebMultipartFile } from './mult
 // handed over cut short.
 export const kThrowFileSizeLimit = Symbol.for('@caffeinejs/multipart:throwFileSizeLimit')
 
+// Decorated onto every request by `multipartPlugin`: the request's `Count`, once a reader on a route with a limit
+// starts one.
+export const kCount = Symbol.for('@caffeinejs/multipart:count')
+
 // The request's parts, held to the `bodyLimit` the route declared, on itself or on its group, as a JSON or a raw body
 // is. Fastify checks a limit only on a body it reads itself, and the plugin's parser reads nothing: busboy reads the
 // request later, from here. A route that declared no limit is held to the plugin's `limits` alone.
@@ -84,8 +88,8 @@ async function* cutFilesFailed(req: FastifyRequest): AsyncGenerator<Multipart> {
   }
 }
 
-// What a request held to its route's limit has sent busboy. One per request, not per reader call: each call goes on
-// from where the last one stopped, and so does the count.
+// What a request held to its route's limit has sent busboy, kept on the request under `kCount`. One per request, not
+// per reader call: each call goes on from where the last one stopped, and so does the count.
 interface Count {
   bytes: number
   // The file busboy is writing: past the limit it fails, which is what stops busboy.
@@ -95,14 +99,13 @@ interface Count {
   passed: Promise<IteratorReturnResult<undefined>>
 }
 
-const counts = new WeakMap<FastifyRequest, Count>()
-
 // The request's count, started by its first reader just after its first `next()`, which pipes the request into busboy
 // before it returns, so the count starts at the first byte. It stays on once that reader is done: `file()` and its
 // stream spellings hand a file over before it has been read.
 function countOf(req: FastifyRequest, limit: number): Count {
-  const started = counts.get(req)
-  if (started !== undefined) {
+  const holder = req as unknown as Record<symbol, Count | null | undefined>
+  const started = holder[kCount]
+  if (started) {
     return started
   }
 
@@ -125,7 +128,7 @@ function countOf(req: FastifyRequest, limit: number): Count {
   }
 
   req.raw.on('data', counter)
-  counts.set(req, count)
+  holder[kCount] = count
 
   return count
 }

@@ -2,7 +2,7 @@ import fastifyMultipart from '@fastify/multipart'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
-import { kThrowFileSizeLimit } from './_parts.js'
+import { kCount, kThrowFileSizeLimit } from './_parts.js'
 
 export type MultipartOptions = NonNullable<Parameters<typeof fastifyMultipart>[1]>
 
@@ -21,6 +21,7 @@ export function multipartPlugin(options: MultipartOptions = {}): FastifyPluginAs
   const plugin: FastifyPluginAsync = async instance => {
     await instance.register(fastifyMultipart, options)
     instance.decorate(kThrowFileSizeLimit, options.throwFileSizeLimit !== false)
+    instance.decorateRequest(kCount, null)
   }
 
   return fp(plugin, { name: '@caffeinejs/multipart' })
