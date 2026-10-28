@@ -91,6 +91,7 @@
     "fastify": "^5.12.5",
     "fastify-plugin": "^6.0.0",
     "jose": "^6.2.10",
+    "negotiator": "^1.1.0",
     "path-to-regexp": "^8.4.2"
   },
   "devDependencies": {
@@ -100,6 +101,7 @@
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",
     "@types/cors": "^2.8.19",
+    "@types/negotiator": "^0.6.5",
     "cors": "^2.8.6",
     "zod": "^4.6.5"
   }

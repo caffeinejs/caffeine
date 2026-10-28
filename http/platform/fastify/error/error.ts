@@ -1,17 +1,53 @@
+import { STATUS_CODES } from 'node:http'
+
+import type { SchemaIssue } from '@caffeinejs/application/schema'
 import { errMessage } from '@caffeinejs/std/err'
-import type { FastifyError, FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
+import type {
+  FastifyError,
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+  FastifySchemaValidationError,
+} from 'fastify'
 import fp from 'fastify-plugin'
 
+import type { IContext } from '../../../context.js'
 import { ErrCaffeineWebApplication } from '../../../core/error/common.js'
-import type { GlobalErrorHandlerOptions } from '../../../core/error/error.js'
+import type { CorrelationIDProvider, GlobalErrorHandlerOptions } from '../../../core/error/error.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from '../../../core/error/handler.js'
-import { ErrHTTP, httpErrorBody, statusErrorBody, type HTTPErrorBody } from '../../../core/error/http.js'
+import { ErrHTTP } from '../../../core/error/http.js'
+import { newProblem, type Problem } from '../../../core/error/problem.js'
+import { negotiateProblemFormat } from '../../../core/error/serializer.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
+import { appendVary } from '../../../vary.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
 import { answer, payloadOf } from '../response.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
+
+/** The context of a request, made when no hook has made it yet: one an earlier `onRequest` hook failed. */
+export type ContextOf = (request: FastifyRequest, reply: FastifyReply) => Context
+
+/** A problem encoded for the request it answers: the media type its client negotiated, and the body. */
+export interface EncodedProblem {
+  contentType: string
+  body: string
+}
+
+// Reads the request's context, which the adapter's `onRequest` hook or the error handler has made by then.
+type ProblemEncoder = (request: FastifyRequest, problem: Problem, err?: Error) => EncodedProblem
+
+const kProblemEncoder = Symbol('caffeine.http.problem-encoder')
+const kContextOf = Symbol('caffeine.http.context-of')
+
+interface ProblemInstance {
+  [kProblemEncoder]: ProblemEncoder
+  [kContextOf]: ContextOf
+}
+
+const JSON_CONTENT_TYPE = 'application/json'
 
 // A cause chain is walked on a request path, and one can be circular as well as long.
 const MAX_CAUSE_DEPTH = 10
@@ -51,13 +87,78 @@ export class GlobalErrorHandlerRef {
  */
 export function globalErrorHandlerPlugin(
   ref: GlobalErrorHandlerRef,
-  options?: GlobalErrorHandlerOptions,
+  options: Required<GlobalErrorHandlerOptions>,
+  contextOf: ContextOf,
 ): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
-    ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider), options)
+    instance.decorate(kProblemEncoder, problemEncoder(options))
+    instance.decorate(kContextOf, contextOf)
+    ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider))
   }
 
   return fp(plugin, { name: 'caffeine-error-handling' })
+}
+
+/**
+ * Encodes `problem` in the format the request's `Accept` asks for, stamped with its `correlation_id` and
+ * `timestamp`, for a helper that answers with one. Every server the adapter builds installs the error handling
+ * plugin first, so the encoder is there before any route can answer.
+ */
+export function encodeProblem(request: FastifyRequest, problem: Problem): EncodedProblem {
+  return (request.server as unknown as ProblemInstance)[kProblemEncoder](request, problem)
+}
+
+// The request's context, made here when an `onRequest` hook ahead of the adapter's failed before it could.
+function contextOf(request: FastifyRequest, reply: FastifyReply): Context {
+  return (request.server as unknown as ProblemInstance)[kContextOf](request, reply)
+}
+
+function problemEncoder({
+  exposeStacktrace,
+  formats,
+  correlationID,
+}: Required<GlobalErrorHandlerOptions>): ProblemEncoder {
+  return (request, problem, err) => {
+    const ctx = request.httpContext
+    const format = negotiateProblemFormat(request.headers.accept, formats)
+    const stamped: Problem = {
+      ...problem,
+      ...correlationOf(request, ctx, correlationID),
+      timestamp: new Date().toISOString(),
+      ...(exposeStacktrace && err !== undefined ? { stacktrace: stacktraceOf(err) } : {}),
+    }
+
+    // An error page that fails must not cost the client the error it describes.
+    try {
+      return { contentType: withCharset(format.mediaType), body: format.serialize(ctx, stamped) }
+    } catch (cause) {
+      request.log.error(
+        { err: cause },
+        `Cannot serialize a problem as "${format.mediaType}": sending it as ${JSON_CONTENT_TYPE} instead`,
+      )
+      return { contentType: JSON_CONTENT_TYPE, body: JSON.stringify(stamped) }
+    }
+  }
+}
+
+// The body is a string, which goes out as UTF-8. Fastify says so only for a JSON type; a Markdown or HTML page needs
+// it too, or a client may decode it as something else.
+function withCharset(mediaType: string): string {
+  return /;\s*charset=/i.test(mediaType) ? mediaType : `${mediaType}; charset=utf-8`
+}
+
+function correlationOf(
+  request: FastifyRequest,
+  ctx: IContext,
+  provider: CorrelationIDProvider,
+): Pick<Problem, 'correlation_id'> {
+  try {
+    const id = provider(ctx)
+    return typeof id === 'string' && id !== '' ? { correlation_id: id } : {}
+  } catch (err) {
+    request.log.error({ err }, 'Cannot read the correlation ID: sending the problem without one')
+    return {}
+  }
 }
 
 /**
@@ -69,68 +170,91 @@ export function globalErrorHandlerPlugin(
 export function installGlobalErrorHandler(
   fastify: FastifyInstance,
   errorManager: ErrorHandlerProvider,
-  options?: GlobalErrorHandlerOptions,
 ): GlobalErrorHandler {
-  const defaultErrorHandler = fastify.errorHandler
-  const exposeStacktrace = options?.exposeStacktrace ?? false
+  // In the format the request asks for, so the response varies on Accept. Encoded here, so a route's error
+  // response schema, written for the bodies the application sends, neither refuses a problem nor strips its members.
+  const sendProblem = (request: FastifyRequest, reply: FastifyReply, problem: Problem, err: Error): FastifyReply => {
+    const { contentType, body } = (request.server as unknown as ProblemInstance)[kProblemEncoder](request, problem, err)
+    appendVary(reply, ['Accept'])
 
-  const withStacktrace = (body: HTTPErrorBody, err: Error): HTTPErrorBody =>
-    exposeStacktrace ? { ...body, stacktrace: stacktraceOf(err) } : body
+    return reply.status(problem.status).type(contentType).send(body)
+  }
 
   // The application-wide error handler. Also the fallback for per-controller (encapsulated) handlers
   // when they do not handle a given error type.
   const globalErrorHandler: GlobalErrorHandler = async (error, request, reply) => {
     const err = error instanceof Error ? error : new Error(String(error))
+    const ctx = contextOf(request, reply)
     const handler = errorManager.provide(err)
 
     if (handler) {
       // The handler may respond via ctx or return a value (JSON payload or a View to render).
-      return respond(request.httpContext, await handler.get().handle(request.httpContext, err))
+      return respond(ctx, await handler.get().handle(ctx, err))
     }
 
     if (err instanceof ErrHTTP) {
-      reply.status(err.statusCode)
-
       if (err.headers) {
         reply.headers(err.headers)
       }
 
-      // A body the error carried is the author's own and is sent as it stands — it need not be an object,
-      // so there is nothing to add a stack trace to.
-      const body = err.body !== undefined ? err.body : withStacktrace(httpErrorBody(err), err)
+      if (err.body === undefined) {
+        return sendProblem(request, reply, err.toProblem(), err)
+      }
 
+      // A body the error carried is the author's own and is sent as it stands, under the media type the reply
+      // already has — it need not be an object, so there is nothing to add a stack trace to.
       // The error's status stands over a Response given as its body.
-      return reply.send(payloadOf(reply, body, true))
+      return reply.status(err.statusCode).send(payloadOf(reply, err.body, true))
     }
 
     // Its message is detail for the log: an issuer, the address a provider could not be reached at.
     if (hasPublicMessage(err)) {
       request.log[err.statusCode >= 500 ? 'error' : 'info']({ err }, err.message)
 
-      return reply
-        .status(err.statusCode)
-        .send(withStacktrace(statusErrorBody(err.statusCode, err.code, err.publicMessage), err))
+      return sendProblem(
+        request,
+        reply,
+        newProblem({ status: err.statusCode, code: err.code, detail: err.publicMessage }),
+        err,
+      )
     }
 
     const status = errorStatus(err)
 
-    // A 4xx describes what the caller got wrong, so its message is written for them and Fastify's own
-    // rendering — the field-level detail of a failed validation — is what answers.
+    // A 4xx describes what the caller got wrong — a failed validation, a body over the limit, JSON that does not
+    // parse — so its message is written for them and answers as the detail, Fastify's own code kept.
     if (status < 500) {
       request.log.info({ err }, err.message)
 
-      // The default handler sends the reply itself. Handed back as the result, the reply tells the runner so;
-      // `undefined` would have it send again while an asynchronous `onSend` hook still holds the first response.
-      defaultErrorHandler(error, request, reply)
+      // Fastify writes the headers its own errors carry, a 405's `Allow` among them.
+      const headers = (err as { headers?: Record<string, string> }).headers
+      if (headers !== undefined) {
+        reply.headers(headers)
+      }
 
-      return reply
+      const code = (err as { code?: unknown }).code
+      const validation = (err as Partial<FastifyError>).validation
+
+      return sendProblem(
+        request,
+        reply,
+        newProblem({
+          status,
+          code: typeof code === 'string' ? code : codeForStatus(status),
+          detail: err.message,
+          ...(validation === undefined
+            ? {}
+            : { errors: problemErrors(validation, (err as Partial<FastifyError>).validationContext) }),
+        }),
+        err,
+      )
     }
 
     // Nothing here was written for a client: a table name, a driver code, the address of a service that did
     // not answer. It stays in the log, and the response names the status and nothing else.
     request.log.error({ err }, err.message)
 
-    return reply.status(status).send(withStacktrace(statusErrorBody(status, 'ERR_INTERNAL'), err))
+    return sendProblem(request, reply, newProblem({ status, code: 'ERR_INTERNAL' }), err)
   }
 
   fastify.setErrorHandler(globalErrorHandler)
@@ -166,6 +290,7 @@ export function installRouteGroupErrorHandler(
 
   server.setErrorHandler(async (error: FastifyError, req: FastifyRequest, reply: FastifyReply) => {
     const err = error instanceof Error ? error : new Error(String(error))
+    const ctx = contextOf(req, reply)
 
     // routeOptions is populated before validation, so route-level handlers also see schema errors.
     const routeCatchBy = req.routeOptions.config?.$caffeine?.compiled?.catchBy
@@ -174,14 +299,14 @@ export function installRouteGroupErrorHandler(
       (routerCatchBy ? resolveByErrorChain(routerCatchBy, err) : undefined)
 
     if (handler) {
-      return respond(req.httpContext, await handler.get().handle(req.httpContext, err))
+      return respond(ctx, await handler.get().handle(ctx, err))
     }
 
     if (groupHandler !== undefined) {
-      const result = await groupHandler(req, req.httpContext, err)
+      const result = await groupHandler(req, ctx, err)
 
       if (result !== kErrorUnhandled) {
-        return respond(req.httpContext, result)
+        return respond(ctx, result)
       }
     }
 
@@ -213,6 +338,39 @@ function errorStatus(err: Error): number {
   const status = candidate.statusCode ?? candidate.status
 
   return typeof status === 'number' && status >= 400 ? status : 500
+}
+
+// The code an `ErrHTTP*` of that status carries, for a 4xx error that names none: `ERR_HTTP_IM_A_TEAPOT` for 418.
+function codeForStatus(status: number): string {
+  const phrase = STATUS_CODES[status]
+
+  return phrase === undefined
+    ? 'ERR_HTTP'
+    : `ERR_HTTP_${phrase
+        .replaceAll("'", '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')}`
+}
+
+// Ajv reports where a value failed as a JSON pointer inside the slot, and a missing property at the object that
+// lacks it. Both become one dotted path from the slot, as a configuration issue is written.
+function problemErrors(validation: FastifySchemaValidationError[], slot: string | undefined): SchemaIssue[] {
+  return validation.map(issue => {
+    const segments = issue.instancePath
+      .split('/')
+      .slice(1)
+      .map(segment => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
+    const missing = (issue.params as { missingProperty?: unknown } | undefined)?.missingProperty
+    if (typeof missing === 'string') {
+      segments.push(missing)
+    }
+
+    return {
+      path: [...(slot === undefined ? [] : [slot]), ...segments].join('.'),
+      message: issue.message ?? 'is invalid',
+      code: issue.keyword,
+    }
+  })
 }
 
 // Node prints a cause as a "Caused by" section of its own, and that section is usually where the detail is —

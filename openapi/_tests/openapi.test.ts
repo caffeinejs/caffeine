@@ -134,6 +134,23 @@ describe('openapi endpoints', () => {
     expect(document.tags).toContainEqual({ name: 'Pets', description: 'Browse and manage pets' })
   })
 
+  // The document describes what the server sends, so a format error handling added reaches it too.
+  it('lists errors under every format error handling negotiates', async () => {
+    app = newBuilder(o => o.docs(false).public()).errorHandling(e =>
+      e.serializer('text/html', (_ctx, problem) => `<h1>${problem.title}</h1>`),
+    ) as WebApplication
+    await app.bootstrap()
+
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
+
+    expect(Object.keys(operationAt(document, '/pets', 'post')?.responses?.['400'].content ?? {})).toEqual([
+      'application/json',
+      'application/problem+json',
+      'text/markdown',
+      'text/html',
+    ])
+  })
+
   it('hoists $id schemas into components', async () => {
     app = buildApp(o => o.docs(false).public())
     await app.bootstrap()

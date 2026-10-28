@@ -112,7 +112,7 @@ describe('a handler that answered the request itself', () => {
     const res = await app.request('/gone')
 
     expect(res.status).toBe(404)
-    expect(await res.json()).toMatchObject({ statusCode: 404, code: 'ERR_HTTP_NOT_FOUND' })
+    expect(await res.json()).toMatchObject({ status: 404, code: 'ERR_HTTP_NOT_FOUND' })
     expect(alreadySent(logged)).toEqual([])
 
     await app.close()

@@ -1,4 +1,4 @@
-import type { AuthSchemeDescriptor, IRoute, IRouteGroup } from '@caffeinejs/http'
+import { defaultProblemFormats, type AuthSchemeDescriptor, type IRoute, type IRouteGroup } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
@@ -24,6 +24,8 @@ import { deriveRequestBody } from './request_body.js'
 import { deriveResponses } from './responses.js'
 import { authorizationNote, buildSecuritySchemes, deriveSecurity } from './security.js'
 
+const DEFAULT_PROBLEM_MEDIA_TYPES = [...defaultProblemFormats().values()].map(format => format.mediaType)
+
 /** The eight methods a 3.1 PathItem can hold. Anything else needs 3.2's `additionalOperations`. */
 const FIXED_METHODS = new Set<string>(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'])
 
@@ -32,6 +34,11 @@ export interface GenerateInput {
   options: OpenAPIOptions
   /** How each registered authentication scheme expects credentials, when the application configured any. */
   schemes?: Map<string, AuthSchemeDescriptor>
+  /**
+   * The media types the server negotiates an error it renders among, as error handling registered them. The
+   * built-in formats when absent.
+   */
+  problemMediaTypes?: readonly string[]
   /** Collects non-fatal problems — a route the target version cannot represent, for instance. */
   onWarning?: (message: string) => void
 }
@@ -147,7 +154,15 @@ function addRoute(ctx: AddRouteInput): void {
     ...(derivedParameters.length > 0 || detail?.parameters !== undefined
       ? { parameters: mergeParameters(derivedParameters, detail?.parameters) }
       : {}),
-    responses: deriveResponses(route, options, ctx.registry, context, group?.responses, detail?.responses),
+    responses: deriveResponses(
+      route,
+      options,
+      ctx.registry,
+      context,
+      input.problemMediaTypes ?? DEFAULT_PROBLEM_MEDIA_TYPES,
+      group?.responses,
+      detail?.responses,
+    ),
     ...extensionsOf(detail),
   }
 

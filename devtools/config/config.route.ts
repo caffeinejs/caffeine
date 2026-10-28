@@ -1,7 +1,7 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Router } from '@caffeinejs/http'
+import { ProblemSchema, Router } from '@caffeinejs/http'
 
-import { ErrorSchema, toolRoutes, type ToolRouter } from '../tool.js'
+import { toolRoutes, type ToolRouter } from '../tool.js'
 import { PropertyDetailSchema, PropertySchema, SourceSchema } from './config.schema.js'
 import type { ConfigTool } from './config.tool.js'
 
@@ -14,7 +14,7 @@ const properties = config
 
 const property = config
   .get('/properties/:path')
-  .schema({ response: { 200: PropertyDetailSchema, 404: ErrorSchema } })
+  .schema({ response: { 200: PropertyDetailSchema, 404: ProblemSchema } })
   .handler((ctx, { tool }) => tool.property(ctx.req.param().path))
 
 const sources = config

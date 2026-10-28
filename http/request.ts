@@ -15,6 +15,12 @@ export interface IRequest<
 > {
   get raw(): RAW
 
+  /**
+   * The ID the server gave this request, the one its log lines carry. Fastify's `genReqId` and `requestIdHeader`
+   * server options decide where it comes from.
+   */
+  get id(): string
+
   /** The request's path and query as the application sees it: without the {@link basePath} the server took off. */
   get url(): string
 

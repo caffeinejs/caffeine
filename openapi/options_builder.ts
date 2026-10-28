@@ -207,7 +207,7 @@ export class OpenAPIOptionsBuilder {
     return this
   }
 
-  /** The body schema of an inferred error response. */
+  /** The body schema of an inferred error response, in place of the RFC 9457 problem the server renders. */
   errorSchema(schema: AnySchema): this {
     this.#options.errorSchema = schema
     return this

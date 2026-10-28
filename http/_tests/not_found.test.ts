@@ -19,7 +19,7 @@ class PetsController {
 void [PetsController]
 
 describe('unmatched routes', () => {
-  it('renders the same envelope as a 404 a handler threw', async () => {
+  it('renders the same problem as a 404 a handler threw', async () => {
     const app = createWebApplication()
     await app.bootstrap()
 
@@ -28,10 +28,10 @@ describe('unmatched routes', () => {
 
     // Same keys, same values — only the detail differs.
     expect(Object.keys(unmatched).sort()).toEqual(Object.keys(thrown).sort())
-    expect(unmatched.statusCode).toBe(404)
-    expect(unmatched.error).toBe('Not Found')
+    expect(unmatched.status).toBe(404)
+    expect(unmatched.title).toBe('Not Found')
     expect(unmatched.code).toBe('ERR_HTTP_NOT_FOUND')
-    expect(unmatched.message).toContain('/no-such-route')
+    expect(unmatched.detail).toBe('Route GET:/no-such-route not found')
 
     await app.close()
   })
@@ -73,8 +73,8 @@ describe('unmatched routes', () => {
     const res = await app.request('/nope')
 
     expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toMatch(/^application\/json/)
-    expect(await res.json()).toMatchObject({ statusCode: 404, code: 'ERR_HTTP_NOT_FOUND' })
+    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    expect(await res.json()).toMatchObject({ status: 404, code: 'ERR_HTTP_NOT_FOUND' })
 
     await app.close()
   })

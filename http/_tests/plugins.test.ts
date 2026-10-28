@@ -294,7 +294,7 @@ describe('plugin registration', () => {
 
     expect(res.status).toBe(400)
     expect(res.headers.get('x-stamp')).toBe('yes')
-    expect(await res.json()).toMatchObject({ message: 'nope' })
+    expect(await res.json()).toMatchObject({ detail: 'nope' })
   })
 
   // The tail slot: the not-found handler is contributed last, so it sees whatever the plugins decorated the
