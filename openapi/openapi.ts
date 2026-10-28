@@ -191,9 +191,9 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
 }
 
 // The formats error handling negotiates among, so the document lists what the server can send.
-function problemMediaTypes(instance: FastifyInstance): string[] | undefined {
-  const formats = instance.$container.getOptional(kErrorHandlingOptions)?.formats
-  return formats === undefined ? undefined : [...formats.values()].map(format => format.mediaType)
+// Error handling is registered in every application, so its options are always bound.
+function problemMediaTypes(instance: FastifyInstance): string[] {
+  return [...instance.$container.get(kErrorHandlingOptions).formats.values()].map(format => format.mediaType)
 }
 
 /**

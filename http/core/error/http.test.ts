@@ -840,6 +840,40 @@ describe('failures from the real world', () => {
 
   // An error rebuilt from a worker or an RPC reply often has no stack of its own; its name and message still say
   // what failed.
+  // A sign-in callback whose state does not match: the caller's mistake, said in words written for them, while the
+  // detail that names the provider stays in the log, recorded as information rather than as a fault.
+  it('answers a 4xx naming a public message with that message, and logs it as information', async () => {
+    const logged: LogEntry[] = []
+    const app = loggingTo(logged).mount(
+      newRouter('/auth').get('/callback', () => {
+        throw Object.assign(new Error('state abc did not match the one sent to https://idp.internal'), {
+          statusCode: 400,
+          code: 'ERR_OIDC_STATE',
+          publicMessage: 'The sign-in link is no longer valid',
+        })
+      }),
+    )
+    await app.bootstrap()
+
+    const res = await app.request('/auth/callback')
+    const text = await res.text()
+
+    expect(res.status).toBe(400)
+    expect(JSON.parse(text)).toEqual({
+      type: 'about:blank',
+      title: 'Bad Request',
+      status: 400,
+      detail: 'The sign-in link is no longer valid',
+      code: 'ERR_OIDC_STATE',
+      ...STAMPED,
+    })
+    expect(text).not.toContain('idp.internal')
+    const entries = logged.filter(entry => entry.msg?.includes('did not match'))
+    expect(entries.map(entry => entry.level)).toEqual([30])
+
+    await app.close()
+  })
+
   it('names a cause that has no stack in the stack trace it exposes', async () => {
     const remote = Object.assign(Object.create(Error.prototype) as Error, {
       name: 'ErrLedger',

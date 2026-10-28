@@ -650,6 +650,21 @@ describe('serializer', () => {
     await app.close()
   })
 
+  // A page written in another encoding says so, and the server does not claim UTF-8 over it.
+  it('keeps the charset a serializer was registered with', async () => {
+    const app = createWebApplication()
+      .errorHandling(e => e.serializer('text/plain; charset=us-ascii', (_ctx, problem) => problem.code))
+      .mount(orders())
+    await app.bootstrap()
+
+    const res = await app.request('/orders/42', { headers: { accept: 'text/plain' } })
+
+    expect(res.headers.get('content-type')).toBe('text/plain; charset=us-ascii')
+    expect(await res.text()).toBe('ERR_HTTP_CONFLICT')
+
+    await app.close()
+  })
+
   // The built-ins are defaults, not a contract: a house Markdown layout replaces Caffeine's under the same type.
   it('replaces a built-in serializer registered under the same media type', async () => {
     const app = createWebApplication()
