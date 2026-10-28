@@ -17,9 +17,7 @@ describe('API versioning', () => {
     v1.get('/').handler(() => ({ v: 1 }))
     const v2 = new Router('/pets').name('PetsV2').extend(version('2.0.0'))
     v2.get('/').handler(() => ({ v: 2 }))
-    return createWebApplication({ container: new CaffeineIoC() })
-      .with(() => constraints())
-      .mount(v1, v2)
+    return createWebApplication({ container: new CaffeineIoC() }).with(constraints()).mount(v1, v2)
   }
 
   it('routes Accept-Version 1.x to v1 and 2.x to v2, not by registration order', async () => {
@@ -63,9 +61,7 @@ describe('API versioning', () => {
     const versioned = new Router('/shop').name('ShopVersioned').extend(version('1.0.0'))
     versioned.get('/').handler(() => ({ kind: 'versioned' }))
 
-    const app = createWebApplication({ container: new CaffeineIoC() })
-      .with(() => constraints())
-      .mount(plain, versioned)
+    const app = createWebApplication({ container: new CaffeineIoC() }).with(constraints()).mount(plain, versioned)
     await app.bootstrap()
 
     expect(await (await app.request('/shop', { headers: { 'accept-version': '1.x' } })).json()).toEqual({
@@ -82,9 +78,7 @@ describe('API versioning', () => {
     const b = new Router('/dup').name('DupB').extend(version('1.0.0'))
     b.get('/').handler(() => ({}))
 
-    const app = createWebApplication({ container: new CaffeineIoC() })
-      .with(() => constraints())
-      .mount(a, b)
+    const app = createWebApplication({ container: new CaffeineIoC() }).with(constraints()).mount(a, b)
     await expect(app.bootstrap()).rejects.toThrow()
 
     await app.close()
@@ -95,7 +89,7 @@ describe('API versioning', () => {
     v1.get('/').handler(() => ({ v: 1 }))
 
     const app = createWebApplication({ container: new CaffeineIoC() })
-      .with(() => constraints())
+      .with(constraints())
       .with(healthProbes())
       .mount(v1)
     await app.bootstrap()

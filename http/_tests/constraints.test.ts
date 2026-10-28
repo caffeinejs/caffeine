@@ -38,7 +38,7 @@ describe('route constraints', () => {
       .handler(() => ({ flavor: 'mild' }))
 
     const app = createWebApplication()
-      .with(() => constraints([flavorStrategy()]))
+      .with(constraints(() => [flavorStrategy()]))
       .mount(dish)
     await app.bootstrap()
 
@@ -68,9 +68,7 @@ describe('route constraints', () => {
     r.get('/')
       .extend(constraint('nope', 1))
       .handler(() => ({}))
-    const app = createWebApplication({ container: new CaffeineIoC() })
-      .with(() => constraints())
-      .mount(r)
+    const app = createWebApplication({ container: new CaffeineIoC() }).with(constraints()).mount(r)
 
     // find-my-way's own error, surfaced when the route registers — there is no more central registry to
     // check the name against ahead of time.
@@ -82,9 +80,7 @@ describe('route constraints', () => {
     r.get('/')
       .extend(version('2.0.0'), fst({ constraints: { version: '1.0.0' } }))
       .handler(() => ({}))
-    const app = createWebApplication({ container: new CaffeineIoC() })
-      .with(() => constraints())
-      .mount(r)
+    const app = createWebApplication({ container: new CaffeineIoC() }).with(constraints()).mount(r)
 
     await expect(app.bootstrap()).rejects.toThrow(/constraint "version" is set by both/)
   })
@@ -95,9 +91,7 @@ describe('route constraints', () => {
       .name('coexist')
       .extend(version('1.0.0'), fst({ constraints: { host: 'api.example' } }))
       .handler(() => ({ ok: true }))
-    const app = createWebApplication({ container: new CaffeineIoC() })
-      .with(() => constraints())
-      .mount(r)
+    const app = createWebApplication({ container: new CaffeineIoC() }).with(constraints()).mount(r)
     await app.bootstrap()
 
     const res = await app.request('/c', { headers: { 'accept-version': '1.x', host: 'api.example' } })
@@ -121,7 +115,7 @@ describe('constraint Vary header', () => {
   // mounted one — a shared cache would otherwise mix the representations.
   it('covers a constrained route a plugin added with $route', async () => {
     const app = createWebApplication()
-      .with(() => constraints([flavorStrategy()]))
+      .with(constraints(() => [flavorStrategy()]))
       .with(() => async (instance: FastifyInstance) => {
         instance.$route('late', router => {
           router.path('/late')
@@ -149,9 +143,7 @@ describe('constraint Vary header', () => {
     const plain = new Router('/plain')
     plain.get('/').handler(() => ({ ok: true }))
 
-    const app = createWebApplication()
-      .with(() => constraints())
-      .mount(plain)
+    const app = createWebApplication().with(constraints()).mount(plain)
     await app.bootstrap()
 
     const res = await app.request('/plain')

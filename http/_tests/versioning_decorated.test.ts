@@ -31,7 +31,7 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container }).with(() => constraints())
+    const app = createWebApplication({ container }).with(constraints())
     await app.bootstrap()
 
     expect(await (await app.request('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
@@ -58,7 +58,7 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container }).with(() => constraints())
+    const app = createWebApplication({ container }).with(constraints())
     await app.bootstrap()
 
     expect(await (await app.request('/catalog/item', { headers: { 'accept-version': '1.x' } })).json()).toEqual({
