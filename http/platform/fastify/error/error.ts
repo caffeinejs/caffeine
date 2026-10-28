@@ -100,12 +100,13 @@ export function installGlobalErrorHandler(
   const { exposeStacktrace, problemContentType: contentType } = options
 
   // Under the problem media type whatever the request accepts: the body is a problem either way, and a client
-  // reading `application/json` reads it as well.
+  // reading `application/json` reads it as well. Encoded here, so a route's error response schema, written for
+  // the bodies the application sends, neither refuses a problem nor strips its members.
   const sendProblem = (reply: FastifyReply, problem: Problem, err: Error): FastifyReply =>
     reply
       .status(problem.status)
       .type(contentType)
-      .send(exposeStacktrace ? { ...problem, stacktrace: stacktraceOf(err) } : problem)
+      .send(JSON.stringify(exposeStacktrace ? { ...problem, stacktrace: stacktraceOf(err) } : problem))
 
   // The application-wide error handler. Also the fallback for per-controller (encapsulated) handlers
   // when they do not handle a given error type.

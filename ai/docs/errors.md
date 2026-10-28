@@ -59,8 +59,10 @@ What stays off the problem:
 - A `@Catch` handler's return value goes out as it stands; the framework never relabels it. A handler that keeps the contract returns `err.toProblem()` (or `newProblem({ status, code, detail })`) and sets the media type itself with `ctx.header('content-type', 'application/problem+json')`. That is how an HTML error page stays possible.
 - Headers on the error, such as `WWW-Authenticate`, are written as before.
 
+A problem the framework renders skips the route's `response` schema, so a schema written for the bodies a route sends itself, such as `404: $t.Object({ message: $t.String() })`, neither fails a thrown `ErrHTTPNotFound` nor strips its members. A body the application sends, a `ctx` helper's body or a `@Catch` return, still goes through it.
+
 An error the application did not anticipate — a plain `Error`, a driver error, a rejected `fetch` — answers a problem with `code: 'ERR_INTERNAL'` and the status phrase as `detail`, and nothing of its own. The status it asked for is kept (a timed-out handler stays 503); its message, and the causes behind it, go to the log only. A 4xx keeps its message as `detail`, since it describes what the caller got wrong, and is logged as information.
 
 `.errorHandling(e => e.exposeStacktrace(config.app.debug))` adds `stacktrace` — the stack plus its chain of causes — to every problem the error handler renders. Off by default, for a development deployment; it is logged as a warning at start-up. A body an `ErrHTTP` carried and anything a `@Catch` handler returned are left alone.
 
-`.errorHandling(e => e.problemContentType('application/json'))` sends every problem under another media type, for a client that accepts nothing else. It must be a JSON media type, or start-up fails. `@caffeinejs/openapi` lists error responses under the same type, with a `Problem` schema an application `errorSchema` replaces.
+`.errorHandling(e => e.problemContentType('application/json'))` sends every problem under another media type, for a client that accepts nothing else. It must be a JSON media type, or start-up fails. `@caffeinejs/openapi` lists the error responses it infers (validation, 401, 403) under the same type, with a `Problem` schema an application `errorSchema` replaces. A status the route declares stays under `application/json`, the type its own body is sent as.

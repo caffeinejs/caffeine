@@ -843,3 +843,82 @@ describe('failures from the real world', () => {
     await app.close()
   })
 })
+
+// A route that declares its error statuses in its schema, with the shape it answered with before problems, or
+// with a narrower one. The schema describes what a handler returns; the problem the framework renders is its own.
+describe('a route that declares an error response schema', () => {
+  const legacy = $t.Object({ code: $t.String(), message: $t.String() })
+
+  function orders() {
+    return newRouter('/orders')
+      .get('/:id', { response: { 200: $t.Object({ id: $t.String() }), 404: legacy } }, () => {
+        throw new ErrHTTPNotFound('Order 42 not found')
+      })
+      .get('/', { querystring: $t.Object({ limit: $t.Integer() }), response: { 400: legacy } }, () => [])
+      .get('/narrow/:id', { response: { 404: $t.Object({ detail: $t.String() }) } }, () => {
+        throw new ErrHTTPNotFound('Order 42 not found')
+      })
+      .get('/helper/:id', { response: { 404: legacy } }, ctx => {
+        ctx.notFound()
+      })
+  }
+
+  it('still answers a thrown error with its status and the whole problem', async () => {
+    const app = createWebApplication().mount(orders())
+    await app.bootstrap()
+
+    const res = await app.request('/orders/42')
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: 'Not Found',
+      status: 404,
+      detail: 'Order 42 not found',
+      code: 'ERR_HTTP_NOT_FOUND',
+    })
+
+    await app.close()
+  })
+
+  it('still answers a failed validation with 400 and the issues', async () => {
+    const app = createWebApplication().mount(orders())
+    await app.bootstrap()
+
+    const res = await app.request('/orders?limit=many')
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({
+      status: 400,
+      code: 'FST_ERR_VALIDATION',
+      errors: [{ path: 'querystring.limit', message: 'must be integer', code: 'type' }],
+    })
+
+    await app.close()
+  })
+
+  // A schema the problem happens to satisfy would otherwise keep only what it declares.
+  it('keeps every member a narrower schema leaves out', async () => {
+    const app = createWebApplication().mount(orders())
+    await app.bootstrap()
+
+    const problem = (await (await app.request('/orders/narrow/42')).json()) as Record<string, unknown>
+
+    expect(Object.keys(problem).sort()).toEqual(['code', 'detail', 'status', 'title', 'type'])
+
+    await app.close()
+  })
+
+  it('answers a ctx helper without a body with the problem', async () => {
+    const app = createWebApplication().mount(orders())
+    await app.bootstrap()
+
+    const res = await app.request('/orders/helper/42')
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ status: 404, code: 'ERR_HTTP_NOT_FOUND' })
+
+    await app.close()
+  })
+})

@@ -82,7 +82,7 @@ export function deriveResponses(
         ? {}
         : {
             content: Object.fromEntries(
-              contentTypesFor(key, successStatus, successTypes, problemContentType).map(type => [type, { schema }]),
+              contentTypesFor(key, successStatus, successTypes).map(type => [type, { schema }]),
             ),
           }),
     })
@@ -150,20 +150,15 @@ function applyDetail(
  * The media types a response body is served as.
  *
  * An error response does not inherit the success types: a route producing `text/csv` still reports failures
- * as problems — the error handler renders a body, not the resource — so carrying the success type onto a 4xx
+ * as JSON — the error handler renders a body, not the resource — so carrying the success type onto a 4xx
  * would describe a CSV error document that never exists.
  */
-function contentTypesFor(
-  status: string,
-  successStatus: string,
-  successTypes: string[],
-  problemContentType: string,
-): string[] {
+function contentTypesFor(status: string, successStatus: string, successTypes: string[]): string[] {
   if (status === successStatus || status.startsWith('2')) {
     return successTypes
   }
 
-  return [problemContentType]
+  return ['application/json']
 }
 
 /**

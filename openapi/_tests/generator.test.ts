@@ -277,7 +277,7 @@ describe('response inference', () => {
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const declared = operationAt(document, '/pets', 'post')?.responses?.['400']
 
-    expect(declared?.content?.['application/problem+json'].schema).toMatchObject({
+    expect(declared?.content?.['application/json'].schema).toMatchObject({
       properties: { detail: { type: 'string' } },
     })
   })
@@ -325,20 +325,33 @@ describe('response inference', () => {
     expect(document.components?.schemas?.Problem).toBeUndefined()
   })
 
-  // The server sends every error under the media type error handling chose, declared statuses included.
-  it('lists every error under the media type the server sends problems as', () => {
+  // An inferred error is the problem the error handler renders, under the type error handling chose.
+  it('lists an inferred error under the media type the server sends problems as', () => {
     const router = fixtureRouter('/pets', r =>
-      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema, response: { 404: errorSchema } })]),
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
     )
 
     const document = generateDocument({
       routeGroups: [router],
       options: fixtureOptions(),
-      problemContentType: 'application/json',
+      problemContentType: 'application/vnd.acme.error+json',
     })
     const responses = operationAt(document, '/pets', 'post')?.responses ?? {}
 
-    expect(Object.keys(responses['400']?.content ?? {})).toEqual(['application/json'])
+    expect(Object.keys(responses['400']?.content ?? {})).toEqual(['application/vnd.acme.error+json'])
+  })
+
+  // A declared status is a body the handler sends itself, through the serializer, as `application/json`:
+  // labelling it a problem would tell a client to parse a shape the route never promised.
+  it('keeps a declared error under the media type the handler sends it as', () => {
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema, response: { 404: errorSchema } })]),
+    )
+
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
+    const responses = operationAt(document, '/pets', 'post')?.responses ?? {}
+
+    expect(Object.keys(responses['400']?.content ?? {})).toEqual(['application/problem+json'])
     expect(Object.keys(responses['404']?.content ?? {})).toEqual(['application/json'])
   })
 

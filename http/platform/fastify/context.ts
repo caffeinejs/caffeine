@@ -206,9 +206,10 @@ export class Context<
       return this.#send(method, body, statusCode)
     }
 
+    // Encoded here, as the error handler does, so the route's response schema does not run on it.
     this.#reply.type(problemContentType(this.#fastifyRequest))
 
-    return this.#send(method, newProblem({ status: statusCode, code }), statusCode)
+    return this.#send(method, JSON.stringify(newProblem({ status: statusCode, code })), statusCode)
   }
 
   /** Sends `body`, under `statusCode` when given, which stands over a Response's own. */
