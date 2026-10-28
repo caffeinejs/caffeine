@@ -2,10 +2,19 @@ import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureK
 import { Scopes } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
+import type { IContext } from '../../context.js'
 import { ErrConfiguration } from './common.js'
 import { buildCatchByMap, ErrorHandlerProvider, type ErrorHandlerRef } from './handler.js'
 import { kErrorHandlingOptions } from './keys.js'
-import { PROBLEM_CONTENT_TYPE } from './problem.js'
+import { defaultProblemFormats, mediaTypeEssence, type ProblemFormat, type ProblemSerializer } from './serializer.js'
+
+/**
+ * Where a problem's `correlation_id` comes from, such as the active trace. `undefined` or `''` leaves the member
+ * out. Called on the error path, so it is synchronous.
+ */
+export type CorrelationIDProvider = (ctx: IContext) => string | undefined
+
+const requestID: CorrelationIDProvider = ctx => ctx.req.id
 
 /** What the error-handling feature settled on, for the server's error handler. */
 export interface GlobalErrorHandlerOptions {
@@ -16,8 +25,13 @@ export interface GlobalErrorHandlerOptions {
    * returned — is left alone either way.
    */
   exposeStacktrace?: boolean
-  /** The media type every problem this package renders is sent as. `application/problem+json` by default. */
-  problemContentType?: string
+  /**
+   * The formats a problem is negotiated among, keyed by their media type's essence. The first is the one a
+   * request that names none gets.
+   */
+  formats?: ReadonlyMap<string, ProblemFormat>
+  /** Where `correlation_id` comes from. The request ID by default. */
+  correlationID?: CorrelationIDProvider
 }
 
 /**
@@ -25,7 +39,8 @@ export interface GlobalErrorHandlerOptions {
  *
  * The feature is registered unconditionally and installs ahead of everything `.with(...)` installs, so every
  * route and hook registered afterwards is covered by it whether or not this is ever called. An application that
- * never calls it renders every error as an RFC 9457 problem, sent as `application/problem+json`.
+ * never calls it renders every error as an RFC 9457 problem, in the format the request's `Accept` asks for:
+ * `application/problem+json`, `text/markdown`, or `application/json` when it names neither.
  *
  * What a call adds is enrolment: which `@Catch` handler classes render errors for the whole application.
  * Declaring a class is no longer enough — a handler nobody named here is still reachable through `@CatchWith`
@@ -48,7 +63,8 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
 
   readonly #handlers: ErrorHandlerRef[] = []
   #exposeStacktrace = false
-  #problemContentType = PROBLEM_CONTENT_TYPE
+  readonly #formats = defaultProblemFormats()
+  #correlationID = requestID
 
   /**
    * Enrols handler classes as the application's global error handlers, each rendering the error types its own
@@ -82,27 +98,47 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   /**
-   * Sends every problem this package renders under `contentType` instead of `application/problem+json`, for a
-   * client that only accepts `application/json`.
+   * Renders problems as `mediaType` for a client whose `Accept` asks for it, such as an HTML page for a browser.
    *
-   * The body stays the same problem. A body an `ErrHTTP` carried, anything a `@Catch` handler returned,
-   * and a body handed to a `ctx` helper keep their own media type.
+   * ```ts
+   * .errorHandling(e => e.serializer('text/html', (ctx, problem) => errorPage(problem)))
+   * ```
    *
-   * @throws ErrConfiguration when `contentType` is not a JSON media type: the server serializes a problem only
-   * for one.
+   * Negotiation compares the media type without its parameters, and in any case; the response is sent under
+   * `mediaType` as written. A media type already offered, such as `text/markdown`, is replaced. A request whose
+   * `Accept` names no format offered still gets `application/json`, so a client never goes without the error.
+   *
+   * A serializer that throws is logged, and that problem is sent as `application/json` instead.
+   *
+   * @throws ErrConfiguration when `mediaType` is not a `type/subtype` pair, or holds a wildcard.
    */
-  problemContentType(contentType: string): this {
-    // The media type alone: a parameter such as `profile=json` does not make a body JSON.
-    if (!/json/i.test(contentType.replace(/;.*$/s, ''))) {
+  serializer(mediaType: string, serialize: ProblemSerializer): this {
+    const essence = mediaTypeEssence(mediaType)
+
+    if (!/^[\w!#$&^.+-]+\/[\w!#$&^.+-]+$/.test(essence)) {
       throw new ErrConfiguration(
-        errMessage(`Cannot send problems as "${contentType}": it is not a JSON media type`)
-          .solutions('Pass a JSON media type, such as "application/problem+json" or "application/json"')
+        errMessage(`Cannot serialize problems as "${mediaType}": it is not a media type`)
+          .solutions('Pass a type and a subtype without a wildcard, such as "text/html"')
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
       )
     }
 
-    this.#problemContentType = contentType
+    this.#formats.set(essence, { mediaType, serialize })
+    return this
+  }
+
+  /**
+   * Takes each problem's `correlation_id` from `provider` instead of the request ID, such as the active trace:
+   *
+   * ```ts
+   * .errorHandling(e => e.correlationID(() => trace.getActiveSpan()?.spanContext().traceId))
+   * ```
+   *
+   * `undefined` or `''` leaves the member out. A provider that throws is logged, and the problem is sent without one.
+   */
+  correlationID(provider: CorrelationIDProvider): this {
+    this.#correlationID = provider
     return this
   }
 
@@ -126,7 +162,11 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
     // What the adapter installs the server's error handler with, ahead of everything `.with(...)` registers.
     kit.container.bind(kErrorHandlingOptions, t =>
       t
-        .toValue({ exposeStacktrace: this.#exposeStacktrace, problemContentType: this.#problemContentType })
+        .toValue({
+          exposeStacktrace: this.#exposeStacktrace,
+          formats: this.#formats,
+          correlationID: this.#correlationID,
+        })
         .lifetime(Scopes.SINGLETON)
         .internal(),
     )

@@ -73,7 +73,7 @@ describe('unmatched routes', () => {
     const res = await app.request('/nope')
 
     expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toBe('application/problem+json; charset=utf-8')
+    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
     expect(await res.json()).toMatchObject({ status: 404, code: 'ERR_HTTP_NOT_FOUND' })
 
     await app.close()

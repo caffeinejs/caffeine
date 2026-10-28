@@ -150,23 +150,23 @@ describe('BFF: a browser signs in through the provider and lands on the shell', 
       expect(asset.status).toBe(200)
     })
 
-    it('keeps an API miss a problem 404 for a fetch and for a navigation', async () => {
+    it('keeps an API miss a JSON problem 404 for a fetch and for a navigation', async () => {
       const fetched = await browser.xhr(`${ORIGIN}/api/typo`)
       expect(fetched.status).toBe(404)
-      expect(fetched.headers['content-type']).toBe('application/problem+json; charset=utf-8')
+      expect(fetched.headers['content-type']).toBe('application/json; charset=utf-8')
 
       // One hop: the answer itself, with no redirect in front of it.
       const navigated = await browser.navigate(`${ORIGIN}/api/typo`)
       expect(navigated.hops).toHaveLength(1)
       expect(navigated.status).toBe(404)
-      expect(navigated.headers['content-type']).toBe('application/problem+json; charset=utf-8')
+      expect(navigated.headers['content-type']).toBe('application/json; charset=utf-8')
     })
 
     it('does not hand a fetch of a client route the page', async () => {
       const res = await browser.xhr(`${ORIGIN}/dashboard`)
 
       expect(res.status).toBe(404)
-      expect(res.headers['content-type']).toBe('application/problem+json; charset=utf-8')
+      expect(res.headers['content-type']).toBe('application/json; charset=utf-8')
     })
 
     it('forbids the API a role the user lacks', async () => {

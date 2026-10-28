@@ -25,6 +25,9 @@ import {
 import { createWebApplication } from '../../platform/fastify/index.js'
 import type { GuardInput } from './guard.js'
 
+// What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
+const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
+
 function buildApp() {
   return createWebApplication()
 }
@@ -589,6 +592,7 @@ describe('denial', () => {
       status: 403,
       detail: 'Resource forbidden',
       code: 'ERR_HTTP_FORBIDDEN',
+      ...STAMPED,
     })
 
     await built.close()
@@ -606,6 +610,7 @@ describe('denial', () => {
       status: 403,
       detail: 'token expired',
       code: 'ERR_HTTP_FORBIDDEN',
+      ...STAMPED,
     })
 
     await built.close()
@@ -624,6 +629,7 @@ describe('denial', () => {
       status: 401,
       detail: 'session expired',
       code: 'ERR_HTTP_UNAUTHORIZED',
+      ...STAMPED,
     })
 
     await built.close()

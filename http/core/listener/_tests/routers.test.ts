@@ -224,11 +224,17 @@ describe('routers on a listener with middleware, guards and plugins', () => {
     const bad = await at('admin', '/failing/bad')
     const badOnMain = await at('main', '/failing-main/bad')
     expect(bad.status).toBe(400)
-    expect(await bad.json()).toEqual(await badOnMain.json())
+    // Each answer carries its own request ID and time; the rest is the same.
+    expect(unstamped(await bad.json())).toEqual(unstamped(await badOnMain.json()))
 
     const missing = await at('admin', '/nothing-here')
     const missingOnMain = await at('main', '/nothing-here')
     expect(missing.status).toBe(404)
-    expect(await missing.json()).toEqual(await missingOnMain.json())
+    expect(unstamped(await missing.json())).toEqual(unstamped(await missingOnMain.json()))
   })
 })
+
+function unstamped(problem: unknown): Record<string, unknown> {
+  const { correlation_id: _id, timestamp: _at, ...rest } = problem as Record<string, unknown>
+  return rest
+}

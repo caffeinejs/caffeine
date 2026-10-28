@@ -22,6 +22,9 @@ import {
 } from '../../index.js'
 import { createWebApplication, Context, newRouter } from '../../platform/fastify/index.js'
 
+// What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
+const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
+
 const SECRET = 'a-cookie-secret-of-at-least-32-characters'
 const OLDER = 'an-older-cookie-secret-of-32-characters-or-more'
 const TENANT = 'a-tenant-secret-handed-to-a-single-call'
@@ -890,6 +893,7 @@ describe('cookies turned off', () => {
       status: 500,
       detail: 'Internal Server Error',
       code: 'ERR_INTERNAL',
+      ...STAMPED,
     })
     expect(text).not.toContain('disabled')
 

@@ -9,6 +9,9 @@ import { createWebApplication, newRouter, authentication } from '../../../../pla
 import { ErrOAuthCallback } from '../internal/remote/errors.js'
 import { ErrOIDCDiscovery } from './errors.js'
 
+// What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
+const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
+
 /**
  * What a client is told when a sign-in cannot go ahead. The errors of these strategies carry two messages: one
  * for the log, naming issuers, endpoints and what a fetch ran into, and one for the client. Routers only, no
@@ -83,6 +86,7 @@ describe('a sign-in that cannot go ahead', () => {
       status: 502,
       detail: 'Authentication provider is unavailable',
       code: 'ERR_OIDC_DISCOVERY',
+      ...STAMPED,
     })
     expect(text).not.toContain('10.0.0.7')
     expect(text).not.toContain('idp.internal')

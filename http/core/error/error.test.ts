@@ -615,62 +615,84 @@ describe('@CatchWith', () => {
   })
 })
 
-describe('problemContentType', () => {
-  function conflicts() {
-    return newRouter('/media')
-      .get('/thrown', () => {
-        throw new ErrHTTPConflict('nope')
+describe('serializer', () => {
+  function orders() {
+    return newRouter('/orders')
+      .get('/:id', () => {
+        throw new ErrHTTPConflict('Order 42 is already paid')
       })
-      .get('/helper', ctx => {
+      .get('/helper/:id', ctx => {
         ctx.notFound()
       })
   }
 
-  // The escape hatch for a client that refuses anything but application/json: the body stays the problem.
-  it('sends every problem the framework renders under the media type the application chose', async () => {
+  // A browser names text/html, so a page the application renders reaches it, and every other client keeps JSON.
+  it('answers a client that asks for its media type with the page the application renders', async () => {
     const app = createWebApplication()
-      .errorHandling(e => e.problemContentType('application/json'))
-      .mount(conflicts())
+      .errorHandling(e =>
+        e.serializer('text/html', (ctx, problem) => `<h1>${problem.status} ${problem.title}</h1><p>${ctx.req.url}</p>`),
+      )
+      .mount(orders())
     await app.bootstrap()
 
-    const thrown = await app.request('/media/thrown')
-    expect(thrown.headers.get('content-type')).toBe('application/json; charset=utf-8')
-    expect(await thrown.json()).toEqual({
-      type: 'about:blank',
-      title: 'Conflict',
-      status: 409,
-      detail: 'nope',
-      code: 'ERR_HTTP_CONFLICT',
-    })
+    const page = await app.request('/orders/42', { headers: { accept: 'text/html,*/*;q=0.8' } })
+    expect(page.status).toBe(409)
+    expect(page.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(await page.text()).toBe('<h1>409 Conflict</h1><p>/orders/42</p>')
 
-    const helper = await app.request('/media/helper')
-    expect(helper.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    const helper = await app.request('/orders/helper/42', { headers: { accept: 'text/html' } })
+    expect(helper.status).toBe(404)
+    expect(await helper.text()).toBe('<h1>404 Not Found</h1><p>/orders/helper/42</p>')
 
-    const unmatched = await app.request('/media/none')
-    expect(unmatched.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    const api = await app.request('/orders/42')
+    expect(api.headers.get('content-type')).toBe('application/json; charset=utf-8')
 
     await app.close()
   })
 
-  // A vendor type with its own version parameter, as some API gateways require.
-  it('takes a JSON media type with parameters', async () => {
+  // The built-ins are defaults, not a contract: a house Markdown layout replaces Caffeine's under the same type.
+  it('replaces a built-in serializer registered under the same media type', async () => {
     const app = createWebApplication()
-      .errorHandling(e => e.problemContentType('application/vnd.acme.error+json; version=2'))
-      .mount(conflicts())
+      .errorHandling(e => e.serializer('Text/Markdown', (_ctx, problem) => `# ${problem.code}`))
+      .mount(orders())
     await app.bootstrap()
 
-    const res = await app.request('/media/thrown')
+    const res = await app.request('/orders/42', { headers: { accept: 'text/markdown' } })
 
-    // Fastify writes the parameters back quoted and adds the charset it encoded the body in.
-    expect(res.headers.get('content-type')).toBe('application/vnd.acme.error+json; version="2"; charset=utf-8')
+    expect(res.headers.get('content-type')).toBe('Text/Markdown; charset=utf-8')
+    expect(await res.text()).toBe('# ERR_HTTP_CONFLICT')
+
+    await app.close()
+  })
+
+  // An error page that fails must not turn one error into a hung request or a second, opaque one.
+  it('falls back to JSON and logs the failure when a serializer throws', async () => {
+    const logged: string[] = []
+    const app = createWebApplication()
+      .server(() => ({
+        factory: { logger: { level: 'error', stream: { write: (line: string) => logged.push(line) } } },
+      }))
+      .errorHandling(e =>
+        e.serializer('text/html', () => {
+          throw new Error('template missing')
+        }),
+      )
+      .mount(orders())
+    await app.bootstrap()
+
+    const res = await app.request('/orders/42', { headers: { accept: 'text/html' } })
+
+    expect(res.status).toBe(409)
+    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
     expect(await res.json()).toMatchObject({ status: 409, code: 'ERR_HTTP_CONFLICT' })
+    expect(logged.some(line => line.includes('Cannot serialize a problem as \\"text/html\\"'))).toBe(true)
 
     await app.close()
   })
 
-  // The server serializes an object only under a JSON media type; any other would fail every error at runtime.
-  it.each(['text/html', 'text/html; profile=json'])('refuses %s at start-up', async contentType => {
-    const app = createWebApplication().errorHandling(e => e.problemContentType(contentType))
+  // A wildcard or a bare word would be offered to every client, or to none.
+  it.each(['text/*', '*/*', 'html', ''])('refuses "%s" at start-up', async mediaType => {
+    const app = createWebApplication().errorHandling(e => e.serializer(mediaType, () => ''))
 
     const failure = await app.bootstrap().then(
       () => undefined,
@@ -679,7 +701,95 @@ describe('problemContentType', () => {
 
     expect(failure).toBeInstanceOf(ErrConfiguration)
     expect((failure as Error).message.split('\n')[0]).toBe(
-      `Cannot send problems as "${contentType}": it is not a JSON media type`,
+      `Cannot serialize problems as "${mediaType}": it is not a media type`,
     )
+  })
+})
+
+describe('correlationID', () => {
+  function payments() {
+    return newRouter('/payments')
+      .post('/', () => {
+        throw new ErrHTTPConflict('Payment already captured')
+      })
+      .get('/helper', ctx => {
+        ctx.badRequest()
+      })
+  }
+
+  // The ID a support request quotes is the one the server's log lines carry for that request.
+  it('is the request ID by default', async () => {
+    const app = createWebApplication()
+      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+      .mount(payments())
+    await app.bootstrap()
+
+    const thrown = await app.request('/payments', { method: 'POST', headers: { 'x-request-id': 'abc-123' } })
+    expect(await thrown.json()).toMatchObject({ correlation_id: 'abc-123' })
+
+    const helper = await app.request('/payments/helper', { headers: { 'x-request-id': 'def-456' } })
+    expect(await helper.json()).toMatchObject({ correlation_id: 'def-456' })
+
+    await app.close()
+  })
+
+  // A trace ID ties the error to every span of the request, across services.
+  it('comes from the provider the application sets, such as the trace in traceparent', async () => {
+    const app = createWebApplication()
+      .errorHandling(e => e.correlationID(ctx => ctx.req.header('traceparent')?.split('-')[1]))
+      .mount(payments())
+    await app.bootstrap()
+
+    const res = await app.request('/payments', {
+      method: 'POST',
+      headers: { traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' },
+    })
+
+    expect(await res.json()).toMatchObject({ correlation_id: '4bf92f3577b34da6a3ce929d0e0e4736' })
+
+    await app.close()
+  })
+
+  // No ID is better than an empty one a client would quote back.
+  it.each([
+    ['no value', () => undefined],
+    ['an empty one', () => ''],
+  ])('is absent when the provider returns %s', async (_label, provider) => {
+    const app = createWebApplication()
+      .errorHandling(e => e.correlationID(provider))
+      .mount(payments())
+    await app.bootstrap()
+
+    const problem = (await (await app.request('/payments', { method: 'POST' })).json()) as Record<string, unknown>
+
+    expect(problem.code).toBe('ERR_HTTP_CONFLICT')
+    expect(Object.keys(problem)).not.toContain('correlation_id')
+
+    await app.close()
+  })
+
+  // The error is what the client needs; a provider failing on top of it must not cost them the answer.
+  it('is absent, and the failure logged, when the provider throws', async () => {
+    const logged: string[] = []
+    const app = createWebApplication()
+      .server(() => ({
+        factory: { logger: { level: 'error', stream: { write: (line: string) => logged.push(line) } } },
+      }))
+      .errorHandling(e =>
+        e.correlationID(() => {
+          throw new Error('no active span')
+        }),
+      )
+      .mount(payments())
+    await app.bootstrap()
+
+    const res = await app.request('/payments', { method: 'POST' })
+    const problem = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(409)
+    expect(Object.keys(problem)).not.toContain('correlation_id')
+    expect(logged.some(line => line.includes('Cannot read the correlation ID'))).toBe(true)
+
+    await app.close()
   })
 })

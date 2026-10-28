@@ -14,9 +14,10 @@ import type { RouteValidationSchema } from '../../core/routing/spec.js'
 import type { AuthenticationState } from '../../core/security/auth/authentication_state.js'
 import { type Principal } from '../../core/security/identity.js'
 import type { InferBody, InferHeaders, InferParams, InferQuery, IRequest, UnsignedCookie } from '../../request.js'
+import { appendVary } from '../../vary.js'
 import type { ContextPlatform, AdapterTypes } from './adapter.js'
 import { reopenCookieFlush, serverCookies } from './cookie/cookie.js'
-import { problemContentType } from './error/error.js'
+import { encodeProblem } from './error/error.js'
 import { protocolOf } from './protocol.js'
 import { payloadOf } from './response.js'
 
@@ -206,10 +207,12 @@ export class Context<
       return this.#send(method, body, statusCode)
     }
 
-    // Encoded here, as the error handler does, so the route's response schema does not run on it.
-    this.#reply.type(problemContentType(this.#fastifyRequest))
+    // Negotiated and encoded as the error handler does, so the route's response schema does not run on it.
+    const { contentType, body: encoded } = encodeProblem(this.#fastifyRequest, newProblem({ status: statusCode, code }))
+    appendVary(this.#reply, ['Accept'])
+    this.#reply.type(contentType)
 
-    return this.#send(method, JSON.stringify(newProblem({ status: statusCode, code })), statusCode)
+    return this.#send(method, encoded, statusCode)
   }
 
   /** Sends `body`, under `statusCode` when given, which stands over a Response's own. */
@@ -258,6 +261,10 @@ export class ContextRequest<SCHEMA extends RouteValidationSchema = RouteValidati
 
   get raw(): IncomingMessage {
     return this.request.raw
+  }
+
+  get id(): string {
+    return this.request.id
   }
 
   get url(): string {

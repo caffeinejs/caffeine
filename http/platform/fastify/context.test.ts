@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import { createWebApplication, newRouter } from './index.js'
 
-const PROBLEM_JSON = 'application/problem+json; charset=utf-8'
-
 function helpers() {
   return newRouter('/helpers')
     .get('/bad-request', ctx => {
@@ -33,8 +31,31 @@ describe('Context error helpers', () => {
     const res = await app.request(`/helpers/${path}`)
 
     expect(res.status).toBe(status)
-    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
-    expect(await res.json()).toEqual({ type: 'about:blank', title, status, detail: title, code })
+    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title,
+      status,
+      detail: title,
+      code,
+      correlation_id: expect.stringMatching(/^req-/),
+      timestamp: expect.any(String),
+    })
+
+    await app.close()
+  })
+
+  // The same negotiation as a thrown error: an agent asking for Markdown gets it from a helper too.
+  it('answers a helper without a body in the format the client asked for', async () => {
+    const app = createWebApplication().mount(helpers())
+    await app.bootstrap()
+
+    const res = await app.request('/helpers/not-found', { headers: { accept: 'text/markdown' } })
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toBe('text/markdown; charset=utf-8')
+    expect(res.headers.get('vary')).toBe('Accept')
+    expect(await res.text()).toContain('# Not Found\n\n## What happened\n\nNot Found\n')
 
     await app.close()
   })
@@ -49,6 +70,22 @@ describe('Context error helpers', () => {
     expect(res.status).toBe(404)
     expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
     expect(await res.json()).toEqual({ reason: 'no such pet' })
+
+    await app.close()
+  })
+})
+
+describe('ContextRequest.id', () => {
+  // The ID the request's log lines carry, so a handler can hand it to a downstream call or a support page.
+  it('is the ID the server gave the request, taken from the header the server was told to trust', async () => {
+    const app = createWebApplication()
+      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+      .mount(newRouter('/whoami').get('/', ctx => ({ id: ctx.req.id })))
+    await app.bootstrap()
+
+    const res = await app.request('/whoami', { headers: { 'x-request-id': 'edge-91' } })
+
+    expect(await res.json()).toEqual({ id: 'edge-91' })
 
     await app.close()
   })

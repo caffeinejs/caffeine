@@ -333,6 +333,10 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // One lookup for the whole server: each context takes its own snapshot off the store, on first read.
     const store = container.get(ConfigStore)
 
+    // The error handler makes the context itself when an `onRequest` hook ahead of this one failed.
+    const contextOf = (req: FastifyRequest, reply: FastifyReply): Context =>
+      (req.httpContext ??= new Context(req, reply, store))
+
     fastify.addHook('onRequest', (req, reply, done) => {
       req.httpContext = new Context(req, reply, store)
 
@@ -412,7 +416,10 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // Error handling first, so every route and hook registered afterwards is covered by it; then cookies, whose
     // `Set-Cookie` writer leads every later plugin's `onSend` hook. Each server gets its own.
     const errorHandler = new GlobalErrorHandlerRef()
-    await installExtension(fastify, globalErrorHandlerPlugin(errorHandler, container.get(kErrorHandlingOptions)))
+    await installExtension(
+      fastify,
+      globalErrorHandlerPlugin(errorHandler, container.get(kErrorHandlingOptions), contextOf),
+    )
     await installExtension(fastify, cookiePlugin(container.get(kCookieSettings)))
 
     for (const extension of input.extensions.root()) {

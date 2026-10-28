@@ -124,7 +124,8 @@ export async function expectNotFoundJSON(res: Response): Promise<void> {
   }
 
   const type = res.headers.get('content-type') ?? ''
-  if (!type.startsWith('application/problem+json')) {
+  // Neither a navigation nor a fetch asks for a problem or Markdown by name, so the problem comes as plain JSON.
+  if (!type.startsWith('application/json')) {
     throw new Error(`expected a problem 404, got content-type "${type}"`)
   }
 

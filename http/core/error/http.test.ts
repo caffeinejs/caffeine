@@ -1,5 +1,5 @@
 import { $t } from '@caffeinejs/application/schema'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 import {
   Catch,
@@ -63,6 +63,10 @@ async function bodyOf(response: Response): Promise<Problem> {
 }
 
 const PROBLEM_JSON = 'application/problem+json; charset=utf-8'
+const JSON_UTF8 = 'application/json; charset=utf-8'
+
+// What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
+const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
 
 @Controller('/http-err')
 class HTTPErrController {
@@ -173,7 +177,7 @@ describe('ErrHTTP problem fallback', () => {
     const res = await app.request('/http-err/conflict')
 
     expect(res.status).toBe(409)
-    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(res.headers.get('content-type')).toBe(JSON_UTF8)
     // `title` is the status phrase, `detail` the message — the two are not interchangeable.
     expect(await res.json()).toEqual({
       type: 'about:blank',
@@ -181,19 +185,22 @@ describe('ErrHTTP problem fallback', () => {
       status: 409,
       detail: 'nope',
       code: 'ERR_HTTP_CONFLICT',
+      ...STAMPED,
     })
 
     await app.close()
   })
 
-  // A client that only asked for JSON still gets the problem media type: it is JSON, and it says what it is.
-  it('sends the problem media type when the request accepts application/json', async () => {
+  // Only a client that asks for the problem media type is told the body is one; a JSON client gets plain JSON.
+  it('sends the problem media type to a client that asks for it, and JSON to one that asks for JSON', async () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.request('/http-err/conflict', { headers: { accept: 'application/json' } })
+    const problem = await app.request('/http-err/conflict', { headers: { accept: 'application/problem+json' } })
+    const json = await app.request('/http-err/conflict', { headers: { accept: 'application/json' } })
 
-    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(problem.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(json.headers.get('content-type')).toBe(JSON_UTF8)
 
     await app.close()
   })
@@ -214,6 +221,7 @@ describe('ErrHTTP problem fallback', () => {
       instance: '/orders/42',
       orderID: '42',
       balance: 0,
+      ...STAMPED,
     })
 
     await app.close()
@@ -234,6 +242,7 @@ describe('ErrHTTP problem fallback', () => {
       detail: 'nope',
       code: 'ERR_HTTP_CONFLICT',
       retry: false,
+      ...STAMPED,
     })
 
     await app.close()
@@ -262,7 +271,7 @@ describe('ErrHTTP problem fallback', () => {
 
     expect(res.status).toBe(401)
     expect(res.headers.get('www-authenticate')).toBe('Bearer realm="api"')
-    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(res.headers.get('content-type')).toBe(JSON_UTF8)
     expect(await res.json()).toMatchObject({ status: 401, detail: 'Sign in first', code: 'ERR_HTTP_UNAUTHORIZED' })
 
     await app.close()
@@ -381,13 +390,14 @@ describe('an unexpected failure', () => {
     const text = await res.text()
 
     expect(res.status).toBe(500)
-    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(res.headers.get('content-type')).toBe(JSON_UTF8)
     expect(JSON.parse(text)).toEqual({
       type: 'about:blank',
       title: 'Internal Server Error',
       status: 500,
       detail: 'Internal Server Error',
       code: 'ERR_INTERNAL',
+      ...STAMPED,
     })
     // The name of the table a statement failed on is the caller's business in no deployment.
     expect(text).not.toContain('customers')
@@ -414,6 +424,7 @@ describe('an unexpected failure', () => {
       status: 503,
       detail: 'Service Unavailable',
       code: 'ERR_INTERNAL',
+      ...STAMPED,
     })
     expect(text).not.toContain('10.0.0.5')
 
@@ -434,7 +445,7 @@ describe('an unexpected failure', () => {
     })
 
     expect(res.status).toBe(400)
-    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(res.headers.get('content-type')).toBe(JSON_UTF8)
     expect(await res.json()).toEqual({
       type: 'about:blank',
       title: 'Bad Request',
@@ -442,6 +453,7 @@ describe('an unexpected failure', () => {
       detail: 'body/name must NOT have fewer than 1 characters',
       code: 'FST_ERR_VALIDATION',
       errors: [{ path: 'body.name', message: 'must NOT have fewer than 1 characters', code: 'minLength' }],
+      ...STAMPED,
     })
 
     const entries = logged.filter(entry => entry.msg === 'body/name must NOT have fewer than 1 characters')
@@ -481,13 +493,14 @@ describe('an unexpected failure', () => {
     })
 
     expect(res.status).toBe(400)
-    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(res.headers.get('content-type')).toBe(JSON_UTF8)
     expect(await res.json()).toEqual({
       type: 'about:blank',
       title: 'Bad Request',
       status: 400,
       detail: "Body is not valid JSON but content-type is set to 'application/json'",
       code: 'FST_ERR_CTP_INVALID_JSON_BODY',
+      ...STAMPED,
     })
 
     await app.close()
@@ -506,6 +519,7 @@ describe('an unexpected failure', () => {
       status: 418,
       detail: 'short and stout',
       code: 'ERR_HTTP_IM_A_TEAPOT',
+      ...STAMPED,
     })
 
     await app.close()
@@ -628,7 +642,7 @@ describe('ErrHTTP subclasses', () => {
       expect([Class.name, res.status]).toEqual([Class.name, status])
       expect(new Class().name).toBe(Class.name)
       // The default message is the status phrase, so the detail adds nothing a client did not already know.
-      expect(body).toEqual({ type: 'about:blank', title: body.title, status, detail: body.title, code })
+      expect(body).toEqual({ type: 'about:blank', title: body.title, status, detail: body.title, code, ...STAMPED })
     }
 
     await app.close()
@@ -712,13 +726,14 @@ describe('failures from the real world', () => {
       const text = await res.text()
 
       expect(res.status).toBe(500)
-      expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+      expect(res.headers.get('content-type')).toBe(JSON_UTF8)
       expect(JSON.parse(text)).toEqual({
         type: 'about:blank',
         title: 'Internal Server Error',
         status: 500,
         detail: 'Internal Server Error',
         code: 'ERR_INTERNAL',
+        ...STAMPED,
       })
       expect(text).not.toMatch(/hang up|reset by peer/)
     }
@@ -750,6 +765,7 @@ describe('failures from the real world', () => {
       status: 429,
       detail: 'Rate limit exceeded, retry in 30 seconds',
       code: 'FST_ERR_RATE_LIMIT',
+      ...STAMPED,
     })
 
     await app.close()
@@ -773,6 +789,7 @@ describe('failures from the real world', () => {
       status: 499,
       detail: 'Client closed the request',
       code: 'ERR_HTTP',
+      ...STAMPED,
     })
 
     await app.close()
@@ -815,6 +832,7 @@ describe('failures from the real world', () => {
         { path: 'data.id', message: 'is invalid', code: 'required' },
         { path: 'event.a/b~c', message: 'must be equal to one of the allowed values', code: 'enum' },
       ],
+      ...STAMPED,
     })
 
     await app.close()
@@ -870,13 +888,14 @@ describe('a route that declares an error response schema', () => {
     const res = await app.request('/orders/42')
 
     expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+    expect(res.headers.get('content-type')).toBe(JSON_UTF8)
     expect(await res.json()).toEqual({
       type: 'about:blank',
       title: 'Not Found',
       status: 404,
       detail: 'Order 42 not found',
       code: 'ERR_HTTP_NOT_FOUND',
+      ...STAMPED,
     })
 
     await app.close()
@@ -905,7 +924,15 @@ describe('a route that declares an error response schema', () => {
 
     const problem = (await (await app.request('/orders/narrow/42')).json()) as Record<string, unknown>
 
-    expect(Object.keys(problem).sort()).toEqual(['code', 'detail', 'status', 'title', 'type'])
+    expect(Object.keys(problem).sort()).toEqual([
+      'code',
+      'correlation_id',
+      'detail',
+      'status',
+      'timestamp',
+      'title',
+      'type',
+    ])
 
     await app.close()
   })
@@ -920,5 +947,154 @@ describe('a route that declares an error response schema', () => {
     expect(await res.json()).toMatchObject({ status: 404, code: 'ERR_HTTP_NOT_FOUND' })
 
     await app.close()
+  })
+})
+
+describe('the members an agent acts on', () => {
+  function checkout() {
+    return newRouter('/checkout')
+      .post('/', () => {
+        throw ErrHTTP.builder()
+          .statusCode(429)
+          .message('12 payment attempts in the last minute')
+          .code('ERR_PAYMENT_RATE_LIMITED')
+          .category('rate_limit')
+          .whatYouShouldDo('Wait for the Retry-After seconds, then retry once. Do not retry in a loop.')
+          .headers({ 'retry-after': '30' })
+          .build()
+      })
+      .post('/coupon', () => {
+        throw new ErrHTTPUnprocessableEntity('Coupon SPRING expired on 2026-04-01', {
+          category: 'validation',
+          whatYouShouldDo: 'Remove the coupon and submit the order again.',
+        })
+      })
+      .get('/plain', () => {
+        throw new ErrHTTPNotFound('No checkout session')
+      })
+  }
+
+  // An agent paying for an order hits a rate limit: it branches on the category and follows the guidance, with
+  // no prose to interpret, and quotes the correlation ID if it has to escalate.
+  it('tells an agent asking for Markdown what failed, what to do and how to quote it', async () => {
+    const app = createWebApplication()
+      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+      .mount(checkout())
+    await app.bootstrap()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-28T15:30:00.000Z'))
+
+    try {
+      const res = await app.request('/checkout', {
+        method: 'POST',
+        headers: { accept: 'text/markdown', 'x-request-id': 'chk-81' },
+      })
+
+      expect(res.status).toBe(429)
+      expect(res.headers.get('retry-after')).toBe('30')
+      expect(res.headers.get('content-type')).toBe('text/markdown; charset=utf-8')
+      expect(await res.text()).toBe(
+        [
+          '---',
+          'type: "about:blank"',
+          'title: "Too Many Requests"',
+          'status: 429',
+          'code: "ERR_PAYMENT_RATE_LIMITED"',
+          'category: "rate_limit"',
+          'correlation_id: "chk-81"',
+          'timestamp: "2026-10-28T15:30:00.000Z"',
+          '---',
+          '',
+          '# Too Many Requests',
+          '',
+          '## What happened',
+          '',
+          '12 payment attempts in the last minute',
+          '',
+          '## What you should do',
+          '',
+          'Wait for the Retry-After seconds, then retry once. Do not retry in a loop.',
+          '',
+        ].join('\n'),
+      )
+    } finally {
+      vi.useRealTimers()
+      await app.close()
+    }
+  })
+
+  // The same members in JSON, set through the options a subclass takes.
+  it('sends the category and the guidance an error was given in its options', async () => {
+    const app = createWebApplication()
+      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+      .mount(checkout())
+    await app.bootstrap()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-28T15:30:00.000Z'))
+
+    try {
+      const res = await app.request('/checkout/coupon', {
+        method: 'POST',
+        headers: { accept: 'application/problem+json', 'x-request-id': 'chk-82' },
+      })
+
+      expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+      expect(await res.json()).toEqual({
+        type: 'about:blank',
+        title: 'Unprocessable Entity',
+        status: 422,
+        detail: 'Coupon SPRING expired on 2026-04-01',
+        code: 'ERR_HTTP_UNPROCESSABLE_ENTITY',
+        category: 'validation',
+        what_you_should_do: 'Remove the coupon and submit the order again.',
+        correlation_id: 'chk-82',
+        timestamp: '2026-10-28T15:30:00.000Z',
+      })
+    } finally {
+      vi.useRealTimers()
+      await app.close()
+    }
+  })
+
+  // Guidance is written by someone who knows the fix. A guess from the framework would mislead an agent.
+  it('leaves the category and the guidance out unless the error was given them', async () => {
+    const app = createWebApplication().mount(checkout())
+    await app.bootstrap()
+
+    const problem = await bodyOf(await app.request('/checkout/plain'))
+
+    expect(Object.keys(problem).sort()).toEqual([
+      'code',
+      'correlation_id',
+      'detail',
+      'status',
+      'timestamp',
+      'title',
+      'type',
+    ])
+    // Rendered now, in UTC, to the millisecond.
+    expect(problem.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+
+    await app.close()
+  })
+
+  // The members describe the error, so the problem a @Catch handler builds from it carries them too.
+  it('puts the category and the guidance on the problem toProblem() builds', () => {
+    const err = newHTTPError()
+      .statusCode(503)
+      .message('The ledger is read-only during the nightly close')
+      .category('maintenance')
+      .whatYouShouldDo('Retry after 02:00 UTC.')
+      .build()
+
+    expect(err.toProblem()).toEqual({
+      type: 'about:blank',
+      title: 'Service Unavailable',
+      status: 503,
+      detail: 'The ledger is read-only during the nightly close',
+      code: 'ERR_HTTP',
+      category: 'maintenance',
+      what_you_should_do: 'Retry after 02:00 UTC.',
+    })
   })
 })

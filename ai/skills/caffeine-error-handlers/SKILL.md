@@ -21,7 +21,7 @@ Unmatched URLs do not go through `@Catch`. SPA `index.html` is not an error hand
 5. Optional: `@Catch(ErrType)` on a **controller method** `(ctx, error)` instead of a separate class.
 6. Prefer throwing `ErrHTTPNotFound` in the handler over `ctx.notFound()` if you want `@Catch` to run.
 
-An application that never calls `.errorHandling(...)` still renders a thrown `ErrHTTP` as an RFC 9457 problem (`application/problem+json`), and answers anything it did not anticipate with a generic body — `code: 'ERR_INTERNAL'`, the status phrase as `detail` — keeping the real message and its causes in the log. Do not write a `@Catch(Error)` handler to get that; it is the default. `.errorHandling(e => e.exposeStacktrace(config.app.debug))` adds `stacktrace` to the bodies this package renders, for a development deployment.
+An application that never calls `.errorHandling(...)` still renders a thrown `ErrHTTP` as an RFC 9457 problem, in the format `Accept` asks for (`application/json` unless it names `application/problem+json` or `text/markdown`), and answers anything it did not anticipate with a generic body — `code: 'ERR_INTERNAL'`, the status phrase as `detail` — keeping the real message and its causes in the log. Do not write a `@Catch(Error)` handler to get that; it is the default. `.errorHandling(e => e.exposeStacktrace(config.app.debug))` adds `stacktrace` to the bodies this package renders, for a development deployment. `.errorHandling(e => e.serializer('text/html', (ctx, problem) => page))` adds a format, and `.errorHandling(e => e.correlationID(ctx => traceID))` changes where `correlation_id` comes from. Set `category` and `whatYouShouldDo` on the `ErrHTTP` when a client, or an agent, needs to act on the error.
 
 ## Shape
 

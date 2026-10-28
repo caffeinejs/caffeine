@@ -437,7 +437,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   /**
    * Enrols the application's global error handlers. The feature is registered either way and installs ahead of
    * every plugin, so where in the chain the call is written makes no difference, and an application that never
-   * calls it still renders a thrown `ErrHTTP` as an RFC 9457 problem, sent as `application/problem+json`.
+   * calls it still renders a thrown `ErrHTTP` as an RFC 9457 problem, in the format the request's `Accept` asks for.
    *
    * A `@Catch` class renders errors application-wide only once it is named here. One nobody names stays bound
    * in the container, reachable through `@CatchWith` on a controller or route.

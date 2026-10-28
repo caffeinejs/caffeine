@@ -1,8 +1,8 @@
-import { ProblemSchema, type IRoute } from '@caffeinejs/http'
+import { mediaTypeEssence, ProblemSchema, type IRoute } from '@caffeinejs/http'
 
 import type { ResponseDetail } from '../decorators/detail.js'
 import type { OpenAPIOptions } from '../options.js'
-import type { HeaderObject, ResponseObject } from '../spec/spec.js'
+import type { HeaderObject, MediaTypeObject, ResponseObject, SchemaObject } from '../spec/spec.js'
 import type { ComponentRegistry } from './components.js'
 
 /** Standard reason phrases, used when nobody wrote a description. */
@@ -52,7 +52,7 @@ export function deriveResponses(
   options: OpenAPIOptions,
   registry: ComponentRegistry,
   context: string,
-  problemContentType: string,
+  problemMediaTypes: readonly string[],
   groupResponses: Record<number | string, ResponseDetail> | undefined,
   operationResponses: Record<number | string, ResponseDetail> | undefined,
 ): Record<string, ResponseObject> {
@@ -90,12 +90,12 @@ export function deriveResponses(
 
   // 3. Inferred, never overwriting anything declared.
   if (options.infer.validation && hasRequestSchema(route)) {
-    addInferred(responses, String(options.errors.validation), options, registry, context, problemContentType)
+    addInferred(responses, String(options.errors.validation), options, registry, context, problemMediaTypes)
   }
 
   if (options.infer.auth && route.authorization.hasProtection) {
-    addInferred(responses, String(options.errors.unauthorized), options, registry, context, problemContentType)
-    addInferred(responses, String(options.errors.forbidden), options, registry, context, problemContentType)
+    addInferred(responses, String(options.errors.unauthorized), options, registry, context, problemMediaTypes)
+    addInferred(responses, String(options.errors.forbidden), options, registry, context, problemMediaTypes)
   }
 
   // 4. Authored detail, merged over everything. Controller-wide first, then the operation's own.
@@ -111,7 +111,7 @@ function addInferred(
   options: OpenAPIOptions,
   registry: ComponentRegistry,
   context: string,
-  problemContentType: string,
+  problemMediaTypes: readonly string[],
 ): void {
   if (responses.has(status)) {
     return
@@ -121,8 +121,22 @@ function addInferred(
 
   responses.set(status, {
     description: REASONS[status] ?? 'Error',
-    content: { [problemContentType]: { schema } },
+    content: Object.fromEntries(problemMediaTypes.map(mediaType => [mediaType, problemContent(mediaType, schema)])),
   })
+}
+
+// The server picks the format from `Accept`, so the document lists every one. The two JSON formats are the problem
+// itself, Markdown is text, and a format the application added has a shape only its serializer knows.
+function problemContent(mediaType: string, schema: SchemaObject): MediaTypeObject {
+  switch (mediaTypeEssence(mediaType)) {
+    case 'application/json':
+    case 'application/problem+json':
+      return { schema }
+    case 'text/markdown':
+      return { schema: { type: 'string' } }
+    default:
+      return {}
+  }
 }
 
 function applyDetail(

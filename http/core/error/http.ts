@@ -5,7 +5,7 @@ export interface ErrHTTPOptions {
   cause?: unknown
   /**
    * The body to send in place of the error's {@link Problem}, unchanged and under the media type the reply
-   * already has. `type`, `instance` and `extensions` are then not sent.
+   * already has. The other problem options here are then not sent.
    */
   body?: unknown
   headers?: Record<string, string>
@@ -14,6 +14,10 @@ export interface ErrHTTPOptions {
   type?: string
   /** URI reference naming this occurrence, sent as {@link Problem.instance}. */
   instance?: string
+  /** The class of error a client branches on, sent as {@link Problem.category}. */
+  category?: string
+  /** What the reader, a person or an agent, should do next, sent as {@link Problem.what_you_should_do}. */
+  whatYouShouldDo?: string
   /** RFC 9457 extension members, sent beside the members a {@link Problem} defines, which they cannot replace. */
   extensions?: Record<string, unknown>
 }
@@ -28,6 +32,8 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
   readonly headers?: Record<string, string>
   readonly type?: string
   readonly instance?: string
+  readonly category?: string
+  readonly whatYouShouldDo?: string
   readonly extensions?: Record<string, unknown>
 
   constructor(
@@ -42,6 +48,8 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
     this.headers = options?.headers
     this.type = options?.type
     this.instance = options?.instance
+    this.category = options?.category
+    this.whatYouShouldDo = options?.whatYouShouldDo
     this.extensions = options?.extensions
   }
 
@@ -57,6 +65,8 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
       detail: this.message,
       type: this.type,
       instance: this.instance,
+      category: this.category,
+      whatYouShouldDo: this.whatYouShouldDo,
       extensions: this.extensions,
     })
   }
@@ -76,6 +86,8 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
  *   .code('ERR_ORDER_PAID')
  *   .type('https://example.com/problems/order-paid')
  *   .instance('/orders/42')
+ *   .category('billing')
+ *   .whatYouShouldDo('Fetch the order to read its receipt instead of paying again')
  *   .extension('orderID', '42')
  *   .build()
  * ```
@@ -123,6 +135,18 @@ export class ErrHTTPBuilder {
 
   instance(instance: string) {
     this.#options.instance = instance
+    return this
+  }
+
+  /** The class of error a client branches on, such as `rate_limit`. Absent unless set. */
+  category(category: string) {
+    this.#options.category = category
+    return this
+  }
+
+  /** What the reader, a person or an agent, should do next, such as when to retry. Absent unless set. */
+  whatYouShouldDo(text: string) {
+    this.#options.whatYouShouldDo = text
     return this
   }
 

@@ -131,7 +131,7 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
               routeGroups: routeGroups() as Array<IRouteGroup<unknown>>,
               options: withBasePathServer(options, instance.$basePath),
               schemes: descriptors,
-              problemContentType: instance.$container.getOptional(kErrorHandlingOptions)?.problemContentType,
+              problemMediaTypes: problemMediaTypes(instance),
               onWarning: message => warnings.push(message),
             })
           : readDocument(options.source)
@@ -188,6 +188,12 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
   }
 
   return fp(plugin, { name: label })
+}
+
+// The formats error handling negotiates among, so the document lists what the server can send.
+function problemMediaTypes(instance: FastifyInstance): string[] | undefined {
+  const formats = instance.$container.getOptional(kErrorHandlingOptions)?.formats
+  return formats === undefined ? undefined : [...formats.values()].map(format => format.mediaType)
 }
 
 /**

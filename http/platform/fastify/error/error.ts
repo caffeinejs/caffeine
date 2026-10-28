@@ -12,23 +12,42 @@ import type {
 } from 'fastify'
 import fp from 'fastify-plugin'
 
+import type { IContext } from '../../../context.js'
 import { ErrCaffeineWebApplication } from '../../../core/error/common.js'
-import type { GlobalErrorHandlerOptions } from '../../../core/error/error.js'
+import type { CorrelationIDProvider, GlobalErrorHandlerOptions } from '../../../core/error/error.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from '../../../core/error/handler.js'
 import { ErrHTTP } from '../../../core/error/http.js'
 import { newProblem, type Problem } from '../../../core/error/problem.js'
+import { negotiateProblemFormat } from '../../../core/error/serializer.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
+import { appendVary } from '../../../vary.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
 import { answer, payloadOf } from '../response.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
-const kProblemContentType = Symbol('caffeine.http.problem-content-type')
+/** The context of a request, made when no hook has made it yet: one an earlier `onRequest` hook failed. */
+export type ContextOf = (request: FastifyRequest, reply: FastifyReply) => Context
+
+/** A problem encoded for the request it answers: the media type its client negotiated, and the body. */
+export interface EncodedProblem {
+  contentType: string
+  body: string
+}
+
+// Reads the request's context, which the adapter's `onRequest` hook or the error handler has made by then.
+type ProblemEncoder = (request: FastifyRequest, problem: Problem, err?: Error) => EncodedProblem
+
+const kProblemEncoder = Symbol('caffeine.http.problem-encoder')
+const kContextOf = Symbol('caffeine.http.context-of')
 
 interface ProblemInstance {
-  [kProblemContentType]: string
+  [kProblemEncoder]: ProblemEncoder
+  [kContextOf]: ContextOf
 }
+
+const JSON_CONTENT_TYPE = 'application/json'
 
 // A cause chain is walked on a request path, and one can be circular as well as long.
 const MAX_CAUSE_DEPTH = 10
@@ -69,21 +88,77 @@ export class GlobalErrorHandlerRef {
 export function globalErrorHandlerPlugin(
   ref: GlobalErrorHandlerRef,
   options: Required<GlobalErrorHandlerOptions>,
+  contextOf: ContextOf,
 ): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
-    instance.decorate(kProblemContentType, options.problemContentType)
-    ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider), options)
+    instance.decorate(kProblemEncoder, problemEncoder(options))
+    instance.decorate(kContextOf, contextOf)
+    ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider))
   }
 
   return fp(plugin, { name: 'caffeine-error-handling' })
 }
 
 /**
- * The media type the server `request` came to sends a problem as. Every server the adapter builds installs the
- * error handling plugin first, so the decoration is there before any route can answer.
+ * Encodes `problem` in the format the request's `Accept` asks for, stamped with its `correlation_id` and
+ * `timestamp`, for a helper that answers with one. Every server the adapter builds installs the error handling
+ * plugin first, so the encoder is there before any route can answer.
  */
-export function problemContentType(request: FastifyRequest): string {
-  return (request.server as unknown as ProblemInstance)[kProblemContentType]
+export function encodeProblem(request: FastifyRequest, problem: Problem): EncodedProblem {
+  return (request.server as unknown as ProblemInstance)[kProblemEncoder](request, problem)
+}
+
+// The request's context, made here when an `onRequest` hook ahead of the adapter's failed before it could.
+function contextOf(request: FastifyRequest, reply: FastifyReply): Context {
+  return (request.server as unknown as ProblemInstance)[kContextOf](request, reply)
+}
+
+function problemEncoder({
+  exposeStacktrace,
+  formats,
+  correlationID,
+}: Required<GlobalErrorHandlerOptions>): ProblemEncoder {
+  return (request, problem, err) => {
+    const ctx = request.httpContext
+    const format = negotiateProblemFormat(request.headers.accept, formats)
+    const stamped: Problem = {
+      ...problem,
+      ...correlationOf(request, ctx, correlationID),
+      timestamp: new Date().toISOString(),
+      ...(exposeStacktrace && err !== undefined ? { stacktrace: stacktraceOf(err) } : {}),
+    }
+
+    // An error page that fails must not cost the client the error it describes.
+    try {
+      return { contentType: withCharset(format.mediaType), body: format.serialize(ctx, stamped) }
+    } catch (cause) {
+      request.log.error(
+        { err: cause },
+        `Cannot serialize a problem as "${format.mediaType}": sending it as ${JSON_CONTENT_TYPE} instead`,
+      )
+      return { contentType: JSON_CONTENT_TYPE, body: JSON.stringify(stamped) }
+    }
+  }
+}
+
+// The body is a string, which goes out as UTF-8. Fastify says so only for a JSON type; a Markdown or HTML page needs
+// it too, or a client may decode it as something else.
+function withCharset(mediaType: string): string {
+  return /;\s*charset=/i.test(mediaType) ? mediaType : `${mediaType}; charset=utf-8`
+}
+
+function correlationOf(
+  request: FastifyRequest,
+  ctx: IContext,
+  provider: CorrelationIDProvider,
+): Pick<Problem, 'correlation_id'> {
+  try {
+    const id = provider(ctx)
+    return typeof id === 'string' && id !== '' ? { correlation_id: id } : {}
+  } catch (err) {
+    request.log.error({ err }, 'Cannot read the correlation ID: sending the problem without one')
+    return {}
+  }
 }
 
 /**
@@ -95,28 +170,26 @@ export function problemContentType(request: FastifyRequest): string {
 export function installGlobalErrorHandler(
   fastify: FastifyInstance,
   errorManager: ErrorHandlerProvider,
-  options: Required<GlobalErrorHandlerOptions>,
 ): GlobalErrorHandler {
-  const { exposeStacktrace, problemContentType: contentType } = options
+  // In the format the request asks for, so the response varies on Accept. Encoded here, so a route's error
+  // response schema, written for the bodies the application sends, neither refuses a problem nor strips its members.
+  const sendProblem = (request: FastifyRequest, reply: FastifyReply, problem: Problem, err: Error): FastifyReply => {
+    const { contentType, body } = (request.server as unknown as ProblemInstance)[kProblemEncoder](request, problem, err)
+    appendVary(reply, ['Accept'])
 
-  // Under the problem media type whatever the request accepts: the body is a problem either way, and a client
-  // reading `application/json` reads it as well. Encoded here, so a route's error response schema, written for
-  // the bodies the application sends, neither refuses a problem nor strips its members.
-  const sendProblem = (reply: FastifyReply, problem: Problem, err: Error): FastifyReply =>
-    reply
-      .status(problem.status)
-      .type(contentType)
-      .send(JSON.stringify(exposeStacktrace ? { ...problem, stacktrace: stacktraceOf(err) } : problem))
+    return reply.status(problem.status).type(contentType).send(body)
+  }
 
   // The application-wide error handler. Also the fallback for per-controller (encapsulated) handlers
   // when they do not handle a given error type.
   const globalErrorHandler: GlobalErrorHandler = async (error, request, reply) => {
     const err = error instanceof Error ? error : new Error(String(error))
+    const ctx = contextOf(request, reply)
     const handler = errorManager.provide(err)
 
     if (handler) {
       // The handler may respond via ctx or return a value (JSON payload or a View to render).
-      return respond(request.httpContext, await handler.get().handle(request.httpContext, err))
+      return respond(ctx, await handler.get().handle(ctx, err))
     }
 
     if (err instanceof ErrHTTP) {
@@ -125,7 +198,7 @@ export function installGlobalErrorHandler(
       }
 
       if (err.body === undefined) {
-        return sendProblem(reply, err.toProblem(), err)
+        return sendProblem(request, reply, err.toProblem(), err)
       }
 
       // A body the error carried is the author's own and is sent as it stands, under the media type the reply
@@ -138,7 +211,12 @@ export function installGlobalErrorHandler(
     if (hasPublicMessage(err)) {
       request.log[err.statusCode >= 500 ? 'error' : 'info']({ err }, err.message)
 
-      return sendProblem(reply, newProblem({ status: err.statusCode, code: err.code, detail: err.publicMessage }), err)
+      return sendProblem(
+        request,
+        reply,
+        newProblem({ status: err.statusCode, code: err.code, detail: err.publicMessage }),
+        err,
+      )
     }
 
     const status = errorStatus(err)
@@ -158,6 +236,7 @@ export function installGlobalErrorHandler(
       const validation = (err as Partial<FastifyError>).validation
 
       return sendProblem(
+        request,
         reply,
         newProblem({
           status,
@@ -175,7 +254,7 @@ export function installGlobalErrorHandler(
     // not answer. It stays in the log, and the response names the status and nothing else.
     request.log.error({ err }, err.message)
 
-    return sendProblem(reply, newProblem({ status, code: 'ERR_INTERNAL' }), err)
+    return sendProblem(request, reply, newProblem({ status, code: 'ERR_INTERNAL' }), err)
   }
 
   fastify.setErrorHandler(globalErrorHandler)
@@ -211,6 +290,7 @@ export function installRouteGroupErrorHandler(
 
   server.setErrorHandler(async (error: FastifyError, req: FastifyRequest, reply: FastifyReply) => {
     const err = error instanceof Error ? error : new Error(String(error))
+    const ctx = contextOf(req, reply)
 
     // routeOptions is populated before validation, so route-level handlers also see schema errors.
     const routeCatchBy = req.routeOptions.config?.$caffeine?.compiled?.catchBy
@@ -219,14 +299,14 @@ export function installRouteGroupErrorHandler(
       (routerCatchBy ? resolveByErrorChain(routerCatchBy, err) : undefined)
 
     if (handler) {
-      return respond(req.httpContext, await handler.get().handle(req.httpContext, err))
+      return respond(ctx, await handler.get().handle(ctx, err))
     }
 
     if (groupHandler !== undefined) {
-      const result = await groupHandler(req, req.httpContext, err)
+      const result = await groupHandler(req, ctx, err)
 
       if (result !== kErrorUnhandled) {
-        return respond(req.httpContext, result)
+        return respond(ctx, result)
       }
     }
 

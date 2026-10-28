@@ -282,8 +282,9 @@ describe('response inference', () => {
     })
   })
 
-  // What the error handler sends: the document describes the body a client will parse, not a placeholder.
-  it('describes an inferred error as the problem the server sends', () => {
+  // What the error handler sends: the document describes the body a client will parse in each format it can ask
+  // for, not a placeholder.
+  it('describes an inferred error as the problem the server sends, in every format', () => {
     const router = fixtureRouter('/pets', r =>
       r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema }).authorize()]),
     )
@@ -293,14 +294,20 @@ describe('response inference', () => {
 
     for (const status of ['400', '401', '403']) {
       expect(responses[status]?.content).toEqual({
+        'application/json': { schema: { $ref: '#/components/schemas/Problem' } },
         'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } },
+        'text/markdown': { schema: { type: 'string' } },
       })
     }
     expect(document.components?.schemas?.Problem).toMatchObject({
       type: 'object',
       required: ['type', 'title', 'status', 'detail', 'code'],
       properties: {
+        category: { type: 'string' },
+        what_you_should_do: { type: 'string' },
         instance: { type: 'string' },
+        correlation_id: { type: 'string' },
+        timestamp: { type: 'string', format: 'date-time' },
         errors: { type: 'array', items: { $ref: '#/components/schemas/SchemaIssue' } },
         stacktrace: { type: 'string' },
       },
@@ -319,14 +326,16 @@ describe('response inference', () => {
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions({ errorSchema }) })
     const content = operationAt(document, '/pets', 'post')?.responses?.['400'].content
 
-    expect(content?.['application/problem+json'].schema).toMatchObject({
-      properties: { message: { type: 'string' }, statusCode: { type: 'integer' } },
-    })
+    for (const mediaType of ['application/json', 'application/problem+json']) {
+      expect(content?.[mediaType].schema).toMatchObject({
+        properties: { message: { type: 'string' }, statusCode: { type: 'integer' } },
+      })
+    }
     expect(document.components?.schemas?.Problem).toBeUndefined()
   })
 
-  // An inferred error is the problem the error handler renders, under the type error handling chose.
-  it('lists an inferred error under the media type the server sends problems as', () => {
+  // A format the application added is one more a client can ask for; only its serializer knows its shape.
+  it('lists an inferred error under every format error handling negotiates', () => {
     const router = fixtureRouter('/pets', r =>
       r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
     )
@@ -334,11 +343,12 @@ describe('response inference', () => {
     const document = generateDocument({
       routeGroups: [router],
       options: fixtureOptions(),
-      problemContentType: 'application/vnd.acme.error+json',
+      problemMediaTypes: ['application/json', 'application/problem+json', 'text/markdown', 'text/html'],
     })
-    const responses = operationAt(document, '/pets', 'post')?.responses ?? {}
+    const content = operationAt(document, '/pets', 'post')?.responses?.['400'].content ?? {}
 
-    expect(Object.keys(responses['400']?.content ?? {})).toEqual(['application/vnd.acme.error+json'])
+    expect(Object.keys(content)).toEqual(['application/json', 'application/problem+json', 'text/markdown', 'text/html'])
+    expect(content['text/html']).toEqual({})
   })
 
   // A declared status is a body the handler sends itself, through the serializer, as `application/json`:
@@ -351,7 +361,11 @@ describe('response inference', () => {
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const responses = operationAt(document, '/pets', 'post')?.responses ?? {}
 
-    expect(Object.keys(responses['400']?.content ?? {})).toEqual(['application/problem+json'])
+    expect(Object.keys(responses['400']?.content ?? {})).toEqual([
+      'application/json',
+      'application/problem+json',
+      'text/markdown',
+    ])
     expect(Object.keys(responses['404']?.content ?? {})).toEqual(['application/json'])
   })
 
@@ -1051,7 +1065,11 @@ describe('responses', () => {
 
     expect(responses['499']).toEqual({
       description: 'Error',
-      content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } } },
+      content: {
+        'application/json': { schema: { $ref: '#/components/schemas/Problem' } },
+        'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } },
+        'text/markdown': { schema: { type: 'string' } },
+      },
     })
   })
 

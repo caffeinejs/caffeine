@@ -2,7 +2,7 @@ import { STATUS_CODES } from 'node:http'
 
 import { $t, type SchemaIssue } from '@caffeinejs/application/schema'
 
-/** The media type an error body is sent as unless `.errorHandling(e => e.problemContentType(...))` changed it. */
+/** The media type of a problem sent to a client that asks for one with `Accept: application/problem+json`. */
 export const PROBLEM_CONTENT_TYPE = 'application/problem+json'
 
 /** The `type` of a problem nothing gave one: RFC 9457 §4.2.1, the status alone says what went wrong. */
@@ -24,6 +24,13 @@ export interface Problem {
   detail: string
   /** The error's code, such as `ERR_HTTP_NOT_FOUND` or Fastify's `FST_ERR_VALIDATION`. */
   code: string
+  /** The class of error a client branches on, such as `rate_limit`. Present only when the application set one. */
+  category?: string
+  /**
+   * What the reader, a person or an agent, should do next, such as when to retry. Present only when the
+   * application set it.
+   */
+  what_you_should_do?: string
   /** URI reference. Present only when the application set one. */
   instance?: string
   /**
@@ -31,6 +38,13 @@ export interface Problem {
    * (`body.owner.name`) and its `code` the rule (`minLength`).
    */
   errors?: SchemaIssue[]
+  /**
+   * Ties the response to the server's logs and traces: the request ID unless error handling was given a
+   * provider. Absent when there is none. Present only on problems the framework sends.
+   */
+  correlation_id?: string
+  /** When the problem was sent, ISO 8601 in UTC. Present only on problems the framework sends. */
+  timestamp?: string
   /** Present only when `exposeStacktrace()` is on, and only on bodies the error handler renders. */
   stacktrace?: string
   [extension: string]: unknown
@@ -47,6 +61,8 @@ export const ProblemSchema = $t.Object(
     status: $t.Integer({ description: 'Same number as the status line.' }),
     detail: $t.String({ description: 'This occurrence. Safe to show a client.' }),
     code: $t.String({ description: 'The error code, to look up.' }),
+    category: $t.Optional($t.String({ description: 'The class of error, to branch on.' })),
+    what_you_should_do: $t.Optional($t.String({ description: 'What to do next, such as when to retry.' })),
     instance: $t.Optional($t.String({ description: 'URI reference naming this occurrence.' })),
     errors: $t.Optional(
       $t.Array(
@@ -61,6 +77,8 @@ export const ProblemSchema = $t.Object(
         { description: 'Each rule a schema failure broke.' },
       ),
     ),
+    correlation_id: $t.Optional($t.String({ description: "Ties the response to the server's logs and traces." })),
+    timestamp: $t.Optional($t.String({ format: 'date-time', description: 'When the problem was sent, in UTC.' })),
     stacktrace: $t.Optional($t.String({ description: 'Present only on a development deployment.' })),
   },
   { $id: 'Problem', additionalProperties: true },
@@ -74,18 +92,34 @@ export interface ProblemInit {
   detail?: string
   type?: string
   instance?: string
+  category?: string
+  whatYouShouldDo?: string
   errors?: SchemaIssue[]
   extensions?: Readonly<Record<string, unknown>>
 }
 
 // The members a problem defines itself. An extension of the same name would change what they mean.
-const MEMBERS = new Set(['type', 'title', 'status', 'detail', 'code', 'instance', 'errors', 'stacktrace'])
+const MEMBERS = new Set([
+  'type',
+  'title',
+  'status',
+  'detail',
+  'code',
+  'category',
+  'what_you_should_do',
+  'instance',
+  'errors',
+  'correlation_id',
+  'timestamp',
+  'stacktrace',
+])
 
 /**
  * Builds a {@link Problem}, for a `@Catch` handler or a helper that answers with one.
  *
  * An extension named like a member of {@link Problem} is dropped, so it can neither replace one nor add a
- * `stacktrace` the application did not turn on.
+ * `stacktrace` the application did not turn on. `correlation_id` and `timestamp` describe one response, so the
+ * framework adds them when it sends the problem, not here.
  */
 export function newProblem(init: ProblemInit): Problem {
   const title = statusPhrase(init.status)
@@ -98,6 +132,8 @@ export function newProblem(init: ProblemInit): Problem {
     status: init.status,
     detail: init.detail ?? title,
     code: init.code,
+    ...(init.category === undefined ? {} : { category: init.category }),
+    ...(init.whatYouShouldDo === undefined ? {} : { what_you_should_do: init.whatYouShouldDo }),
     ...(init.instance === undefined ? {} : { instance: init.instance }),
     ...(init.errors === undefined ? {} : { errors: init.errors }),
   }
