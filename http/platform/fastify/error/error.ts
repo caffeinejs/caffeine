@@ -16,7 +16,7 @@ import { ErrCaffeineWebApplication } from '../../../core/error/common.js'
 import type { GlobalErrorHandlerOptions } from '../../../core/error/error.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from '../../../core/error/handler.js'
 import { ErrHTTP } from '../../../core/error/http.js'
-import { newProblem, PROBLEM_CONTENT_TYPE, type Problem } from '../../../core/error/problem.js'
+import { newProblem, type Problem } from '../../../core/error/problem.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
@@ -27,7 +27,7 @@ export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, 
 const kProblemContentType = Symbol('caffeine.http.problem-content-type')
 
 interface ProblemInstance {
-  [kProblemContentType]?: string
+  [kProblemContentType]: string
 }
 
 // A cause chain is walked on a request path, and one can be circular as well as long.
@@ -68,19 +68,22 @@ export class GlobalErrorHandlerRef {
  */
 export function globalErrorHandlerPlugin(
   ref: GlobalErrorHandlerRef,
-  options?: GlobalErrorHandlerOptions,
+  options: Required<GlobalErrorHandlerOptions>,
 ): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
-    instance.decorate(kProblemContentType, options?.problemContentType ?? PROBLEM_CONTENT_TYPE)
+    instance.decorate(kProblemContentType, options.problemContentType)
     ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider), options)
   }
 
   return fp(plugin, { name: 'caffeine-error-handling' })
 }
 
-/** The media type the server `request` came to sends a problem as. */
+/**
+ * The media type the server `request` came to sends a problem as. Every server the adapter builds installs the
+ * error handling plugin first, so the decoration is there before any route can answer.
+ */
 export function problemContentType(request: FastifyRequest): string {
-  return (request.server as unknown as ProblemInstance)[kProblemContentType] ?? PROBLEM_CONTENT_TYPE
+  return (request.server as unknown as ProblemInstance)[kProblemContentType]
 }
 
 /**
@@ -92,10 +95,9 @@ export function problemContentType(request: FastifyRequest): string {
 export function installGlobalErrorHandler(
   fastify: FastifyInstance,
   errorManager: ErrorHandlerProvider,
-  options?: GlobalErrorHandlerOptions,
+  options: Required<GlobalErrorHandlerOptions>,
 ): GlobalErrorHandler {
-  const exposeStacktrace = options?.exposeStacktrace ?? false
-  const contentType = options?.problemContentType ?? PROBLEM_CONTENT_TYPE
+  const { exposeStacktrace, problemContentType: contentType } = options
 
   // Under the problem media type whatever the request accepts: the body is a problem either way, and a client
   // reading `application/json` reads it as well.

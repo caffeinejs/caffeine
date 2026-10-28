@@ -92,7 +92,8 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
    * for one.
    */
   problemContentType(contentType: string): this {
-    if (!(contentType.split(';')[0] ?? '').toLowerCase().includes('json')) {
+    // The media type alone: a parameter such as `profile=json` does not make a body JSON.
+    if (!/json/i.test(contentType.replace(/;.*$/s, ''))) {
       throw new ErrConfiguration(
         errMessage(`Cannot send problems as "${contentType}": it is not a JSON media type`)
           .solutions('Pass a JSON media type, such as "application/problem+json" or "application/json"')

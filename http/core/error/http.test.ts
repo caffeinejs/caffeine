@@ -3,20 +3,46 @@ import { describe, it, expect } from 'vitest'
 
 import {
   Catch,
+  CatchWith,
   type IContext,
   Controller,
   ErrHTTP,
+  ErrHTTPBadGateway,
   ErrHTTPBadRequest,
   ErrHTTPConflict,
+  ErrHTTPFailedDependency,
+  ErrHTTPForbidden,
+  ErrHTTPGatewayTimeout,
+  ErrHTTPGone,
+  ErrHTTPImATeapot,
+  ErrHTTPInsufficientStorage,
+  ErrHTTPInternalServerError,
+  ErrHTTPLocked,
+  ErrHTTPMethodNotAllowed,
+  ErrHTTPMisdirectedRequest,
+  ErrHTTPNotAcceptable,
+  ErrHTTPNotFound,
+  ErrHTTPNotImplemented,
+  ErrHTTPPayloadTooLarge,
+  ErrHTTPPaymentRequired,
+  ErrHTTPPreconditionFailed,
+  ErrHTTPProxyAuthenticationRequired,
+  ErrHTTPRequestTimeout,
+  ErrHTTPServiceUnavailable,
+  ErrHTTPTooManyRequests,
   ErrHTTPUnauthorized,
+  ErrHTTPUnprocessableEntity,
+  ErrHTTPUnsupportedMediaType,
+  ErrHTTPVersionNotSupported,
   ErrorHandler,
   Get,
+  newHTTPError,
   type Problem,
   Post,
   Schema,
   type ActionResult,
 } from '../../index.js'
-import { createWebApplication } from '../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
 
 interface LogEntry {
   level?: number
@@ -547,6 +573,272 @@ describe('exposeStacktrace', () => {
     expect((await bodyOf(await app.request('/unexpected/boom'))).stacktrace).toBeUndefined()
     expect((await bodyOf(await app.request('/http-err/conflict'))).stacktrace).toBeUndefined()
     expect((await bodyOf(await app.request('/unexpected/upstream'))).stacktrace).toBeUndefined()
+
+    await app.close()
+  })
+})
+
+// Every ready-made class says, bare, no more than its status does: a client that switches on `code` or `status`
+// gets the same answer whichever of them a handler threw.
+describe('ErrHTTP subclasses', () => {
+  const classes: Array<[new () => ErrHTTP, number, string]> = [
+    [ErrHTTPBadRequest, 400, 'ERR_HTTP_BAD_REQUEST'],
+    [ErrHTTPUnauthorized, 401, 'ERR_HTTP_UNAUTHORIZED'],
+    [ErrHTTPPaymentRequired, 402, 'ERR_HTTP_PAYMENT_REQUIRED'],
+    [ErrHTTPForbidden, 403, 'ERR_HTTP_FORBIDDEN'],
+    [ErrHTTPNotFound, 404, 'ERR_HTTP_NOT_FOUND'],
+    [ErrHTTPMethodNotAllowed, 405, 'ERR_HTTP_METHOD_NOT_ALLOWED'],
+    [ErrHTTPNotAcceptable, 406, 'ERR_HTTP_NOT_ACCEPTABLE'],
+    [ErrHTTPProxyAuthenticationRequired, 407, 'ERR_HTTP_PROXY_AUTHENTICATION_REQUIRED'],
+    [ErrHTTPRequestTimeout, 408, 'ERR_HTTP_REQUEST_TIMEOUT'],
+    [ErrHTTPConflict, 409, 'ERR_HTTP_CONFLICT'],
+    [ErrHTTPGone, 410, 'ERR_HTTP_GONE'],
+    [ErrHTTPPreconditionFailed, 412, 'ERR_HTTP_PRECONDITION_FAILED'],
+    [ErrHTTPPayloadTooLarge, 413, 'ERR_HTTP_PAYLOAD_TOO_LARGE'],
+    [ErrHTTPUnsupportedMediaType, 415, 'ERR_HTTP_UNSUPPORTED_MEDIA_TYPE'],
+    [ErrHTTPImATeapot, 418, 'ERR_HTTP_IM_A_TEAPOT'],
+    [ErrHTTPMisdirectedRequest, 421, 'ERR_HTTP_MISDIRECTED_REQUEST'],
+    [ErrHTTPUnprocessableEntity, 422, 'ERR_HTTP_UNPROCESSABLE_ENTITY'],
+    [ErrHTTPLocked, 423, 'ERR_HTTP_LOCKED'],
+    [ErrHTTPFailedDependency, 424, 'ERR_HTTP_FAILED_DEPENDENCY'],
+    [ErrHTTPTooManyRequests, 429, 'ERR_HTTP_TOO_MANY_REQUESTS'],
+    [ErrHTTPInternalServerError, 500, 'ERR_HTTP_INTERNAL_SERVER_ERROR'],
+    [ErrHTTPNotImplemented, 501, 'ERR_HTTP_NOT_IMPLEMENTED'],
+    [ErrHTTPBadGateway, 502, 'ERR_HTTP_BAD_GATEWAY'],
+    [ErrHTTPServiceUnavailable, 503, 'ERR_HTTP_SERVICE_UNAVAILABLE'],
+    [ErrHTTPGatewayTimeout, 504, 'ERR_HTTP_GATEWAY_TIMEOUT'],
+    [ErrHTTPVersionNotSupported, 505, 'ERR_HTTP_VERSION_NOT_SUPPORTED'],
+    [ErrHTTPInsufficientStorage, 507, 'ERR_HTTP_INSUFFICIENT_STORAGE'],
+  ]
+
+  it('renders each one thrown bare as the problem of its status', async () => {
+    const router = newRouter('/thrown')
+    for (const [index, [Class]] of classes.entries()) {
+      router.get(`/${index}`, () => {
+        throw new Class()
+      })
+    }
+    const app = createWebApplication().mount(router)
+    await app.bootstrap()
+
+    for (const [index, [Class, status, code]] of classes.entries()) {
+      const res = await app.request(`/thrown/${index}`)
+      const body = await bodyOf(res)
+
+      expect([Class.name, res.status]).toEqual([Class.name, status])
+      expect(new Class().name).toBe(Class.name)
+      // The default message is the status phrase, so the detail adds nothing a client did not already know.
+      expect(body).toEqual({ type: 'about:blank', title: body.title, status, detail: body.title, code })
+    }
+
+    await app.close()
+  })
+})
+
+describe('ErrHTTP.builder', () => {
+  // A legacy client keeps its own error shape on one route while the rest of the application speaks problems.
+  it('builds an error that sends a body of its own, with its cause and headers', () => {
+    const cause = new Error('quota store unreachable')
+    const err = ErrHTTP.builder()
+      .statusCode(429)
+      .message('Slow down')
+      .cause(cause)
+      .headers({ 'retry-after': '30' })
+      .body({ error: 'rate_limited' })
+      .options({ code: 'ERR_RATE_LIMITED' })
+      .build()
+
+    expect(err).toBeInstanceOf(ErrHTTP)
+    expect([err.statusCode, err.message, err.code]).toEqual([429, 'Slow down', 'ERR_RATE_LIMITED'])
+    expect(err.cause).toBe(cause)
+    expect(err.headers).toEqual({ 'retry-after': '30' })
+    expect(err.body).toEqual({ error: 'rate_limited' })
+  })
+
+  // `options(...)` merges over what the fluent calls set, so a shared default block and a per-site detail compose.
+  it('keeps the fields options() does not name', () => {
+    const err = newHTTPError()
+      .statusCode(404)
+      .message('Pet 42 not found')
+      .type('https://example.com/problems/pet-not-found')
+      .options({ instance: '/pets/42' })
+      .build()
+
+    expect(err.toProblem()).toEqual({
+      type: 'https://example.com/problems/pet-not-found',
+      title: 'Not Found',
+      status: 404,
+      detail: 'Pet 42 not found',
+      code: 'ERR_HTTP',
+      instance: '/pets/42',
+    })
+  })
+})
+
+class ErrInventory extends Error {}
+
+@Catch(ErrInventory)
+class InventoryHandler implements ErrorHandler<ErrInventory> {
+  handle(ctx: IContext): ActionResult {
+    ctx.status(409)
+    return { inventory: 'conflict' }
+  }
+}
+void [InventoryHandler]
+
+// A controller with handlers of its own still falls back to the application's problem for everything else.
+@CatchWith(InventoryHandler)
+@Controller('/inventory')
+class InventoryController {
+  @Get('/legacy')
+  legacy(): ActionResult {
+    // Some older libraries reject with a string rather than an Error.
+    throw 'connection reset by peer' as unknown as Error
+  }
+}
+void [InventoryController]
+
+describe('failures from the real world', () => {
+  it('answers a thrown string with the generic problem, from a plain route and from a controller with handlers', async () => {
+    const app = createWebApplication().mount(
+      newRouter('/legacy').get('/', () => {
+        throw 'socket hang up' as unknown as Error
+      }),
+    )
+    await app.bootstrap()
+
+    for (const path of ['/legacy', '/inventory/legacy']) {
+      const res = await app.request(path)
+      const text = await res.text()
+
+      expect(res.status).toBe(500)
+      expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
+      expect(JSON.parse(text)).toEqual({
+        type: 'about:blank',
+        title: 'Internal Server Error',
+        status: 500,
+        detail: 'Internal Server Error',
+        code: 'ERR_INTERNAL',
+      })
+      expect(text).not.toMatch(/hang up|reset by peer/)
+    }
+
+    await app.close()
+  })
+
+  // What a rate limiter throws: a 429 that tells the client when to come back.
+  it('keeps the headers a 4xx from a library carries, beside the problem', async () => {
+    const app = createWebApplication().mount(
+      newRouter('/search').get('/', () => {
+        throw Object.assign(new Error('Rate limit exceeded, retry in 30 seconds'), {
+          statusCode: 429,
+          code: 'FST_ERR_RATE_LIMIT',
+          headers: { 'retry-after': '30', 'x-ratelimit-remaining': '0' },
+        })
+      }),
+    )
+    await app.bootstrap()
+
+    const res = await app.request('/search')
+
+    expect(res.status).toBe(429)
+    expect(res.headers.get('retry-after')).toBe('30')
+    expect(res.headers.get('x-ratelimit-remaining')).toBe('0')
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: 'Too Many Requests',
+      status: 429,
+      detail: 'Rate limit exceeded, retry in 30 seconds',
+      code: 'FST_ERR_RATE_LIMIT',
+    })
+
+    await app.close()
+  })
+
+  // nginx's 499: a status with no phrase still gets a code a client can look up.
+  it('names a status Node has no phrase for', async () => {
+    const app = createWebApplication().mount(
+      newRouter('/upload').get('/', () => {
+        throw Object.assign(new Error('Client closed the request'), { statusCode: 499 })
+      }),
+    )
+    await app.bootstrap()
+
+    const res = await app.request('/upload')
+
+    expect(res.status).toBe(499)
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: 'Unknown Error',
+      status: 499,
+      detail: 'Client closed the request',
+      code: 'ERR_HTTP',
+    })
+
+    await app.close()
+  })
+
+  // A webhook handler that checks its payload with its own Ajv instance and throws what Ajv reported, the way
+  // Fastify does. Ajv built with `messages: false` leaves each message out, and there is no request slot to name.
+  it('lists the issues of a validation a handler ran itself', async () => {
+    const app = createWebApplication().mount(
+      newRouter('/webhooks').post('/', () => {
+        throw Object.assign(new Error('Webhook payload is invalid'), {
+          statusCode: 422,
+          code: 'ERR_WEBHOOK_PAYLOAD',
+          validation: [
+            { keyword: 'required', instancePath: '/data', schemaPath: '#/required', params: { missingProperty: 'id' } },
+            {
+              keyword: 'enum',
+              instancePath: '/event/a~1b~0c',
+              schemaPath: '#/enum',
+              params: {},
+              message: 'must be equal to one of the allowed values',
+            },
+          ],
+        })
+      }),
+    )
+    await app.bootstrap()
+
+    const res = await app.request('/webhooks', { method: 'POST' })
+
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: 'Unprocessable Entity',
+      status: 422,
+      detail: 'Webhook payload is invalid',
+      code: 'ERR_WEBHOOK_PAYLOAD',
+      // JSON pointer escapes are undone: `~1` is a slash and `~0` a tilde inside one property name.
+      errors: [
+        { path: 'data.id', message: 'is invalid', code: 'required' },
+        { path: 'event.a/b~c', message: 'must be equal to one of the allowed values', code: 'enum' },
+      ],
+    })
+
+    await app.close()
+  })
+
+  // An error rebuilt from a worker or an RPC reply often has no stack of its own; its name and message still say
+  // what failed.
+  it('names a cause that has no stack in the stack trace it exposes', async () => {
+    const remote = Object.assign(Object.create(Error.prototype) as Error, {
+      name: 'ErrLedger',
+      message: 'ledger shard 3 is read-only',
+    })
+    const app = createWebApplication()
+      .errorHandling(e => e.exposeStacktrace())
+      .mount(
+        newRouter('/payments').post('/', () => {
+          throw new Error('Cannot record the payment', { cause: remote })
+        }),
+      )
+    await app.bootstrap()
+
+    const body = await bodyOf(await app.request('/payments', { method: 'POST' }))
+
+    expect(body.stacktrace).toContain('Caused by: ErrLedger: ledger shard 3 is read-only')
 
     await app.close()
   })

@@ -652,9 +652,25 @@ describe('problemContentType', () => {
     await app.close()
   })
 
+  // A vendor type with its own version parameter, as some API gateways require.
+  it('takes a JSON media type with parameters', async () => {
+    const app = createWebApplication()
+      .errorHandling(e => e.problemContentType('application/vnd.acme.error+json; version=2'))
+      .mount(conflicts())
+    await app.bootstrap()
+
+    const res = await app.request('/media/thrown')
+
+    // Fastify writes the parameters back quoted and adds the charset it encoded the body in.
+    expect(res.headers.get('content-type')).toBe('application/vnd.acme.error+json; version="2"; charset=utf-8')
+    expect(await res.json()).toMatchObject({ status: 409, code: 'ERR_HTTP_CONFLICT' })
+
+    await app.close()
+  })
+
   // The server serializes an object only under a JSON media type; any other would fail every error at runtime.
-  it('refuses a media type that is not JSON at start-up', async () => {
-    const app = createWebApplication().errorHandling(e => e.problemContentType('text/html'))
+  it.each(['text/html', 'text/html; profile=json'])('refuses %s at start-up', async contentType => {
+    const app = createWebApplication().errorHandling(e => e.problemContentType(contentType))
 
     const failure = await app.bootstrap().then(
       () => undefined,
@@ -663,7 +679,7 @@ describe('problemContentType', () => {
 
     expect(failure).toBeInstanceOf(ErrConfiguration)
     expect((failure as Error).message.split('\n')[0]).toBe(
-      'Cannot send problems as "text/html": it is not a JSON media type',
+      `Cannot send problems as "${contentType}": it is not a JSON media type`,
     )
   })
 })
