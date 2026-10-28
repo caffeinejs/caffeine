@@ -2,9 +2,10 @@ import type { RouteValidationSchema } from '../core/routing/spec.js'
 import { configureRoute } from './registrar/registrar.js'
 
 /**
- * Declares the validation contract of a route. Each slot takes a `$t` schema (recommended) or any Standard Schema
- * that converts to JSON Schema; the schema is compiled once, when the route is registered, and Fastify's Ajv
- * validates every request from the compiled result.
+ * Declares the validation contract of a route. Each slot takes a `$t` schema (recommended) or any Standard Schema, and
+ * the schema is compiled once, when the route is registered. Fastify's Ajv validates the request, unless a slot holds
+ * a codec such as `$t.Duration()` or a Standard Schema: then Caffeine validates it, decoding the codecs and running
+ * the library.
  *
  * ```ts
  * @Post('/')

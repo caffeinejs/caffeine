@@ -355,6 +355,21 @@ describe('the init argument', () => {
     })
   })
 
+  // The route decodes the text itself, so the client sends the text: a span written `'5s'`, not milliseconds.
+  it('takes the text a codec in the query reads', () => {
+    typeOnly(() => {
+      const jobs = new Router('/jobs')
+        .get('/')
+        .schema({ querystring: $t.Object({ timeout: $t.Duration() }) })
+        .handler(() => ({ ok: true }))
+      const client = brewer<typeof jobs>('http://localhost')
+
+      expectTypeOf(client.jobs.get).toBeCallableWith({ query: { timeout: '5s' } })
+      // @ts-expect-error -- the route reads duration text and refuses a number
+      void client.jobs.get({ query: { timeout: 5000 } })
+    })
+  })
+
   it('takes headers the route did not declare beside the ones it did', () => {
     typeOnly(() => {
       const counted = new Router('/counted')

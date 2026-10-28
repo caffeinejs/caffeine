@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { isStandardSchema, isTypeBoxSchema, schemaVendor } from './schema.js'
 import { $t } from './t.js'
-import { validateSchema } from './validate.js'
+import { compileEncoder, compileValidator, hasCodec, registerFormat, validateSchema } from './validate.js'
 
 describe('schema detection', () => {
   it('tells the two dialects apart', () => {
@@ -164,5 +164,250 @@ describe('validateSchema with materialize', () => {
       ok: true,
       value: { root: { name: 'n' } },
     })
+  })
+})
+
+describe('compileValidator with TypeBox', () => {
+  const Query = $t.Object({ timeout: $t.Duration(), tags: $t.Optional($t.List($t.String())), page: $t.Integer() })
+
+  it('converts, checks and decodes, so the caller gets the value its type promises', () => {
+    const validate = compileValidator(Query)
+
+    expect(validate({ timeout: '5s', tags: 'a,b', page: '2' })).toEqual({
+      ok: true,
+      value: { timeout: 5000, tags: ['a', 'b'], page: 2 },
+    })
+  })
+
+  // A large invalid value must not cost a list of every failure: the first is all a caller gets.
+  it('reports the first issue only', () => {
+    const validate = compileValidator($t.Object({ ids: $t.Array($t.Integer()) }))
+
+    const result = validate({ ids: ['x', 'y', 'z'] })
+
+    expect(result).toEqual({
+      ok: false,
+      issues: [{ path: 'ids.0', message: 'Expected integer', code: expect.any(String) }],
+    })
+  })
+
+  it('reports text a codec cannot read as an issue on its field', () => {
+    const validate = compileValidator($t.Object({ db: $t.JSON($t.Object({ host: $t.String() })) }))
+
+    expect(validate({ db: '{not json' })).toEqual({
+      ok: false,
+      issues: [{ path: 'db', message: 'The value is not valid JSON', code: 'Decode' }],
+    })
+  })
+
+  it('works on the value it is handed rather than a copy', () => {
+    const input = { page: '2' }
+
+    const result = compileValidator($t.Object({ page: $t.Integer() }))(input)
+
+    expect(result.ok === true && result.value).toBe(input)
+    expect(input).toEqual({ page: 2 })
+  })
+
+  // As Ajv's `removeAdditional`, which validates HTTP requests: a key goes only where its object forbids it.
+  it('drops an undeclared key only where its object forbids undeclared keys', () => {
+    const validate = compileValidator(
+      $t.Object(
+        {
+          open: $t.Object({ a: $t.String() }),
+          closed: $t.Object({ a: $t.String() }, { additionalProperties: false }),
+          either: $t.Nullable($t.Object({ a: $t.String() }, { additionalProperties: false })),
+        },
+        { additionalProperties: false },
+      ),
+    )
+
+    expect(
+      validate({ open: { a: 'x', more: 1 }, closed: { a: 'y', more: 2 }, either: { a: 'z', more: 3 }, extra: true }),
+    ).toEqual({
+      ok: true,
+      value: { open: { a: 'x', more: 1 }, closed: { a: 'y' }, either: { a: 'z' } },
+    })
+  })
+
+  // As Ajv's `removeAdditional`: wherever a closed object is reached, through an array, a tuple, a record or a schema
+  // for undeclared keys, and nowhere a schema says nothing about.
+  it('drops an undeclared key in every closed object a value reaches, and none in a value left unchecked', () => {
+    const Closed = $t.Object({ a: $t.String() }, { additionalProperties: false })
+    const validate = compileValidator(
+      $t.Object({
+        list: $t.Array(Closed),
+        pair: $t.Tuple([Closed, $t.Integer()]),
+        named: $t.Record($t.String(), Closed),
+        extra: $t.Object({}, { additionalProperties: Closed }),
+        either: $t.Union([$t.Null(), Closed]),
+        any: $t.Unknown(),
+      }),
+    )
+
+    expect(
+      validate({
+        list: [{ a: 'l', more: 1 }],
+        pair: [{ a: 'p', more: 2 }, '3'],
+        named: { k: { a: 'n', more: 4 } },
+        extra: { k: { a: 'e', more: 5 } },
+        either: { a: 'u', more: 6 },
+        any: [{ more: 7 }],
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        list: [{ a: 'l' }],
+        pair: [{ a: 'p' }, 3],
+        named: { k: { a: 'n' } },
+        extra: { k: { a: 'e' } },
+        either: { a: 'u' },
+        any: [{ more: 7 }],
+      },
+    })
+  })
+})
+
+describe('compileValidator with a Standard Schema', () => {
+  it('runs the library, so its refinements and transforms apply', () => {
+    const validate = compileValidator(
+      z.object({
+        email: z.string().refine(v => v.includes('@'), 'must be an email'),
+        name: z.string().transform(v => v.trim()),
+      }),
+    )
+
+    expect(validate({ email: 'a@b.c', name: '  cat ' })).toEqual({ ok: true, value: { email: 'a@b.c', name: 'cat' } })
+    expect(validate({ email: 'nope', name: 'cat' })).toEqual({
+      ok: false,
+      issues: [{ path: 'email', message: 'must be an email' }],
+    })
+  })
+
+  // A large invalid value must not answer with every issue the library collected: the first is all a caller gets.
+  it('reports the first issue only, however many the library collected', () => {
+    const validate = compileValidator(z.object({ ids: z.array(z.number()) }))
+
+    expect(validate({ ids: ['a', 'b', 'c'] })).toEqual({
+      ok: false,
+      issues: [{ path: 'ids.0', message: 'Invalid input: expected number, received string' }],
+    })
+  })
+
+  it('settles with the library when it validates asynchronously', async () => {
+    const validate = compileValidator(z.object({ name: z.string().refine(async v => v !== 'taken', 'is taken') }))
+
+    await expect(validate({ name: 'taken' })).resolves.toEqual({
+      ok: false,
+      issues: [{ path: 'name', message: 'is taken' }],
+    })
+    await expect(validate({ name: 'free' })).resolves.toEqual({ ok: true, value: { name: 'free' } })
+  })
+})
+
+// TypeBox's object check ignores `patternProperties`; Ajv, which validates HTTP requests, honours them.
+describe('compileValidator with patternProperties', () => {
+  const Body = $t.Object(
+    { ttl: $t.Duration(), name: $t.String() },
+    { additionalProperties: false, patternProperties: { '^x-': $t.String() } },
+  )
+
+  it('keeps a key a pattern allows, and drops one nothing allows where undeclared keys are forbidden', () => {
+    expect(compileValidator(Body)({ ttl: '1m', name: 'cat', 'x-trace': '1', admin: true })).toEqual({
+      ok: true,
+      value: { ttl: 60000, name: 'cat', 'x-trace': '1' },
+    })
+  })
+
+  it("checks a key a pattern allows against that pattern's schema", () => {
+    expect(compileValidator(Body)({ ttl: '1m', name: 'cat', 'x-trace': { id: 1 } })).toEqual({
+      ok: false,
+      issues: [{ path: 'x-trace', message: 'Expected string', code: expect.any(String) }],
+    })
+  })
+
+  // A key only a pattern allows is not in the object's type, and Ajv, which validates the same route when nothing else
+  // in it holds a codec, never decodes: such a key reaches the handler as it was sent, whatever else the route holds.
+  it("converts a key's value as its pattern's schema says, and leaves a codec there undecoded", () => {
+    const validate = compileValidator(
+      $t.Object({}, { patternProperties: { '^t-': $t.Duration(), '^n-': $t.Integer() } }),
+    )
+
+    expect(validate({ 't-wait': '5s', 'n-count': '3', other: true })).toEqual({
+      ok: true,
+      value: { 't-wait': '5s', 'n-count': 3, other: true },
+    })
+  })
+
+  // As Ajv: every pattern a key matches checks it, and none is handed what another made of it.
+  it('checks a key two patterns allow against each of them', () => {
+    const validate = compileValidator(
+      $t.Object({ ttl: $t.Duration() }, { patternProperties: { '^t-': $t.Duration(), '^t-w': $t.Duration() } }),
+    )
+
+    expect(validate({ ttl: '1m', 't-wait': '5s' })).toEqual({ ok: true, value: { ttl: 60000, 't-wait': '5s' } })
+  })
+
+  // As on an object without patterns, where TypeBox decodes the keys its additionalProperties schema checks.
+  it('checks and decodes a key no pattern allows against an additionalProperties schema', () => {
+    const validate = compileValidator(
+      $t.Object({}, { additionalProperties: $t.Duration(), patternProperties: { '^x-': $t.String() } }),
+    )
+
+    expect(validate({ 'x-a': 's', wait: '5s' })).toEqual({ ok: true, value: { 'x-a': 's', wait: 5000 } })
+    expect(validate({ 'x-a': 's', wait: 'z' })).toMatchObject({ ok: false, issues: [{ path: 'wait' }] })
+  })
+
+  it('checks a key a pattern allows in an object nested in an array, naming where it failed', () => {
+    const validate = compileValidator($t.Array($t.Object({}, { patternProperties: { '^x-': $t.String() } })))
+
+    expect(validate([{ 'x-a': 'ok' }, { 'x-b': { id: 1 } }])).toEqual({
+      ok: false,
+      issues: [{ path: '1.x-b', message: 'Expected string', code: expect.any(String) }],
+    })
+  })
+})
+
+// TypeBox refuses every value of a format it does not know, until one is registered under its name.
+describe('registerFormat', () => {
+  it('teaches the validators a format, and keeps the first registration of a name', () => {
+    const validate = compileValidator($t.Object({ code: $t.String({ format: 'caffeine-test-even-length' }) }))
+
+    expect(validate({ code: 'ab' }).ok).toBe(false)
+
+    registerFormat('caffeine-test-even-length', value => value.length % 2 === 0)
+    registerFormat('caffeine-test-even-length', () => true)
+
+    expect(validate({ code: 'ab' }).ok).toBe(true)
+    expect(validate({ code: 'abc' }).ok).toBe(false)
+  })
+})
+
+describe('hasCodec', () => {
+  it('finds a codec at any depth, and nothing in a schema without one', () => {
+    expect(hasCodec($t.Object({ filter: $t.Object({ ttl: $t.Optional($t.Nullable($t.Duration())) }) }))).toBe(true)
+    expect(hasCodec($t.Object({ id: $t.Integer(), tags: $t.Array($t.String()) }))).toBe(false)
+    expect(hasCodec(z.object({ name: z.string().transform(v => v.trim()) }))).toBe(false)
+  })
+})
+
+describe('compileEncoder', () => {
+  it('runs codecs the other way, back to the text they read', () => {
+    const encode = compileEncoder($t.Object({ ttl: $t.Duration(), size: $t.Bytes() }))
+
+    expect(encode?.({ ttl: 5000, size: 2048 })).toEqual({ ttl: '5s', size: '2kb' })
+  })
+
+  it('leaves the value it is handed untouched', () => {
+    const value = { ttl: 5000 }
+
+    compileEncoder($t.Object({ ttl: $t.Duration() }))?.(value)
+
+    expect(value).toEqual({ ttl: 5000 })
+  })
+
+  it('has nothing to do for a schema without a codec', () => {
+    expect(compileEncoder($t.Object({ id: $t.Integer() }))).toBeUndefined()
+    expect(compileEncoder(z.object({ id: z.number() }))).toBeUndefined()
   })
 })
