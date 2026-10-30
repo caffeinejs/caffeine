@@ -2,13 +2,50 @@ import { type Duration, formatDuration, Minute, Second } from '@caffeinejs/std/d
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { Backoff } from '../backoff.js'
-import { settled } from '../compose.js'
+import { settled, type RawNext } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { ErrCallNotPermitted, ErrInvalidOption, type NotPermittedState } from '../errors.js'
+import { ErrCallRefused, ErrInvalidOption, restoreStacks, suppressStacks } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
 import { clampDelay, clock, scheduleUnref, type TimerHandle } from '../timers.js'
 import { CountWindow, type Window } from './_count_window.js'
 import { TimeWindow } from './_time_window.js'
+
+/** The circuit breaker states in which a call can be refused. */
+export type NotPermittedState = 'open' | 'forced_open' | 'half_open'
+
+const refusals: Record<NotPermittedState, string> = {
+  open: 'circuit breaker is open',
+  forced_open: 'circuit breaker is forced open',
+  half_open: 'circuit breaker is half open and every trial call is in use',
+}
+
+/**
+ * A circuit breaker refused the call; the operation did not run.
+ *
+ * `retryAfter` is the time left before the breaker lets trial calls through again. It is set only when `state`
+ * is `open`: a forced-open breaker stays open until someone resets it, and a half-open one frees a trial slot when
+ * a trial call settles.
+ */
+export class ErrCallNotPermitted extends ErrCallRefused {
+  // Built once rather than per refusal: refusals come in bulk while a dependency is down, and the footer is the same
+  // for every one of them.
+  static readonly #footer = errMessage('').reference('@caffeinejs/resilience', ErrCallNotPermitted).build()
+
+  /** The name of the circuit breaker that refused the call. */
+  readonly breaker: string
+  readonly state: NotPermittedState
+
+  constructor(breaker: string, state: NotPermittedState, retryAfter: Duration | undefined) {
+    super(
+      `Cannot call "${breaker}": ${refusals[state]}${ErrCallNotPermitted.#footer}`,
+      'ERR_CALL_NOT_PERMITTED',
+      retryAfter,
+    )
+    this.name = 'ErrCallNotPermitted'
+    this.breaker = breaker
+    this.state = state
+  }
+}
 
 export type CircuitBreakerState = 'closed' | 'open' | 'half_open' | 'forced_open' | 'disabled' | 'metrics_only'
 
@@ -54,7 +91,8 @@ export interface CircuitBreakerOptions {
   recordError?: (error: unknown) => boolean
   /**
    * Errors the breaker neither counts nor lets affect its state. Checked before `recordError`. A failure after
-   * the caller's signal aborted is always ignored.
+   * the caller's signal aborted is always ignored, and so is a refusal ({@link ErrCallRefused}) from a strategy
+   * inside the breaker, such as a spent rate limit or a full bulkhead.
    */
   ignoreError?: (error: unknown) => boolean
   /** Whether a returned value counts as a failure, such as a response with status 503. */
@@ -95,7 +133,8 @@ export interface CircuitBreakerEvents {
     readonly name: string
     readonly duration: Duration
     readonly error: unknown
-    readonly reason: 'ignored' | 'aborted'
+    /** `refused` when a strategy inside the breaker refused the call. */
+    readonly reason: 'ignored' | 'aborted' | 'refused'
   }
   notPermitted: { readonly name: string; readonly state: NotPermittedState }
   stateChange: { readonly name: string; readonly from: CircuitBreakerState; readonly to: CircuitBreakerState }
@@ -136,20 +175,17 @@ interface Refusal {
 const FORCED_OPEN_REFUSAL: Refusal = { state: 'forced_open', retryAfter: undefined }
 const HALF_OPEN_REFUSAL: Refusal = { state: 'half_open', retryAfter: undefined }
 
-const errorClass = Error as { stackTraceLimit?: number }
-
-// A refusal without a stack trace. The limit is process-wide, so it is restored before anything else can throw.
+// A refusal without a stack trace.
 function stacklessRefusal(
   breaker: string,
   state: NotPermittedState,
   retryAfter: Duration | undefined,
 ): ErrCallNotPermitted {
-  const limit = errorClass.stackTraceLimit
-  errorClass.stackTraceLimit = 0
+  const limit = suppressStacks()
   try {
     return new ErrCallNotPermitted(breaker, state, retryAfter)
   } finally {
-    errorClass.stackTraceLimit = limit
+    restoreStacks(limit)
   }
 }
 
@@ -329,7 +365,7 @@ export class CircuitBreaker implements StrategyObject {
     const state = this.#state
     if (state === DISABLED) {
       try {
-        return settled(next(ctx))
+        return settled((next as RawNext<T>)(ctx))
       } catch (error) {
         return Promise.reject(error)
       }
@@ -364,7 +400,7 @@ export class CircuitBreaker implements StrategyObject {
     // helper that called it would add a frame to every stack trace.
     let pending: Promise<T>
     try {
-      pending = settled(next(ctx))
+      pending = settled((next as RawNext<T>)(ctx))
     } catch (error) {
       pending = Promise.reject(error)
     }
@@ -497,11 +533,14 @@ export class CircuitBreaker implements StrategyObject {
     const now = clock.now()
     const duration = now - start
 
-    let reason: 'ignored' | 'aborted' | undefined
+    let reason: 'ignored' | 'aborted' | 'refused' | undefined
     let failed: boolean
     try {
       if (ctx.signal !== undefined && ctx.signal.aborted) {
         reason = 'aborted'
+      } else if (error instanceof ErrCallRefused) {
+        // This process turned the call away; the dependency never saw it.
+        reason = 'refused'
       } else if (this.#ignoreError !== undefined && this.#ignoreError(error)) {
         reason = 'ignored'
       }

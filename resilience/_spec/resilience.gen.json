@@ -1,0 +1,176 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ResilienceConfigSchema",
+  "type": "object",
+  "properties": {
+    "circuitBreakers": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "object",
+          "properties": {
+            "failureRateThreshold": {
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "type": "number"
+            },
+            "slowCallRateThreshold": {
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "type": "number"
+            },
+            "slowCallDurationThreshold": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
+            },
+            "slidingWindow": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "size"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "count",
+                      "type": "string"
+                    },
+                    "size": {
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "duration"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "time",
+                      "type": "string"
+                    },
+                    "duration": {
+                      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            },
+            "minimumNumberOfCalls": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "waitDurationInOpenState": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
+            },
+            "permittedNumberOfCallsInHalfOpenState": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxWaitDurationInHalfOpenState": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
+            },
+            "automaticTransitionFromOpenToHalfOpen": {
+              "type": "boolean"
+            },
+            "captureStackTrace": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "retries": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "object",
+          "properties": {
+            "maxAttempts": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "backoff": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
+            },
+            "failAfterMaxAttempts": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "timeLimiters": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "object",
+          "properties": {
+            "timeoutDuration": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "bulkheads": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "object",
+          "properties": {
+            "maxConcurrentCalls": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxWaitDuration": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
+            },
+            "maxQueuedCalls": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "captureStackTrace": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "rateLimiters": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "object",
+          "properties": {
+            "limitForPeriod": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "limitRefreshPeriod": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
+            },
+            "maxWaitDuration": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
+            },
+            "captureStackTrace": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

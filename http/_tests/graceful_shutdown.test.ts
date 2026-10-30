@@ -83,6 +83,20 @@ async function silentConnection(app: WebApplication): Promise<Socket> {
   return socket
 }
 
+/**
+ * A client connection that sends `request` as it opens, once the server has accepted it. Sent after the accept, the
+ * bytes could arrive once the server had already judged the connection silent.
+ */
+async function connectionSending(app: WebApplication, request: string): Promise<Socket> {
+  const accepted = new Promise(resolve => app.instance.server.once('connection', resolve))
+  const socket = connect(portOf(app), '127.0.0.1')
+  socket.on('error', () => undefined)
+  socket.write(request)
+  await accepted
+
+  return socket
+}
+
 /** A keep-alive connection whose one request has been answered, left idle. */
 async function idleConnection(app: WebApplication): Promise<Socket> {
   const socket = connect(portOf(app), '127.0.0.1')
@@ -283,12 +297,11 @@ describe('graceful shutdown', () => {
 
     const closed = app.close()
     await preClose
-    const client = await silentConnection(app)
+    const client = await connectionSending(app, 'GET /drain/fast HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
     client.setEncoding('utf8')
     let received = ''
     client.on('data', (chunk: string) => (received += chunk))
     const hungUp = new Promise(resolve => client.once('close', resolve))
-    client.write('GET /drain/fast HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
     await hungUp
     resume()
 

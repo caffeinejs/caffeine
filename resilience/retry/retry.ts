@@ -1,12 +1,34 @@
-import { type Duration, formatDuration, Millisecond } from '@caffeinejs/std/duration'
+import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
+import { exponential } from '../backoff.js'
 import { settled } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { ErrCallNotPermitted, ErrInvalidOption, ErrMaxRetriesExceeded } from '../errors.js'
+import { described, ErrCallRefused, ErrInvalidOption, ErrResilience } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
 import { clampDelay } from '../timers.js'
 import { sleep } from './_sleep.js'
+
+/**
+ * Every attempt returned a result the retry was told to retry, and the retry was told to fail rather than hand the
+ * last one back. The last result is in `result`.
+ */
+export class ErrMaxRetriesExceeded extends ErrResilience {
+  readonly attempts: number
+  readonly result: unknown
+
+  constructor(retry: string, attempts: number, result: unknown) {
+    super(
+      errMessage(`Cannot complete "${retry}": result still retryable after ${attempts} attempts`)
+        .reference('@caffeinejs/resilience', ErrMaxRetriesExceeded)
+        .build(),
+      'ERR_MAX_RETRIES_EXCEEDED',
+    )
+    this.name = 'ErrMaxRetriesExceeded'
+    this.attempts = attempts
+    this.result = result
+  }
+}
 
 /**
  * The delay before the next attempt. `attempt` is the attempt that just failed, starting at 1; `error` is what it
@@ -19,14 +41,23 @@ export interface RetryOptions {
   name: string
   /** Attempts in total, the first call included. Defaults to 3. */
   maxAttempts?: number
-  /** The wait between attempts, or a function of the failed attempt. Defaults to 500 milliseconds. */
+  /**
+   * The wait between attempts, or a function of the failed attempt. Defaults to `exponential()`: 500 milliseconds,
+   * doubling per attempt up to 30 seconds, each wait spread by half of it either way.
+   */
   backoff?: Duration | RetryBackoff
   /**
-   * Whether an error is worth another attempt. Defaults to every error except {@link ErrCallNotPermitted}, so an
-   * open circuit breaker fails the call at once. A function given here replaces that default entirely.
+   * Whether an error is worth another attempt. Defaults to every error.
+   *
+   * A refusal ({@link ErrCallRefused}: an open circuit breaker, a full bulkhead, a spent rate limit) and a failure
+   * after the caller aborted are never retried, whatever this returns. It must return a boolean; anything else
+   * rejects the call with {@link ErrInvalidOption}.
    */
   retryOn?: (error: unknown, attempt: number) => boolean
-  /** Whether a returned value is worth another attempt, such as a response with status 503. */
+  /**
+   * Whether a returned value is worth another attempt, such as a response with status 503. It must return a
+   * boolean; anything else rejects the call with {@link ErrInvalidOption}.
+   */
   retryOnResult?: (result: unknown) => boolean
   /**
    * What happens when the last attempt still returns a retryable value: `false`, the default, hands that value to
@@ -68,8 +99,6 @@ export interface RetryEvents {
   ignored: { readonly name: string; readonly attempts: number; readonly error: unknown }
 }
 
-const retryAnythingButARefusal = (error: unknown): boolean => !(error instanceof ErrCallNotPermitted)
-
 // One per call that needs a second attempt. It carries the resolvers of the promise the caller holds, so a later
 // attempt settles that promise directly instead of resolving the attempt before it: the memory and the settle time
 // of a call do not grow with the attempts it used.
@@ -91,7 +120,7 @@ export class Retry implements StrategyObject {
   readonly #name: string
   readonly #maxAttempts: number
   readonly #backoff: Duration | RetryBackoff
-  readonly #retryOn: (error: unknown, attempt: number) => boolean
+  readonly #retryOn: ((error: unknown, attempt: number) => boolean) | undefined
   readonly #retryOnResult: ((result: unknown) => boolean) | undefined
   readonly #failAfterMaxAttempts: boolean
   readonly #emitter = new Emitter<RetryEvents>()
@@ -122,7 +151,7 @@ export class Retry implements StrategyObject {
       throw invalid(`maxAttempts must be an integer of at least 1, got ${String(maxAttempts)}`)
     }
 
-    const backoff = options.backoff ?? 500 * Millisecond
+    const backoff = options.backoff ?? exponential()
     if (typeof backoff !== 'function' && (typeof backoff !== 'number' || !Number.isFinite(backoff) || backoff < 0)) {
       throw invalid(`backoff must be a finite Duration of at least 0s or a function, got ${formatDuration(backoff)}`)
     }
@@ -141,7 +170,7 @@ export class Retry implements StrategyObject {
     this.#name = name
     this.#maxAttempts = maxAttempts
     this.#backoff = backoff
-    this.#retryOn = options.retryOn ?? retryAnythingButARefusal
+    this.#retryOn = options.retryOn
     this.#retryOnResult = options.retryOnResult
     this.#failAfterMaxAttempts = failAfterMaxAttempts
   }
@@ -196,7 +225,7 @@ export class Retry implements StrategyObject {
   #retriesResult(attempt: number, result: unknown): boolean {
     let retryable: boolean
     try {
-      retryable = this.#retryOnResult !== undefined && this.#retryOnResult(result)
+      retryable = this.#retryOnResult !== undefined && this.#verdict('retryOnResult', this.#retryOnResult(result))
     } catch (thrown) {
       this.#ignored(attempt, thrown)
       throw thrown
@@ -225,7 +254,10 @@ export class Retry implements StrategyObject {
   #retriesError(ctx: ExecutionContext, attempt: number, error: unknown): boolean {
     let retryable: boolean
     try {
-      retryable = !(ctx.signal !== undefined && ctx.signal.aborted) && this.#retryOn(error, attempt)
+      retryable =
+        !(ctx.signal !== undefined && ctx.signal.aborted) &&
+        !(error instanceof ErrCallRefused) &&
+        (this.#retryOn === undefined || this.#verdict('retryOn', this.#retryOn(error, attempt)))
     } catch (thrown) {
       this.#ignored(attempt, thrown)
       throw thrown
@@ -244,6 +276,21 @@ export class Retry implements StrategyObject {
       this.#emitter.emit('failure', { name: this.#name, attempts: attempt, error })
     }
     return false
+  }
+
+  // A predicate's answer, refused unless it is a boolean: a promise is truthy, so an async predicate would retry
+  // whatever it resolved to.
+  #verdict(key: 'retryOn' | 'retryOnResult', value: unknown): boolean {
+    if (typeof value !== 'boolean') {
+      throw new ErrInvalidOption(
+        errMessage(`Cannot run retry "${this.#name}": ${key} must return a boolean, got ${described(value)}`)
+          .solutions(`Return true or false from ${key}: an async function returns a promise, which is not one`)
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
+    }
+
+    return value
   }
 
   #retrying<T>(ctx: ExecutionContext, next: Next<T>, error: unknown, result: unknown, failed: boolean): Promise<T> {

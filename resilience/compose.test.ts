@@ -1,8 +1,8 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import { circuitBreaker } from './circuit_breaker/circuit_breaker.js'
+import { circuitBreaker, ErrCallNotPermitted } from './circuitbreaker/circuitbreaker.js'
 import { compose, runWith } from './compose.js'
-import { ErrCallNotPermitted, ErrInvalidOption } from './errors.js'
+import { ErrInvalidOption } from './errors.js'
 import { retry } from './retry/retry.js'
 import type { ExecutionContext, Next, Strategy, StrategyObject } from './strategy.js'
 

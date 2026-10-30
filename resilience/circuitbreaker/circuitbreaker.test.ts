@@ -2,7 +2,7 @@ import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { compose, runWith } from '../compose.js'
-import { ErrCallNotPermitted, ErrInvalidOption } from '../errors.js'
+import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
 import { useFakeClock } from '../fake_clock.testkit.js'
 import type { ExecutionContext, Next, Strategy } from '../strategy.js'
 import {
@@ -10,7 +10,8 @@ import {
   type CircuitBreaker,
   type CircuitBreakerEvents,
   type CircuitBreakerOptions,
-} from './circuit_breaker.js'
+  ErrCallNotPermitted,
+} from './circuitbreaker.js'
 
 beforeEach(() => {
   useFakeClock()
@@ -245,6 +246,23 @@ describe('circuitBreaker, closed', () => {
     expect(seen[0][1]).toMatchObject({ name: 'inventory', reason: 'ignored' })
   })
 
+  // A spent quota or a full bulkhead inside the breaker is this process turning the call away: counted as failures,
+  // a burst would open the breaker on a healthy dependency.
+  it('ignores a refusal from a strategy inside it, whatever recordError says', async () => {
+    const breaker = breakerOf({ recordError: () => true })
+    const seen = listen(breaker, 'ignored', 'failure')
+    const refusal = new ErrCallRefused('Cannot call "inventory": queue is full', 'ERR_QUEUE_FULL', undefined)
+
+    await expect(
+      runWith(() => {
+        throw refusal
+      }, breaker),
+    ).rejects.toBe(refusal)
+
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 0, failedCalls: 0 })
+    expect(seen).toEqual([['ignored', { name: 'inventory', duration: 0, error: refusal, reason: 'refused' }]])
+  })
+
   // A caller that gave up is not a dependency that failed.
   it('ignores a failure that settles after the caller aborted', async () => {
     const breaker = breakerOf()
@@ -313,6 +331,8 @@ describe('circuitBreaker, open', () => {
 
     expect(operation).not.toHaveBeenCalled()
     expect(refused).toBeInstanceOf(ErrCallNotPermitted)
+    // The kind every refusal shares, which retry never retries and an HTTP layer answers with 503.
+    expect(refused).toBeInstanceOf(ErrCallRefused)
     expect(refused).toMatchObject({
       breaker: 'inventory',
       state: 'open',

@@ -1,10 +1,14 @@
-import { Millisecond } from '@caffeinejs/std/duration'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ErrBulkheadFull } from '../bulkhead/bulkhead.js'
+import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
 import { runWith } from '../compose.js'
-import { ErrCallNotPermitted, ErrInvalidOption, ErrMaxRetriesExceeded } from '../errors.js'
+import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
+import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import type { ExecutionContext, Next, Strategy } from '../strategy.js'
-import { retry, type RetryEvents, type RetryOptions } from './retry.js'
+import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
+import { ErrMaxRetriesExceeded, retry, type RetryEvents, type RetryOptions } from './retry.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -136,7 +140,57 @@ describe('retry', () => {
     expect(operation).toHaveBeenCalledTimes(1)
   })
 
-  it('replaces the default entirely with a retryOn of its own', async () => {
+  // A predicate written for transient errors, such as `() => true`, must not turn an open breaker, a full bulkhead or
+  // a spent quota into a retry storm: a refusal means the operation never ran, and retrying it at once adds load.
+  it.each([
+    ['an open circuit breaker', new ErrCallNotPermitted('inventory', 'open', 1_000)],
+    ['a full bulkhead', new ErrBulkheadFull('inventory', 2, 0)],
+    ['a spent rate limit', new ErrRateLimitExceeded('inventory', 100, 1 * Second, 400 * Millisecond)],
+    ['any other refusal', new ErrCallRefused('Cannot call "inventory": queue is full', 'ERR_QUEUE_FULL', undefined)],
+  ])('never retries %s, whatever retryOn says', async (_, refusal) => {
+    const retryOn = vi.fn(() => true)
+    const retries = retryOf({ retryOn })
+    const operation = vi.fn(() => {
+      throw refusal
+    })
+
+    await expect(runWith(operation, retries)).rejects.toBe(refusal)
+    expect(operation).toHaveBeenCalledTimes(1)
+    expect(retryOn).not.toHaveBeenCalled()
+    expect(retries.metrics().failedCallsWithoutRetry).toBe(1)
+  })
+
+  it('never retries a failure after the caller aborted, whatever retryOn says', async () => {
+    const retryOn = vi.fn(() => true)
+    const retries = retryOf({ retryOn })
+    const controller = new AbortController()
+    const operation = vi.fn(() => {
+      controller.abort()
+      throw new Error('cancelled')
+    })
+
+    await expect(runWith(operation, retries, controller.signal)).rejects.toThrow('cancelled')
+    expect(operation).toHaveBeenCalledTimes(1)
+    expect(retryOn).not.toHaveBeenCalled()
+  })
+
+  // A timeout is the dependency being slow, not a refusal: the next attempt may well be fast.
+  it('retries a time limit by default', async () => {
+    const retries = retryOf()
+    let attempt = 0
+    const operation = vi.fn(() => {
+      attempt++
+      if (attempt === 1) {
+        throw new ErrTimeLimitExceeded('inventory', 100 * Millisecond)
+      }
+      return 'ok'
+    })
+
+    await expect(runWith(operation, retries)).resolves.toBe('ok')
+    expect(operation).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks retryOn about every other error, the last attempt included', async () => {
     const seen: Array<[unknown, number]> = []
     const retries = retryOf({
       retryOn: (error, attempt) => {
@@ -144,20 +198,82 @@ describe('retry', () => {
         return true
       },
     })
-    const refusal = new ErrCallNotPermitted('inventory', 'open', 1_000)
+    const error = new Error('down')
     const operation = vi.fn(() => {
-      throw refusal
+      throw error
     })
 
-    await expect(runWith(operation, retries)).rejects.toBe(refusal)
+    await expect(runWith(operation, retries)).rejects.toBe(error)
 
     expect(operation).toHaveBeenCalledTimes(3)
     // Consulted on the last attempt too: it decides whether the call ends as exhausted or as not retryable.
     expect(seen).toEqual([
-      [refusal, 1],
-      [refusal, 2],
-      [refusal, 3],
+      [error, 1],
+      [error, 2],
+      [error, 3],
     ])
+  })
+
+  // A promise is truthy: an async predicate would retry every error, whatever it resolved to.
+  it.each([
+    ['a promise', Promise.resolve(false)],
+    ['undefined', undefined],
+    ['a number', 1],
+  ])('rejects with ErrInvalidOption when retryOn returns %s, and counts the call as failed', async (got, verdict) => {
+    const retries = retryOf({ retryOn: (() => verdict) as never })
+    const seen = listen(retries, 'ignored')
+    const { operation, attempts } = flaky(5)
+
+    const error = await runWith(operation, retries).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message).toContain(
+      `Cannot run retry "inventory": retryOn must return a boolean, got ${got}`,
+    )
+    expect(attempts).toEqual([1])
+    expect(retries.metrics().failedCallsWithoutRetry).toBe(1)
+    expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, error }]])
+  })
+
+  it.each([
+    ['a promise', Promise.resolve(false)],
+    ['undefined', undefined],
+    ['a number', 1],
+  ])('rejects with ErrInvalidOption when retryOnResult returns %s', async (got, verdict) => {
+    const retries = retryOf({ retryOnResult: (() => verdict) as never })
+    const operation = vi.fn(() => 'busy')
+
+    const error = await runWith(operation, retries).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message).toContain(
+      `Cannot run retry "inventory": retryOnResult must return a boolean, got ${got}`,
+    )
+    expect(operation).toHaveBeenCalledTimes(1)
+    expect(retries.metrics().failedCallsWithoutRetry).toBe(1)
+  })
+
+  // Clients that back off in lockstep reach a recovering dependency together. The default spreads them: 500 ms
+  // doubling per attempt, each delay anywhere within half of it either way.
+  it.each([
+    [0, [250, 500]],
+    [1, [750, 1_500]],
+  ])('backs off exponentially with jitter by default: Math.random() = %d waits %o', async (random, [first, second]) => {
+    vi.spyOn(Math, 'random').mockReturnValue(random)
+    const retries = retry({ name: 'inventory' })
+    const { operation, attempts } = flaky(2)
+
+    const call = runWith(operation, retries)
+    await vi.advanceTimersByTimeAsync(first - 1)
+    expect(attempts).toEqual([1])
+    await vi.advanceTimersByTimeAsync(1)
+    expect(attempts).toEqual([1, 2])
+
+    await vi.advanceTimersByTimeAsync(second - 1)
+    expect(attempts).toEqual([1, 2])
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(call).resolves.toBe('ok')
+    expect(attempts).toEqual([1, 2, 3])
   })
 
   it('stops at an error that retryOn declines', async () => {

@@ -8,8 +8,9 @@ import { defineConfig } from 'vitest/config'
 // (test/services/redis) where a spec needs them — distlock and the caching Redis store
 // (caching/store/redis/redis.e2e.ts) against the dockerized Redis and Valkey, the HTTP cache through a staged
 // Redis outage (caching.chaos.e2e.ts), and configuration against the dockerized Spring Cloud Config Server
-// (test/services/configserver). Specs skip when their service is not up, unless CAFFEINE_E2E_STRICT=1, which
-// fails them instead.
+// (test/services/configserver), and the resilience strategies against a scripted dependency on a local socket
+// (resilience_*.e2e.ts), which needs no service. Specs skip when their service is not up, unless
+// CAFFEINE_E2E_STRICT=1, which fails them instead.
 export default defineConfig({
   plugins: [
     swc.vite({
@@ -28,7 +29,20 @@ export default defineConfig({
     alias: {
       // Test the working-tree source, not a built dist. A string alias matches by prefix, so the subpath goes first.
       '@caffeinejs/http/fastify': fileURLToPath(new URL('../../http/platform/fastify/index.ts', import.meta.url)),
+      // One copy of the route registry: the resilience HTTP check reads the routes the source decorators wrote.
+      '@caffeinejs/http/decorators/registrar': fileURLToPath(
+        new URL('../../http/decorators/registrar/index.ts', import.meta.url),
+      ),
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
+      ...Object.fromEntries(
+        ['aop', 'bulkhead', 'circuitbreaker', 'fallback', 'http', 'otel', 'ratelimiter', 'retry', 'timelimiter'].map(
+          subpath => [
+            `@caffeinejs/resilience/${subpath}`,
+            fileURLToPath(new URL(`../../resilience/${subpath}/index.ts`, import.meta.url)),
+          ],
+        ),
+      ),
+      '@caffeinejs/resilience': fileURLToPath(new URL('../../resilience/index.ts', import.meta.url)),
       '@caffeinejs/distlock/backend/redis': fileURLToPath(
         new URL('../../distlock/backend/redis/index.ts', import.meta.url),
       ),

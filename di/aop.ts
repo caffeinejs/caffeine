@@ -282,24 +282,23 @@ function executeChain(
   cls: AnyClass,
   proxy: unknown,
 ): unknown {
-  let nextI = 0
-
-  const jp: JoinPoint<any> = {
-    methodName,
-    target: proxy as any,
-    ctor: cls,
-    args,
-    proceed(...n: unknown[]) {
-      return runStep(nextI, n.length ? n : jp.args)
-    },
-  }
-
+  // Each aspect gets its own join point, whose proceed resumes at the step after that aspect however often it is
+  // called: an aspect that proceeds again, as a retry does, runs every aspect inside it again.
   function runStep(i: number, a: unknown[]): unknown {
     if (i >= aspects.length) {
       return (target[methodName] as Function).apply(proxy, a)
     }
-    nextI = i + 1
-    jp.args = a
+
+    const jp: JoinPoint<any> = {
+      methodName,
+      target: proxy as any,
+      ctor: cls,
+      args: a,
+      proceed(...n: unknown[]) {
+        return runStep(i + 1, n.length ? n : jp.args)
+      },
+    }
+
     return runAspect(aspects[i], jp)
   }
 
