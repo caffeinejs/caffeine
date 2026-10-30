@@ -14,7 +14,7 @@ import type { Refresher } from '@caffeinejs/di'
 
 ```ts
 interface Refresher {
-  refresh(): Promise<void>
+  refresh(target?: symbol | Binding): Promise<void>
 }
 ```
 
@@ -29,6 +29,14 @@ in all cases.
 
 ```ts
 await container.refresher.refresh()
+```
+
+`target` narrows the refresh: a label refreshes the bindings carrying it, and a binding refreshes that one alone.
+A binding that is not `REFRESH`-scoped is refused with `ErrNotRefreshable`.
+
+```ts
+await container.refresher.refresh(kFlagsLabel)
+await container.refresher.refresh(container.getBinding(RemoteConfig)!)
 ```
 
 ### Use case

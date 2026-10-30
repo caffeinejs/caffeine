@@ -10,7 +10,15 @@
           "type": "string"
         },
         "json": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": false,
+              "type": "boolean"
+            }
+          ]
         },
         "yaml": {
           "anyOf": [

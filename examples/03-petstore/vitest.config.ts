@@ -4,9 +4,9 @@ import { config as loadEnv } from 'dotenv'
 import swc from 'unplugin-swc'
 import { defineConfig } from 'vitest/config'
 
-// Load the repo-root .env (where the PETSTORE_AUTH__GITHUB__* credentials live) and hand the
+// Load the repo-root .env (where the PETSTORE_GITHUB_* credentials live) and hand the
 // parsed values to the test workers via `test.env`. Vitest runs specs in worker threads, so a bare
-// `dotenv/config` in this config file would not reach them. Absent .env → {} → the schema's own defaults
+// `dotenv/config` in this config file would not reach them. Absent .env → {} → the placeholders' fallbacks
 // apply, so the suite stays green offline. Real creds only matter for manual runs;
 // GitHub's interactive login cannot complete in an automated test (the flow spec stubs GitHub).
 const rootEnv = loadEnv({ path: fileURLToPath(new URL('../../.env', import.meta.url)) }).parsed ?? {}
@@ -51,6 +51,8 @@ export default defineConfig({
       // extend a *different* Responder than the adapter checks for, and every HTML route would come back as JSON.
       '@caffeinejs/html': fileURLToPath(new URL('../../html/index.ts', import.meta.url)),
       '@caffeinejs/openapi': fileURLToPath(new URL('../../openapi/index.ts', import.meta.url)),
+      // Source too: its plugin extends `HTTPPlugin`, which the server checks against the source copy above.
+      '@caffeinejs/devtools': fileURLToPath(new URL('../../devtools/index.ts', import.meta.url)),
       '@caffeinejs/testing/http': fileURLToPath(new URL('../../testing/http/index.ts', import.meta.url)),
       '@caffeinejs/testing': fileURLToPath(new URL('../../testing/index.ts', import.meta.url)),
       '@caffeinejs/brewer': fileURLToPath(new URL('../../brewer/index.ts', import.meta.url)),
@@ -58,7 +60,8 @@ export default defineConfig({
   },
   test: {
     name: 'example-petstore',
-    env: rootEnv,
+    // The `test` profile layers config/application-test.yaml, with OS-assigned ports, over the base file.
+    env: { ...rootEnv, CAFFEINE_PROFILES: 'test' },
     globalSetup: ['./vitest.globalsetup.ts'],
     include: ['**/*.test.ts'],
     environment: 'node',

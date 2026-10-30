@@ -15,7 +15,7 @@ import { PinoLogger } from '@caffeinejs/application/logger/pino'
  */
 export function createLogger(): Logger {
   return new PinoLogger({
-    // Overridden from PETSTORE_LOG__LEVEL once configuration resolves — see `.logger(...)` in app.ts.
+    // Overridden by `log.level` once configuration resolves — see `.logger(...)` in app.ts.
     level: 'info',
     // A one-line summary per record rather than the default object dump, so the demo's output is readable in a
     // terminal without piping it anywhere.

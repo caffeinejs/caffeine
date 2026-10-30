@@ -235,9 +235,7 @@ describe("a Response's headers join the ones the server adds, rather than replac
   const versioned = new Router('/versioned').extend(version('1.0.0'))
   versioned.get('/').handler(() => new Response('v1', { headers: { vary: 'Accept-Language' } }))
 
-  const app = createWebApplication()
-    .with(() => constraints())
-    .mount(versioned)
+  const app = createWebApplication().with(constraints()).mount(versioned)
 
   beforeAll(async () => {
     await app.bootstrap()

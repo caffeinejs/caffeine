@@ -23,6 +23,14 @@ declare module '@caffeinejs/http' {
   interface RouteGroupDetail {
     openapi?: APIGroupDetail
   }
+
+  interface RouteValidationSchema {
+    /**
+     * Omits the route from every OpenAPI document, as `@Operation({ hidden: true })` does. The convention
+     * `@fastify/swagger` reads off a Fastify schema; the route is still served and validated.
+     */
+    hide?: boolean
+  }
 }
 
 /**

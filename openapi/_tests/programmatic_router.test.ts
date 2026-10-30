@@ -4,6 +4,7 @@ import { constraints, createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apiGroup, operation } from '../decorators/index.js'
+import { OpenAPI } from '../feature.js'
 import { openapi } from '../openapi.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
@@ -40,6 +41,7 @@ describe('openapi from a programmatic router', () => {
       .handler(() => ({}))
 
     app = createWebApplication({})
+      .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 
@@ -55,6 +57,22 @@ describe('openapi from a programmatic router', () => {
 
     // `hidden` keeps an operation out of the document, same as it does on a controller.
     expect(document.paths?.['/documented-pets/hidden']).toBeUndefined()
+  })
+
+  it('takes a bare tag name for apiGroup', async () => {
+    const stores = new Router('/named-stores').name('NamedStores').extend(apiGroup('Stores'))
+    stores.get('/').handler(() => [])
+
+    app = createWebApplication({})
+      .install(OpenAPI())
+      .with(openapi(o => o.docs(false).public()))
+      .mount(stores) as WebApplication
+    await app.bootstrap()
+
+    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
+
+    expect(operationAt(document, '/named-stores')?.tags).toEqual(['Stores'])
+    expect(document.tags).toContainEqual({ name: 'Stores' })
   })
 
   it("describes routes declared with a router the same way it describes a controller's", async () => {
@@ -76,6 +94,7 @@ describe('openapi from a programmatic router', () => {
       .handler(ctx => ctx.body(ctx.req.body()))
 
     app = createWebApplication({})
+      .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 
@@ -101,6 +120,7 @@ describe('openapi from a programmatic router', () => {
     geo.get('/near/:lat-:lng').handler(() => ({ near: true }))
 
     app = createWebApplication({})
+      .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Geo', version: '1.0.0' }).docs(false).public()))
       .mount(geo) as WebApplication
 
@@ -122,7 +142,8 @@ describe('openapi from a programmatic router', () => {
       .handler(() => [])
 
     app = createWebApplication({})
-      .with(() => constraints())
+      .with(constraints())
+      .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 

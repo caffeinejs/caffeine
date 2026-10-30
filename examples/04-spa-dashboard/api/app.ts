@@ -2,7 +2,7 @@ import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
 import { Authentication, Authorization } from '@caffeinejs/http'
 import { createWebApplication, authentication, csrf, healthProbes } from '@caffeinejs/http/fastify'
-import { openapi } from '@caffeinejs/openapi'
+import { OpenAPI, openapi } from '@caffeinejs/openapi'
 import { Second } from '@caffeinejs/std/duration'
 
 import { SESSION_COOKIE, configuration } from './app.config.js'
@@ -42,15 +42,9 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
         }
       })
 
-      // --- Installs, in the order they register.
+      // --- Features. Where an `.install(...)` sits makes no difference: every feature configures before the
+      // container initializes.
       //
-      // Both plugins go ahead of the authentication gate on purpose: a hook registered after it never runs for
-      // a request the gate rejected, so this is what puts the security headers on a 401 and refuses a
-      // cross-origin request before it reaches the auth path at all. `csrf()` is the framework's: every unsafe
-      // request is judged by its Fetch Metadata, and the client sends no token.
-      .with(securityHeaders)
-      .with(csrf())
-
       // One scheme for the whole application — pages and API alike. The session cookie is an encrypted JWT,
       // HttpOnly, so no token is ever in JavaScript; the browser attaches it to same-origin `fetch` itself.
       //
@@ -74,10 +68,20 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             .addCredentials(),
         ),
       )
-      .with(authentication())
       // A route that declares nothing is gated. The route somebody forgets is the safe one.
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
+      .install(OpenAPI())
 
+      // --- Plugins, in the order they register.
+      //
+      // Both plugins go ahead of the authentication gate on purpose: a hook registered after it never runs for
+      // a request the gate rejected, so this is what puts the security headers on a 401 and refuses a
+      // cross-origin request before it reaches the auth path at all. `csrf()` is the framework's: every unsafe
+      // request is judged by its Fetch Metadata, and the client sends no token.
+      .with(securityHeaders)
+      .with(csrf())
+
+      .with(authentication())
       .with(site)
       .with(
         openapi(o =>

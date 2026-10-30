@@ -1,50 +1,44 @@
+import { fileURLToPath } from 'node:url'
+
 import { newConfiguration } from '@caffeinejs/application'
 import type { InferConfig } from '@caffeinejs/application/config'
-import { EnvConfigSource } from '@caffeinejs/application/config/env'
+import { YAMLConfigSource } from '@caffeinejs/application/config/yaml'
 import { $t } from '@caffeinejs/application/schema'
 
 /**
- * Everything this application reads from its environment, in one schema.
+ * The shape of `config/application.yaml`, and of every profile file layered over it.
  *
- * Values arrive as strings and are coerced to the declared types: `PETSTORE_SERVER__PORT` becomes a number
- * because the schema says so, with no coercion wrapper at the call site. A block nobody set resolves to its
- * field defaults, so the application runs with no configuration at all.
- *
- * Keys are spelled the way an environment variable folds — `clientId`, not `clientID` — because
- * `EnvConfigSource` lowercases each path segment and only `CLIENT_I_D` would reach the other spelling. The
- * TypeScript identifiers they feed still follow the repository's acronym rules, so `clientId` is handed to
- * `.clientID(...)`.
+ * The values live in the file, so the schema declares types and constraints and no defaults: a key the file
+ * misses fails the load instead of running on a value nobody wrote down. Secrets are `${env:...}` placeholders
+ * in the file, read from the environment when the source loads.
  *
  * `DATABASE_URL` is the one value outside this schema, and on purpose. `prisma.config.ts` reads it for
  * `prisma migrate` and the seed, and the driver adapter in `src/util/db/prisma.ts` reads it for the client.
- * It has no `PETSTORE_` prefix and nothing here declares it. `main.ts` and `prisma.config.ts` load `.env` for it.
+ * `main.ts` and `prisma.config.ts` load `.env` for it, and for the variables the placeholders read.
  */
 export const ConfigSchema = $t.Object({
-  // What the server listens on. Handed to `.server(...)` as the listen options, so the keys are Fastify's.
+  // Handed to `.server(...)` as the listen options, so the keys are Fastify's.
   server: $t.Object({
-    host: $t.String({ default: '0.0.0.0' }),
-    port: $t.Number({ default: 9999 }),
+    host: $t.String(),
+    port: $t.Number(),
   }),
   log: $t.Object({
-    level: $t.String({ default: 'info' }),
+    level: $t.String(),
   }),
-  // Basic credentials for the API documentation. Demo defaults so the example runs with no setup.
+  devtools: $t.Object({
+    host: $t.String(),
+    port: $t.Integer({ minimum: 0, maximum: 65_535 }),
+  }),
   docs: $t.Object({
-    user: $t.String({ default: 'admin' }),
-    password: $t.String({ default: 'admin123' }),
+    user: $t.String(),
+    password: $t.String(),
   }),
   auth: $t.Object({
     github: $t.Object({
-      // Placeholders keep the application startable with nothing configured: the OAuth scheme refuses empty
-      // credentials, and a sign-in needs real ones to reach GitHub at all.
-      clientId: $t.String({ default: 'dev-github-client-id' }),
-      clientSecret: $t.String({ default: 'dev-github-client-secret' }),
-      // Also the host to browse the application from. The sign-in sets its state cookie for the host the
-      // browser is on, and GitHub sends the browser back here; `localhost` and `127.0.0.1` are different hosts
-      // to a browser, so a sign-in started on the other one comes back without its cookie.
-      callbackUrl: $t.String({ default: 'http://localhost:9999/login/github/callback' }),
-      // The OAuth scheme requires at least 32 characters, so the fallback is one.
-      sessionSecret: $t.String({ default: 'petstore-dev-session-secret-32-chars!!' }),
+      clientId: $t.String(),
+      clientSecret: $t.String(),
+      callbackUrl: $t.String(),
+      sessionSecret: $t.String(),
     }),
   }),
 })
@@ -52,12 +46,12 @@ export const ConfigSchema = $t.Object({
 export type Config = InferConfig<typeof ConfigSchema>
 
 const conf = newConfiguration(ConfigSchema)
-  .source(new EnvConfigSource({ prefix: 'PETSTORE_' }))
+  .source(new YAMLConfigSource(fileURLToPath(new URL('../config/application.yaml', import.meta.url))))
   .build()
 
 /**
- * The configuration the application resolves at `bootstrap()`. Data only: importing this module reads no
- * environment, the source reads it when the application loads.
+ * The configuration the application resolves at `bootstrap()`. Data only: importing this module reads no file,
+ * the source reads it when the application loads.
  */
 export const configuration = conf.config
 

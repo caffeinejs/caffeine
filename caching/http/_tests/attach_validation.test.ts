@@ -115,13 +115,7 @@ describe('constrained routes that share a URL', () => {
 
   async function start(router: Router, cachingFirst = true) {
     const caching = HTTPCaching(b => b.store(new MemoryHTTPCacheStore()))
-    const app = cachingFirst
-      ? newApp()
-          .with(caching)
-          .with(() => constraints())
-      : newApp()
-          .with(() => constraints())
-          .with(caching)
+    const app = cachingFirst ? newApp().with(caching).with(constraints()) : newApp().with(constraints()).with(caching)
     const mounted = app.mount(router)
     close = () => mounted.close()
     await mounted.bootstrap()
@@ -189,7 +183,7 @@ describe('constrained routes that share a URL', () => {
         .handler(() => ({ tenant: 'acme' }))
 
       const app = newApp()
-        .with(() => constraints([tenant]))
+        .with(constraints(() => [tenant]))
         .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
         .mount(router)
       close = () => app.close()

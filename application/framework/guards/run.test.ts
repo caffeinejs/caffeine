@@ -25,13 +25,14 @@ class Denied extends Error {
 const deny: GuardDenial = (outcome, reason) => new Denied(outcome, reason)
 
 function instance(guard: TestGuard['guard']): CompiledGuard<TestGuard> {
-  return { kind: 'instance', instance: { guard } }
+  return { kind: 'instance', name: 'TestGuard', instance: { guard } }
 }
 
 /** A guard the container can only build per request — and, here, cannot build at all. */
 function unresolvable(err: unknown): CompiledGuard<TestGuard> {
   return {
     kind: 'provider',
+    name: 'TestGuard',
     provider: {
       get(): TestGuard {
         throw err

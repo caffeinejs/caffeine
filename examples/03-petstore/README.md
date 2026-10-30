@@ -18,11 +18,15 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** specificat
 - **Multipart upload** (`$multipart.file()`), and the OpenAPI 3.2 **QUERY** search verb.
 - **Generated API docs** via `@caffeinejs/openapi`: an OpenAPI 3.2 document derived from the routes themselves —
   controllers and routers alike — plus a Scalar UI at `/docs`.
-- **Configuration** in one schema, one file: `src/app.config.ts`. The application does not read
-  `process.env` for its own settings. `DATABASE_URL` is Prisma's: the CLI reads it from `prisma.config.ts`,
-  and the client reads it through the driver adapter.
+- **Configuration** in one YAML file, `config/application.yaml`, validated against the schema in
+  `src/app.config.ts`. Only the secrets come from the environment, through placeholders in the file.
+  `DATABASE_URL` is Prisma's: the CLI reads it from `prisma.config.ts`, and the client reads it through the
+  driver adapter.
 - **Structured logging** with pino, at a level the configuration chooses.
 - **Kubernetes probes** via `.with(healthProbes())`: `/livez`, `/readyz`, `/startupz`, and a database readiness indicator.
+- **Devtools** via `.install(DevTools())`, on a port of their own (`127.0.0.1:9090`): bindings and the dependency
+  graph, configuration with secrets masked, every route and what protects it, health and more. See
+  [Devtools](#devtools).
 - **Graceful shutdown** via `.shutdown()`: a drain that refuses readiness before it stops listening.
 - **Dockerised**: `docker-compose` brings up Postgres + the app, runs migrations, seeds demo data.
 
@@ -105,36 +109,39 @@ Postgres comes up, `prisma migrate deploy` applies migrations, the seed adds two
 (`alice` / `wonderland`), and the API listens on **<http://localhost:3000>**. Data survives restarts (named volume
 `petstore-pgdata`).
 
-Running it outside Docker (`npm start`) uses the schema default instead — **<http://localhost:9999>** — because the
-port `3000` above comes from `PETSTORE_SERVER__PORT` in `docker-compose.yml`. Substitute it in the commands below
-if that is how you are running it.
+Running it outside Docker (`npm start`) uses the base file's port instead — **<http://localhost:9999>** — because
+the port `3000` above comes from the `docker` profile, which `docker-compose.yml` activates. Substitute it in the
+commands below if that is how you are running it.
 
 ## Configuration
 
-Everything this app reads from its environment is declared once, in [src/app.config.ts](src/app.config.ts):
-the server address, the log level, the docs credentials and the GitHub OAuth settings. Nothing in the
-application reads `process.env`.
+Every setting lives in [config/application.yaml](config/application.yaml), validated against the schema in
+[src/app.config.ts](src/app.config.ts): the server address, the log level, the devtools address, the docs
+credentials and the GitHub OAuth settings. The schema declares no defaults, so a key the file misses fails the
+start. Nothing in the application reads `process.env`.
 
-The one variable outside that schema is `DATABASE_URL`. It has no `PETSTORE_` prefix. `prisma.config.ts`
-reads it for `prisma migrate` and the seed. The driver adapter in `src/util/db/prisma.ts` reads it for the
-client. `src/main.ts` and `prisma.config.ts` load `.env` so it is set for both.
+A profile file beside it, `application-<profile>.yaml`, is layered over the base when `CAFFEINE_PROFILES` names
+the profile: `docker` (port 3000) for `docker-compose.yml`, `test` (OS-assigned ports) for the tests.
 
-Every block is optional. A block nobody sets resolves to its field defaults, so `npm start` works with no `.env`
-at all — see [.env.example](.env.example) for the variables and their defaults. A double underscore separates
-path segments, and each segment folds to lower case, which is why the keys are spelled `clientId` and
-`callbackUrl`:
+Secrets are not written in the file. Each is a placeholder, `'${env:NAME:-fallback}'`, read from the environment
+when the configuration loads, and falls back to a demo value so `npm start` works with no `.env` at all.
+`src/main.ts` loads `.env`, so the variables can live there — see [.env.example](.env.example):
 
-| Variable                              | Sets                              |
-| ------------------------------------- | --------------------------------- |
-| `PETSTORE_SERVER__PORT`               | `server.port`                     |
-| `PETSTORE_LOG__LEVEL`                 | `log.level`                       |
-| `PETSTORE_DOCS__USER` / `__PASSWORD`  | the Basic credentials             |
-| `PETSTORE_AUTH__GITHUB__CLIENT_ID`    | `auth.github.clientId`            |
-| `PETSTORE_AUTH__GITHUB__CALLBACK_URL` | `auth.github.callbackUrl`         |
-| `DATABASE_URL`                        | Prisma CLI and the driver adapter |
+| Variable                         | Sets                              |
+| -------------------------------- | --------------------------------- |
+| `PETSTORE_DOCS_PASSWORD`         | `docs.password`                   |
+| `PETSTORE_GITHUB_CLIENT_ID`      | `auth.github.clientId`            |
+| `PETSTORE_GITHUB_CLIENT_SECRET`  | `auth.github.clientSecret`        |
+| `PETSTORE_GITHUB_SESSION_SECRET` | `auth.github.sessionSecret`       |
+| `DATABASE_URL`                   | Prisma CLI and the driver adapter |
 
-> Earlier revisions of this example used a `PETSTOREDEMO_AUTH_GITHUB_*` prefix with single underscores. If you
-> have an old `.env`, rename those four variables.
+`DATABASE_URL` is outside the schema. `prisma.config.ts` reads it for `prisma migrate` and the seed. The driver
+adapter in `src/util/db/prisma.ts` reads it for the client. `src/main.ts` and `prisma.config.ts` load `.env` so it
+is set for both.
+
+> Earlier revisions of this example read every setting from `PETSTORE_*` variables, such as
+> `PETSTORE_AUTH__GITHUB__CLIENT_SECRET`. If you have an old `.env`, rename the secrets as above and move any other
+> value into `config/application.yaml`.
 
 ## API documentation
 
@@ -257,6 +264,19 @@ npm start -w @caffeinejs/example-petstore
 The generated module graph (`src/**/*.gen.mod.ts`) is **committed**, so a clone builds without running the CLI.
 Re-run `npm run generate -w @caffeinejs/example-petstore` after adding, moving or removing a file that declares an
 injectable, and commit what changes.
+
+## Devtools
+
+The devtools listen on a server of their own, `127.0.0.1:9090` by default, and never on the port users reach.
+With the application running (`make example:petstore`), start the UI that reads them:
+
+```sh
+make example:petstore-devtools   # http://127.0.0.1:9091
+```
+
+The endpoints answer JSON on their own too: `curl http://127.0.0.1:9090/devtools/routes`. In Docker, the devtools
+listen on the container's loopback, so the host does not reach them. Set `devtools.host: 0.0.0.0` in
+`config/application-docker.yaml` and publish the port only on a machine you trust.
 
 ## Out of scope / Limitations
 

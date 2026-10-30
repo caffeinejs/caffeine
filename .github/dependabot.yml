@@ -15,6 +15,7 @@ updates:
 
   - package-ecosystem: 'docker'
     directories:
+      - '/devtools-ui'
       - '/di/_tests/deno'
       - '/di/examples/04-fastify-cats-complete'
       - '/examples/03-petstore'

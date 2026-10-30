@@ -39,7 +39,8 @@ import {
   createApplication,
   newConfiguration,
 } from './index.js'
-import { newNoopLogger, type Logger } from './logger/index.js'
+import { ConsoleLogger } from './logger/console/index.js'
+import { Log, newNoopLogger, type Logger } from './logger/index.js'
 import { $t } from './schema/t.js'
 import { ErrShutdownTimeout, type ShutdownSignal, type SignalDispatcher } from './shutdown/index.js'
 
@@ -177,6 +178,22 @@ function tracker<C = unknown>(configure?: FeatureConfigurer<TrackerBuilder<C>, C
 function keyed(instance = 'default'): Feature {
   return new TrackerBuilder(instance === 'default' ? 'keyed' : `keyed:${instance}`)
 }
+
+describe('Application.log', () => {
+  // The application's own logger is only known once `bootstrap()` configured it; setup logs before that, so it
+  // goes where the process sent the global `Log`, even when `Log.use()` came after the application was built.
+  it('logs through the global Log before bootstrap() configures a logger', () => {
+    const app = new Application({ container: new CaffeineIoC({ decorators: false }) })
+
+    Log.use(new ConsoleLogger({ level: 'debug' }))
+    try {
+      expect(app.log.level).toBe('debug')
+      expect(app.log.bindings()).toEqual({ name: 'caffeine' })
+    } finally {
+      Log.use(new ConsoleLogger())
+    }
+  })
+})
 
 describe('Application.install', () => {
   it('installs the feature and bootstraps it', async () => {

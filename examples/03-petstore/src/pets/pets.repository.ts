@@ -1,6 +1,7 @@
 import { Injectable } from '@caffeinejs/di'
 
-import { Prisma, PrismaClient, type Pet as PetRow } from '../../generated/prisma/client.js'
+import { Prisma, type PrismaClient, type Pet as PetRow } from '../../generated/prisma/client.js'
+import { kPrisma } from '../util/db/prisma.js'
 import type {
   CreatePetDTO,
   MedicalInfo,
@@ -36,7 +37,7 @@ function toPetDTO(row: PetRow): PetDTO {
 
 // Data access for pets. Owns all Prisma queries and the row → API DTO mapping; the controller
 // stays free of persistence concerns (controller → repository, no service layer).
-@Injectable([PrismaClient])
+@Injectable([kPrisma])
 export class PetsRepository {
   constructor(private readonly prisma: PrismaClient) {}
 

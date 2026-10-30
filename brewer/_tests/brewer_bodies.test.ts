@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm'
 import { $t } from '@caffeinejs/application/schema'
 import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import { multipart, multipartPlugin } from '@caffeinejs/multipart'
+import { formData, multipart } from '@caffeinejs/multipart'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
@@ -69,11 +69,11 @@ const uploads = new Router('/uploads')
   .post('/form')
   .handler(async ctx => ({
     type: ctx.req.header('content-type') ?? null,
-    parts: await partsOf(await multipart(ctx).formData()),
+    parts: await partsOf(await formData(ctx).form()),
   }))
   .post('/profile')
   .schema({ body: $t.Object({ caption: $t.String(), avatar: $t.File(), photos: $t.Optional($t.Files()) }) })
-  .handler(async ctx => ({ parts: await partsOf(await multipart(ctx).formData()) }))
+  .handler(async ctx => ({ parts: await partsOf(await formData(ctx).form()) }))
 
 const adoptions = new Router('/adoptions')
   .post('/')
@@ -105,7 +105,7 @@ const downloads = new Router('/downloads')
 const fileSize = 64 * 1024
 
 const app = createWebApplication()
-  .with(() => multipartPlugin({ limits: { fileSize } }))
+  .with(multipart(() => ({ limits: { fileSize } })))
   .mount(echo, uploads, adoptions, downloads)
 
 let origin: string

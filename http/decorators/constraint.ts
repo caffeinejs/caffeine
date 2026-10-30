@@ -9,7 +9,7 @@ import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
  * Writes into `route.config` under `kRouteConstraints` rather than a dedicated field, so group→route
  * inheritance is the existing generic `config` merge (`.extend(constraint(...))` on a route overrides the same
  * name set on its group). The `constraints()` plugin resolves it into Fastify's actual `constraints` matching
- * object, and a custom name needs its strategy passed to `.with(() => constraints([strategy]))`.
+ * object, and a custom name needs its strategy passed to `.with(constraints(() => [strategy]))`.
  */
 export function constraint(name: string, value: unknown, options?: { header?: string }): AnyRouteExtension {
   return (target: { config(key: string, value: unknown): unknown }) => {
@@ -25,7 +25,7 @@ export function constraint(name: string, value: unknown, options?: { header?: st
  * constraint `name`.
  *
  * Needs the `constraints()` plugin installed. `version` matches on Fastify's built-in semver matcher; any other
- * name needs its strategy passed to `.with(() => constraints([strategy]))`. A route whose constraint the request does not satisfy is
+ * name needs its strategy passed to `.with(constraints(() => [strategy]))`. A route whose constraint the request does not satisfy is
  * not matched, and the request falls through to Fastify's not-found. The programmatic form is {@link constraint},
  * applied with `.extend(constraint(name, value), ...)`.
  */

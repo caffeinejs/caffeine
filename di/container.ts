@@ -26,6 +26,7 @@ import {
   ErrInvalidContainerState,
   ErrInjectableBase,
   ErrNoValuesProvider,
+  ErrNotRefreshable,
 } from './errors.js'
 import { HookListener } from './hooks.js'
 import { Injection, InjectionDescriptor, ResolveInjection } from './injection.js'
@@ -1322,8 +1323,12 @@ export class CaffeineIoC implements Container {
     }
   }
 
-  private async refresh(label?: symbol): Promise<void> {
-    return (this.scopes.get(Scopes.REFRESH) as RefreshScope).refresh(label)
+  private async refresh(target?: symbol | Binding): Promise<void> {
+    if (typeof target === 'object' && target.scopeID !== Scopes.REFRESH) {
+      throw new ErrNotRefreshable(keyStr(target.ctx?.key ?? (target.type as InjectionToken | undefined)))
+    }
+
+    return (this.scopes.get(Scopes.REFRESH) as RefreshScope).refresh(target)
   }
 
   private unref(key: InjectionToken) {

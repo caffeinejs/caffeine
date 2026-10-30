@@ -4,9 +4,10 @@ import { errMessage } from '@caffeinejs/std/err'
 import { ErrGuardConfiguration } from './errors.js'
 import type { BaseGuard } from './guard.js'
 
+/** A guard ready to run, and the name of the key it was bound under: the class name, or the token's description. */
 export type CompiledGuard<G extends BaseGuard<never>> =
-  | { readonly kind: 'instance'; readonly instance: G }
-  | { readonly kind: 'provider'; readonly provider: Provider<G> }
+  | { readonly kind: 'instance'; readonly name: string; readonly instance: G }
+  | { readonly kind: 'provider'; readonly name: string; readonly provider: Provider<G> }
 
 /**
  * Resolves `keys` to a dense chain. Empty input yields an empty array.
@@ -80,7 +81,7 @@ function compileOne<G extends BaseGuard<never>>(
     if (typeof (instance as { guard?: unknown } | null)?.guard !== 'function') {
       throw notAGuard()
     }
-    compiled = { kind: 'instance', instance }
+    compiled = { kind: 'instance', name, instance }
   } else {
     // Nothing to instantiate outside a request: a class binding is checked by its prototype, a factory or
     // value binding is taken on trust.
@@ -90,7 +91,7 @@ function compileOne<G extends BaseGuard<never>>(
     if (proto !== undefined && typeof proto.guard !== 'function') {
       throw notAGuard()
     }
-    compiled = { kind: 'provider', provider }
+    compiled = { kind: 'provider', name, provider }
   }
 
   compiledByKey.set(key, compiled)

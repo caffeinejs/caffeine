@@ -1,6 +1,6 @@
 {
   "name": "@caffeinejs/example-devtools-basic",
-  "description": "Task API with Caffeine Devtools attached to a running HTTP application",
+  "description": "Task API with the Caffeine devtools on a port of their own, protected and extended with a tool",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "@caffeinejs/application": "*",
-    "@caffeinejs/di": "*",
     "@caffeinejs/devtools": "*",
+    "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "fastify": "^5.12.5"
   }

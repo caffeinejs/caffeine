@@ -1,12 +1,13 @@
 import { fileURLToPath } from 'node:url'
 
 import type { Logger } from '@caffeinejs/application/logger'
+import { DevTools } from '@caffeinejs/devtools'
 import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
 import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
 import { createWebApplication, authentication, healthProbes } from '@caffeinejs/http/fastify'
-import { multipartPlugin } from '@caffeinejs/multipart'
-import { openapi } from '@caffeinejs/openapi'
+import { multipart } from '@caffeinejs/multipart'
+import { OpenAPI, openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
 import { Second } from '@caffeinejs/std/duration'
 
@@ -43,7 +44,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       // --- Settings. These configure builders the constructor already registered, so where they are written
       // makes no difference to install order; they are grouped first because they read as configuration.
 
-      // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
+      // Server host/port come from `server` in config/application.yaml.
       .server(({ config }) => ({ listener: config.server }))
       // The two handlers that render every thrown error: HTTPErrorHandler for an ErrHTTP, FallbackErrorHandler
       // for a validation failure or anything unexpected. Declaring them is not enough — this is what puts them
@@ -71,7 +72,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       .install(
         Authentication((auth, { config }) =>
           auth
-            // Basic, for the API documentation only. Demo credentials, overridable from the environment.
+            // Basic, for the API documentation only. Demo credentials; the password is read from the environment.
             .addBasic('Basic', o =>
               o
                 .realm('Petstore docs')
@@ -131,10 +132,16 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             .default('GitHub'),
         ),
       )
+      // The devtools, on their own port, never the one users reach: http://127.0.0.1:9090/devtools by default. Values
+      // are shown, and the GitHub client secret, the session secret and the docs password stay masked: their keys
+      // name a secret. With authentication installed, the devtools' server gets a gate of its own.
+      .install(DevTools((d, { config }) => d.config(config.devtools).showConfigValues()))
+      // Holds the generated documents, so a component other than the HTTP endpoints can read them.
+      .install(OpenAPI())
       .with(authentication())
       // JSX server-side rendering. Registering it is optional — `HTML(...)` renders without it — and what it
       // configures is whether the markup is prefixed with a doctype.
-      .with(() => html())
+      .with(html())
       .with(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
       // The document is generated from the routes themselves — @Schema, @Status, @Authorize, the $p pickers and
       // the routers' own `.schema()` are the source, and @APIGroup/@Operation (with their `apiGroup()` and
@@ -166,7 +173,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             .errorSchema(APIErrorSchema),
         ),
       )
-      .with(() => multipartPlugin())
+      .with(multipart())
       // Kubernetes probes: /livez, /readyz, /startupz.
       .with(healthProbes())
       // The two features written as routers rather than controllers. Mounting is what carries their route types

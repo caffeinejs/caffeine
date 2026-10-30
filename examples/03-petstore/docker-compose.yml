@@ -27,7 +27,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://petstore:petstore@postgres:5432/petstore?schema=public
-      PETSTORE_SERVER__PORT: 3000
+      # Layers config/application-docker.yaml over config/application.yaml.
+      CAFFEINE_PROFILES: docker
     ports:
       - '3000:3000'
 

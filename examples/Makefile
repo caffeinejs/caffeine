@@ -29,6 +29,13 @@ example\:petstore: ## run the petstore example (Postgres in Docker, app on host 
 	@npm run db:seed -w @caffeinejs/example-petstore
 	@cd examples/03-petstore && ../../node_modules/.bin/tsx src/main.ts
 
+.PHONY: example\:petstore-devtools
+# The devtools the petstore serves on its own port; the UI's variables are read as the environment sets them.
+example\:petstore-devtools: export CAFFEINE_DEVTOOLS_TARGET__URL ?= http://127.0.0.1:9090/devtools
+example\:petstore-devtools: ## run the devtools UI for a running petstore example (UI at http://127.0.0.1:9091)
+	@npm run build
+	@node devtools-ui/dist/main.js
+
 .PHONY: example\:spa-dashboard
 # Not a prerequisite: make 3.81 keeps the backslash in a prerequisite name, so `build\:cli` there names a target
 # that does not exist and the CLI is never built; `$(MAKE)` resolves the name the way the command line does.
@@ -46,5 +53,6 @@ example\:watt: ## run the Watt example (entrypoint at http://127.0.0.1:3042/shop
 
 help::
 	@printf "\033[36m%-20s\033[0m %s\n" "example:petstore" "run the petstore example (Postgres in Docker, app on host at http://localhost:9999)"
+	@printf "\033[36m%-20s\033[0m %s\n" "example:petstore-devtools" "run the devtools UI for a running petstore example (UI at http://127.0.0.1:9091)"
 	@printf "\033[36m%-20s\033[0m %s\n" "example:spa-dashboard" "run the SPA dashboard example (app on host at http://127.0.0.1:9010)"
 	@printf "\033[36m%-20s\033[0m %s\n" "example:watt" "run the Watt example (entrypoint at http://127.0.0.1:3042/shop, probes at http://127.0.0.1:9090)"

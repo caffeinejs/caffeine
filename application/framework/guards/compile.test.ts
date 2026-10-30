@@ -60,7 +60,9 @@ describe('compile_guard_keys', () => {
 
     // Taken on trust: a factory says nothing about the shape it will return, and the alternative is
     // refusing a legitimate guard at start-up.
-    expect(compile(container, [kGuard])).toEqual([{ kind: 'provider', provider: expect.anything() }])
+    expect(compile(container, [kGuard])).toEqual([
+      { kind: 'provider', name: 'Symbol(factory-guard)', provider: expect.anything() },
+    ])
   })
 
   it('names a guard bound under a named token, and what referenced it, when it cannot be resolved', async () => {
@@ -78,7 +80,9 @@ describe('compile_guard_keys', () => {
     container.bind(AllowGuard, t => t.toSelf().lifetime(Scopes.SINGLETON))
     await container.init()
 
-    expect(compile(container, [AllowGuard])).toEqual([{ kind: 'instance', instance: expect.any(AllowGuard) }])
+    expect(compile(container, [AllowGuard])).toEqual([
+      { kind: 'instance', name: 'AllowGuard', instance: expect.any(AllowGuard) },
+    ])
   })
 
   it('yields an empty chain for an empty key list', async () => {

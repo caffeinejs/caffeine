@@ -89,7 +89,7 @@ export function parseBytes(text: string): ByteSize {
  *
  * @example
  * // A third-party option in bytes
- * multipartPlugin({ limits: { fileSize: bytes('10mb') } })
+ * multipart(() => ({ limits: { fileSize: bytes('10mb') } }))
  *
  * @throws {@link ErrInvalidByteSize} if the text is outside the grammar, or the size is not a whole number of bytes
  * from 0 to `Number.MAX_SAFE_INTEGER`.

@@ -37,7 +37,7 @@ import {
 } from './core/middleware/index.js'
 import { parseUse } from './core/middleware/middleware.js'
 import { ControllerRouteSource } from './core/routing/decorated.js'
-import { buildRouting, type RouteSource } from './core/routing/index.js'
+import { buildRouting, RouteInventory, type RouteSource } from './core/routing/index.js'
 import type { Router } from './core/routing/programmatic/programmatic.js'
 import { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './core/routing/programmatic/source.js'
@@ -102,6 +102,8 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   #built = false
   /** What routers and controllers registered for themselves, resolved once during start-up. */
   readonly #plugins = new ScopedPlugins<T>()
+  /** Every server's routes, filled as each is built. */
+  readonly #inventory = new RouteInventory()
 
   // Held as fields: `.errorHandling(...)` and `.cookie(...)` hand their callbacks to the instances installed below.
   readonly #errorHandling = new ErrorHandlingBuilder<C>()
@@ -121,6 +123,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
 
     this.#adapter = adapterFactory({ container: this.container })
+    this.container.bind(RouteInventory, t => t.toValue(this.#inventory).internal())
   }
 
   /**
@@ -542,6 +545,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
       context,
       plugins: this.#plugins,
       compileRouteGroup: routing.compileRouteGroup,
+      inventory: this.#inventory,
     })
 
     this.#listenerServers = listenerServers(servers.named!)
