@@ -69,7 +69,7 @@ export function mediaTypeCharset(mediaType: string): string | undefined {
 function withoutParameters(accept: string): string {
   return splitOutsideQuotes(accept, ',')
     .map(range => {
-      const type = splitOutsideQuotes(range, ';')[0]?.trim() ?? ''
+      const type = range.replace(/;.*$/s, '').trim()
       const q = parametersOf(range).find(parameter => /^q=/i.test(parameter))
       return q === undefined ? type : `${type};${q}`
     })

@@ -42,6 +42,8 @@ describe('problem negotiation', () => {
     ['application/json;profile="a,b";q=0, text/markdown;q=0.5', 'text/markdown'],
     ['application/json;profile="a;q=1";q=0.1, text/markdown;q=0.9', 'text/markdown'],
     ['application/json;profile="a\\",b";q=0.1, text/markdown;q=0.9', 'text/markdown'],
+    // A header cut off inside a quoted escape still names the range it was in.
+    ['application/json;q=0.1, text/markdown;profile="a\\', 'text/markdown'],
     ['application/problem+json;q=0.5, application/json;q=0.4', 'application/problem+json'],
     ['text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'text/html'],
     // An error never answers 406: a client that accepts nothing offered still learns what failed.
