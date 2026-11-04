@@ -2,7 +2,7 @@ import { Hour, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { bulkhead } from '../bulkhead/bulkhead.js'
-import { circuitBreaker, ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
+import { circuitBreaker } from '../circuitbreaker/circuitbreaker.js'
 import { compose } from '../compose.js'
 import { ErrCallRefused } from '../errors.js'
 import { useFakeClock } from '../fake_clock.testkit.js'
@@ -57,7 +57,8 @@ describe('the recommended order', () => {
     expect(quota.metrics().availablePermissions).toBe(98)
   })
 
-  // An open breaker inside a retry fails the call at once: retrying a refusal would only add load.
+  // An open breaker inside a retry fails the call at once: retrying a refusal would only add load. The caller gets the
+  // last failure that reached the operation, not the refusal, which would claim no attempt ran.
   it('fails at once, without another attempt, once the breaker inside the retry opens', async () => {
     const { breaker, retries, run } = chain()
     let attempts = 0
@@ -70,7 +71,8 @@ describe('the recommended order', () => {
 
     expect(attempts).toBe(2)
     expect(breaker.state).toBe('open')
-    expect(error).toBeInstanceOf(ErrCallNotPermitted)
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toBe('down')
     expect(retries.metrics().failedCallsWithRetry).toBe(1)
   })
 

@@ -160,6 +160,45 @@ describe('retry', () => {
     expect(retries.metrics().failedCallsWithoutRetry).toBe(1)
   })
 
+  // A refusal promises the operation did not run. Once an earlier attempt reached it, that promise is false for the
+  // call: a caller that falls back only on a refusal would treat a write that may have gone through as never sent.
+  it('rejects with the earlier attempt’s error, not a refusal that ends the retries after it', async () => {
+    const retries = retryOf({ maxAttempts: 3 })
+    const seen = listen(retries, 'ignored')
+    const timeout = new Error('no answer in time')
+    const refusal = new ErrCallNotPermitted('inventory', 'open', 1_000)
+    const operation = vi.fn().mockRejectedValueOnce(timeout).mockRejectedValueOnce(refusal)
+
+    await expect(runWith(operation, retries)).rejects.toBe(timeout)
+    expect(operation).toHaveBeenCalledTimes(2)
+    expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 2, error: refusal }]])
+    expect(retries.metrics().failedCallsWithRetry).toBe(1)
+  })
+
+  it('hands back the earlier attempt’s retryable result when a refusal ends the retries after it', async () => {
+    const retries = retryOf({ retryOnResult: result => result === 'busy' })
+    const operation = vi
+      .fn()
+      .mockResolvedValueOnce('busy')
+      .mockRejectedValueOnce(new ErrBulkheadFull('inventory', 2, 0))
+
+    await expect(runWith(operation, retries)).resolves.toBe('busy')
+    expect(operation).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects with ErrMaxRetriesExceeded over that result when told to fail rather than hand it back', async () => {
+    const retries = retryOf({ retryOnResult: result => result === 'busy', failAfterMaxAttempts: true })
+    const operation = vi
+      .fn()
+      .mockResolvedValueOnce('busy')
+      .mockRejectedValueOnce(new ErrBulkheadFull('inventory', 2, 0))
+
+    const error = await runWith(operation, retries).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(ErrMaxRetriesExceeded)
+    expect(error).toMatchObject({ attempts: 1, result: 'busy' })
+  })
+
   it('never retries a failure after the caller aborted, whatever retryOn says', async () => {
     const retryOn = vi.fn(() => true)
     const retries = retryOf({ retryOn })

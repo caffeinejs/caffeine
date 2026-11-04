@@ -225,8 +225,9 @@ describe('the order of the strategies', () => {
 
     const error = await target.call().catch((reason: unknown) => reason)
 
+    // Two attempts, then the breaker inside refused the third: a breaker outside would have let all three through.
     expect(target.attempts).toBe(2)
-    expect(error).toBeInstanceOf(ErrCallNotPermitted)
+    expect((error as Error).message).toBe('down')
   })
 })
 

@@ -253,6 +253,10 @@ A refusal, any `ErrCallRefused` such as an open breaker's `ErrCallNotPermitted`,
 failure after the caller aborted, whatever `retryOn` returns: a refusal means the operation never ran, and retrying
 it at once only adds load to what is already refusing. `retryOn` narrows what is retried; it cannot widen it.
 
+A refusal after an attempt that reached the operation, such as a breaker that opened on the timeout before it, ends
+the call with that earlier attempt's outcome instead: its error, or its retryable value as when attempts run out. A
+refusal out of a retry therefore still means that no attempt ran.
+
 The default backoff waits 500 ms, doubling per attempt up to 30 s, each wait spread by half of it either way, so
 callers that failed together do not come back together. Pass `backoff: exponential({ jitter: 0 })`, or a fixed
 `Duration`, to wait exactly.

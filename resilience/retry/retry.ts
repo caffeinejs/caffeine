@@ -50,8 +50,9 @@ export interface RetryOptions {
    * Whether an error is worth another attempt. Defaults to every error.
    *
    * A refusal ({@link ErrCallRefused}: an open circuit breaker, a full bulkhead, a spent rate limit) and a failure
-   * after the caller aborted are never retried, whatever this returns. It must return a boolean; anything else
-   * rejects the call with {@link ErrInvalidOption}.
+   * after the caller aborted are never retried, whatever this returns. A refusal after an attempt that reached the
+   * operation ends the call with that attempt's outcome, as if it had been the last. It must return a boolean;
+   * anything else rejects the call with {@link ErrInvalidOption}.
    */
   retryOn?: (error: unknown, attempt: number) => boolean
   /**
@@ -108,6 +109,10 @@ interface RetriedCall<T> {
   readonly resolve: (value: T) => void
   readonly reject: (reason: unknown) => void
   attempt: number
+  // The outcome of the last attempt that reached the operation: a refusal after it ends the call with this instead.
+  failed: boolean
+  error: unknown
+  result: unknown
 }
 
 /**
@@ -295,12 +300,15 @@ export class Retry implements StrategyObject {
 
   #retrying<T>(ctx: ExecutionContext, next: Next<T>, error: unknown, result: unknown, failed: boolean): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      this.#wait({ ctx, next, resolve, reject, attempt: 1 }, error, result, failed)
+      this.#wait({ ctx, next, resolve, reject, attempt: 1, failed, error, result }, error, result, failed)
     })
   }
 
   #wait<T>(call: RetriedCall<T>, error: unknown, result: unknown, failed: boolean): void {
     const attempt = call.attempt
+    call.failed = failed
+    call.error = error
+    call.result = result
     let delay: Duration
     try {
       delay = clampDelay(
@@ -358,6 +366,8 @@ export class Retry implements StrategyObject {
         try {
           if (this.#retriesError(call.ctx, attempt, error)) {
             this.#wait(call, error, undefined, true)
+          } else if (error instanceof ErrCallRefused) {
+            this.#endRefused(call)
           } else {
             call.reject(error)
           }
@@ -366,6 +376,18 @@ export class Retry implements StrategyObject {
         }
       },
     )
+  }
+
+  // A refusal promises the operation did not run, which an earlier attempt that reached it makes false for the call:
+  // the caller gets that attempt's outcome, as if it had been the last one.
+  #endRefused<T>(call: RetriedCall<T>): void {
+    if (call.failed) {
+      call.reject(call.error)
+    } else if (this.#failAfterMaxAttempts) {
+      call.reject(new ErrMaxRetriesExceeded(this.#name, call.attempt - 1, call.result))
+    } else {
+      call.resolve(call.result as T)
+    }
   }
 
   #succeeded(attempts: number): void {

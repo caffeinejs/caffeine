@@ -2,7 +2,6 @@ import { createApplication, ErrFeatureAlreadyInstalled, type Feature } from '@ca
 import { CaffeineIoC } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
 import { runWith } from '../compose.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ErrMaxRetriesExceeded } from '../retry/retry.js'
@@ -59,8 +58,9 @@ describe('Resilience()', () => {
     const app = await boot(Resilience(inventory))
     const target = app.container.get(Inventory)
 
-    await expect(target.stock()).rejects.toBeInstanceOf(ErrCallNotPermitted)
+    await expect(target.stock()).rejects.toThrow('down')
     expect(target.attempts).toBe(2)
+    expect(app.container.get(ResilienceRegistry).circuitBreaker('inventory').state).toBe('open')
   })
 
   // Configuration tunes what code left open; what code set is the last word.
