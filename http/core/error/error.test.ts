@@ -650,17 +650,36 @@ describe('serializer', () => {
     await app.close()
   })
 
-  // A page written in another encoding says so, and the server does not claim UTF-8 over it.
-  it('keeps the charset a serializer was registered with', async () => {
+  // A serializer returns a string, which the server writes as UTF-8: a page declared in another charset would be
+  // read as that charset, and every character outside ASCII would come out garbled.
+  it.each(['text/html; charset=iso-8859-1', 'text/plain; charset="us-ascii"'])(
+    'refuses "%s" at start-up',
+    async mediaType => {
+      const app = createWebApplication().errorHandling(e => e.serializer(mediaType, () => ''))
+
+      const failure = await app.bootstrap().then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+
+      expect(failure).toBeInstanceOf(ErrConfiguration)
+      expect((failure as Error).message.split('\n')[0]).toBe(
+        `Cannot serialize problems as "${mediaType}": a serializer's string is sent as UTF-8, not in the charset it names`,
+      )
+    },
+  )
+
+  // UTF-8 is what goes out, so declaring it is allowed, in any case and quoted, and the bytes match it.
+  it('sends non-ASCII text from a serializer as the UTF-8 it declares', async () => {
     const app = createWebApplication()
-      .errorHandling(e => e.serializer('text/plain; charset=us-ascii', (_ctx, problem) => problem.code))
+      .errorHandling(e => e.serializer('text/html; charset="UTF-8"', () => '<p>café</p>'))
       .mount(orders())
     await app.bootstrap()
 
-    const res = await app.request('/orders/42', { headers: { accept: 'text/plain' } })
+    const res = await app.request('/orders/42', { headers: { accept: 'text/html' } })
 
-    expect(res.headers.get('content-type')).toBe('text/plain; charset=us-ascii')
-    expect(await res.text()).toBe('ERR_HTTP_CONFLICT')
+    expect(res.headers.get('content-type')).toBe('text/html; charset="UTF-8"')
+    expect(new TextDecoder('utf-8', { fatal: true }).decode(await res.arrayBuffer())).toBe('<p>café</p>')
 
     await app.close()
   })

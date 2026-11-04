@@ -110,7 +110,7 @@ Wait for the Retry-After seconds, then retry once. Do not retry in a loop.
 
 `Errors` and `Stack trace` sections follow when those members are present. Frontmatter values are JSON, and text from the problem cannot open a heading, a fence or a frontmatter block.
 
-`.errorHandling(e => e.serializer(mediaType, (ctx, problem) => string))` renders problems as another format, such as an HTML page for a browser, or replaces a built-in one under the same media type. A serializer that throws is logged, and that problem goes out as `application/json`. A media type with a wildcard, or without a subtype, fails start-up.
+`.errorHandling(e => e.serializer(mediaType, (ctx, problem) => string))` renders problems as another format, such as an HTML page for a browser, or replaces a built-in one under the same media type. A serializer that throws is logged, and that problem goes out as `application/json`. The string it returns is sent as UTF-8, so a media type that names another charset fails start-up, as does one with a wildcard or without a subtype.
 
 ```ts
 .errorHandling(e => e.serializer('text/html', (ctx, problem) => errorPage(problem)))

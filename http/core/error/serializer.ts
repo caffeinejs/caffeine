@@ -54,14 +54,54 @@ export function negotiateProblemFormat(
   return formats.get(chosen) as ProblemFormat
 }
 
+/**
+ * The charset a media type declares, lower-cased and unquoted, or `undefined` when it declares none.
+ */
+export function mediaTypeCharset(mediaType: string): string | undefined {
+  const charset = parametersOf(mediaType).find(parameter => /^charset\s*=/i.test(parameter))
+  return charset
+    ?.replace(/^charset\s*=\s*/i, '')
+    .replace(/^"(.*)"$/s, '$1')
+    .toLowerCase()
+}
+
 // Negotiator matches the parameters of a range too, and `text/markdown; charset=utf-8` would match nothing offered.
 function withoutParameters(accept: string): string {
-  return accept
-    .split(',')
+  return splitOutsideQuotes(accept, ',')
     .map(range => {
-      const [type = '', ...parameters] = range.split(';')
-      const q = parameters.map(parameter => parameter.trim()).find(parameter => /^q=/i.test(parameter))
-      return q === undefined ? type.trim() : `${type.trim()};${q}`
+      const type = splitOutsideQuotes(range, ';')[0]?.trim() ?? ''
+      const q = parametersOf(range).find(parameter => /^q=/i.test(parameter))
+      return q === undefined ? type : `${type};${q}`
     })
     .join(',')
+}
+
+function parametersOf(mediaType: string): string[] {
+  return splitOutsideQuotes(mediaType, ';')
+    .slice(1)
+    .map(parameter => parameter.trim())
+}
+
+// RFC 9110 §5.6.4: a quoted value is one value, its separators included, and a backslash escapes the next character.
+function splitOutsideQuotes(text: string, separator: string): string[] {
+  const parts: string[] = []
+  let part = ''
+  let quoted = false
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]
+    if (quoted && char === '\\') {
+      part += char + (text[i + 1] ?? '')
+      i++
+    } else if (char === separator && !quoted) {
+      parts.push(part)
+      part = ''
+    } else {
+      quoted = char === '"' ? !quoted : quoted
+      part += char
+    }
+  }
+
+  parts.push(part)
+  return parts
 }

@@ -6,7 +6,13 @@ import type { IContext } from '../../context.js'
 import { ErrConfiguration } from './common.js'
 import { buildCatchByMap, ErrorHandlerProvider, type ErrorHandlerRef } from './handler.js'
 import { kErrorHandlingOptions } from './keys.js'
-import { defaultProblemFormats, mediaTypeEssence, type ProblemFormat, type ProblemSerializer } from './serializer.js'
+import {
+  defaultProblemFormats,
+  mediaTypeCharset,
+  mediaTypeEssence,
+  type ProblemFormat,
+  type ProblemSerializer,
+} from './serializer.js'
 
 /**
  * Where a problem's `correlation_id` comes from, such as the active trace. `undefined` or `''` leaves the member
@@ -108,9 +114,11 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
    * `mediaType` as written. A media type already offered, such as `text/markdown`, is replaced. A request whose
    * `Accept` names no format offered still gets `application/json`, so a client never goes without the error.
    *
-   * A serializer that throws is logged, and that problem is sent as `application/json` instead.
+   * The string a serializer returns is sent as UTF-8, and `charset=utf-8` is added unless `mediaType` names it. A
+   * serializer that throws is logged, and that problem is sent as `application/json` instead.
    *
-   * @throws ErrConfiguration when `mediaType` is not a `type/subtype` pair, or holds a wildcard.
+   * @throws ErrConfiguration when `mediaType` is not a `type/subtype` pair, holds a wildcard, or names a charset
+   * other than UTF-8.
    */
   serializer(mediaType: string, serialize: ProblemSerializer): this {
     const essence = mediaTypeEssence(mediaType)
@@ -119,6 +127,18 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
       throw new ErrConfiguration(
         errMessage(`Cannot serialize problems as "${mediaType}": it is not a media type`)
           .solutions('Pass a type and a subtype without a wildcard, such as "text/html"')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    const charset = mediaTypeCharset(mediaType)
+    if (charset !== undefined && charset !== 'utf-8') {
+      throw new ErrConfiguration(
+        errMessage(
+          `Cannot serialize problems as "${mediaType}": a serializer's string is sent as UTF-8, not in the charset it names`,
+        )
+          .solutions(`Leave the charset out, or name it: "${essence}; charset=utf-8"`)
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
       )
