@@ -65,7 +65,7 @@ export class ResilienceAspect implements MethodAspect {
    * Builds the plan of every annotated method of `cls`.
    *
    * @throws {@link ErrInvalidOption} when a method names an instance nothing defines, a `@Fallback` names a method
-   * `cls` lacks, or an annotation is on a static method.
+   * `cls` lacks, or an annotation is on a static or a private method.
    */
   prepare(cls: AnyClass): void {
     for (const [annotation, decorator] of ANNOTATIONS) {
@@ -79,6 +79,22 @@ export class ResilienceAspect implements MethodAspect {
             .reference('@caffeinejs/resilience', ErrInvalidOption)
             .build(),
         )
+      }
+    }
+
+    for (const [annotation, decorator] of ANNOTATIONS) {
+      for (const member of reflect.members(cls, annotation).keys()) {
+        // A private method is called by name inside its class, never through a property a weave could replace.
+        if (typeof (cls.prototype as Record<Member, unknown>)[member] !== 'function') {
+          throw new ErrInvalidOption(
+            errMessage(
+              `Cannot weave "${cls.name}.${String(member)}": @${decorator} is on a private method, which is never woven`,
+            )
+              .solutions(`Make "${String(member)}" a public method of "${cls.name}"`)
+              .reference('@caffeinejs/resilience', ErrInvalidOption)
+              .build(),
+          )
+        }
       }
     }
 

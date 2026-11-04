@@ -195,30 +195,35 @@ interface ResolvedEntry {
   methods: Set<string | symbol> | PointcutMethodPredicate | null
 }
 
+// Woven in place: each advised method becomes an own property of the instance that runs the chain with the instance
+// itself as `this`. A proxy would hand every method the proxy instead, and a native private member (`#field`) refuses
+// a receiver that is not the instance its class built. A call through `this` still finds the woven property first.
+// An instance resolved again, such as a value binding, is woven once.
+const woven = new WeakSet<object>()
+
 function weave(instance: unknown, methodMap: Map<string | symbol, MethodAspect[]>, cls: AnyClass): unknown {
-  const wrapperCache = new Map<string | symbol, Function>()
+  const target = instance as Record<string | symbol, unknown>
+  if (woven.has(target)) {
+    return instance
+  }
+  woven.add(target)
 
-  return new Proxy(instance as object, {
-    get(target: any, prop: string | symbol, receiver: unknown): unknown {
-      const aspects = methodMap.get(prop)
-      if (!aspects || aspects.length === 0) {
-        return Reflect.get(target, prop, receiver)
-      }
+  for (const [prop, aspects] of methodMap) {
+    const method = target[prop]
+    if (aspects.length === 0 || typeof method !== 'function') {
+      continue
+    }
 
-      if (typeof target[prop] !== 'function') {
-        return Reflect.get(target, prop, receiver)
-      }
-
-      let wrapper = wrapperCache.get(prop)
-      if (!wrapper) {
-        wrapper = function (...args: unknown[]) {
-          return executeChain(target, prop, args, aspects, cls, receiver)
-        }
-        wrapperCache.set(prop, wrapper)
-      }
-      return wrapper
-    },
-  })
+    Object.defineProperty(target, prop, {
+      configurable: true,
+      enumerable: false,
+      writable: true,
+      value: function (this: unknown, ...args: unknown[]) {
+        return executeChain(target, method, prop, args, aspects, cls)
+      },
+    })
+  }
+  return instance
 }
 
 function buildMethodMap(
@@ -276,22 +281,22 @@ function buildMethodMap(
 
 function executeChain(
   target: any,
+  method: Function,
   methodName: string | symbol,
   args: unknown[],
   aspects: MethodAspect[],
   cls: AnyClass,
-  proxy: unknown,
 ): unknown {
   // Each aspect gets its own join point, whose proceed resumes at the step after that aspect however often it is
   // called: an aspect that proceeds again, as a retry does, runs every aspect inside it again.
   function runStep(i: number, a: unknown[]): unknown {
     if (i >= aspects.length) {
-      return (target[methodName] as Function).apply(proxy, a)
+      return method.apply(target, a)
     }
 
     const jp: JoinPoint<any> = {
       methodName,
-      target: proxy as any,
+      target,
       ctor: cls,
       args: a,
       proceed(...n: unknown[]) {

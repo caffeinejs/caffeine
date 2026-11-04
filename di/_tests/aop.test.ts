@@ -1468,7 +1468,7 @@ describe('AOP', function () {
 // ─── this binding and instanceof ─────────────────────────────────────────────
 
 describe('this binding and instanceof', function () {
-  // (a) self-call: this.methodB() inside intercepted methodA goes through the proxy
+  // (a) self-call: this.methodB() inside intercepted methodA goes through the woven method
   class SelfCallTarget {
     methodA(): string {
       return 'a:' + this.methodB()
@@ -1489,7 +1489,7 @@ describe('this binding and instanceof', function () {
   }
   void SelfCallAspect
 
-  it('this.method() inside intercepted method is intercepted via the proxy', async function () {
+  it('this.method() inside intercepted method is intercepted', async function () {
     selfCallSpy.mockClear()
 
     const di = new CaffeineIoC({ profiles: ['aop-self-call'] })
@@ -1503,7 +1503,44 @@ describe('this binding and instanceof', function () {
     expect(selfCallSpy.mock.calls.map(([m]) => m).sort()).toEqual(['methodA', 'methodB'])
   })
 
-  // (b) return this: builder chaining routes returned value through the proxy
+  // A native private member checks that `this` is the instance its class built: an advised method, and a plain
+  // method of a woven instance, must both run with that instance.
+  class PrivateTarget {
+    #count = 0
+    #bump(): number {
+      return ++this.#count
+    }
+
+    advised(): number {
+      return this.#bump()
+    }
+
+    plain(): number {
+      return this.#count
+    }
+  }
+
+  @Aspect([$aop.forClass(PrivateTarget, 'advised')])
+  @Profile('aop-private-members')
+  class PrivateAspect implements MethodAspect<PrivateTarget> {
+    before() {
+      /* noop */
+    }
+  }
+  void PrivateAspect
+
+  it('runs methods of a woven instance with the instance, so private members work', async function () {
+    const di = new CaffeineIoC({ profiles: ['aop-private-members'] })
+    di.bind(PrivateTarget, t => t.toSelf())
+    await di.init()
+    const target = di.get(PrivateTarget)
+
+    expect(target.advised()).toBe(1)
+    expect(target.advised()).toBe(2)
+    expect(target.plain()).toBe(2)
+  })
+
+  // (b) return this: builder chaining returns the woven instance
   class BuilderTarget {
     private _name = ''
     setName(name: string): this {
@@ -1541,7 +1578,7 @@ describe('this binding and instanceof', function () {
     expect(builderSpy.mock.calls.map(([m]) => m)).toEqual(['setName', 'getName'])
   })
 
-  // (c) instanceof: Proxy has no getPrototypeOf trap; prototype chain is preserved
+  // (c) instanceof: weaving keeps the instance's prototype chain
   class InstanceofTarget {
     run(): string {
       return 'ok'
@@ -1557,7 +1594,7 @@ describe('this binding and instanceof', function () {
   }
   void InstanceofAspect
 
-  it('instanceof check returns true for proxied instances', async function () {
+  it('instanceof check returns true for woven instances', async function () {
     const di = new CaffeineIoC({ profiles: ['aop-instanceof'] })
     di.bind(InstanceofTarget, t => t.toSelf())
     await di.init()

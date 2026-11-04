@@ -571,6 +571,25 @@ describe('preparing a class', () => {
     )
   })
 
+  // A native private member refuses any receiver but the instance its class built, so a woven method must run with it.
+  it('runs an annotated method with the instance itself, so it can use private members', async () => {
+    class Counter {
+      #attempts = 0
+
+      @Retry('inventory')
+      async call(): Promise<number> {
+        this.#attempts++
+        if (this.#attempts < 2) {
+          throw new Error('blip')
+        }
+        return this.#attempts
+      }
+    }
+    const { di } = await containerWith(di => di.bind(Counter, t => t.toSelf()))
+
+    await expect(di.get(Counter).call()).resolves.toBe(2)
+  })
+
   class StaticLoader {
     @Retry('inventory')
     static async load(): Promise<string> {
@@ -585,6 +604,27 @@ describe('preparing a class', () => {
 
     expect(() => aspect.prepare(StaticLoader)).toThrow(
       'Cannot weave "StaticLoader.load": @Retry is on a static method, which is never woven',
+    )
+  })
+
+  class PrivateLoader {
+    @Retry('inventory')
+    async #load(): Promise<string> {
+      return 'ok'
+    }
+
+    async load(): Promise<string> {
+      return this.#load()
+    }
+  }
+
+  // A private method is called by name inside its class, never through a property, so nothing would weave it.
+  it('refuses an annotation on a private method', async () => {
+    const { di } = await containerWith(di => di.bind(PrivateLoader, t => t.toSelf()))
+    const aspect = di.get(ResilienceAspect)
+
+    expect(() => aspect.prepare(PrivateLoader)).toThrow(
+      'Cannot weave "PrivateLoader.#load": @Retry is on a private method, which is never woven',
     )
   })
 
