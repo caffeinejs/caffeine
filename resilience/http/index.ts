@@ -1,2 +1,2 @@
 export { ResilienceHTTP, ResilienceHTTPBuilder, type ResilienceHTTPConfig } from './feature.js'
-export { ResilienceErrorHandler } from './http.js'
+export { isClientError, ResilienceErrorHandler } from './http.js'

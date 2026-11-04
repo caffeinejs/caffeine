@@ -1,16 +1,20 @@
 import { CaffeineIoC, Profile } from '@caffeinejs/di'
-import { CatchWith, Controller, Get } from '@caffeinejs/http'
+import { CatchWith, Controller, ErrHTTP, ErrHTTPBadRequest, ErrHTTPNotFound, Get } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { CircuitBreaker, Retry } from '../aop/annotations.js'
+import { Resilience } from '../aop/feature.js'
+import { ResilienceRegistry } from '../aop/registry.js'
 import { ErrBulkheadFull } from '../bulkhead/bulkhead.js'
 import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import { ErrMaxRetriesExceeded } from '../retry/retry.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
-import { ResilienceErrorHandler } from './http.js'
+import { ResilienceHTTP } from './feature.js'
+import { isClientError, ResilienceErrorHandler } from './http.js'
 
 const opened: Array<() => Promise<unknown>> = []
 
@@ -181,5 +185,88 @@ describe('ResilienceErrorHandler named with @CatchWith', () => {
 
     expect(res.status).toBe(503)
     expect(res.headers.get('retry-after')).toBe('2')
+  })
+})
+
+describe('isClientError', () => {
+  // The application's own 4xx answers the client's mistake: another attempt or a breaker failure would blame a
+  // dependency for it.
+  it.each([
+    ['an ErrHTTP 400', new ErrHTTPBadRequest()],
+    ['an ErrHTTP 404', new ErrHTTPNotFound()],
+    ['an ErrHTTP 408 the application answers', new ErrHTTP(408, 'Request Timeout')],
+    ['an ErrHTTP 429 the application answers', new ErrHTTP(429, 'Too Many Requests')],
+    ['an error carrying statusCode 404', Object.assign(new Error('missing'), { statusCode: 404 })],
+    ['an error carrying status 422', Object.assign(new Error('invalid'), { status: 422 })],
+  ])('is true for %s', (_, error) => {
+    expect(isClientError(error)).toBe(true)
+  })
+
+  // A dependency that timed out or throttled is failing for now: retries and the breaker must still see it.
+  it.each([
+    ['an ErrHTTP 500', new ErrHTTP(500, 'Internal Server Error')],
+    ['an ErrHTTP 503', new ErrHTTP(503, 'Service Unavailable')],
+    ['an error carrying status 408 from a dependency', Object.assign(new Error('timeout'), { status: 408 })],
+    ['an error carrying statusCode 429 from a dependency', Object.assign(new Error('throttled'), { statusCode: 429 })],
+    ['an error carrying status 503', Object.assign(new Error('down'), { status: 503 })],
+    ['an error carrying status "404" as text', Object.assign(new Error('missing'), { status: '404' })],
+    ['an error with no status', new Error('down')],
+    ['undefined', undefined],
+    ['null', null],
+    ['a bare 404', 404],
+  ])('is false for %s', (_, error) => {
+    expect(isClientError(error)).toBe(false)
+  })
+})
+
+const catalog = { attempts: 0 }
+
+@Controller('/catalog')
+@Profile('resilience-http-client-errors')
+class CatalogController {
+  @Retry('catalog')
+  @CircuitBreaker('catalog')
+  @Get('/:id', p => [p.param('id')])
+  async item(id: string): Promise<never> {
+    catalog.attempts++
+    throw id === 'missing' ? new ErrHTTPNotFound() : new Error('database down')
+  }
+}
+void CatalogController
+
+describe('isClientError on a controller', () => {
+  // A burst of 404s is clients asking for what does not exist: it must not open the breaker for everyone.
+  it('keeps 404s out of the retry and the breaker, while a server error is still retried', async () => {
+    catalog.attempts = 0
+    const app = createWebApplication({
+      container: new CaffeineIoC({ profiles: ['resilience-http-client-errors'] }),
+    })
+      .install(
+        Resilience(r =>
+          r
+            .retry('catalog', { maxAttempts: 3, backoff: 0, retryOn: error => !isClientError(error) })
+            .circuitBreaker('catalog', {
+              slidingWindow: { type: 'count', size: 4 },
+              minimumNumberOfCalls: 4,
+              ignoreError: isClientError,
+            }),
+        ),
+      )
+      .install(ResilienceHTTP())
+    opened.push(() => app.close())
+    await app.bootstrap()
+
+    for (let i = 0; i < 4; i++) {
+      expect((await app.request('/catalog/missing')).status).toBe(404)
+    }
+    const breaker = app.container.get(ResilienceRegistry).circuitBreaker('catalog')
+
+    expect(catalog.attempts).toBe(4)
+    expect(breaker.state).toBe('closed')
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+
+    expect((await app.request('/catalog/tea')).status).toBe(500)
+    expect(catalog.attempts).toBe(7)
+    expect(breaker.metrics().failedCalls).toBe(3)
   })
 })

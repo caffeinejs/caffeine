@@ -17,7 +17,7 @@ npm install @caffeinejs/resilience
 | `@caffeinejs/resilience/ratelimiter`    | `rateLimiter`, `ErrRateLimitExceeded`                                                                     |
 | `@caffeinejs/resilience/fallback`       | `fallback`                                                                                                |
 | `@caffeinejs/resilience/aop`            | Annotations and the `Resilience()` feature, with `@caffeinejs/di` and `@caffeinejs/application` installed |
-| `@caffeinejs/resilience/http`           | `ResilienceErrorHandler` and the `ResilienceHTTP()` replay check, with `@caffeinejs/http` installed       |
+| `@caffeinejs/resilience/http`           | `ResilienceErrorHandler`, `isClientError`, `ResilienceHTTP()`, with `@caffeinejs/http` installed          |
 | `@caffeinejs/resilience/otel`           | OpenTelemetry instruments, with `@opentelemetry/api` installed                                            |
 
 ## Quick start
@@ -529,7 +529,28 @@ dependency names never reach a client:
 A rate limiter on a route answers 503, not 429: it limits the whole process, not one client. Any other error is
 left to the application's handlers.
 
-### Retrying a handler replays it
+### Client errors
+
+A strategy treats every error alike, on a controller as anywhere else: a 404 a handler throws is retried, counts as a
+breaker failure, and is handed to a fallback, so a burst of requests for missing records can open the breaker for
+every client. Nothing is excluded by default. `isClientError` tells a client's mistake from a failing dependency; pass
+it to each instance that should not blame the dependency for one:
+
+```ts
+import { isClientError } from '@caffeinejs/resilience/http'
+
+Resilience(r =>
+  r
+    .retry('catalog', { maxAttempts: 3, retryOn: error => !isClientError(error) })
+    .circuitBreaker('catalog', { ignoreError: isClientError }),
+)
+
+@Fallback('cachedItem', { fallbackOn: error => !isClientError(error) })
+```
+
+An `ErrHTTP` with a 4xx status, such as `ErrHTTPNotFound`, is a client error. Any other error is one when it carries a
+numeric `status` or `statusCode` from 400 to 499, except 408 and 429: a dependency that timed out or throttled is
+failing for now. The breaker counts an ignored error neither as a failure nor as a success.
 
 Resilience annotations work on controller methods as on any other: a controller is a class the container builds.
 `@Retry` on a handler runs the whole handler again, every service it calls, every write and every outbound
