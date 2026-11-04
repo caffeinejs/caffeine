@@ -28,23 +28,37 @@ export function linked(caller: AbortSignal, attempt: AbortSignal): AbortSignal {
   const signal = controller.signal
   controllers.set(signal, controller)
 
-  const ref = new WeakRef(signal)
-  const onCaller = (): void => {
+  // Each callback is made in a function of its own: closures made in one function share its scope, and one that
+  // held the controller would keep every other alive with it, the signal included.
+  const onCaller = callerListener(caller, new WeakRef(signal))
+  caller.addEventListener('abort', onCaller, { once: true })
+  attempt.addEventListener('abort', attemptListener(caller, onCaller, attempt, controller), { once: true })
+  unlinks.register(signal, unlink(caller, onCaller))
+
+  return signal
+}
+
+function callerListener(caller: AbortSignal, ref: WeakRef<AbortSignal>): () => void {
+  return () => {
     const held = ref.deref()
     if (held !== undefined) {
       controllers.get(held)?.abort(caller.reason)
     }
   }
-  caller.addEventListener('abort', onCaller, { once: true })
-  attempt.addEventListener(
-    'abort',
-    () => {
-      caller.removeEventListener('abort', onCaller)
-      controller.abort(attempt.reason)
-    },
-    { once: true },
-  )
-  unlinks.register(signal, () => caller.removeEventListener('abort', onCaller))
+}
 
-  return signal
+function attemptListener(
+  caller: AbortSignal,
+  onCaller: () => void,
+  attempt: AbortSignal,
+  controller: AbortController,
+): () => void {
+  return () => {
+    caller.removeEventListener('abort', onCaller)
+    controller.abort(attempt.reason)
+  }
+}
+
+function unlink(caller: AbortSignal, onCaller: () => void): () => void {
+  return () => caller.removeEventListener('abort', onCaller)
 }
