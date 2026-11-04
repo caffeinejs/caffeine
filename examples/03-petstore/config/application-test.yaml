@@ -1,0 +1,7 @@
+# The `test` profile, which the Vitest config activates. OS-assigned ports: a test that runs the application must
+# not collide with another, or with anything else on the machine.
+server:
+  port: 0
+
+devtools:
+  port: 0

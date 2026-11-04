@@ -23,8 +23,8 @@ export function Home(props: { githubConfigured: boolean }): JSX.Element {
         </a>
         {!props.githubConfigured && (
           <p class="warn">
-            GitHub credentials are not configured. Set the <code>PETSTORE_AUTH__GITHUB__*</code> environment variables
-            to enable sign-in.
+            GitHub credentials are not configured. Set the <code>PETSTORE_GITHUB_*</code> environment variables to
+            enable sign-in.
           </p>
         )}
       </section>

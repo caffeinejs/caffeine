@@ -1,0 +1,3 @@
+# The `docker` profile, which docker-compose.yml activates.
+server:
+  port: 3000

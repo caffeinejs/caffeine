@@ -142,7 +142,7 @@ describe('openapi from a programmatic router', () => {
       .handler(() => [])
 
     app = createWebApplication({})
-      .with(() => constraints())
+      .with(constraints())
       .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication

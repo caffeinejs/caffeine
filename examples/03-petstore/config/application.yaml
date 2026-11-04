@@ -1,0 +1,38 @@
+# Everything the application reads, validated against the schema in src/app.config.ts. A profile file beside this
+# one, application-<profile>.yaml, is layered over it when CAFFEINE_PROFILES names the profile.
+#
+# Secrets are never written here: each is read from the environment variable its placeholder names, and falls back
+# to a demo value so the example runs with nothing set. Quote a value that holds a placeholder.
+
+# What the server listens on. Handed to `.server(...)` as the listen options, so the keys are Fastify's.
+server:
+  host: 0.0.0.0
+  port: 9999
+
+# trace, debug, info, warn, error or fatal.
+log:
+  level: info
+
+# The devtools, on a server of their own: loopback, so nothing outside this machine reaches them.
+# `make example:petstore-devtools` starts the UI that reads them.
+devtools:
+  host: 127.0.0.1
+  port: 9090
+
+# HTTP Basic credentials for /docs.
+docs:
+  user: admin
+  password: '${env:PETSTORE_DOCS_PASSWORD:-admin123}'
+
+auth:
+  github:
+    # From an OAuth app at https://github.com/settings/developers. The fallbacks keep the application startable:
+    # the OAuth scheme refuses empty credentials, and a sign-in needs real ones to reach GitHub at all.
+    clientId: '${env:PETSTORE_GITHUB_CLIENT_ID:-dev-github-client-id}'
+    clientSecret: '${env:PETSTORE_GITHUB_CLIENT_SECRET:-dev-github-client-secret}'
+    # Also the host to browse the application from. The sign-in sets its state cookie for the host the browser is
+    # on, and GitHub sends the browser back here; `localhost` and `127.0.0.1` are different hosts to a browser, so a
+    # sign-in started on the other one comes back without its cookie.
+    callbackUrl: http://localhost:9999/login/github/callback
+    # Seals the OAuth state and session cookies: at least 32 characters.
+    sessionSecret: '${env:PETSTORE_GITHUB_SESSION_SECRET:-petstore-dev-session-secret-32-chars!!}'

@@ -31,7 +31,7 @@ example\:petstore: ## run the petstore example (Postgres in Docker, app on host 
 
 .PHONY: example\:petstore-devtools
 # The devtools the petstore serves on its own port; the UI's variables are read as the environment sets them.
-example\:petstore-devtools: export CAFFEINE_DEVTOOLS_TARGET__URL ?= http://127.0.0.1:$(or $(PETSTORE_DEVTOOLS__PORT),9090)/devtools
+example\:petstore-devtools: export CAFFEINE_DEVTOOLS_TARGET__URL ?= http://127.0.0.1:9090/devtools
 example\:petstore-devtools: ## run the devtools UI for a running petstore example (UI at http://127.0.0.1:9091)
 	@npm run build
 	@node devtools-ui/dist/main.js
