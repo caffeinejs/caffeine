@@ -25,11 +25,12 @@ export function isValidationSlot(value: unknown): value is ValidationSlot {
  * letter or digit gives `ERR_VALIDATION`.
  */
 export function validationCode(keyword: string): string {
+  // Each run of separators is one `_` by the time the ends are trimmed, so none of these backtracks.
   const words = keyword
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
-    .replace(/[^A-Za-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
+    .replaceAll(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replaceAll(/([A-Z])([A-Z][a-z])/g, '$1_$2')
+    .replaceAll(/[^A-Za-z0-9]+/g, '_')
+    .replaceAll(/^_|_$/g, '')
     .toUpperCase()
 
   return words === '' ? 'ERR_VALIDATION' : `ERR_VALIDATION_${words}`
@@ -86,11 +87,11 @@ function sourceOf(slot: ValidationSlot, segments: readonly string[]): ProblemIss
     return { in: location, pointer: pointerOf(segments) }
   }
 
-  const [name, ...rest] = segments
-  if (name === undefined) {
+  if (segments.length === 0) {
     return { in: location }
   }
 
+  const [name, ...rest] = segments
   return rest.length === 0
     ? { in: location, name: unescapeSegment(name) }
     : { in: location, name: unescapeSegment(name), pointer: pointerOf(rest) }

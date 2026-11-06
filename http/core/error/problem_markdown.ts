@@ -8,6 +8,11 @@ const SECTIONS = new Set(['detail', 'what_you_should_do', 'errors', 'stacktrace'
 // Every character some reader ends a line on: JavaScript's multiline anchors and YAML 1.1 count the last three.
 const LINE_BREAK = /\r\n|[\r\n\u0085\u2028\u2029]/
 const SEPARATORS = /[\u0085\u2028\u2029]/g
+const ESCAPED_SEPARATORS: Readonly<Record<string, string>> = {
+  '\u0085': String.raw`\u0085`,
+  '\u2028': String.raw`\u2028`,
+  '\u2029': String.raw`\u2029`,
+}
 
 // Words YAML 1.1 reads as a boolean or null, which a key must not be spelled as to come back as a string.
 const YAML_KEYWORD = /^(?:y|n|yes|no|true|false|on|off|null)$/i
@@ -25,7 +30,8 @@ export function problemMarkdown(_ctx: IContext, problem: Problem): string {
     ...Object.keys(problem).filter(name => !FRONTMATTER.includes(name) && !SECTIONS.has(name)),
   ]
   const front = fields.flatMap(name => {
-    const value = JSON.stringify(problem[name])
+    // A member holding `undefined` or a function has no JSON, whatever the declared return type says.
+    const value = JSON.stringify(problem[name]) as string | undefined
     return value === undefined ? [] : [`${yamlKey(name)}: ${escapeSeparators(value)}`]
   })
 
@@ -67,19 +73,19 @@ function yamlKey(name: string): string {
 
 // JSON leaves these as they are, and a reader that breaks lines on them would see the value end there.
 function escapeSeparators(json: string): string {
-  return json.replace(SEPARATORS, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`)
+  return json.replaceAll(SEPARATORS, char => ESCAPED_SEPARATORS[char])
 }
 
 // One line, for a heading or a list item: a line break there would end it and start a block of the text's own.
 function inline(text: string): string {
-  return text.replace(/\s*(?:\r\n|[\r\n\u0085\u2028\u2029])\s*/g, ' ')
+  return text.replaceAll(/\s*(?:\r\n|[\r\n\u0085\u2028\u2029])\s*/g, ' ')
 }
 
 // Inline markup in a line of text a client may have chosen, such as a key it sent: a link with text of its own, an
 // image, HTML, emphasis or a code span would render as markup. Each marker is escaped, and reads as itself. A bare URL
 // has no marker: a renderer that links one shows the URL itself.
 function escapeInline(text: string): string {
-  return text.replace(/[\\`*_[\]<>&~]/g, '\\$&')
+  return text.replaceAll(/[\\`*_[\]<>&~]/g, String.raw`\$&`)
 }
 
 // Where an entry failed, as one line: `body /items/0`, `query ids /1`, or `query` for the whole query string.
@@ -95,7 +101,7 @@ function locationOf(source: ProblemIssueSource): string {
 function block(text: string): string {
   return text
     .split(LINE_BREAK)
-    .map(line => line.replace(/^(\s*)([#>`~=+*_|<-])/, '$1\\$2'))
+    .map(line => line.replace(/^(\s*)([#>`~=+*_|<-])/, String.raw`$1\$2`))
     .join('\n')
 }
 

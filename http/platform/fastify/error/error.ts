@@ -182,6 +182,21 @@ export function installGlobalErrorHandler(
     return reply.status(problem.status).type(contentType).send(body)
   }
 
+  const sendErrHTTP = (request: FastifyRequest, reply: FastifyReply, err: ErrHTTP): FastifyReply => {
+    if (err.headers) {
+      reply.headers(err.headers)
+    }
+
+    if (err.body === undefined) {
+      return sendProblem(request, reply, err.toProblem(), err)
+    }
+
+    // A body the error carried is the author's own and is sent as it stands, under the media type the reply
+    // already has — it need not be an object, so there is nothing to add a stack trace to.
+    // The error's status stands over a Response given as its body.
+    return reply.status(err.statusCode).send(payloadOf(reply, err.body, true))
+  }
+
   // The application-wide error handler. Also the fallback for per-controller (encapsulated) handlers
   // when they do not handle a given error type.
   const globalErrorHandler: GlobalErrorHandler = async (error, request, reply) => {
@@ -201,18 +216,7 @@ export function installGlobalErrorHandler(
     }
 
     if (err instanceof ErrHTTP) {
-      if (err.headers) {
-        reply.headers(err.headers)
-      }
-
-      if (err.body === undefined) {
-        return sendProblem(request, reply, err.toProblem(), err)
-      }
-
-      // A body the error carried is the author's own and is sent as it stands, under the media type the reply
-      // already has — it need not be an object, so there is nothing to add a stack trace to.
-      // The error's status stands over a Response given as its body.
-      return reply.status(err.statusCode).send(payloadOf(reply, err.body, true))
+      return sendErrHTTP(request, reply, err)
     }
 
     // Its message is detail for the log: an issuer, the address a provider could not be reached at.
@@ -349,7 +353,7 @@ function codeForStatus(status: number): string {
     : `ERR_HTTP_${phrase
         .replaceAll("'", '')
         .toUpperCase()
-        .replace(/[^A-Z0-9]+/g, '_')}`
+        .replaceAll(/[^A-Z0-9]+/g, '_')}`
 }
 
 // The body's failures answer 422, the request's parameters' 400. The log line is bounded like the response: the slot,

@@ -1,4 +1,5 @@
 import { $t } from '@caffeinejs/application/schema'
+import type { FastifySchemaValidationError } from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
@@ -669,6 +670,52 @@ describe('an entry Ajv wrote no message for', () => {
         source: { in: 'body', pointer: '/name' },
         params: { type: 'string' },
       },
+    ])
+
+    await app.close()
+  })
+})
+
+// A validator the application compiled need not be Ajv: what it reports is listed by what it carries.
+describe('a validator the application compiled', () => {
+  function appReporting(error: unknown, logged: Array<{ level?: number; msg?: string }> = []) {
+    return createWebApplication()
+      .server(() => ({
+        factory: { logger: { level: 'info', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } } },
+      }))
+      .serverCallback((_kit, instance) => {
+        instance.setValidatorCompiler(() => () => ({ error: error as FastifySchemaValidationError[] }))
+      })
+      .mount(newRouter('/own').post('/', { body: $t.Object({ sku: $t.String() }) }, () => ({ ok: true })))
+  }
+
+  // No keyword gives the bare code, no path places it at the body itself, and no params give none.
+  it('lists errors that name no keyword or path', async () => {
+    const app = appReporting([{ instancePath: '/sku', message: 'must be a SKU' }, { message: 'is incomplete' }])
+    await app.bootstrap()
+
+    expect(await errorsOf(app, '/own', { sku: 'x' })).toEqual([
+      { code: 'ERR_VALIDATION', detail: 'sku must be a SKU', source: { in: 'body', pointer: '/sku' }, params: {} },
+      { code: 'ERR_VALIDATION', detail: 'is incomplete', source: { in: 'body', pointer: '' }, params: {} },
+    ])
+
+    await app.close()
+  })
+
+  // Something other than a list of errors has nothing to count or list: the problem names the slot alone.
+  it('answers a report that is not a list with the slot alone', async () => {
+    const logged: Array<{ level?: number; msg?: string }> = []
+    const app = appReporting('Rejected', logged)
+    await app.bootstrap()
+
+    const res = await app.request('/own', { method: 'POST', headers: JSON_BODY, body: '{"sku":"x"}' })
+    const problem = (await res.json()) as Problem
+
+    expect(res.status).toBe(422)
+    expect(problem.detail).toBe('Invalid request body')
+    expect(problem).not.toHaveProperty('errors')
+    expect(logged.filter(entry => entry.msg === 'Invalid request body: 0 errors')).toEqual([
+      expect.objectContaining({ level: 30 }),
     ])
 
     await app.close()
