@@ -48,7 +48,7 @@ class ProgrammaticService implements Feature {
 
   [kFeatureConfigure](kit: FeatureConfigureKit): Promise<void> {
     const endpoints = this.#endpoints
-    kit.container.bind(endpoints, t => t.toValue(new endpoints()).labels(Keys.CONTROLLER))
+    kit.container.bind(endpoints, t => t.toValue(new endpoints()).labels(Keys.CONTROLLER, Keys.ENTRYPOINT))
 
     const authz = this.#authz
     registerRouteGroup(endpoints, router => {
@@ -151,6 +151,29 @@ describe('registerRouteGroup', () => {
       message: expect.stringMatching(
         /^Cannot build router: no route definition found for router "Symbol\(NotAController\)"/,
       ),
+    })
+  })
+
+  // Packages that act on every request entrypoint, such as the resilience replay check, find a controller by
+  // Keys.ENTRYPOINT alone: one bound without it would escape them with nothing to say so.
+  it('refuses a controller bound without the entrypoint label, naming the class', async () => {
+    class HandBound {
+      hand(): string {
+        return 'hand'
+      }
+    }
+    registerRouteGroup(HandBound, router =>
+      router.path('/hand').routes([new RouteBuilder().path('/').method('GET').name('hand').parameters([])]),
+    )
+    app = createWebApplication()
+    app.container.bind(HandBound, t => t.toSelf().labels(Keys.CONTROLLER))
+
+    await expect(app.bootstrap()).rejects.toMatchObject({
+      code: 'ERR_HTTP_UNLABELLED_ENTRYPOINT',
+      message:
+        'Cannot build router: controller "HandBound" is labelled Keys.CONTROLLER without Keys.ENTRYPOINT, so ' +
+        'packages that act on every request entrypoint do not see it\nPossible Solutions:\n' +
+        '  - Bind it with .labels(Keys.CONTROLLER, Keys.ENTRYPOINT)',
     })
   })
 
