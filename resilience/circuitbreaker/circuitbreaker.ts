@@ -3,8 +3,9 @@ import { errMessage } from '@caffeinejs/std/err'
 
 import type { Backoff } from '../backoff.js'
 import { lift, mark } from '../compose.js'
+import { disposable } from '../dispose.js'
 import { Emitter } from '../emitter.js'
-import { ErrCallRefused, refusal } from '../errors.js'
+import { ErrCallRefused, type ErrorMatcher, refusal } from '../errors.js'
 import { Options } from '../options.js'
 import type { Operation, Wrapper } from '../policy.js'
 import { clampDelay, type Clock, scheduleUnref } from '../timers.js'
@@ -88,14 +89,17 @@ export interface CircuitBreakerOptions {
    * the next call happens either way.
    */
   automaticTransitionFromOpenToHalfOpen?: boolean
-  /** Whether an error counts as a failure; `false` counts it as a success. Every error counts by default. */
-  recordError?: (error: unknown) => boolean
   /**
-   * Errors the breaker neither counts nor lets affect its state. Checked before `recordError`. A failure after
-   * the caller's signal aborted is always ignored, and so is a refusal ({@link ErrCallRefused}) from a strategy
-   * inside the breaker, such as a spent rate limit or a full bulkhead.
+   * Which errors count as failures: a predicate, or error classes whose instances do. Any other error counts as a
+   * success. Every error counts by default.
    */
-  ignoreError?: (error: unknown) => boolean
+  recordError?: ErrorMatcher
+  /**
+   * Errors the breaker neither counts nor lets affect its state: a predicate, or error classes. Checked before
+   * `recordError`. A failure after the caller's signal aborted is always ignored, and so is a refusal
+   * ({@link ErrCallRefused}) from a policy inside the breaker, such as a spent rate limit or a full bulkhead.
+   */
+  ignoreError?: ErrorMatcher
   /** Whether a returned value counts as a failure, such as a response with status 503. */
   recordResult?: (result: unknown) => boolean
   /**
@@ -146,6 +150,22 @@ export interface CircuitBreakerEvents {
   slowCallRateExceeded: { readonly name: string; readonly slowCallRate: number }
 }
 
+/**
+ * A call {@link CircuitBreaker.acquire} let through. Settle it once, when the work ends; a second settlement does
+ * nothing. The call's duration runs from `acquire()`. A predicate that throws throws from the method that ran it,
+ * and the call is not recorded.
+ */
+export interface CircuitBreakerPermit {
+  /** The work succeeded. */
+  onSuccess(): void
+  /** The work returned `result`, which counts as a failure when `recordResult` says so. */
+  onResult(result: unknown): void
+  /** The work failed with `error`, which `ignoreError` and `recordError` classify as they do a wrapped call's. */
+  onError(error: unknown): void
+  /** The work was abandoned, such as when its caller left: nothing is recorded, and a trial slot is given back. */
+  release(): void
+}
+
 const CLOSED = 0
 const OPEN = 1
 const HALF_OPEN = 2
@@ -186,6 +206,7 @@ const HALF_OPEN_REFUSAL: Refusal = { state: 'half_open', retryAfter: undefined }
  * Refused calls reject with {@link ErrCallNotPermitted}.
  */
 export class CircuitBreaker implements Wrapper {
+  declare [Symbol.dispose]: () => void
   readonly #name: string
   readonly #failureRateThreshold: number
   readonly #slowCallRateThreshold: number
@@ -217,6 +238,7 @@ export class CircuitBreaker implements Wrapper {
   // In metrics_only, a rate event is published when the rate crosses its threshold, not on every call above it.
   #failureRateAbove = false
   #slowCallRateAbove = false
+  #disposed = false
 
   constructor(options: CircuitBreakerOptions) {
     const o = new Options('circuit breaker', options)
@@ -284,8 +306,8 @@ export class CircuitBreaker implements Wrapper {
       false,
     )
     this.#captureStackTrace = o.boolean('captureStackTrace', options.captureStackTrace, false)
-    this.#recordError = o.function('recordError', options.recordError)
-    this.#ignoreError = o.function('ignoreError', options.ignoreError)
+    this.#recordError = o.matcher('recordError', options.recordError)
+    this.#ignoreError = o.matcher('ignoreError', options.ignoreError)
     this.#recordResult = o.function('recordResult', options.recordResult)
     this.#clock = o.clock(options.clock)
   }
@@ -336,7 +358,7 @@ export class CircuitBreaker implements Wrapper {
       const start = this.#clock.now()
       return inner(ctx, input).then(
         result => {
-          this.#onResult(generation, start, result)
+          this.#onResult(generation, start, result, true)
           return result
         },
         error => {
@@ -391,6 +413,97 @@ export class CircuitBreaker implements Wrapper {
 
     if (this.#emitter.has('reset')) {
       this.#emitter.emit('reset', { name: this.#name })
+    }
+  }
+
+  /**
+   * Opens the breaker, as a reached threshold does: it refuses calls until the wait passes, then lets trial calls
+   * through. `for` sets that wait instead of `waitDurationInOpenState`. Calls in flight are not recorded when they
+   * settle.
+   *
+   * @throws {@link ErrInvalidOption} when `for` is not a finite Duration of at least 0s.
+   */
+  transitionToOpen(options?: { readonly for?: Duration }): void {
+    const wait = options?.for
+    if (wait === undefined) {
+      this.#transitionTo(OPEN)
+      return
+    }
+
+    const o = new Options('circuit breaker', { name: this.#name }, 'open')
+    this.#transitionTo(
+      OPEN,
+      undefined,
+      clampDelay(o.duration('for', wait, 0), `the open state of circuit breaker "${this.#name}"`),
+    )
+  }
+
+  /** Lets trial calls through now, without waiting for the open state to end. Calls in flight are not recorded. */
+  transitionToHalfOpen(): void {
+    this.#transitionTo(HALF_OPEN)
+  }
+
+  /**
+   * Closes the breaker and forgets what it recorded, as {@link CircuitBreaker.reset} does without its `reset` event.
+   * Calls in flight are not recorded.
+   */
+  transitionToClosed(): void {
+    this.#transitionTo(CLOSED)
+  }
+
+  /**
+   * Lets one call through, or refuses it, for work that is not one operation, such as a body streamed after the
+   * response started: the caller settles the permit when the work ends. A refusal is returned, not thrown, and
+   * counted as a wrapped call's is.
+   */
+  acquire(): CircuitBreakerPermit | ErrCallNotPermitted {
+    const admitted = this.#admit()
+    if (typeof admitted !== 'number') {
+      this.#refused(admitted.state)
+      return this.#notPermitted(admitted)
+    }
+
+    const start = this.#clock.now()
+    // A disabled breaker records nothing, as it does for a wrapped call.
+    let settled = this.#state === DISABLED
+    return {
+      onSuccess: () => {
+        if (!settled) {
+          settled = true
+          this.#onResult(admitted, start, undefined, false)
+        }
+      },
+      onResult: result => {
+        if (!settled) {
+          settled = true
+          this.#onResult(admitted, start, result, true)
+        }
+      },
+      onError: error => {
+        if (!settled) {
+          settled = true
+          this.#onError(admitted, start, error, undefined)
+        }
+      },
+      release: () => {
+        if (!settled) {
+          settled = true
+          this.#release(admitted)
+        }
+      },
+    }
+  }
+
+  /**
+   * Cancels the timer that moves an open breaker to half open, and sets none from then on, so no timer outlives a
+   * shutdown. The breaker keeps working: an open one moves to half open on the first call after its wait. The
+   * `[Symbol.dispose]` alias does the same.
+   */
+  dispose(): void {
+    this.#disposed = true
+    if (this.#timer !== undefined) {
+      this.#clock.clearTimeout(this.#timer)
+      this.#timer = undefined
     }
   }
 
@@ -513,16 +626,19 @@ export class CircuitBreaker implements Wrapper {
     this.#record(generation, failed, slow, now)
   }
 
-  #onResult(generation: number, start: number, result: unknown): void {
+  // `classify` is false for a success reported without a result, which `recordResult` has nothing to judge.
+  #onResult(generation: number, start: number, result: unknown, classify: boolean): void {
     const now = this.#clock.now()
     const duration = now - start
 
-    let failed: boolean
-    try {
-      failed = this.#recordResult !== undefined && this.#recordResult(result)
-    } catch (predicateError) {
-      this.#release(generation)
-      throw predicateError
+    let failed = false
+    if (classify && this.#recordResult !== undefined) {
+      try {
+        failed = this.#recordResult(result)
+      } catch (predicateError) {
+        this.#release(generation)
+        throw predicateError
+      }
     }
 
     const slow = duration > this.#slowCallDurationThresholdMs
@@ -616,10 +732,10 @@ export class CircuitBreaker implements Wrapper {
   }
 
   // Every field is updated before any event is emitted, so a listener sees a consistent breaker and may move it
-  // again. `tripped` is set when a threshold opened the breaker.
-  #transitionTo(target: number, tripped?: Tripped): void {
+  // again. `tripped` is set when a threshold opened the breaker; `wait` replaces the configured open wait.
+  #transitionTo(target: number, tripped?: Tripped, wait?: number): void {
     // Computed first: a wait function that throws or returns a non-finite delay leaves the breaker as it was.
-    const waitMs = target === OPEN ? this.#openWait() : 0
+    const waitMs = target === OPEN ? (wait ?? this.#openWait()) : 0
     const from = this.#state
     const now = this.#clock.now()
 
@@ -636,7 +752,7 @@ export class CircuitBreaker implements Wrapper {
         this.#openedAt = now
         this.#openCount++
         this.#openWaitMs = waitMs
-        if (this.#automaticTransition) {
+        if (this.#automaticTransition && !this.#disposed) {
           this.#scheduleHalfOpen(waitMs)
         }
         break
@@ -685,6 +801,8 @@ export class CircuitBreaker implements Wrapper {
     )
   }
 }
+
+disposable(CircuitBreaker)
 
 /**
  * Creates a {@link CircuitBreaker}.

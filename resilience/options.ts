@@ -6,16 +6,20 @@ import { type Clock, systemClock } from './timers.js'
 
 /**
  * Checks one factory's options, value by value, so every factory words a bad one the same way:
- * `Cannot create retry "inventory": maxAttempts must be an integer of at least 1, got 0`. A method that changes an
- * option of a live instance checks it the same way, as `change`.
+ * `Cannot create retry "inventory": maxAttempts must be an integer of at least 1, got 0`. A method of a live instance
+ * checks its arguments the same way, under its own action, such as `change`.
  */
 export class Options {
   readonly name: string
   readonly #kind: string
-  readonly #action: 'create' | 'change'
+  readonly #action: 'create' | 'change' | 'open'
 
   /** @throws {@link ErrInvalidOption} when `options` carries no non-empty `name`. */
-  constructor(kind: string, options: { readonly name?: unknown } | undefined, action: 'create' | 'change' = 'create') {
+  constructor(
+    kind: string,
+    options: { readonly name?: unknown } | undefined,
+    action: 'create' | 'change' | 'open' = 'create',
+  ) {
     const name = options?.name
     if (typeof name !== 'string' || name.length === 0) {
       throw new ErrInvalidOption(
