@@ -10,6 +10,7 @@ import {
   ErrHTTPBadGateway,
   ErrHTTPBadRequest,
   ErrHTTPConflict,
+  ErrHTTPContentTooLarge,
   ErrHTTPFailedDependency,
   ErrHTTPForbidden,
   ErrHTTPGatewayTimeout,
@@ -23,7 +24,6 @@ import {
   ErrHTTPNotAcceptable,
   ErrHTTPNotFound,
   ErrHTTPNotImplemented,
-  ErrHTTPPayloadTooLarge,
   ErrHTTPPaymentRequired,
   ErrHTTPPreconditionFailed,
   ErrHTTPProxyAuthenticationRequired,
@@ -31,7 +31,7 @@ import {
   ErrHTTPServiceUnavailable,
   ErrHTTPTooManyRequests,
   ErrHTTPUnauthorized,
-  ErrHTTPUnprocessableEntity,
+  ErrHTTPUnprocessableContent,
   ErrHTTPUnsupportedMediaType,
   ErrHTTPVersionNotSupported,
   ErrorHandler,
@@ -608,11 +608,11 @@ describe('ErrHTTP subclasses', () => {
     [ErrHTTPConflict, 409, 'ERR_HTTP_CONFLICT'],
     [ErrHTTPGone, 410, 'ERR_HTTP_GONE'],
     [ErrHTTPPreconditionFailed, 412, 'ERR_HTTP_PRECONDITION_FAILED'],
-    [ErrHTTPPayloadTooLarge, 413, 'ERR_HTTP_PAYLOAD_TOO_LARGE'],
+    [ErrHTTPContentTooLarge, 413, 'ERR_HTTP_CONTENT_TOO_LARGE'],
     [ErrHTTPUnsupportedMediaType, 415, 'ERR_HTTP_UNSUPPORTED_MEDIA_TYPE'],
     [ErrHTTPImATeapot, 418, 'ERR_HTTP_IM_A_TEAPOT'],
     [ErrHTTPMisdirectedRequest, 421, 'ERR_HTTP_MISDIRECTED_REQUEST'],
-    [ErrHTTPUnprocessableEntity, 422, 'ERR_HTTP_UNPROCESSABLE_ENTITY'],
+    [ErrHTTPUnprocessableContent, 422, 'ERR_HTTP_UNPROCESSABLE_CONTENT'],
     [ErrHTTPLocked, 423, 'ERR_HTTP_LOCKED'],
     [ErrHTTPFailedDependency, 424, 'ERR_HTTP_FAILED_DEPENDENCY'],
     [ErrHTTPTooManyRequests, 429, 'ERR_HTTP_TOO_MANY_REQUESTS'],
@@ -823,7 +823,7 @@ describe('failures from the real world', () => {
     expect(res.status).toBe(422)
     expect(await res.json()).toEqual({
       type: 'about:blank',
-      title: 'Unprocessable Entity',
+      title: 'Unprocessable Content',
       status: 422,
       detail: 'Webhook payload is invalid',
       code: 'ERR_WEBHOOK_PAYLOAD',
@@ -998,7 +998,7 @@ describe('the members an agent acts on', () => {
           .build()
       })
       .post('/coupon', () => {
-        throw new ErrHTTPUnprocessableEntity('Coupon SPRING expired on 2026-04-01', {
+        throw new ErrHTTPUnprocessableContent('Coupon SPRING expired on 2026-04-01', {
           category: 'validation',
           whatYouShouldDo: 'Remove the coupon and submit the order again.',
         })
@@ -1075,10 +1075,10 @@ describe('the members an agent acts on', () => {
       expect(res.headers.get('content-type')).toBe(PROBLEM_JSON)
       expect(await res.json()).toEqual({
         type: 'about:blank',
-        title: 'Unprocessable Entity',
+        title: 'Unprocessable Content',
         status: 422,
         detail: 'Coupon SPRING expired on 2026-04-01',
-        code: 'ERR_HTTP_UNPROCESSABLE_ENTITY',
+        code: 'ERR_HTTP_UNPROCESSABLE_CONTENT',
         category: 'validation',
         what_you_should_do: 'Remove the coupon and submit the order again.',
         correlation_id: 'chk-82',

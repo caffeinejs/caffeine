@@ -263,10 +263,10 @@ export class ErrHTTPPreconditionFailed extends ErrHTTP {
   }
 }
 
-export class ErrHTTPPayloadTooLarge extends ErrHTTP {
-  constructor(message: string = 'Payload Too Large', options?: ErrHTTPOptions) {
-    super(413, message, { code: 'ERR_HTTP_PAYLOAD_TOO_LARGE', ...options })
-    this.name = 'ErrHTTPPayloadTooLarge'
+export class ErrHTTPContentTooLarge extends ErrHTTP {
+  constructor(message: string = 'Content Too Large', options?: ErrHTTPOptions) {
+    super(413, message, { code: 'ERR_HTTP_CONTENT_TOO_LARGE', ...options })
+    this.name = 'ErrHTTPContentTooLarge'
   }
 }
 
@@ -291,10 +291,10 @@ export class ErrHTTPMisdirectedRequest extends ErrHTTP {
   }
 }
 
-export class ErrHTTPUnprocessableEntity extends ErrHTTP {
-  constructor(message: string = 'Unprocessable Entity', options?: ErrHTTPOptions) {
-    super(422, message, { code: 'ERR_HTTP_UNPROCESSABLE_ENTITY', ...options })
-    this.name = 'ErrHTTPUnprocessableEntity'
+export class ErrHTTPUnprocessableContent extends ErrHTTP {
+  constructor(message: string = 'Unprocessable Content', options?: ErrHTTPOptions) {
+    super(422, message, { code: 'ERR_HTTP_UNPROCESSABLE_CONTENT', ...options })
+    this.name = 'ErrHTTPUnprocessableContent'
   }
 }
 

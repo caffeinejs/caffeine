@@ -1,5 +1,3 @@
-import { STATUS_CODES } from 'node:http'
-
 import type { SchemaIssue } from '@caffeinejs/application/schema'
 import { errMessage } from '@caffeinejs/std/err'
 import type {
@@ -20,6 +18,7 @@ import { ErrHTTP } from '../../../core/error/http.js'
 import { newProblem, type Problem } from '../../../core/error/problem.js'
 import { negotiateProblemFormat } from '../../../core/error/serializer.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
+import { statusPhrase } from '../../../status.js'
 import { appendVary } from '../../../vary.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
@@ -342,7 +341,7 @@ function errorStatus(err: Error): number {
 
 // The code an `ErrHTTP*` of that status carries, for a 4xx error that names none: `ERR_HTTP_IM_A_TEAPOT` for 418.
 function codeForStatus(status: number): string {
-  const phrase = STATUS_CODES[status]
+  const phrase = statusPhrase(status)
 
   return phrase === undefined
     ? 'ERR_HTTP'

@@ -170,8 +170,8 @@ export class Context<
     return this.#fail(404, 'ERR_HTTP_NOT_FOUND', 'notFound', body)
   }
 
-  unprocessableEntity(body?: unknown): this {
-    return this.#fail(422, 'ERR_HTTP_UNPROCESSABLE_ENTITY', 'unprocessableEntity', body)
+  unprocessableContent(body?: unknown): this {
+    return this.#fail(422, 'ERR_HTTP_UNPROCESSABLE_CONTENT', 'unprocessableContent', body)
   }
 
   internalServerError(body?: unknown): this {

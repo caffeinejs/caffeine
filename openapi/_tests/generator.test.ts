@@ -1048,6 +1048,13 @@ describe('responses', () => {
     expect(responses['200']).toEqual({ description: 'OK', content: { 'application/json': {} } })
   })
 
+  // RFC 9110 renamed 422; Node still calls it "Unprocessable Entity".
+  it('describes a declared 422 by its RFC 9110 name', () => {
+    const responses = responsesOf(fixtureRoute('POST', '/', 'create').schema({ response: { 422: petSchema } }))
+
+    expect(responses['422']?.description).toBe('Unprocessable Content')
+  })
+
   it('emits no content for a declared 204 and names an unusual declared status generically', () => {
     const responses = responsesOf(
       fixtureRoute('DELETE', '/', 'clear').schema({ response: { 204: $t.Null(), 299: petSchema } }),

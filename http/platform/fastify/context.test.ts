@@ -10,8 +10,8 @@ function helpers() {
     .get('/not-found', ctx => {
       ctx.notFound()
     })
-    .get('/unprocessable-entity', ctx => {
-      ctx.unprocessableEntity()
+    .get('/unprocessable-content', ctx => {
+      ctx.unprocessableContent()
     })
     .get('/not-found-with-body', ctx => {
       ctx.notFound({ reason: 'no such pet' })
@@ -23,7 +23,7 @@ describe('Context error helpers', () => {
   it.each([
     ['bad-request', 400, 'Bad Request', 'ERR_HTTP_BAD_REQUEST'],
     ['not-found', 404, 'Not Found', 'ERR_HTTP_NOT_FOUND'],
-    ['unprocessable-entity', 422, 'Unprocessable Entity', 'ERR_HTTP_UNPROCESSABLE_ENTITY'],
+    ['unprocessable-content', 422, 'Unprocessable Content', 'ERR_HTTP_UNPROCESSABLE_CONTENT'],
   ])('answers /%s without a body with a problem', async (path, status, title, code) => {
     const app = createWebApplication().mount(helpers())
     await app.bootstrap()

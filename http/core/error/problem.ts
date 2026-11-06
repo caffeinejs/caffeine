@@ -1,6 +1,6 @@
-import { STATUS_CODES } from 'node:http'
-
 import { $t, type SchemaIssue } from '@caffeinejs/application/schema'
+
+import { statusPhrase } from '../../status.js'
 
 /** The media type of a problem sent to a client that asks for one with `Accept: application/problem+json`. */
 export const PROBLEM_CONTENT_TYPE = 'application/problem+json'
@@ -16,7 +16,7 @@ const PROBLEM_TYPE_BLANK = 'about:blank'
 export interface Problem {
   /** URI reference. `about:blank` unless the application set one. */
   type: string
-  /** Node's status phrase for `status`. Stable for that status. */
+  /** The status phrase for `status`, as {@link statusPhrase} gives it. Stable for that status. */
   title: string
   /** Same number as the status line. */
   status: number
@@ -122,7 +122,7 @@ const MEMBERS = new Set([
  * framework adds them when it sends the problem, not here.
  */
 export function newProblem(init: ProblemInit): Problem {
-  const title = statusPhrase(init.status)
+  const title = statusPhrase(init.status) ?? 'Unknown Error'
   const extensions = Object.entries(init.extensions ?? {}).filter(([name]) => !MEMBERS.has(name))
 
   return {
@@ -137,8 +137,4 @@ export function newProblem(init: ProblemInit): Problem {
     ...(init.instance === undefined ? {} : { instance: init.instance }),
     ...(init.errors === undefined ? {} : { errors: init.errors }),
   }
-}
-
-function statusPhrase(status: number): string {
-  return STATUS_CODES[status] ?? 'Unknown Error'
 }

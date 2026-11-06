@@ -1,33 +1,12 @@
-import { mediaTypeEssence, ProblemSchema, type IRoute } from '@caffeinejs/http'
+import { mediaTypeEssence, ProblemSchema, statusPhrase, type IRoute } from '@caffeinejs/http'
 
 import type { ResponseDetail } from '../decorators/detail.js'
 import type { OpenAPIOptions } from '../options.js'
 import type { HeaderObject, MediaTypeObject, ResponseObject, SchemaObject } from '../spec/spec.js'
 import type { ComponentRegistry } from './components.js'
 
-/** Standard reason phrases, used when nobody wrote a description. */
-const REASONS: Record<string, string> = {
-  200: 'OK',
-  201: 'Created',
-  202: 'Accepted',
-  204: 'No Content',
-  301: 'Moved Permanently',
-  302: 'Found',
-  304: 'Not Modified',
-  400: 'Bad Request',
-  401: 'Unauthorized',
-  403: 'Forbidden',
-  404: 'Not Found',
-  405: 'Method Not Allowed',
-  409: 'Conflict',
-  410: 'Gone',
-  415: 'Unsupported Media Type',
-  422: 'Unprocessable Entity',
-  429: 'Too Many Requests',
-  500: 'Internal Server Error',
-  502: 'Bad Gateway',
-  503: 'Service Unavailable',
-  504: 'Gateway Timeout',
+/** What a range is called, used when nobody wrote a description. A numeric status takes its reason phrase. */
+const RANGES: Record<string, string> = {
   '1XX': 'Informational',
   '2XX': 'Success',
   '3XX': 'Redirection',
@@ -64,7 +43,7 @@ export function deriveResponses(
   const headers = deriveHeaders(route)
 
   responses.set(successStatus, {
-    description: REASONS[successStatus] ?? 'Success',
+    description: reasonOf(successStatus) ?? 'Success',
     ...(headers === undefined ? {} : { headers }),
     ...(successStatus === '204' ? {} : { content: emptyContent(successTypes) }),
   })
@@ -76,7 +55,7 @@ export function deriveResponses(
     const existing = responses.get(key)
 
     responses.set(key, {
-      description: existing?.description ?? REASONS[key] ?? 'Response',
+      description: existing?.description ?? reasonOf(key) ?? 'Response',
       ...(existing?.headers === undefined ? {} : { headers: existing.headers }),
       ...(key === '204'
         ? {}
@@ -120,7 +99,7 @@ function addInferred(
   const schema = registry.register(options.errorSchema ?? ProblemSchema, 'output', `${context} response.${status}`)
 
   responses.set(status, {
-    description: REASONS[status] ?? 'Error',
+    description: reasonOf(status) ?? 'Error',
     content: Object.fromEntries(problemMediaTypes.map(mediaType => [mediaType, problemContent(mediaType, schema)])),
   })
 }
@@ -150,7 +129,7 @@ function applyDetail(
     responses.set(key, {
       ...existing,
       ...authored,
-      description: authored.description ?? existing?.description ?? REASONS[key] ?? 'Response',
+      description: authored.description ?? existing?.description ?? reasonOf(key) ?? 'Response',
       ...(authored.content === undefined
         ? existing?.content === undefined
           ? {}
@@ -211,6 +190,11 @@ function deriveHeaders(route: IRoute<unknown>): Record<string, HeaderObject> | u
   }
 
   return Object.keys(headers).length === 0 ? undefined : headers
+}
+
+// The standard name of a status or a range, for a response nobody described.
+function reasonOf(status: string): string | undefined {
+  return /^\d+$/.test(status) ? statusPhrase(Number(status)) : RANGES[status]
 }
 
 /** Fastify accepts `4xx`; the specification writes it `4XX`. */
