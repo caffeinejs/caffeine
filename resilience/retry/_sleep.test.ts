@@ -13,54 +13,93 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+// Records how a sleep ended.
+function sleeper() {
+  const ended: unknown[] = []
+  return {
+    ended,
+    wake: () => ended.push('woke'),
+    abort: (reason: unknown) => ended.push(reason),
+  }
+}
+
 describe('sleep', () => {
-  it('resolves after the delay', async () => {
-    let done = false
-    const slept = sleep(100, undefined, fakeTimersClock).then(() => (done = true))
+  it('wakes after the delay', async () => {
+    const s = sleeper()
+    sleep(100, undefined, fakeTimersClock, s.wake, s.abort)
 
     await vi.advanceTimersByTimeAsync(99)
-    expect(done).toBe(false)
+    expect(s.ended).toEqual([])
     await vi.advanceTimersByTimeAsync(1)
-    await slept
 
-    expect(done).toBe(true)
+    expect(s.ended).toEqual(['woke'])
   })
 
-  it('schedules no timer for a zero delay', async () => {
-    const slept = sleep(0, undefined, fakeTimersClock)
+  // The retry adds the call to its waiting calls after starting the sleep: a wake before then would leave it there.
+  it('wakes after it returns, without a timer, for a zero delay', async () => {
+    const s = sleeper()
 
+    sleep(0, undefined, fakeTimersClock, s.wake, s.abort)
+
+    expect(s.ended).toEqual([])
     expect(vi.getTimerCount()).toBe(0)
-    await slept
+    await Promise.resolve()
+    expect(s.ended).toEqual(['woke'])
   })
 
   // Many calls sleeping on one long-lived signal would otherwise pile listeners onto it.
   it('removes its abort listener when it wakes', async () => {
     const controller = new AbortController()
-    const slept = sleep(100, controller.signal, fakeTimersClock)
+    const s = sleeper()
+    sleep(100, controller.signal, fakeTimersClock, s.wake, s.abort)
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(1)
 
     await vi.advanceTimersByTimeAsync(100)
-    await slept
 
+    expect(s.ended).toEqual(['woke'])
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 
-  it('rejects with the abort reason at once, leaving no timer and no listener', async () => {
+  it('aborts with the abort reason at once, leaving no timer and no listener', () => {
     const controller = new AbortController()
     const reason = new Error('caller gave up')
-    const slept = sleep(60_000, controller.signal, fakeTimersClock)
+    const s = sleeper()
+    sleep(60_000, controller.signal, fakeTimersClock, s.wake, s.abort)
 
     controller.abort(reason)
 
-    await expect(slept).rejects.toBe(reason)
+    expect(s.ended).toEqual([reason])
     expect(vi.getTimerCount()).toBe(0)
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 
-  it('rejects without scheduling anything when the signal is already aborted', async () => {
+  it('aborts after it returns, without scheduling anything, when the signal is already aborted', async () => {
     const reason = new Error('caller gave up')
+    const s = sleeper()
 
-    await expect(sleep(100, AbortSignal.abort(reason), fakeTimersClock)).rejects.toBe(reason)
+    sleep(100, AbortSignal.abort(reason), fakeTimersClock, s.wake, s.abort)
+
+    expect(s.ended).toEqual([])
     expect(vi.getTimerCount()).toBe(0)
+    await Promise.resolve()
+    expect(s.ended).toEqual([reason])
+  })
+
+  // Disposing a retry ends its waiting calls itself: the sleep must neither wake them later nor hold the process.
+  it.each([
+    ['a timer', 100],
+    ['no timer', 0],
+  ])('ends without waking or aborting when cancelled, with %s', async (_, ms) => {
+    const controller = new AbortController()
+    const s = sleeper()
+    const cancel = sleep(ms, controller.signal, fakeTimersClock, s.wake, s.abort)
+
+    cancel()
+    controller.abort(new Error('caller gave up'))
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(s.ended).toEqual([])
+    expect(vi.getTimerCount()).toBe(0)
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 })

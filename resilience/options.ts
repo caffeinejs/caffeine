@@ -1,7 +1,7 @@
 import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { described, type ErrorClass, type ErrorMatcher, ErrInvalidOption } from './errors.js'
+import { described, type ErrorClass, ErrInvalidOption } from './errors.js'
 import { type Clock, systemClock } from './timers.js'
 
 /**
@@ -83,8 +83,14 @@ export class Options {
     return value
   }
 
-  /** An {@link ErrorMatcher} as a predicate; a list of classes is checked here, once. */
-  matcher(key: string, value: ErrorMatcher | undefined): ((error: unknown) => boolean) | undefined {
+  /**
+   * An `ErrorMatcher` as a predicate; a list of classes is checked here, once. A predicate may take more than the
+   * error, as `retryOn` takes the attempt.
+   */
+  matcher<P extends (error: unknown, ...rest: never[]) => boolean = (error: unknown) => boolean>(
+    key: string,
+    value: P | readonly ErrorClass[] | undefined,
+  ): P | ((error: unknown) => boolean) | undefined {
     if (value === undefined || typeof value === 'function') {
       return value
     }
@@ -93,7 +99,7 @@ export class Options {
     }
 
     const classes: readonly ErrorClass[] = [...value]
-    return error => {
+    return (error: unknown) => {
       for (let i = 0; i < classes.length; i++) {
         if (error instanceof classes[i]!) {
           return true

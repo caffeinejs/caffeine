@@ -9,6 +9,7 @@ import { compose, decorate, run } from '../compose.js'
 import { ErrInvalidOption } from '../errors.js'
 import type { CallContext } from '../policy.js'
 import { retry } from '../retry/retry.js'
+import { unhandledRejections } from '../unhandled.testkit.js'
 import { ErrTimeLimitExceeded, timeLimiter, type TimeLimiterEvents, type TimeLimiterOptions } from './timelimiter.js'
 
 beforeEach(() => {
@@ -74,6 +75,12 @@ describe('time limiter options', () => {
   it('requires a name', () => {
     expect(() => timeLimiter({ name: '', timeoutDuration: 100 * Millisecond })).toThrow(
       'Cannot create time limiter: name must be a non-empty string',
+    )
+  })
+
+  it('refuses a discard that is not a function', () => {
+    expect(() => limiterOf({ discard: 'cancel' as never })).toThrow(
+      'Cannot create time limiter "inventory": discard must be a function, got string',
     )
   })
 
@@ -223,6 +230,59 @@ describe('time limiter', () => {
     expect(await timedOut).toBeInstanceOf(ErrTimeLimitExceeded)
     expect(await other).toBeInstanceOf(ErrTimeLimitExceeded)
     expect(limiter.metrics()).toEqual({ successfulCalls: 0, failedCalls: 0, timedOutCalls: 2 })
+  })
+
+  // Nobody reads a response that arrives after its caller got a timeout: its body would hold the connection.
+  it('hands a value that arrives after the limit to discard, and never one that arrives in time', async () => {
+    const discard = vi.fn()
+    const limiter = limiterOf({ discard })
+    const inTime = controllable()
+    const late = controllable()
+
+    const answered = run(limiter.wrap(inTime.operation))
+    inTime.resolve('fresh')
+    await expect(answered).resolves.toBe('fresh')
+    const timedOut = run(limiter.wrap(late.operation)).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(100)
+    late.resolve('stale')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(await timedOut).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(discard.mock.calls).toEqual([['stale']])
+  })
+
+  it('hands a value that arrives after the caller aborted to discard', async () => {
+    const discard = vi.fn()
+    const late = controllable()
+    const caller = new AbortController()
+
+    const call = run(limiterOf({ discard }).wrap(late.operation), caller.signal).catch((error: unknown) => error)
+    caller.abort(new Error('caller gave up'))
+    late.resolve('stale')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(((await call) as Error).message).toBe('caller gave up')
+    expect(discard.mock.calls).toEqual([['stale']])
+  })
+
+  // The caller has its answer; a late failure must not surface later as an unhandled rejection that kills the process.
+  it('leaves no rejection unhandled when an outcome arrives after the call ended', async () => {
+    const reasons = await unhandledRejections(async () => {
+      const limiter = limiterOf()
+      const timedOut = controllable()
+      const abandoned = controllable()
+      const caller = new AbortController()
+
+      const first = run(limiter.wrap(timedOut.operation)).catch(() => undefined)
+      await vi.advanceTimersByTimeAsync(100)
+      const second = run(limiter.wrap(abandoned.operation), caller.signal).catch(() => undefined)
+      caller.abort()
+      timedOut.reject(new Error('too late'))
+      abandoned.reject(new Error('nobody waits'))
+      await Promise.all([first, second])
+    })
+
+    expect(reasons).toEqual([])
   })
 
   // A server's shutdown signal outlives every call made under it: each call must take its listener with it.

@@ -7,6 +7,7 @@ import { compose, decorate, run } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
 import type { Operation } from '../policy.js'
 import { ErrTimeLimitExceeded, timeLimiter } from '../timelimiter/timelimiter.js'
+import { unhandledRejections } from '../unhandled.testkit.js'
 import { fallback, type FallbackEvents, type FallbackHandler, type FallbackOptions } from './fallback.js'
 
 beforeEach(() => {
@@ -204,6 +205,35 @@ describe('fallback', () => {
     ).catch(() => undefined)
 
     expect(stale.metrics()).toEqual({ successfulCalls: 1, recoveredCalls: 1, failedCalls: 1, ignoredCalls: 2 })
+  })
+})
+
+describe('fallback, unhandled rejections', () => {
+  // Every way a call can end must settle the caller's promise and leave no other one rejected behind it.
+  it('leaves no rejection unhandled, whichever way a call ends', async () => {
+    const reasons = await unhandledRejections(async () => {
+      const caller = new AbortController()
+      const calls = [
+        run(
+          fallbackOf(() => {
+            throw new Error('cache bug')
+          }).wrap(failing(new Error('down'))),
+        ),
+        run(fallbackOf(() => Promise.reject(new Error('cache down'))).wrap(failing(new Error('down')))),
+        run(fallbackOf(() => 'cached', { on: [RangeError] }).wrap(failing(new Error('down')))),
+        run(fallbackOf(() => 'cached', { on: (() => 'yes') as never }).wrap(failing(new Error('down')))),
+        run(
+          fallbackOf(() => 'cached').wrap(async () => {
+            caller.abort()
+            throw new Error('down')
+          }),
+          caller.signal,
+        ),
+      ].map(call => call.catch(() => undefined))
+      await Promise.all(calls)
+    })
+
+    expect(reasons).toEqual([])
   })
 })
 

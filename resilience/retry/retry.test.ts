@@ -8,6 +8,7 @@ import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
 import type { Operation, Policy } from '../policy.js'
 import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
+import { unhandledRejections } from '../unhandled.testkit.js'
 import { ErrMaxRetriesExceeded, retry, type RetryEvents, type RetryOptions } from './retry.js'
 
 beforeEach(() => {
@@ -53,7 +54,8 @@ describe('retry options', () => {
     [{ maxAttempts: 2.5 }, 'maxAttempts must be an integer of at least 1, got 2.5'],
     [{ backoff: -1 }, 'backoff must be a finite Duration of at least 0s or a function, got -1ms'],
     [{ backoff: Number.NaN }, 'backoff must be a finite Duration of at least 0s or a function, got NaN'],
-    [{ retryOn: 'all' }, 'retryOn must be a function, got string'],
+    [{ retryOn: 'all' }, 'retryOn must be a function or an array of error classes, got a string'],
+    [{ discard: true }, 'discard must be a function, got boolean'],
     [{ retryOnResult: 1 }, 'retryOnResult must be a function, got number'],
     [{ failAfterMaxAttempts: 'yes' }, 'failAfterMaxAttempts must be a boolean, got string'],
   ])('rejects %o when the retry is created, naming it', (options, reason) => {
@@ -617,5 +619,219 @@ describe('retry', () => {
 
   it('exposes its name', () => {
     expect(retryOf().name).toBe('inventory')
+  })
+})
+
+describe('retry, unhandled rejections', () => {
+  // Every way a call can end must settle the caller's promise and leave no other one rejected behind it.
+  it('leaves no rejection unhandled, whichever way a call ends', async () => {
+    const reasons = await unhandledRejections(async () => {
+      const down = () => Promise.reject(new Error('down'))
+      const caller = new AbortController()
+      const waiting = retryOf({ backoff: 1 * Second })
+      const disposed = retryOf({ backoff: 1 * Second })
+      const refused = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('down'))
+        .mockRejectedValue(new ErrBulkheadFull('x', 1, 0))
+      const calls = [
+        run(waiting.wrap(down), caller.signal),
+        run(disposed.wrap(down)),
+        run(retryOf().wrap(refused)),
+        run(retryOf({ backoff: () => Number.NaN }).wrap(down)),
+        run(
+          retryOf({
+            retryOn: () => {
+              throw new Error('retryOn bug')
+            },
+          }).wrap(down),
+        ),
+        run(retryOf({ retryOnResult: () => true, failAfterMaxAttempts: true }).wrap(async () => 'busy')),
+      ].map(call => call.catch(() => undefined))
+      await vi.advanceTimersByTimeAsync(0)
+      caller.abort()
+      disposed.dispose()
+      await vi.advanceTimersByTimeAsync(0)
+      await Promise.all(calls)
+    })
+
+    expect(reasons).toEqual([])
+  })
+})
+
+describe('retry, retryOn as error classes', () => {
+  // A class list says what a predicate of instanceof checks would, without the chance to get one wrong.
+  it('retries an error of a listed class, a subclass included, and stops at any other', async () => {
+    class ErrUnavailable extends Error {}
+    class ErrGatewayTimeout extends ErrUnavailable {}
+    const retries = retryOf({ retryOn: [ErrUnavailable], maxAttempts: 3 })
+    const operation = vi
+      .fn()
+      .mockRejectedValueOnce(new ErrGatewayTimeout('slow'))
+      .mockRejectedValueOnce(new ErrUnavailable('down'))
+      .mockRejectedValueOnce(new TypeError('bug'))
+
+    await expect(run(retries.wrap(operation))).rejects.toBeInstanceOf(TypeError)
+    expect(operation).toHaveBeenCalledTimes(3)
+
+    const declined = vi.fn().mockRejectedValue(new TypeError('bug'))
+    await expect(run(retries.wrap(declined))).rejects.toBeInstanceOf(TypeError)
+    expect(declined).toHaveBeenCalledTimes(1)
+  })
+
+  it('never retries a refusal, even one of a listed class', async () => {
+    const retries = retryOf({ retryOn: [ErrCallRefused] })
+    const operation = vi.fn().mockRejectedValue(new ErrBulkheadFull('inventory', 2, 0))
+
+    await expect(run(retries.wrap(operation))).rejects.toBeInstanceOf(ErrBulkheadFull)
+    expect(operation).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('retry, discard', () => {
+  // A 503 whose body nobody reads holds its connection through the whole wait.
+  it('hands each result it retries to discard, after the retry event and before the wait', async () => {
+    const order: string[] = []
+    const retries = retryOf({
+      maxAttempts: 3,
+      backoff: 100 * Millisecond,
+      retryOnResult: result => result !== 'ok',
+      discard: result => order.push(`discard ${String(result)}`),
+    })
+    retries.on('retry', event => order.push(`retry ${String(event.result)}`))
+    const operation = vi.fn().mockResolvedValueOnce('busy 1').mockResolvedValueOnce('busy 2').mockResolvedValue('ok')
+
+    const call = run(retries.wrap(operation))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(order).toEqual(['retry busy 1', 'discard busy 1'])
+    await vi.advanceTimersByTimeAsync(200)
+
+    await expect(call).resolves.toBe('ok')
+    expect(order).toEqual(['retry busy 1', 'discard busy 1', 'retry busy 2', 'discard busy 2'])
+  })
+
+  // The caller owns the result it receives: releasing it would hand back a response whose body is gone.
+  it('never discards the result the caller receives, the last retryable one included', async () => {
+    const discard = vi.fn()
+    const retries = retryOf({ maxAttempts: 2, retryOnResult: result => result === 'busy', discard })
+    const operation = vi.fn().mockResolvedValueOnce('busy').mockResolvedValueOnce('busy')
+
+    await expect(run(retries.wrap(operation))).resolves.toBe('busy')
+    expect(discard).toHaveBeenCalledTimes(1)
+  })
+
+  it('never discards an error', async () => {
+    const discard = vi.fn()
+    const { operation } = flaky(1)
+
+    await expect(run(retryOf({ discard }).wrap(operation))).resolves.toBe('ok')
+    expect(discard).not.toHaveBeenCalled()
+  })
+
+  // Handing back a result whose body was released would fail where the caller reads it, far from the cause.
+  it('rejects with ErrMaxRetriesExceeded over a discarded result when a refusal ends the retries after it', async () => {
+    const retries = retryOf({ retryOnResult: result => result === 'busy', discard: () => undefined })
+    const operation = vi
+      .fn()
+      .mockResolvedValueOnce('busy')
+      .mockRejectedValueOnce(new ErrBulkheadFull('inventory', 2, 0))
+
+    const error = await run(retries.wrap(operation)).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(ErrMaxRetriesExceeded)
+    expect(error).toMatchObject({ attempts: 1, result: 'busy' })
+  })
+
+  it('keeps the call going when discard throws, and rethrows its error on a microtask', async () => {
+    const queued: Array<() => void> = []
+    vi.stubGlobal('queueMicrotask', (callback: () => void) => queued.push(callback))
+    const thrown = new Error('discard bug')
+    const retries = retryOf({
+      backoff: 100 * Millisecond,
+      retryOnResult: result => result === 'busy',
+      discard: () => {
+        throw thrown
+      },
+    })
+    const operation = vi.fn().mockResolvedValueOnce('busy').mockResolvedValueOnce('ok')
+
+    const call = run(retries.wrap(operation))
+    await vi.advanceTimersByTimeAsync(0)
+    vi.unstubAllGlobals()
+    await vi.advanceTimersByTimeAsync(100)
+
+    await expect(call).resolves.toBe('ok')
+    expect(queued).toHaveLength(1)
+    expect(queued[0]).toThrow(thrown)
+  })
+})
+
+describe('retry, dispose', () => {
+  // A shutdown must not wait out a backoff of seconds.
+  it('ends a waiting call at once with its last error, leaving no timer', async () => {
+    const retries = retryOf({ backoff: 30 * Second })
+    const seen = listen(retries, 'ignored')
+    const down = new Error('down')
+    const operation = vi.fn().mockRejectedValue(down)
+    const call = run(retries.wrap(operation)).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(0)
+
+    retries.dispose()
+
+    expect(await call).toBe(down)
+    expect(operation).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, error: down }]])
+    expect(retries.metrics().failedCallsWithoutRetry).toBe(1)
+  })
+
+  it('ends a waiting call at once with its last result', async () => {
+    const retries = retryOf({ backoff: 30 * Second, retryOnResult: result => result === 'busy' })
+    const seen = listen(retries, 'ignored')
+    const call = run(retries.wrap(async () => 'busy'))
+    await vi.advanceTimersByTimeAsync(0)
+
+    retries.dispose()
+
+    await expect(call).resolves.toBe('busy')
+    expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, result: 'busy' }]])
+  })
+
+  it('rejects a waiting call with ErrMaxRetriesExceeded when its last result went to discard', async () => {
+    const retries = retryOf({ backoff: 30 * Second, retryOnResult: result => result === 'busy', discard: vi.fn() })
+    const call = run(retries.wrap(async () => 'busy')).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(0)
+
+    retries.dispose()
+
+    expect(await call).toBeInstanceOf(ErrMaxRetriesExceeded)
+    expect(await call).toMatchObject({ attempts: 1, result: 'busy' })
+  })
+
+  // A call that arrives during a shutdown must not start a wait the shutdown already ended for the others.
+  it('ends a later call at once where it would wait, without discarding the result it hands back', async () => {
+    const discard = vi.fn()
+    const retries = retryOf({ backoff: 30 * Second, retryOnResult: result => result === 'busy', discard })
+    retries.dispose()
+
+    await expect(run(retries.wrap(async () => 'busy'))).resolves.toBe('busy')
+    const { operation } = flaky(1)
+    await expect(run(retries.wrap(operation))).rejects.toThrow('failure 1')
+
+    expect(discard).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('is what a using declaration calls at the end of its block', async () => {
+    const { operation } = flaky(5)
+    let call: Promise<unknown> | undefined
+    {
+      using retries = retryOf({ backoff: 30 * Second })
+      call = run(retries.wrap(operation)).catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(0)
+    }
+
+    expect(((await call) as Error).message).toBe('failure 1')
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

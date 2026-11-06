@@ -3,8 +3,9 @@ import { errMessage } from '@caffeinejs/std/err'
 
 import { exponential } from '../backoff.js'
 import { lift, mark } from '../compose.js'
-import { Emitter } from '../emitter.js'
-import { described, ErrCallRefused, ErrInvalidOption, ErrResilience } from '../errors.js'
+import { disposable } from '../dispose.js'
+import { detached, Emitter } from '../emitter.js'
+import { described, ErrCallRefused, type ErrorClass, ErrInvalidOption, ErrResilience } from '../errors.js'
 import { Options } from '../options.js'
 import type { CallContext, Operation, Wrapper } from '../policy.js'
 import { clampDelay, type Clock } from '../timers.js'
@@ -12,7 +13,7 @@ import { sleep } from './_sleep.js'
 
 /**
  * Every attempt returned a result the retry was told to retry, and the retry was told to fail rather than hand the
- * last one back. The last result is in `result`.
+ * last one back, or that result already went to `discard`. The last result is in `result`.
  */
 export class ErrMaxRetriesExceeded extends ErrResilience {
   readonly attempts: number
@@ -48,14 +49,15 @@ export interface RetryOptions {
    */
   backoff?: Duration | RetryBackoff
   /**
-   * Whether an error is worth another attempt. Defaults to every error.
+   * Which errors are worth another attempt: a predicate of the error and the attempt that failed, or a list of error
+   * classes. Defaults to every error.
    *
    * A refusal ({@link ErrCallRefused}: an open circuit breaker, a full bulkhead, a spent rate limit) and a failure
-   * after the caller aborted are never retried, whatever this returns. A refusal after an attempt that reached the
-   * operation ends the call with that attempt's outcome, as if it had been the last. It must return a boolean;
-   * anything else rejects the call with {@link ErrInvalidOption}.
+   * after the caller aborted are never retried, whatever this says. A refusal after an attempt that reached the
+   * operation ends the call with that attempt's outcome, as if it had been the last. A predicate must return a
+   * boolean; anything else rejects the call with {@link ErrInvalidOption}.
    */
-  retryOn?: (error: unknown, attempt: number) => boolean
+  retryOn?: ((error: unknown, attempt: number) => boolean) | readonly ErrorClass[]
   /**
    * Whether a returned value is worth another attempt, such as a response with status 503. It must return a
    * boolean; anything else rejects the call with {@link ErrInvalidOption}.
@@ -66,6 +68,17 @@ export interface RetryOptions {
    * the caller; `true` rejects with {@link ErrMaxRetriesExceeded}. Either way the call counts as failed.
    */
   failAfterMaxAttempts?: boolean
+  /**
+   * Releases a result the retry tries again, such as a 503 response whose body would otherwise hold its connection
+   * while the retry waits: `discard: response => response.body?.cancel()`. It runs before the wait, after the `retry`
+   * event. The call never waits for it, and a throw or a rejection from it resurfaces as uncaught, as a listener's
+   * does.
+   *
+   * A result it released never reaches the caller. When a later attempt is refused, or the retry is disposed while the
+   * call waits, the call rejects with {@link ErrMaxRetriesExceeded}, which carries the result, instead of resolving
+   * with it.
+   */
+  discard?: (result: unknown) => unknown
   /** Where the retry sets the timers it waits on. Defaults to the runtime's. */
   clock?: Clock
 }
@@ -97,10 +110,11 @@ export interface RetryEvents {
    */
   failure: { readonly name: string; readonly attempts: number; readonly error?: unknown; readonly result?: unknown }
   /**
-   * The call ended without using every attempt: the error was not retryable, the caller aborted, or `retryOn`,
-   * `retryOnResult` or `backoff` threw, in which case `error` is what it threw.
+   * The call ended without using every attempt: the error was not retryable, the caller aborted, `retryOn`,
+   * `retryOnResult` or `backoff` threw, in which case `error` is what it threw, or the retry was disposed, in which
+   * case `error` or `result` is the last attempt's outcome.
    */
-  ignored: { readonly name: string; readonly attempts: number; readonly error: unknown }
+  ignored: { readonly name: string; readonly attempts: number; readonly error?: unknown; readonly result?: unknown }
 }
 
 // One per call that needs a second attempt. It carries the resolvers of the promise the caller holds, so a later
@@ -117,6 +131,8 @@ interface RetriedCall<T, I> {
   failed: boolean
   error: unknown
   result: unknown
+  // Ends the wait for the next attempt without starting it; set while the call waits.
+  cancel: (() => void) | undefined
 }
 
 /**
@@ -126,14 +142,18 @@ interface RetriedCall<T, I> {
  * during a wait rejects at once with the abort reason, and a failure after an abort is not retried.
  */
 export class Retry implements Wrapper {
+  declare [Symbol.dispose]: () => void
   readonly #name: string
   readonly #maxAttempts: number
   readonly #backoff: Duration | RetryBackoff
   readonly #retryOn: ((error: unknown, attempt: number) => boolean) | undefined
   readonly #retryOnResult: ((result: unknown) => boolean) | undefined
   readonly #failAfterMaxAttempts: boolean
+  readonly #discard: ((result: unknown) => unknown) | undefined
   readonly #clock: Clock
   readonly #emitter = new Emitter<RetryEvents>()
+  readonly #waiting = new Set<RetriedCall<unknown, unknown>>()
+  #disposed = false
   #successfulWithoutRetry = 0
   #successfulWithRetry = 0
   #failedWithoutRetry = 0
@@ -149,9 +169,10 @@ export class Retry implements Wrapper {
       throw o.invalid(`backoff must be a finite Duration of at least 0s or a function, got ${formatDuration(backoff)}`)
     }
     this.#backoff = backoff
-    this.#retryOn = o.function('retryOn', options.retryOn)
+    this.#retryOn = o.matcher('retryOn', options.retryOn)
     this.#retryOnResult = o.function('retryOnResult', options.retryOnResult)
     this.#failAfterMaxAttempts = o.boolean('failAfterMaxAttempts', options.failAfterMaxAttempts, false)
+    this.#discard = o.function('discard', options.discard)
     this.#clock = o.clock(options.clock)
   }
 
@@ -174,6 +195,19 @@ export class Retry implements Wrapper {
       failedCallsWithoutRetry: this.#failedWithoutRetry,
       failedCallsWithRetry: this.#failedWithRetry,
     }
+  }
+
+  /**
+   * Ends every call waiting for its next attempt now, with that call's last outcome, and from then on ends a call at
+   * once where it would wait, so no backoff holds a shutdown. The `[Symbol.dispose]` alias does the same.
+   */
+  dispose(): void {
+    this.#disposed = true
+    for (const call of this.#waiting) {
+      call.cancel?.()
+      this.#endDisposed(call, this.#discard !== undefined)
+    }
+    this.#waiting.clear()
   }
 
   wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
@@ -275,7 +309,12 @@ export class Retry implements Wrapper {
     failed: boolean,
   ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      this.#wait({ ctx, inner, input, resolve, reject, attempt: 1, failed, error, result }, error, result, failed)
+      this.#wait(
+        { ctx, inner, input, resolve, reject, attempt: 1, failed, error, result, cancel: undefined },
+        error,
+        result,
+        failed,
+      )
     })
   }
 
@@ -284,6 +323,11 @@ export class Retry implements Wrapper {
     call.failed = failed
     call.error = error
     call.result = result
+    if (this.#disposed) {
+      this.#endDisposed(call, false)
+      return
+    }
+
     let delay: Duration
     try {
       delay = clampDelay(
@@ -303,10 +347,22 @@ export class Retry implements Wrapper {
       )
     }
 
-    // Both handlers settle the caller's promise themselves, so the promise `then` returns is not needed.
-    void sleep(delay, call.ctx.signal, this.#clock).then(
-      () => this.#again(call),
+    if (!failed && this.#discard !== undefined) {
+      detached(this.#discard, result)
+    }
+
+    const waiting = call as RetriedCall<unknown, unknown>
+    this.#waiting.add(waiting)
+    call.cancel = sleep(
+      delay,
+      call.ctx.signal,
+      this.#clock,
+      () => {
+        this.#waiting.delete(waiting)
+        this.#again(call)
+      },
       reason => {
+        this.#waiting.delete(waiting)
         this.#ignored(attempt, reason)
         call.reject(reason)
       },
@@ -347,10 +403,29 @@ export class Retry implements Wrapper {
   // A refusal promises the operation did not run, which an earlier attempt that reached it makes false for the call:
   // the caller gets that attempt's outcome, as if it had been the last one.
   #endRefused<T, I>(call: RetriedCall<T, I>): void {
+    this.#endWithLast(call, call.attempt - 1, this.#discard !== undefined)
+  }
+
+  // Disposal ends the call before its next attempt, with the outcome of the one before.
+  #endDisposed<T, I>(call: RetriedCall<T, I>, discarded: boolean): void {
+    this.#count(false, call.attempt)
+    if (this.#emitter.has('ignored')) {
+      this.#emitter.emit(
+        'ignored',
+        call.failed
+          ? { name: this.#name, attempts: call.attempt, error: call.error }
+          : { name: this.#name, attempts: call.attempt, result: call.result },
+      )
+    }
+    this.#endWithLast(call, call.attempt, discarded)
+  }
+
+  // A result that went to `discard` is not handed back: the error carries it instead.
+  #endWithLast<T, I>(call: RetriedCall<T, I>, attempts: number, discarded: boolean): void {
     if (call.failed) {
       call.reject(call.error)
-    } else if (this.#failAfterMaxAttempts) {
-      call.reject(new ErrMaxRetriesExceeded(this.#name, call.attempt - 1, call.result))
+    } else if (this.#failAfterMaxAttempts || discarded) {
+      call.reject(new ErrMaxRetriesExceeded(this.#name, attempts, call.result))
     } else {
       call.resolve(call.result as T)
     }
@@ -384,6 +459,8 @@ export class Retry implements Wrapper {
     }
   }
 }
+
+disposable(Retry)
 
 /**
  * Creates a {@link Retry}.

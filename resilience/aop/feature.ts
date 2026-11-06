@@ -34,11 +34,11 @@ export type CircuitBreakerConfig = Omit<
 > & { readonly waitDurationInOpenState?: Duration }
 
 /** The retry options a configuration tree can carry: data only. */
-export type RetryConfig = Omit<RetryOptions, 'name' | 'backoff' | 'retryOn' | 'retryOnResult' | 'clock'> & {
+export type RetryConfig = Omit<RetryOptions, 'name' | 'backoff' | 'retryOn' | 'retryOnResult' | 'discard' | 'clock'> & {
   readonly backoff?: Duration
 }
 
-export type TimeLimiterConfig = Partial<Omit<TimeLimiterOptions, 'name' | 'clock'>>
+export type TimeLimiterConfig = Partial<Omit<TimeLimiterOptions, 'name' | 'discard' | 'clock'>>
 export type BulkheadConfig = Omit<BulkheadOptions, 'name' | 'clock'>
 export type RateLimiterConfig = Partial<Omit<RateLimiterOptions, 'name' | 'clock'>>
 

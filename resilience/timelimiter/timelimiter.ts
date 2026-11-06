@@ -2,7 +2,7 @@ import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { lift, mark } from '../compose.js'
-import { Emitter } from '../emitter.js'
+import { detached, Emitter } from '../emitter.js'
 import { ErrResilience } from '../errors.js'
 import { Options } from '../options.js'
 import type { Operation, Wrapper } from '../policy.js'
@@ -35,6 +35,12 @@ export interface TimeLimiterOptions {
   name: string
   /** How long the rest of the chain may run. Required. */
   timeoutDuration: Duration
+  /**
+   * Releases a value that arrives after the call ended, by the time limit or by the caller, such as a response whose
+   * body nobody will read: `discard: response => response.body?.cancel()`. Without it, the late value is dropped as
+   * it is. A throw or a rejection from it resurfaces as uncaught, as a listener's does.
+   */
+  discard?: (value: unknown) => unknown
   /** Where the time limiter reads the time and sets its timer. Defaults to the runtime's. */
   clock?: Clock
 }
@@ -59,7 +65,7 @@ export interface TimeLimiterEvents {
  * passes, and with the caller's reason when the caller's signal aborts. Either way the call rejects at once, even if
  * the operation ignores its signal and never settles. The signal stays linked to the caller's after the call settles,
  * so a body the operation streams still learns that the caller left. An outcome that arrives after the call settled
- * is dropped.
+ * is dropped, a value through `discard` when one is given.
  *
  * Its place in the chain decides what it bounds: inside a retry, each attempt; outside it, every attempt and every
  * wait between them.
@@ -68,6 +74,7 @@ export class TimeLimiter implements Wrapper {
   readonly #name: string
   readonly #timeoutDuration: Duration
   readonly #timeoutMs: number
+  readonly #discard: ((value: unknown) => unknown) | undefined
   readonly #clock: Clock
   readonly #emitter = new Emitter<TimeLimiterEvents>()
   #successful = 0
@@ -83,6 +90,7 @@ export class TimeLimiter implements Wrapper {
       'Pass the longest the call may take, such as timeoutDuration: 2 * Second',
     )
     this.#timeoutMs = clampDelay(this.#timeoutDuration, `time limiter "${o.name}"`)
+    this.#discard = o.function('discard', options.discard)
     this.#clock = o.clock(options.clock)
   }
 
@@ -168,6 +176,8 @@ export class TimeLimiter implements Wrapper {
                 this.#emitter.emit('success', { name: this.#name, duration: clock.now() - start })
               }
               resolve(value)
+            } else if (this.#discard !== undefined) {
+              detached(this.#discard, value)
             }
           },
           error => {

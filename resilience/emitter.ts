@@ -17,6 +17,21 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 }
 
 /**
+ * Calls a callback the application gave, such as `discard`, whose failure must not become the call's: a throw, or a
+ * returned promise that rejects, resurfaces as uncaught on its own microtask, as a listener's does.
+ */
+export function detached<V>(callback: (value: V) => unknown, value: V): void {
+  try {
+    const returned = callback(value)
+    if (isThenable(returned)) {
+      returned.then(undefined, rethrow)
+    }
+  } catch (error) {
+    rethrow(error)
+  }
+}
+
+/**
  * Synchronous, typed events. Listener arrays are replaced on every `on` and removal, never mutated, so `emit`
  * iterates a stable array without copying it.
  */
