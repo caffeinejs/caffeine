@@ -387,7 +387,7 @@ describe('instrumentTimeLimiter', () => {
   it('counts each call once, by kind, as a monotonic counter', async () => {
     vi.useFakeTimers()
     const h = harness()
-    const limiter = timeLimiter({ name: 'inventory', timeoutDuration: 100 * Millisecond })
+    const limiter = timeLimiter({ name: 'inventory', timeoutDuration: 100 * Millisecond, clock: fakeTimersClock })
     instrumentTimeLimiter(limiter, { meterProvider: h.meterProvider })
 
     await run(limiter.wrap(async () => 'ok'))

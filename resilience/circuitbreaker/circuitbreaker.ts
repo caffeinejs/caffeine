@@ -74,6 +74,10 @@ export interface CircuitBreakerOptions {
    * How long the breaker stays open before it lets trial calls through. A function receives how many times in a
    * row the breaker has opened, starting at 1, so an `exponential()` backoff lengthens repeated waits. Defaults
    * to one minute.
+   *
+   * A function that returns anything but a finite number fails whatever opens the breaker with
+   * {@link ErrInvalidOption}: the wrapped call that tripped it rejects, and `acquire()`, a permit's `onResult()` or
+   * `onError()`, and `transitionToOpen()` throw.
    */
   waitDurationInOpenState?: Duration | Backoff
   /** Trial calls let through while half open; their outcome closes or re-opens the breaker. Defaults to 10. */
@@ -158,9 +162,19 @@ export interface CircuitBreakerEvents {
 export interface CircuitBreakerPermit {
   /** The work succeeded. */
   onSuccess(): void
-  /** The work returned `result`, which counts as a failure when `recordResult` says so. */
+  /**
+   * The work returned `result`, which counts as a failure when `recordResult` says so.
+   *
+   * @throws {@link ErrInvalidOption} when the failure opens the breaker and `waitDurationInOpenState` returns no
+   * finite number.
+   */
   onResult(result: unknown): void
-  /** The work failed with `error`, which `ignoreError` and `recordError` classify as they do a wrapped call's. */
+  /**
+   * The work failed with `error`, which `ignoreError` and `recordError` classify as they do a wrapped call's.
+   *
+   * @throws {@link ErrInvalidOption} when the failure opens the breaker and `waitDurationInOpenState` returns no
+   * finite number.
+   */
   onError(error: unknown): void
   /** The work was abandoned, such as when its caller left: nothing is recorded, and a trial slot is given back. */
   release(): void
@@ -421,7 +435,8 @@ export class CircuitBreaker implements Wrapper {
    * through. `for` sets that wait instead of `waitDurationInOpenState`. Calls in flight are not recorded when they
    * settle.
    *
-   * @throws {@link ErrInvalidOption} when `for` is not a finite Duration of at least 0s.
+   * @throws {@link ErrInvalidOption} when `for` is not a finite Duration of at least 0s, or, without `for`, when
+   * `waitDurationInOpenState` returns no finite number.
    */
   transitionToOpen(options?: { readonly for?: Duration }): void {
     const wait = options?.for
@@ -455,6 +470,9 @@ export class CircuitBreaker implements Wrapper {
    * Lets one call through, or refuses it, for work that is not one operation, such as a body streamed after the
    * response started: the caller settles the permit when the work ends. A refusal is returned, not thrown, and
    * counted as a wrapped call's is.
+   *
+   * @throws {@link ErrInvalidOption} when a half-open breaker whose trial calls outstayed
+   * `maxWaitDurationInHalfOpenState` re-opens, and `waitDurationInOpenState` returns no finite number.
    */
   acquire(): CircuitBreakerPermit | ErrCallNotPermitted {
     const admitted = this.#admit()

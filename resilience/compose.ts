@@ -102,7 +102,8 @@ export interface DecorateOptions {
    *
    * Without it, the caller's signal is the first argument that is an `AbortSignal`, and a call that passes none
    * hands the function none. With it, the argument there is the caller's signal, and the function always receives the
-   * attempt's signal there, even when the caller passed none, so a time limit reaches it.
+   * attempt's signal there, even when the caller passed none, so a time limit reaches it. A call that passes anything
+   * there but an `AbortSignal` or `undefined` rejects with {@link ErrInvalidOption}.
    */
   readonly signalAt?: number
 }
@@ -170,12 +171,28 @@ export function decorate(
     const i = at ?? signalIndex(args)
     // Never `args[-1]`: reading a negative index leaves the fast element path and slows every call.
     const caller = (i === -1 ? undefined : args[i]) as AbortSignal | undefined
-    if (caller !== undefined && caller.aborted) {
-      return Promise.reject(caller.reason)
+    if (caller !== undefined) {
+      if (at !== undefined && !(caller instanceof AbortSignal)) {
+        return Promise.reject(notASignal(at, caller))
+      }
+      if (caller.aborted) {
+        return Promise.reject(caller.reason)
+      }
     }
 
     return guarded({ signal: caller }, args)
   }
+}
+
+function notASignal(at: number, value: unknown): ErrInvalidOption {
+  return new ErrInvalidOption(
+    errMessage(
+      `Cannot call a decorated function: its argument ${at} must be an AbortSignal or undefined, as signalAt says, got ${value === null ? 'null' : typeof value}`,
+    )
+      .solutions(`Pass the signal itself as argument ${at}`, 'Set signalAt to the position of the signal parameter')
+      .reference('@caffeinejs/resilience', ErrInvalidOption)
+      .build(),
+  )
 }
 
 // The index of the first argument that is an `AbortSignal`, or -1.

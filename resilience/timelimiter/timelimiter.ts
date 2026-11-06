@@ -128,7 +128,7 @@ export class TimeLimiter implements Wrapper {
       const signal = parent === undefined ? controller.signal : AbortSignal.any([parent, controller.signal])
       const clock = this.#clock
       const start = clock.now()
-      const pending = inner({ signal }, input)
+      const pending = inner({ ...ctx, signal }, input)
 
       return new Promise<T>((resolve, reject) => {
         let done = false

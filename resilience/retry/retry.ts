@@ -12,16 +12,23 @@ import { clampDelay, type Clock } from '../timers.js'
 import { sleep } from './_sleep.js'
 
 /**
- * Every attempt returned a result the retry was told to retry, and the retry was told to fail rather than hand the
- * last one back, or that result already went to `discard`. The last result is in `result`.
+ * A call ended on a result the retry was told to retry, and the retry was told to fail rather than hand the last one
+ * back, or that result already went to `discard`. The call ends so when every attempt was used, and also when the
+ * next attempt was refused or the retry was disposed while the call waited. The last result is in `result`.
  */
 export class ErrMaxRetriesExceeded extends ErrResilience {
   readonly attempts: number
   readonly result: unknown
 
-  constructor(retry: string, attempts: number, result: unknown) {
+  /** `ending` says why the call ended: every attempt was used, the next one was refused, or the retry was disposed. */
+  constructor(
+    retry: string,
+    attempts: number,
+    result: unknown,
+    ending: 'exhausted' | 'refused' | 'disposed' = 'exhausted',
+  ) {
     super(
-      errMessage(`Cannot complete "${retry}": result still retryable after ${attempts} attempts`)
+      errMessage(`Cannot complete "${retry}": ${endingReason(attempts, ending)}`)
         .reference('@caffeinejs/resilience', ErrMaxRetriesExceeded)
         .build(),
       'ERR_MAX_RETRIES_EXCEEDED',
@@ -29,6 +36,17 @@ export class ErrMaxRetriesExceeded extends ErrResilience {
     this.name = 'ErrMaxRetriesExceeded'
     this.attempts = attempts
     this.result = result
+  }
+}
+
+function endingReason(attempts: number, ending: 'exhausted' | 'refused' | 'disposed'): string {
+  switch (ending) {
+    case 'exhausted':
+      return `result still retryable after ${attempts} ${attempts === 1 ? 'attempt' : 'attempts'}`
+    case 'refused':
+      return `attempt ${attempts + 1} was refused after attempt ${attempts} returned a retryable result`
+    case 'disposed':
+      return `retry was disposed before attempt ${attempts + 1}, after attempt ${attempts} returned a retryable result`
   }
 }
 
@@ -203,11 +221,15 @@ export class Retry implements Wrapper {
    */
   dispose(): void {
     this.#disposed = true
-    for (const call of this.#waiting) {
+    // Taken out of the set before any ends, so a listener that disposes again finds none left to end.
+    const waiting = [...this.#waiting]
+    this.#waiting.clear()
+    for (const call of waiting) {
       call.cancel?.()
+    }
+    for (const call of waiting) {
       this.#endDisposed(call, this.#discard !== undefined)
     }
-    this.#waiting.clear()
   }
 
   wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
@@ -403,7 +425,7 @@ export class Retry implements Wrapper {
   // A refusal promises the operation did not run, which an earlier attempt that reached it makes false for the call:
   // the caller gets that attempt's outcome, as if it had been the last one.
   #endRefused<T, I>(call: RetriedCall<T, I>): void {
-    this.#endWithLast(call, call.attempt - 1, this.#discard !== undefined)
+    this.#endWithLast(call, call.attempt - 1, this.#discard !== undefined, 'refused')
   }
 
   // Disposal ends the call before its next attempt, with the outcome of the one before.
@@ -417,15 +439,20 @@ export class Retry implements Wrapper {
           : { name: this.#name, attempts: call.attempt, result: call.result },
       )
     }
-    this.#endWithLast(call, call.attempt, discarded)
+    this.#endWithLast(call, call.attempt, discarded, 'disposed')
   }
 
   // A result that went to `discard` is not handed back: the error carries it instead.
-  #endWithLast<T, I>(call: RetriedCall<T, I>, attempts: number, discarded: boolean): void {
+  #endWithLast<T, I>(
+    call: RetriedCall<T, I>,
+    attempts: number,
+    discarded: boolean,
+    ending: 'refused' | 'disposed',
+  ): void {
     if (call.failed) {
       call.reject(call.error)
     } else if (this.#failAfterMaxAttempts || discarded) {
-      call.reject(new ErrMaxRetriesExceeded(this.#name, attempts, call.result))
+      call.reject(new ErrMaxRetriesExceeded(this.#name, attempts, call.result, ending))
     } else {
       call.resolve(call.result as T)
     }

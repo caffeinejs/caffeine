@@ -19,8 +19,19 @@ export class ErrRateLimitExceeded extends ErrCallRefused {
   readonly rateLimiter: string
   declare readonly retryAfter: Duration
 
-  constructor(rateLimiter: string, limitForPeriod: number, limitRefreshPeriod: Duration, retryAfter: Duration) {
-    super(exceededMessage(rateLimiter, limitForPeriod, limitRefreshPeriod), 'ERR_RATE_LIMIT_EXCEEDED', retryAfter)
+  /** `disposed` says the call waited for a permit and the wait ended because the rate limiter was disposed. */
+  constructor(
+    rateLimiter: string,
+    limitForPeriod: number,
+    limitRefreshPeriod: Duration,
+    retryAfter: Duration,
+    disposed = false,
+  ) {
+    super(
+      exceededMessage(rateLimiter, limitForPeriod, limitRefreshPeriod, disposed),
+      'ERR_RATE_LIMIT_EXCEEDED',
+      retryAfter,
+    )
     this.name = 'ErrRateLimitExceeded'
     this.rateLimiter = rateLimiter
   }
@@ -29,8 +40,16 @@ export class ErrRateLimitExceeded extends ErrCallRefused {
 // Built once rather than per refusal: refusals come in bulk once a quota is spent.
 const footer = errMessage('').reference('@caffeinejs/resilience', ErrRateLimitExceeded).build()
 
-function exceededMessage(rateLimiter: string, limitForPeriod: number, limitRefreshPeriod: Duration): string {
-  return `Cannot call "${rateLimiter}": rate limit of ${limitForPeriod} calls per ${formatDuration(limitRefreshPeriod)} reached${footer}`
+function exceededMessage(
+  rateLimiter: string,
+  limitForPeriod: number,
+  limitRefreshPeriod: Duration,
+  disposed: boolean,
+): string {
+  const reason = disposed
+    ? 'rate limiter was disposed while the call waited for a permit'
+    : `rate limit of ${limitForPeriod} ${limitForPeriod === 1 ? 'call' : 'calls'} per ${formatDuration(limitRefreshPeriod)} reached`
+  return `Cannot call "${rateLimiter}": ${reason}${footer}`
 }
 
 export interface RateLimiterOptions {
@@ -175,6 +194,7 @@ export class RateLimiter implements Wrapper {
 
     // Every call still waiting reserved a later period, so the current one has no permit left. Lined up again, the
     // calls fill the coming periods in order; a call that left the line no longer holds a place.
+    const refused: Array<[WaitingCall<unknown, unknown>, Duration]> = []
     let kept = 0
     let call = this.#queue.first
     while (call !== undefined) {
@@ -183,7 +203,7 @@ export class RateLimiter implements Wrapper {
       const at = this.#origin + cycle * this.#limitRefreshPeriod
       if (at - call.since > this.#maxWaitMs) {
         this.#leave(call)
-        this.#refuse(call, at - now)
+        refused.push([call, at - now])
       } else {
         call.cycle = cycle
         kept++
@@ -195,11 +215,19 @@ export class RateLimiter implements Wrapper {
       this.#permits = -kept
     }
     this.#schedule()
+
+    // Refused once the line is whole again, so a listener that calls back in finds it so.
+    for (const [refusedCall, retryAfter] of refused) {
+      this.#refuse(refusedCall, retryAfter, false)
+    }
   }
 
   /**
    * Changes how long a call may wait for a permit. It applies to the calls that arrive from now on: a call already
    * waiting keeps the permit it reserved.
+   *
+   * The annotations compare the wait with a time limiter around the rate limiter once, at start-up. Raised to that
+   * limit or past it, a waiting call times out instead of being refused.
    *
    * @throws {@link ErrInvalidOption} when `maxWaitDuration` is not a finite Duration of at least 0s.
    */
@@ -219,17 +247,24 @@ export class RateLimiter implements Wrapper {
   dispose(): void {
     this.#disposed = true
     const now = this.#clock.now()
-    let call = this.#queue.first
-    while (call !== undefined) {
+    // A call whose period came while its timer was late holds its permit: it starts rather than being refused.
+    this.#catchUp(now)
+
+    const refused: Array<WaitingCall<unknown, unknown>> = []
+    for (let call = this.#queue.first; call !== undefined; call = this.#queue.first) {
       this.#leave(call)
-      this.#refuse(call, this.#origin + call.cycle * this.#limitRefreshPeriod - now)
-      call = this.#queue.first
+      refused.push(call)
     }
     // Nobody holds a later period any more, and the current one had no permit left while anybody did.
     if (this.#permits < 0) {
       this.#permits = 0
     }
     this.#schedule()
+
+    // Refused once the line is empty, so a listener that calls back in finds it so.
+    for (const call of refused) {
+      this.#refuse(call, this.#origin + call.cycle * this.#limitRefreshPeriod - now, true)
+    }
   }
 
   wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
@@ -312,11 +347,12 @@ export class RateLimiter implements Wrapper {
   }
 
   // The refusal, with a stack trace only when asked for one.
-  #exceeded(retryAfter: Duration): ErrRateLimitExceeded {
+  #exceeded(retryAfter: Duration, disposed = false): ErrRateLimitExceeded {
+    const limit = this.#limitForPeriod
     if (this.#captureStackTrace) {
-      return new ErrRateLimitExceeded(this.#name, this.#limitForPeriod, this.#limitRefreshPeriod, retryAfter)
+      return new ErrRateLimitExceeded(this.#name, limit, this.#limitRefreshPeriod, retryAfter, disposed)
     }
-    return refusal(ErrRateLimitExceeded, exceededMessage(this.#name, this.#limitForPeriod, this.#limitRefreshPeriod), {
+    return refusal(ErrRateLimitExceeded, exceededMessage(this.#name, limit, this.#limitRefreshPeriod, disposed), {
       code: 'ERR_RATE_LIMIT_EXCEEDED',
       name: 'ErrRateLimitExceeded',
       retryAfter,
@@ -342,12 +378,12 @@ export class RateLimiter implements Wrapper {
   }
 
   // Refuses a call that was waiting: its permit lies `retryAfter` away.
-  #refuse(call: WaitingCall<any, any>, retryAfter: Duration): void {
+  #refuse(call: WaitingCall<any, any>, retryAfter: Duration, disposed: boolean): void {
     this.#rejected++
     if (this.#emitter.has('rejected')) {
       this.#emitter.emit('rejected', { name: this.#name, retryAfter })
     }
-    call.reject(this.#exceeded(retryAfter))
+    call.reject(this.#exceeded(retryAfter, disposed))
   }
 
   // Moves to the period `now` falls in, granting a full set of permits per period passed, less what was reserved.

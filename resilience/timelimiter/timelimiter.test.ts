@@ -285,19 +285,23 @@ describe('time limiter', () => {
     expect(reasons).toEqual([])
   })
 
-  // A server's shutdown signal outlives every call made under it: each call must take its listener with it.
-  it('leaves no abort listener on a long-lived caller signal after many calls', async () => {
+  // A server's shutdown signal outlives every call made under it, and so does the signal combined from it until it is
+  // collected: a listener left there would keep each settled call's promise and timer alive with it.
+  it('takes its abort listener off the signal it handed a call once the call settles', async () => {
     const limiter = limiterOf()
     const shutdown = new AbortController()
-    const call = decorate(limiter, (_signal: AbortSignal, value: () => Promise<number>) => value())
+    const handed: AbortSignal[] = []
+    const call = decorate(limiter, (signal: AbortSignal, value: () => Promise<number>) => {
+      handed.push(signal)
+      return value()
+    })
 
-    for (let i = 0; i < 1_000; i++) {
-      await call(shutdown.signal, async () => i)
-    }
-    const hung = call(shutdown.signal, () => new Promise(() => undefined)).catch(() => undefined)
-    await vi.advanceTimersByTimeAsync(100)
-    await hung
+    await call(shutdown.signal, async () => 1)
+    await call(shutdown.signal, async () => {
+      throw new Error('down')
+    }).catch(() => undefined)
 
+    expect(handed.map(signal => getEventListeners(signal, 'abort').length)).toEqual([0, 0])
     expect(getEventListeners(shutdown.signal, 'abort')).toHaveLength(0)
   })
 

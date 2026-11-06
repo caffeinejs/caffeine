@@ -326,8 +326,20 @@ describe('bulkhead', () => {
     expect(refused.stack?.split('\n').some(line => /^\s+at /.test(line))).toBe(true)
   })
 
-  // The limit is process-wide: a refusal that left it at zero would strip the stack of every error that follows.
-  it('restores Error.stackTraceLimit after a refusal', async () => {
+  it('says the bulkhead was disposed in a refusal that captured a stack trace too', async () => {
+    const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 10 * Second, captureStackTrace: true })
+    const g = gate()
+    void run(pool.wrap(g.operation('a')))
+    const waiting = run(pool.wrap(g.operation('b'))).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(300)
+
+    pool.dispose()
+
+    expect(((await waiting) as Error).message).toContain('bulkhead was disposed while the call waited 300ms for a slot')
+  })
+
+  // The limit is process-wide: a refusal that changed it would change the stack of every error that follows.
+  it('leaves Error.stackTraceLimit as it found it after a refusal', async () => {
     const pool = bulkheadOf({ maxConcurrentCalls: 1 })
     const g = gate()
     const errorClass = Error as { stackTraceLimit?: number }
@@ -402,7 +414,10 @@ describe('bulkhead, dispose', () => {
 
     for (const refused of await Promise.all(waiting)) {
       expect(refused).toBeInstanceOf(ErrBulkheadFull)
-      expect((refused as Error).message).toContain('no slot freed within 300ms with 1 call running')
+      // Disposal, not a wait that ran out: a reader must not go looking for a 300ms limit nobody set.
+      expect((refused as Error).message).toContain(
+        'Cannot call "payments": bulkhead was disposed while the call waited 300ms for a slot',
+      )
     }
     expect(vi.getTimerCount()).toBe(0)
     expect(pool.metrics()).toMatchObject({ availableConcurrentCalls: 0, queuedCalls: 0, rejectedCalls: 2 })
@@ -410,6 +425,23 @@ describe('bulkhead, dispose', () => {
     await expect(running).resolves.toBe('a')
     expect(g.started).toEqual(['a'])
     expect(pool.metrics().availableConcurrentCalls).toBe(1)
+  })
+
+  // A listener that reads the bulkhead while the shutdown refuses must see the shutdown done, not half of it.
+  it('refuses the waiting calls only once none is left in line', async () => {
+    const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 10 * Second, maxQueuedCalls: 2 })
+    const g = gate()
+    const running = run(pool.wrap(g.operation('a')))
+    const waiting = ['b', 'c'].map(id => run(pool.wrap(g.operation(id))).catch((error: unknown) => error))
+    const seen: number[] = []
+    pool.on('rejected', () => seen.push(pool.metrics().queuedCalls))
+
+    pool.dispose()
+
+    await Promise.all(waiting)
+    expect(seen).toEqual([0, 0])
+    g.resolve('a')
+    await running
   })
 
   it('still starts a call that finds a free slot, and refuses at once one that would wait', async () => {

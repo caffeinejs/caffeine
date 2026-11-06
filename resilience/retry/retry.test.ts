@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrBulkheadFull } from '../bulkhead/bulkhead.js'
 import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
+import { fakeTimersClock } from '../clock.testkit.js'
 import { compose, run } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
 import type { Operation, Policy } from '../policy.js'
@@ -21,7 +22,7 @@ afterEach(() => {
 })
 
 function retryOf(options: Partial<RetryOptions> = {}) {
-  return retry({ name: 'inventory', backoff: 0, ...options })
+  return retry({ name: 'inventory', backoff: 0, clock: fakeTimersClock, ...options })
 }
 
 // An operation that fails `failures` times, then returns `value`, numbering each attempt it ran.
@@ -200,7 +201,13 @@ describe('retry', () => {
     const error = await run(retries.wrap(operation)).catch((thrown: unknown) => thrown)
 
     expect(error).toBeInstanceOf(ErrMaxRetriesExceeded)
-    expect(error).toMatchObject({ attempts: 1, result: 'busy' })
+    expect(error).toMatchObject({
+      attempts: 1,
+      result: 'busy',
+      message: expect.stringContaining(
+        'Cannot complete "inventory": attempt 2 was refused after attempt 1 returned a retryable result',
+      ),
+    })
   })
 
   it('never retries a failure after the caller aborted, whatever retryOn says', async () => {
@@ -361,6 +368,14 @@ describe('retry', () => {
       message: 'Cannot complete "inventory": result still retryable after 3 attempts',
     })
     expect(seen).toEqual([['failure', { name: 'inventory', attempts: 3, result: 'busy' }]])
+  })
+
+  it('counts one attempt as one in the message', async () => {
+    const retries = retryOf({ maxAttempts: 1, retryOnResult: result => result === 'busy', failAfterMaxAttempts: true })
+
+    const error = await run(retries.wrap(async () => 'busy')).catch((reason: unknown) => reason)
+
+    expect((error as Error).message).toBe('Cannot complete "inventory": result still retryable after 1 attempt')
   })
 
   // A caller that gave up wants its answer now, not after the remaining attempts.
@@ -797,6 +812,23 @@ describe('retry, dispose', () => {
     expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, result: 'busy' }]])
   })
 
+  // A listener may react to the shutdown by disposing again; each call must still end, and count, once.
+  it('ends each waiting call once when an ignored listener disposes the retry again', async () => {
+    const retries = retryOf({ backoff: 30 * Second })
+    const seen = listen(retries, 'ignored')
+    retries.on('ignored', () => retries.dispose())
+    const calls = ['a', 'b'].map(id =>
+      run(retries.wrap(vi.fn().mockRejectedValue(new Error(id)))).catch((error: unknown) => (error as Error).message),
+    )
+    await vi.advanceTimersByTimeAsync(0)
+
+    retries.dispose()
+
+    expect(await Promise.all(calls)).toEqual(['a', 'b'])
+    expect(seen.map(([, event]) => (event.error as Error).message)).toEqual(['a', 'b'])
+    expect(retries.metrics().failedCallsWithoutRetry).toBe(2)
+  })
+
   it('rejects a waiting call with ErrMaxRetriesExceeded when its last result went to discard', async () => {
     const retries = retryOf({ backoff: 30 * Second, retryOnResult: result => result === 'busy', discard: vi.fn() })
     const call = run(retries.wrap(async () => 'busy')).catch((error: unknown) => error)
@@ -805,7 +837,13 @@ describe('retry, dispose', () => {
     retries.dispose()
 
     expect(await call).toBeInstanceOf(ErrMaxRetriesExceeded)
-    expect(await call).toMatchObject({ attempts: 1, result: 'busy' })
+    expect(await call).toMatchObject({
+      attempts: 1,
+      result: 'busy',
+      message: expect.stringContaining(
+        'Cannot complete "inventory": retry was disposed before attempt 2, after attempt 1 returned a retryable result',
+      ),
+    })
   })
 
   // A call that arrives during a shutdown must not start a wait the shutdown already ended for the others.

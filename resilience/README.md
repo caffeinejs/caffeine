@@ -96,7 +96,8 @@ the bulkhead first, the call is ignored by the breaker. The annotations refuse t
 is the bulkhead outside the time limiter, `compose(retries, breaker, quota, pool, deadline)`: the limit then bounds
 only the running call, and a call that timed out gives its slot back while its operation may still run.
 
-A preset has one time limiter. For a limit per attempt and a total across every attempt and every wait, compose two:
+An annotated method gets one time limiter. For a limit per attempt and a total across every attempt and every wait,
+compose two:
 
 ```ts
 const total = timeLimiter({ name: 'inventory-total', timeoutDuration: 5 * Second })
@@ -139,7 +140,8 @@ await getStock('42') // fetchStock('42', <the attempt's signal>)
 
 `this` is not kept: decorate a bound method, `decorate(policy, client.get.bind(client))`.
 
-- An already-aborted signal rejects with its reason without running anything.
+- Through `run`, `decorate` and the annotations, an already-aborted signal rejects with its reason without running
+  anything. A guarded operation called directly leaves that to its policies.
 - An abort during a retry's wait rejects at once with the abort reason; no further attempt runs.
 - A failure that settles after the caller aborted is not counted against the dependency, not retried, and not
   answered by a fallback.
@@ -569,9 +571,9 @@ createApplication({ container, config }).install(
 - **`@Fallback(method)`** names a method of the same class that takes the error, then the original arguments, and
   resolves to what the decorated method does; anything else is a type error. `on` takes a predicate or a list of
   error classes. It never runs once the caller's signal has aborted.
-- **The signal argument.** The first argument that is an `AbortSignal` is the caller's signal; each attempt receives
-  its own in its place, which a time limiter aborts at its limit. A caller that passes none still gets the limit,
-  but the method is never told.
+- **The signal argument.** The first argument that is an `AbortSignal` is the caller's signal. With a time limiter,
+  each attempt receives one of its own in its place, which the limiter aborts at its limit. A caller that passes none
+  still gets the limit, but the method is never told.
 - **What is woven.** Every class the container builds: decorated with `@Injectable`, bound by hand, in any scope,
   and subclasses, which inherit the annotations of the methods they do not redeclare. A call through `this` goes
   through the policies too. An instance built with `new`, and a value or a factory bound without a class, is not

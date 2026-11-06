@@ -41,6 +41,19 @@ const DEFINITIONS: ResilienceDefinitions = {
   rateLimiters: { inventory: { limitForPeriod: 1, limitRefreshPeriod: 1 * Hour } },
 }
 
+// The definitions with every instance on the clock the test drives.
+function onFakeClock(definitions: ResilienceDefinitions): ResilienceDefinitions {
+  const timed = <O>(instances: Readonly<Record<string, O>> | undefined): Record<string, O> =>
+    Object.fromEntries(Object.entries(instances ?? {}).map(([name, o]) => [name, { ...o, clock: fakeTimersClock }]))
+  return {
+    circuitBreakers: timed(definitions.circuitBreakers),
+    retries: timed(definitions.retries),
+    timeLimiters: timed(definitions.timeLimiters),
+    bulkheads: timed(definitions.bulkheads),
+    rateLimiters: timed(definitions.rateLimiters),
+  }
+}
+
 // A container with the aspect and a registry bound by hand, decorators off, so no fixture registers anywhere else.
 async function containerWith(
   bind: (di: CaffeineIoC) => void,
@@ -48,7 +61,7 @@ async function containerWith(
   options: { profiles?: string[]; order?: readonly ResilienceKind[] } = {},
 ) {
   const di = new CaffeineIoC(options.profiles === undefined ? { decorators: false } : { profiles: options.profiles })
-  const registry = new ResilienceRegistry(definitions)
+  const registry = new ResilienceRegistry(onFakeClock(definitions))
   di.bind(ResilienceRegistry, t => t.toValue(registry))
   di.aspect(ResilienceAspect, s =>
     s

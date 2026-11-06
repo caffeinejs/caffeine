@@ -1,3 +1,4 @@
+import { Minute } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
 import { circuitBreaker, ErrCallNotPermitted } from './circuitbreaker/circuitbreaker.js'
@@ -270,7 +271,7 @@ describe('decorate', () => {
     const caller = new AbortController()
     let received: AbortSignal | undefined
     const guarded = decorate(
-      timeLimiter({ name: 'inventory', timeoutDuration: 60_000 }),
+      timeLimiter({ name: 'inventory', timeoutDuration: 1 * Minute }),
       async (_id: string, signal?: AbortSignal) => {
         received = signal
         return 1
@@ -290,7 +291,7 @@ describe('decorate', () => {
   it('puts the attempt’s signal at signalAt even when the caller passed none', async () => {
     let received: AbortSignal | undefined
     const guarded = decorate(
-      timeLimiter({ name: 'inventory', timeoutDuration: 60_000 }),
+      timeLimiter({ name: 'inventory', timeoutDuration: 1 * Minute }),
       async (_id: string, signal?: AbortSignal) => {
         received = signal
         return 1
@@ -355,6 +356,29 @@ describe('decorate', () => {
     )
   })
 
+  // A signalAt that points at the wrong argument would hand every policy something that is not a signal; the call must
+  // still fail as a promise, saying where the signal belongs.
+  it.each([
+    [null, 'null'],
+    [{ signal: new AbortController().signal }, 'object'],
+  ])('rejects with ErrInvalidOption when the argument at signalAt is %o', async (value, got) => {
+    const guarded = decorate(
+      timeLimiter({ name: 'inventory', timeoutDuration: 1 * Minute }),
+      async (_id: string, _options?: unknown) => 1,
+      { signalAt: 1 },
+    )
+
+    let call: Promise<number> | undefined
+    expect(() => {
+      call = guarded('42', value)
+    }).not.toThrow()
+    const error = await call!.catch((thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message).toContain(
+      `Cannot call a decorated function: its argument 1 must be an AbortSignal or undefined, as signalAt says, got ${got}`,
+    )
+  })
+
   it.each([-1, 1.5, Number.NaN])('throws ErrInvalidOption for a signalAt of %s', at => {
     expect(() => decorate(recorder([], 'a'), async () => 1, { signalAt: at })).toThrow(
       `Cannot decorate: signalAt must be an integer of at least 0, got ${String(at)}`,
@@ -382,7 +406,7 @@ describe('with the built-in policies', () => {
 
   it('fails fast through a retry when the breaker is open', async () => {
     const breaker = circuitBreaker({ name: 'inventory' })
-    const retries = retry({ name: 'inventory', backoff: 60_000 })
+    const retries = retry({ name: 'inventory', backoff: 1 * Minute })
     breaker.forceOpen()
 
     await expect(run(compose(retries, breaker)(async () => 'ok'))).rejects.toBeInstanceOf(ErrCallNotPermitted)

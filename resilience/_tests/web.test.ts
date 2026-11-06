@@ -273,24 +273,29 @@ async function storefront() {
     .install(
       Resilience(r =>
         r
-          .timeLimiter('page', { timeoutDuration: 100 * Millisecond })
-          .retry('inventory', { maxAttempts: 3, backoff: 0 })
-          .timeLimiter('inventory', { timeoutDuration: 10 * Second })
-          .bulkhead('exports', { maxConcurrentCalls: 1 })
-          .rateLimiter('search', { limitForPeriod: 1, limitRefreshPeriod: 1 * Hour })
-          .rateLimiter('lookup', { limitForPeriod: 1, limitRefreshPeriod: 1 * Hour })
-          .rateLimiter('local', { limitForPeriod: 1, limitRefreshPeriod: 1 * Hour })
+          .timeLimiter('page', { clock: fakeTimersClock, timeoutDuration: 100 * Millisecond })
+          .retry('inventory', { clock: fakeTimersClock, maxAttempts: 3, backoff: 0 })
+          .timeLimiter('inventory', { clock: fakeTimersClock, timeoutDuration: 10 * Second })
+          .bulkhead('exports', { clock: fakeTimersClock, maxConcurrentCalls: 1 })
+          .rateLimiter('search', { clock: fakeTimersClock, limitForPeriod: 1, limitRefreshPeriod: 1 * Hour })
+          .rateLimiter('lookup', { clock: fakeTimersClock, limitForPeriod: 1, limitRefreshPeriod: 1 * Hour })
+          .rateLimiter('local', { clock: fakeTimersClock, limitForPeriod: 1, limitRefreshPeriod: 1 * Hour })
           .circuitBreaker('reports', {
+            clock: fakeTimersClock,
             minimumNumberOfCalls: 2,
             slidingWindow: { type: 'count', size: 2 },
             waitDurationInOpenState: 1 * Minute,
           })
-          .circuitBreaker('scoped', { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } })
-          .circuitBreaker('prices')
-          .retry('feed', { maxAttempts: 2, backoff: 0 })
-          .retry('orders', { maxAttempts: 2, backoff: 0 })
-          .retry('streamed', { maxAttempts: 2, backoff: 0 })
-          .circuitBreaker('streamed'),
+          .circuitBreaker('scoped', {
+            clock: fakeTimersClock,
+            minimumNumberOfCalls: 2,
+            slidingWindow: { type: 'count', size: 2 },
+          })
+          .circuitBreaker('prices', { clock: fakeTimersClock })
+          .retry('feed', { clock: fakeTimersClock, maxAttempts: 2, backoff: 0 })
+          .retry('orders', { clock: fakeTimersClock, maxAttempts: 2, backoff: 0 })
+          .retry('streamed', { clock: fakeTimersClock, maxAttempts: 2, backoff: 0 })
+          .circuitBreaker('streamed', { clock: fakeTimersClock }),
       ),
     )
     .install(ResilienceHTTP())

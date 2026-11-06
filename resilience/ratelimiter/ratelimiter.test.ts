@@ -298,8 +298,18 @@ describe('rate limiter', () => {
     ])
   })
 
-  // The limit is process-wide: a refusal that left it at zero would strip the stack of every error that follows.
-  it('restores Error.stackTraceLimit after a refusal', async () => {
+  it('says the rate limiter was disposed in a refusal that captured a stack trace too', async () => {
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second, captureStackTrace: true })
+    await run(quota.wrap(async () => 'a'))
+    const waiting = run(quota.wrap(async () => 'b')).catch((error: unknown) => error)
+
+    quota.dispose()
+
+    expect(((await waiting) as Error).message).toContain('rate limiter was disposed while the call waited for a permit')
+  })
+
+  // The limit is process-wide: a refusal that changed it would change the stack of every error that follows.
+  it('leaves Error.stackTraceLimit as it found it after a refusal', async () => {
     const quota = limiterOf({ limitForPeriod: 1 })
     const errorClass = Error as { stackTraceLimit?: number }
     const original = errorClass.stackTraceLimit
@@ -424,6 +434,32 @@ describe('rate limiter, changing its limits', () => {
     expect(starts.map(([id, at]) => `${id}@${at}`)).toEqual(['a@0', 'b@0', 'c@1000', 'd@2000'])
   })
 
+  // A listener may shut the rate limiter down from a refusal; the change must not refuse a call twice, or count a call
+  // the shutdown already refused as holding a later permit.
+  it('counts each refusal once when a rejected listener disposes the rate limiter during a change', async () => {
+    const quota = limiterOf({ limitForPeriod: 2, maxWaitDuration: 1_500 * Millisecond })
+    const { operation } = recorder()
+    const early = ['a', 'b', 'c', 'd'].map(id => run(quota.wrap(operation(id))).catch((error: unknown) => error))
+    await vi.advanceTimersByTimeAsync(600)
+    const late = ['e', 'f'].map(id => run(quota.wrap(operation(id))).catch((error: unknown) => error))
+    let rejected = 0
+    quota.on('rejected', () => {
+      if (++rejected === 1) {
+        quota.dispose()
+      }
+    })
+
+    quota.changeLimitForPeriod(1)
+
+    const outcomes = await Promise.all([...early, ...late])
+    expect(outcomes.slice(0, 2)).toEqual(['a', 'b'])
+    expect(outcomes.slice(2).every(error => error instanceof ErrRateLimitExceeded)).toBe(true)
+    expect(rejected).toBe(4)
+    expect(quota.metrics()).toMatchObject({ waitingCalls: 0, rejectedCalls: 4 })
+    await vi.advanceTimersByTimeAsync(400)
+    expect(quota.metrics().availablePermissions).toBe(1)
+  })
+
   it('moves the waiting calls forward under a higher limit', async () => {
     const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
     const { starts, operation } = recorder()
@@ -490,9 +526,48 @@ describe('rate limiter, dispose', () => {
     const refused = (await Promise.all(waiting)) as ErrRateLimitExceeded[]
     expect(refused.map(error => error.retryAfter)).toEqual([600, 1_600])
     expect(refused.every(error => error instanceof ErrRateLimitExceeded)).toBe(true)
+    expect(refused[0]!.message).toContain(
+      'Cannot call "partner-api": rate limiter was disposed while the call waited for a permit',
+    )
     expect(vi.getTimerCount()).toBe(0)
     expect(quota.metrics()).toMatchObject({ waitingCalls: 0, rejectedCalls: 2 })
     expect(starts.map(([id]) => id)).toEqual(['a'])
+  })
+
+  // On a busy event loop the timer of a period can fire late; a call whose period has come holds its permit already.
+  it('starts a waiting call whose period came while its timer was late, rather than refusing it', async () => {
+    let late = 0
+    const quota = limiterOf({
+      limitForPeriod: 1,
+      maxWaitDuration: 5 * Second,
+      clock: { ...fakeTimersClock, now: () => performance.now() + late },
+    })
+    const { starts, operation } = recorder()
+    await run(quota.wrap(operation('a')))
+    const waiting = run(quota.wrap(operation('b')))
+    await vi.advanceTimersByTimeAsync(999)
+    late = 11
+
+    quota.dispose()
+
+    await expect(waiting).resolves.toBe('b')
+    expect(starts.map(([id]) => id)).toEqual(['a', 'b'])
+    expect(quota.metrics().rejectedCalls).toBe(0)
+  })
+
+  // A listener that reads the rate limiter while the shutdown refuses must see the shutdown done, not half of it.
+  it('refuses the waiting calls only once none is left in line', async () => {
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
+    const { operation } = recorder()
+    await run(quota.wrap(operation('a')))
+    const waiting = ['b', 'c'].map(id => run(quota.wrap(operation(id))).catch((error: unknown) => error))
+    const seen: number[] = []
+    quota.on('rejected', () => seen.push(quota.metrics().waitingCalls))
+
+    quota.dispose()
+
+    await Promise.all(waiting)
+    expect(seen).toEqual([0, 0])
   })
 
   it('still starts a call that finds a permit, and refuses at once one that would wait', async () => {
@@ -505,6 +580,8 @@ describe('rate limiter, dispose', () => {
 
     expect(refused).toBeInstanceOf(ErrRateLimitExceeded)
     expect((refused as ErrRateLimitExceeded).retryAfter).toBe(1_000)
+    // It never waited, so the limit is the reason.
+    expect((refused as Error).message).toContain('Cannot call "partner-api": rate limit of 1 call per 1s reached')
     await vi.advanceTimersByTimeAsync(1 * Second)
     await expect(run(quota.wrap(operation('c')))).resolves.toBe('c')
   })

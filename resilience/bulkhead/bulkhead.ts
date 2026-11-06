@@ -18,9 +18,12 @@ export class ErrBulkheadFull extends ErrCallRefused {
   /** The name of the bulkhead that refused the call. */
   readonly bulkhead: string
 
-  /** `waited` is how long the call waited for a slot before it was refused; `undefined` when it could not wait. */
-  constructor(bulkhead: string, maxConcurrentCalls: number, queuedCalls: number, waited?: Duration) {
-    super(fullMessage(bulkhead, maxConcurrentCalls, queuedCalls, waited), 'ERR_BULKHEAD_FULL', undefined)
+  /**
+   * `waited` is how long the call waited for a slot before it was refused; `undefined` when it could not wait.
+   * `disposed` says the wait ended because the bulkhead was disposed, not because it ran out.
+   */
+  constructor(bulkhead: string, maxConcurrentCalls: number, queuedCalls: number, waited?: Duration, disposed = false) {
+    super(fullMessage(bulkhead, maxConcurrentCalls, queuedCalls, waited, disposed), 'ERR_BULKHEAD_FULL', undefined)
     this.name = 'ErrBulkheadFull'
     this.bulkhead = bulkhead
   }
@@ -29,12 +32,20 @@ export class ErrBulkheadFull extends ErrCallRefused {
 // Built once rather than per refusal: refusals come in bulk while a dependency is slow.
 const footer = errMessage('').reference('@caffeinejs/resilience', ErrBulkheadFull).build()
 
-function fullMessage(bulkhead: string, maxConcurrentCalls: number, queuedCalls: number, waited?: Duration): string {
+function fullMessage(
+  bulkhead: string,
+  maxConcurrentCalls: number,
+  queuedCalls: number,
+  waited: Duration | undefined,
+  disposed: boolean,
+): string {
   const running = `${maxConcurrentCalls} ${maxConcurrentCalls === 1 ? 'call' : 'calls'} running`
   const reason =
     waited === undefined
       ? `bulkhead is full with ${running} and ${queuedCalls} queued`
-      : `no slot freed within ${formatDuration(waited)} with ${running}`
+      : disposed
+        ? `bulkhead was disposed while the call waited ${formatDuration(waited)} for a slot`
+        : `no slot freed within ${formatDuration(waited)} with ${running}`
   return `Cannot call "${bulkhead}": ${reason}${footer}`
 }
 
@@ -152,12 +163,16 @@ export class Bulkhead implements Wrapper {
   dispose(): void {
     this.#disposed = true
     const now = this.#clock.now()
-    let call = this.#queue.first
-    while (call !== undefined) {
+    const refused: Array<QueuedCall<unknown, unknown>> = []
+    for (let call = this.#queue.first; call !== undefined; call = this.#queue.first) {
       this.#leave(call)
+      refused.push(call)
+    }
+
+    // Refused once the line is empty, so a listener that calls back in finds it so.
+    for (const call of refused) {
       this.#refused()
-      call.reject(this.#full(now - call.since))
-      call = this.#queue.first
+      call.reject(this.#full(now - call.since, true))
     }
   }
 
@@ -231,12 +246,12 @@ export class Bulkhead implements Wrapper {
   }
 
   // The refusal, with a stack trace only when asked for one.
-  #full(waited: Duration | undefined): ErrBulkheadFull {
+  #full(waited: Duration | undefined, disposed = false): ErrBulkheadFull {
     const queued = this.#queue.size
     if (this.#captureStackTrace) {
-      return new ErrBulkheadFull(this.#name, this.#maxConcurrentCalls, queued, waited)
+      return new ErrBulkheadFull(this.#name, this.#maxConcurrentCalls, queued, waited, disposed)
     }
-    return refusal(ErrBulkheadFull, fullMessage(this.#name, this.#maxConcurrentCalls, queued, waited), {
+    return refusal(ErrBulkheadFull, fullMessage(this.#name, this.#maxConcurrentCalls, queued, waited, disposed), {
       code: 'ERR_BULKHEAD_FULL',
       name: 'ErrBulkheadFull',
       retryAfter: undefined,
