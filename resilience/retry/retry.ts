@@ -89,8 +89,7 @@ export interface RetryOptions {
   /**
    * Releases a result the retry tries again, such as a 503 response whose body would otherwise hold its connection
    * while the retry waits: `discard: response => response.body?.cancel()`. It runs before the wait, after the `retry`
-   * event. The call never waits for it, and a throw or a rejection from it resurfaces as uncaught, as a listener's
-   * does.
+   * event. The call never waits for it, and what it throws or rejects with is dropped.
    *
    * A result it released never reaches the caller. When a later attempt is refused, or the retry is disposed while the
    * call waits, the call rejects with {@link ErrMaxRetriesExceeded}, which carries the result, instead of resolving

@@ -38,7 +38,10 @@ export interface TimeLimiterOptions {
   /**
    * Releases a value that arrives after the call ended, by the time limit or by the caller, such as a response whose
    * body nobody will read: `discard: response => response.body?.cancel()`. Without it, the late value is dropped as
-   * it is. A throw or a rejection from it resurfaces as uncaught, as a listener's does.
+   * it is. What it throws or rejects with is dropped too.
+   *
+   * The value was made under a signal that has already aborted, so a body tied to that signal has already failed and
+   * let go of its connection, and `cancel()` on it rejects.
    */
   discard?: (value: unknown) => unknown
   /** Where the time limiter reads the time and sets its timer. Defaults to the runtime's. */

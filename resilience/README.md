@@ -330,7 +330,8 @@ A 503 response holds its connection until its body is read or cancelled. `discar
 again, after the `retry` event and before the wait, so the body is released while the retry waits. It never runs on the
 result the caller receives, nor on an error. A result it released never reaches the caller: when a later attempt is
 refused, or the retry is disposed while the call waits, the call rejects with `ErrMaxRetriesExceeded`, which carries
-the result. A throw or a rejection from `discard` resurfaces as uncaught, as a listener's does.
+the result. What `discard` throws or rejects with is dropped: it releases a value nobody holds, so no caller is left to
+hear of it.
 
 The default backoff waits 500 ms, doubling per attempt up to 30 s, each wait spread by half of it either way, so
 callers that failed together do not come back together. Pass `backoff: exponential({ jitter: 0 })`, or a fixed
@@ -376,7 +377,8 @@ the caller left.
 A timeout cannot undo work: an operation that ignores its signal keeps running after the call rejected, and a
 retried write can overlap the one still in flight. Pass the signal to every I/O call, and make writes idempotent. A
 value that arrives after the call ended is dropped; `discard` releases it, such as a response whose body nobody will
-read.
+read. That value was made under a signal that has already aborted: a body tied to it has already failed, and
+`cancel()` on it rejects, which `discard` drops along with anything else it throws or rejects with.
 
 Where it sits decides what it bounds: inside a retry, each attempt; outside it, every attempt and every wait between
 them (see [Composing policies](#composing-policies)).
