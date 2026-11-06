@@ -98,6 +98,14 @@ class Inventory {
     return never()
   }
 
+  @TimeLimiter('inventory')
+  async busy(): Promise<string> {
+    // Work before the first await, such as serializing a large payload: no timer can fire while it runs.
+    vi.advanceTimersByTime(150)
+    await Promise.resolve()
+    return 'built'
+  }
+
   @Bulkhead('inventory')
   async held(release: Promise<void>): Promise<string> {
     await release
@@ -160,6 +168,13 @@ describe('resilience annotations on a class the container builds', () => {
     await vi.advanceTimersByTimeAsync(100)
 
     expect(await call).toBeInstanceOf(ErrTimeLimitExceeded)
+  })
+
+  // The limit counts the method's own synchronous work, which no timer can interrupt.
+  it('times out a method with @TimeLimiter whose work before its first await outruns the limit', async () => {
+    const { di } = await containerWith(di => di.bind(Inventory, t => t.toSelf()))
+
+    await expect(di.get(Inventory).busy()).rejects.toBeInstanceOf(ErrTimeLimitExceeded)
   })
 
   it('caps the calls of a method with @Bulkhead', async () => {

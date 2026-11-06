@@ -433,6 +433,187 @@ describe('time limiter', () => {
   })
 })
 
+// A clock whose time the test moves without firing a timer, as synchronous code or a busy event loop does: no timer
+// can fire until control returns to the event loop.
+function lateClock() {
+  const time = { late: 0 }
+  return { time, clock: { ...fakeTimersClock, now: () => performance.now() + time.late } }
+}
+
+// What a call has come to so far: its value, its error, or 'pending'.
+function track(call: Promise<unknown>): { outcome: unknown } {
+  const state: { outcome: unknown } = { outcome: 'pending' }
+  call.then(
+    value => (state.outcome = value),
+    (error: unknown) => (state.outcome = error),
+  )
+  return state
+}
+
+// The limit bounds the call, not the part of it a timer can watch: time the operation spends before it returns, or
+// that passes while the event loop is busy, counts as much as time spent waiting.
+describe('time limiter, time its timer cannot see', () => {
+  it('times out at once a call whose operation runs past the limit before it returns a pending promise', async () => {
+    const { time, clock } = lateClock()
+    const discard = vi.fn()
+    const limiter = limiterOf({ clock, discard })
+    const seen = listen(limiter, 'success', 'failure', 'timeout')
+    const late = controllable()
+
+    const call = track(
+      run(
+        limiter.wrap(ctx => {
+          time.late += 200 * Millisecond
+          return late.operation(ctx)
+        }),
+      ),
+    )
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(call.outcome).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(late.signal()?.reason).toBe(call.outcome)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(limiter.metrics()).toEqual({ successfulCalls: 0, failedCalls: 0, timedOutCalls: 1 })
+    late.resolve('stale')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(discard.mock.calls).toEqual([['stale']])
+    expect(seen).toEqual([['timeout', { name: 'inventory', timeoutDuration: 100 * Millisecond }]])
+  })
+
+  it('leaves a call whose operation used part of the limit before it returned only the rest of it', async () => {
+    const { time, clock } = lateClock()
+    const limiter = limiterOf({ clock })
+
+    const call = track(
+      run(
+        limiter.wrap(() => {
+          time.late += 60 * Millisecond
+          return new Promise(() => undefined)
+        }),
+      ),
+    )
+    await vi.advanceTimersByTimeAsync(39)
+    expect(call.outcome).toBe('pending')
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(call.outcome).toBeInstanceOf(ErrTimeLimitExceeded)
+  })
+
+  // A settled promise's continuation runs before any timer: without a check, the overdue value would win.
+  it('times out a value that is already there when the operation ran past the limit before it returned', async () => {
+    const { time, clock } = lateClock()
+    const discard = vi.fn()
+    const limiter = limiterOf({ clock, discard })
+
+    const outcome = await run(
+      limiter.wrap(async () => {
+        time.late += 200 * Millisecond
+        return 'stale'
+      }),
+    ).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(outcome).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(discard.mock.calls).toEqual([['stale']])
+    expect(limiter.metrics()).toEqual({ successfulCalls: 0, failedCalls: 0, timedOutCalls: 1 })
+  })
+
+  it('times out an error that is already there when the operation ran past the limit before it returned', async () => {
+    const { time, clock } = lateClock()
+    const limiter = limiterOf({ clock })
+    let outcome: unknown
+
+    const reasons = await unhandledRejections(async () => {
+      outcome = await run(
+        limiter.wrap(async () => {
+          time.late += 200 * Millisecond
+          throw new Error('down')
+        }),
+      ).catch((error: unknown) => error)
+    })
+
+    expect(outcome).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(limiter.metrics()).toEqual({ successfulCalls: 0, failedCalls: 0, timedOutCalls: 1 })
+    expect(reasons).toEqual([])
+  })
+
+  // The timer fires late when the event loop is busy; the limit does not move with it.
+  it('times out a value that arrives past the limit before the overdue timer fires', async () => {
+    const { time, clock } = lateClock()
+    const discard = vi.fn()
+    const limiter = limiterOf({ clock, discard })
+    const seen = listen(limiter, 'success', 'failure', 'timeout')
+    const late = controllable()
+
+    const call = run(limiter.wrap(late.operation)).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(50)
+    time.late += 100 * Millisecond
+    late.resolve('stale')
+    const outcome = await call
+
+    expect(outcome).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(late.signal()?.reason).toBe(outcome)
+    expect(discard.mock.calls).toEqual([['stale']])
+    expect(vi.getTimerCount()).toBe(0)
+    expect(seen).toEqual([['timeout', { name: 'inventory', timeoutDuration: 100 * Millisecond }]])
+  })
+
+  it('times out an error that arrives past the limit before the overdue timer fires', async () => {
+    const { time, clock } = lateClock()
+    const limiter = limiterOf({ clock })
+    const late = controllable()
+
+    const call = run(limiter.wrap(late.operation)).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(50)
+    time.late += 100 * Millisecond
+    late.reject(new Error('down'))
+
+    expect(await call).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(limiter.metrics()).toEqual({ successfulCalls: 0, failedCalls: 0, timedOutCalls: 1 })
+  })
+
+  // The limit is how long the call may run: one that takes exactly that long is in time.
+  it('accepts an outcome that arrives exactly at the limit', async () => {
+    const { time, clock } = lateClock()
+    const discard = vi.fn()
+    const limiter = limiterOf({ clock, discard })
+
+    const outcome = await run(
+      limiter.wrap(async () => {
+        time.late += 100 * Millisecond
+        return 'fresh'
+      }),
+    )
+
+    expect(outcome).toBe('fresh')
+    expect(discard).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+    expect(limiter.metrics()).toEqual({ successfulCalls: 1, failedCalls: 0, timedOutCalls: 0 })
+  })
+
+  // The caller that left is not the dependency being slow, even when the operation also ran past the limit.
+  it('rejects with the caller’s reason when the caller aborts while the operation runs past the limit', async () => {
+    const { time, clock } = lateClock()
+    const limiter = limiterOf({ clock })
+    const caller = new AbortController()
+    const reason = new Error('caller gave up')
+
+    const call = run(
+      limiter.wrap(() => {
+        time.late += 200 * Millisecond
+        caller.abort(reason)
+        return new Promise(() => undefined)
+      }),
+      caller.signal,
+    )
+
+    await expect(call).rejects.toBe(reason)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(limiter.metrics()).toEqual({ successfulCalls: 0, failedCalls: 0, timedOutCalls: 0 })
+  })
+})
+
 describe('time limiter in a chain', () => {
   // Inside a retry, a timeout is one failed attempt: the next attempt gets the whole limit and a signal not yet aborted.
   it('gives each attempt of a retry its own limit and its own signal', async () => {
@@ -479,6 +660,34 @@ describe('time limiter in a chain', () => {
 
     expect(await call).toBeInstanceOf(ErrTimeLimitExceeded)
     expect(attempts).toBe(3)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  // A budget for the whole call still holds when the first attempt spends it before the retry gets to wait.
+  it('bounds the retry inside it even when the first attempt runs past the limit before it fails', async () => {
+    const { time, clock } = lateClock()
+    const limiter = limiterOf({ timeoutDuration: 1 * Second, clock })
+    const retries = retry({ name: 'inventory', maxAttempts: 5, backoff: 400 * Millisecond, clock: fakeTimersClock })
+    let attempts = 0
+
+    const call = track(
+      run(
+        compose(
+          limiter,
+          retries,
+        )(async () => {
+          attempts++
+          if (attempts === 1) {
+            time.late += 1200 * Millisecond
+          }
+          throw new Error('down')
+        }),
+      ),
+    )
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(call.outcome).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(attempts).toBe(1)
     expect(vi.getTimerCount()).toBe(0)
   })
 

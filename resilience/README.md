@@ -374,6 +374,11 @@ never settles. When the caller aborts first, the call rejects with the caller's 
 The signal stays linked to the caller's after the call settles, so a body the operation streams still learns that
 the caller left.
 
+The limit counts from the call: time the operation spends before it returns, such as work before its first
+`await`, counts too. A timer cannot interrupt that work, so a call that outruns the limit before it returns times
+out as soon as it does. An outcome that arrives after the limit times out even when the timer has not fired yet, as
+when the event loop was busy.
+
 A timeout cannot undo work: an operation that ignores its signal keeps running after the call rejected, and a
 retried write can overlap the one still in flight. Pass the signal to every I/O call, and make writes idempotent. A
 value that arrives after the call ended is dropped; `discard` releases it, such as a response whose body nobody will

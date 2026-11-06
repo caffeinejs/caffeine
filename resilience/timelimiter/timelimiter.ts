@@ -70,6 +70,11 @@ export interface TimeLimiterEvents {
  * so a body the operation streams still learns that the caller left. An outcome that arrives after the call settled
  * is dropped, a value through `discard` when one is given.
  *
+ * The limit counts from the call: time the operation spends before it returns, such as work before its first
+ * `await`, counts too. A timer cannot interrupt that work, so a call that outruns the limit before it returns times
+ * out as soon as it does. An outcome that arrives after the limit times out even when the timer has not fired yet, as
+ * when the event loop was busy.
+ *
  * Its place in the chain decides what it bounds: inside a retry, each attempt; outside it, every attempt and every
  * wait between them.
  */
@@ -77,6 +82,8 @@ export class TimeLimiter implements Wrapper {
   readonly #name: string
   readonly #timeoutDuration: Duration
   readonly #timeoutMs: number
+  // Names the timer in a refused delay; built once, as every call clamps one.
+  readonly #delayLabel: string
   readonly #discard: ((value: unknown) => unknown) | undefined
   readonly #clock: Clock
   readonly #emitter = new Emitter<TimeLimiterEvents>()
@@ -92,7 +99,8 @@ export class TimeLimiter implements Wrapper {
       options.timeoutDuration,
       'Pass the longest the call may take, such as timeoutDuration: 2 * Second',
     )
-    this.#timeoutMs = clampDelay(this.#timeoutDuration, `time limiter "${o.name}"`)
+    this.#delayLabel = `time limiter "${o.name}"`
+    this.#timeoutMs = clampDelay(this.#timeoutDuration, this.#delayLabel)
     this.#discard = o.function('discard', options.discard)
     this.#clock = o.clock(options.clock)
   }
@@ -130,17 +138,24 @@ export class TimeLimiter implements Wrapper {
       const controller = new AbortController()
       const signal = parent === undefined ? controller.signal : AbortSignal.any([parent, controller.signal])
       const clock = this.#clock
+      const limit = this.#timeoutMs
       const start = clock.now()
       const pending = inner({ ...ctx, signal }, input)
+      // No timer fires while the operation runs before it returns, so that time is taken off the limit here.
+      const elapsed = clock.now() - start
 
       return new Promise<T>((resolve, reject) => {
         let done = false
+        let timer: unknown
+        let timing = false
         const finish = (): boolean => {
           if (done) {
             return false
           }
           done = true
-          clock.clearTimeout(timer)
+          if (timing) {
+            clock.clearTimeout(timer)
+          }
           if (parent !== undefined) {
             signal.removeEventListener('abort', onAbort)
           }
@@ -154,8 +169,7 @@ export class TimeLimiter implements Wrapper {
           }
         }
 
-        // Not unref'd: it is what settles a call whose operation ignores its signal.
-        const timer = clock.setTimeout(() => {
+        const timeOut = (): void => {
           if (finish()) {
             const error = new ErrTimeLimitExceeded(this.#name, this.#timeoutDuration)
             this.#timedOut++
@@ -165,7 +179,7 @@ export class TimeLimiter implements Wrapper {
             }
             reject(error)
           }
-        }, this.#timeoutMs)
+        }
 
         if (parent !== undefined) {
           signal.addEventListener('abort', onAbort, { once: true })
@@ -175,12 +189,27 @@ export class TimeLimiter implements Wrapper {
           }
         }
 
+        if (elapsed > limit) {
+          timeOut()
+        } else if (!done) {
+          // Not unref'd: it is what settles a call whose operation ignores its signal. Rounded up, so a runtime that
+          // truncates delays never fires it early.
+          timer = clock.setTimeout(timeOut, clampDelay(Math.ceil(limit - elapsed), this.#delayLabel))
+          timing = true
+        }
+
+        // An outcome past the limit times out even before the timer fires, which a busy event loop delays: a settled
+        // promise's continuation runs ahead of any timer.
         pending.then(
           value => {
+            const now = clock.now()
+            if (now - start > limit) {
+              timeOut()
+            }
             if (finish()) {
               this.#successful++
               if (this.#emitter.has('success')) {
-                this.#emitter.emit('success', { name: this.#name, duration: clock.now() - start })
+                this.#emitter.emit('success', { name: this.#name, duration: now - start })
               }
               resolve(value)
             } else if (this.#discard !== undefined) {
@@ -188,10 +217,14 @@ export class TimeLimiter implements Wrapper {
             }
           },
           error => {
+            const now = clock.now()
+            if (now - start > limit) {
+              timeOut()
+            }
             if (finish()) {
               this.#failed++
               if (this.#emitter.has('failure')) {
-                this.#emitter.emit('failure', { name: this.#name, duration: clock.now() - start, error })
+                this.#emitter.emit('failure', { name: this.#name, duration: now - start, error })
               }
               reject(error)
             }
