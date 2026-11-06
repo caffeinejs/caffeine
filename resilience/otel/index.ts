@@ -3,6 +3,7 @@ export {
   instrumentCircuitBreaker,
   instrumentFallback,
   instrumentRateLimiter,
+  instrumentRegistry,
   instrumentRetry,
   instrumentTimeLimiter,
   type ResilienceInstrumentationOptions,

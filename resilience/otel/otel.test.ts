@@ -1,8 +1,13 @@
+import { createApplication } from '@caffeinejs/application'
+import { CaffeineIoC } from '@caffeinejs/di'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { diag, DiagLogLevel, metrics, type DiagLogger, type MeterProvider } from '@opentelemetry/api'
 import { DataPointType, type Histogram } from '@opentelemetry/sdk-metrics'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { Fallback, Retry, TimeLimiter } from '../aop/annotations.js'
+import { Resilience } from '../aop/feature.js'
+import { ResilienceRegistry } from '../aop/registry.js'
 import { bulkhead } from '../bulkhead/bulkhead.js'
 import { circuitBreaker, type CircuitBreaker, type CircuitBreakerOptions } from '../circuitbreaker/circuitbreaker.js'
 import { fakeTimersClock } from '../clock.testkit.js'
@@ -16,6 +21,7 @@ import {
   instrumentCircuitBreaker,
   instrumentFallback,
   instrumentRateLimiter,
+  instrumentRegistry,
   instrumentRetry,
   instrumentTimeLimiter,
 } from './otel.js'
@@ -589,5 +595,88 @@ describe('instrumentFallback', () => {
       }),
     ).not.toThrow()
     expect(logged.map(([message]) => message)).toEqual(['@caffeinejs/resilience instrumentation failed on "collect"'])
+  })
+})
+
+class Storefront {
+  @Retry('inventory')
+  @TimeLimiter('inventory')
+  async stock(): Promise<string> {
+    return 'ok'
+  }
+
+  @Fallback('cached')
+  async price(): Promise<number> {
+    throw new Error('down')
+  }
+
+  async cached(): Promise<number> {
+    return 1
+  }
+}
+
+// One call must cover every instance an application has, or a policy added later goes unmeasured.
+describe('instrumentRegistry', () => {
+  // An application as it runs: the registry is complete once it has started.
+  async function storefront() {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
+      Resilience(r =>
+        r
+          .preset('inventory', p =>
+            p.retry({ maxAttempts: 2, backoff: 0 }).timeLimiter({ timeoutDuration: 2 * Second }),
+          )
+          .preset('payments', p => p.circuitBreaker({ failureRateThreshold: 50 }).bulkhead({ maxConcurrentCalls: 4 }))
+          .preset('partner', p => p.rateLimiter({ limitForPeriod: 10, limitRefreshPeriod: 1 * Second })),
+      ),
+    )
+    app.container.bind(Storefront, t => t.toSelf())
+    cleanups.push(() => app.close())
+    await app.bootstrap()
+    return { registry: app.container.get(ResilienceRegistry), store: app.container.get(Storefront) }
+  }
+
+  it('records every instance of every kind, the fallback of each @Fallback method included', async () => {
+    const h = harness()
+    const { registry, store } = await storefront()
+    instrumentRegistry(registry, { meterProvider: h.meterProvider })
+
+    await store.stock()
+    await store.price()
+
+    // Each name once, whatever the number of series a metric splits it into.
+    const names = async (metric: string, attribute: string) => [
+      ...new Set((await h.points(metric)).map(point => point.attributes[attribute])),
+    ]
+    expect(await names('resilience.circuit_breaker.state', 'resilience.circuit_breaker.name')).toEqual(['payments'])
+    expect(await names('resilience.retry.calls', 'resilience.retry.name')).toEqual(['inventory'])
+    expect(await names('resilience.time_limiter.calls', 'resilience.time_limiter.name')).toEqual(['inventory'])
+    expect(await names('resilience.bulkhead.available_concurrent_calls', 'resilience.bulkhead.name')).toEqual([
+      'payments',
+    ])
+    expect(await names('resilience.rate_limiter.available_permissions', 'resilience.rate_limiter.name')).toEqual([
+      'partner',
+    ])
+    expect(await names('resilience.fallback.calls', 'resilience.fallback.name')).toEqual(['Storefront.price'])
+  })
+
+  it('stops every instrument with the one function it returns', async () => {
+    const h = harness()
+    const { registry, store } = await storefront()
+    const stop = instrumentRegistry(registry, { meterProvider: h.meterProvider })
+    await store.stock()
+    await store.price()
+
+    stop()
+
+    for (const metric of [
+      'resilience.circuit_breaker.state',
+      'resilience.retry.calls',
+      'resilience.time_limiter.calls',
+      'resilience.bulkhead.available_concurrent_calls',
+      'resilience.rate_limiter.available_permissions',
+      'resilience.fallback.calls',
+    ]) {
+      expect(await h.points(metric)).toEqual([])
+    }
   })
 })

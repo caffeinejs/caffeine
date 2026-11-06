@@ -1,3 +1,4 @@
+import { CaffeineIoC } from '@caffeinejs/di'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -8,7 +9,9 @@ import { run } from '../compose.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import { Retry } from '../retry/retry.js'
-import { ResilienceRegistry } from './registry.js'
+import { Fallback } from './annotations.js'
+import { ResilienceAspect, resiliencePointcut } from './aop.js'
+import { type ResilienceEvent, ResilienceRegistry } from './registry.js'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -108,5 +111,70 @@ describe('ResilienceRegistry', () => {
     expect(await queued).toBeInstanceOf(ErrBulkheadFull)
     expect(await throttled).toBeInstanceOf(ErrRateLimitExceeded)
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('ResilienceRegistry.on', () => {
+  // One place to log or count every policy, instead of a loop over each kind with a listener per event type.
+  it('hands one listener every event of every instance, tagged with its kind, type and name', async () => {
+    const registry = new ResilienceRegistry({
+      inventory: { retry: { maxAttempts: 2, backoff: 0 }, circuitBreaker: {} },
+    })
+    const events: ResilienceEvent[] = []
+    registry.on(e => events.push(e))
+
+    await run(
+      registry.retry('inventory').wrap(
+        registry.circuitBreaker('inventory').wrap(async () => {
+          throw new Error('down')
+        }),
+      ),
+    ).catch(() => undefined)
+
+    expect(events.map(({ kind, type, name }) => [kind, type, name])).toEqual([
+      ['circuitBreaker', 'failure', 'inventory'],
+      ['retry', 'retry', 'inventory'],
+      ['circuitBreaker', 'failure', 'inventory'],
+      ['retry', 'failure', 'inventory'],
+    ])
+    expect(events[1]).toMatchObject({ event: { name: 'inventory', attempt: 1 } })
+  })
+
+  it('stops calling the listener once unsubscribed', async () => {
+    const registry = new ResilienceRegistry({ inventory: { circuitBreaker: {} } })
+    const events: ResilienceEvent[] = []
+    const off = registry.on(e => events.push(e))
+
+    off()
+    registry.circuitBreaker('inventory').transitionToOpen()
+
+    expect(events).toEqual([])
+  })
+
+  // A fallback is built when its method's plan is: a listener added earlier must still see it.
+  it('reaches a fallback added after the listener', async () => {
+    class Inventory {
+      @Fallback('cached')
+      async stock(): Promise<string> {
+        throw new Error('down')
+      }
+
+      async cached(): Promise<string> {
+        return 'cached'
+      }
+    }
+    const registry = new ResilienceRegistry()
+    const events: ResilienceEvent[] = []
+    registry.on(e => events.push(e))
+    const di = new CaffeineIoC({ decorators: false })
+    di.aspect(ResilienceAspect, a => a.toValue(new ResilienceAspect(registry)).pointcuts(resiliencePointcut))
+    di.bind(Inventory, t => t.toSelf())
+    await di.init()
+
+    await expect(di.get(Inventory).stock()).resolves.toBe('cached')
+
+    expect(events.map(({ kind, type, name }) => [kind, type, name])).toEqual([
+      ['fallback', 'recovered', 'Inventory.stock'],
+    ])
   })
 })

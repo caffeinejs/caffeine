@@ -1,13 +1,28 @@
 import { errMessage } from '@caffeinejs/std/err'
 
-import { type Bulkhead, bulkhead, type BulkheadOptions } from '../bulkhead/bulkhead.js'
-import { type CircuitBreaker, circuitBreaker, type CircuitBreakerOptions } from '../circuitbreaker/circuitbreaker.js'
+import { type Bulkhead, bulkhead, type BulkheadEvents, type BulkheadOptions } from '../bulkhead/bulkhead.js'
+import {
+  type CircuitBreaker,
+  circuitBreaker,
+  type CircuitBreakerEvents,
+  type CircuitBreakerOptions,
+} from '../circuitbreaker/circuitbreaker.js'
 import { disposable } from '../dispose.js'
 import { ErrInvalidOption } from '../errors.js'
-import type { Fallback } from '../fallback/fallback.js'
-import { type RateLimiter, rateLimiter, type RateLimiterOptions } from '../ratelimiter/ratelimiter.js'
-import { type Retry, retry, type RetryOptions } from '../retry/retry.js'
-import { type TimeLimiter, timeLimiter, type TimeLimiterOptions } from '../timelimiter/timelimiter.js'
+import type { Fallback, FallbackEvents } from '../fallback/fallback.js'
+import {
+  type RateLimiter,
+  rateLimiter,
+  type RateLimiterEvents,
+  type RateLimiterOptions,
+} from '../ratelimiter/ratelimiter.js'
+import { type Retry, retry, type RetryEvents, type RetryOptions } from '../retry/retry.js'
+import {
+  type TimeLimiter,
+  timeLimiter,
+  type TimeLimiterEvents,
+  type TimeLimiterOptions,
+} from '../timelimiter/timelimiter.js'
 
 /** A kind of policy a preset can define, one of each at most. */
 export type ResilienceKind = 'circuitBreaker' | 'retry' | 'timeLimiter' | 'bulkhead' | 'rateLimiter'
@@ -32,6 +47,71 @@ const LABELS: Record<ResilienceKind, string> = {
   rateLimiter: 'rate limiter',
 }
 
+// The events of each kind of instance the registry holds, fallbacks included.
+interface EventsByKind {
+  circuitBreaker: CircuitBreakerEvents
+  retry: RetryEvents
+  timeLimiter: TimeLimiterEvents
+  bulkhead: BulkheadEvents
+  rateLimiter: RateLimiterEvents
+  fallback: FallbackEvents
+}
+
+/**
+ * One event of one instance a registry holds: `kind` and `type` tell which, so `event` is the exact payload that
+ * instance's `on(type, ...)` receives.
+ */
+export type ResilienceEvent = {
+  [K in keyof EventsByKind]: {
+    [T in keyof EventsByKind[K]]: {
+      readonly kind: K
+      readonly type: T
+      readonly name: string
+      readonly event: EventsByKind[K][T]
+    }
+  }[keyof EventsByKind[K]]
+}[keyof EventsByKind]
+
+// Every event type of each kind, so one listener can subscribe to all of them.
+const EVENTS = {
+  circuitBreaker: [
+    'success',
+    'failure',
+    'ignored',
+    'notPermitted',
+    'stateChange',
+    'reset',
+    'failureRateExceeded',
+    'slowCallRateExceeded',
+  ],
+  retry: ['retry', 'success', 'failure', 'ignored'],
+  timeLimiter: ['success', 'failure', 'timeout'],
+  bulkhead: ['permitted', 'rejected', 'finished'],
+  rateLimiter: ['permitted', 'rejected'],
+  fallback: ['recovered', 'failure', 'ignored'],
+} as const satisfies { readonly [K in keyof EventsByKind]: readonly (keyof EventsByKind[K])[] }
+
+// Fails to compile when an instance gains an event the list above leaves out.
+type Unlisted = {
+  [K in keyof EventsByKind]: Exclude<keyof EventsByKind[K], (typeof EVENTS)[K][number]>
+}[keyof EventsByKind]
+const _everyEventListed: [Unlisted] extends [never] ? true : never = true
+
+type Listener = (event: ResilienceEvent) => unknown
+type Subscribable = { on(type: string, listener: (event: { name: string }) => unknown): () => void }
+
+function subscribe(kind: keyof EventsByKind, instance: unknown, listener: Listener): () => void {
+  const target = instance as Subscribable
+  const offs = EVENTS[kind].map(type =>
+    target.on(type, event => listener({ kind, type, name: event.name, event } as ResilienceEvent)),
+  )
+  return () => {
+    for (const off of offs) {
+      off()
+    }
+  }
+}
+
 // How the aspect adds the fallback it builds for each method. Not exported from the barrel: a fallback is defined by
 // `@Fallback` on a method, never by name.
 export const kAddFallback = Symbol('@caffeinejs/resilience:add-fallback')
@@ -51,6 +131,8 @@ export class ResilienceRegistry {
   readonly #bulkheads = new Map<string, Bulkhead>()
   readonly #rateLimiters = new Map<string, RateLimiter>()
   readonly #fallbacks: Fallback[] = []
+  // Each listener `on` added, with the unsubscriptions of what it listens to so far.
+  readonly #listeners = new Map<Listener, (() => void)[]>()
 
   readonly #presets = new Set<string>()
 
@@ -133,6 +215,52 @@ export class ResilienceRegistry {
 
   [kAddFallback](fallback: Fallback): void {
     this.#fallbacks.push(fallback)
+    for (const [listener, offs] of this.#listeners) {
+      offs.push(subscribe('fallback', fallback, listener))
+    }
+  }
+
+  /**
+   * Calls `listener` with every event of every instance the registry holds, fallbacks included, a fallback added later
+   * too. Returns the function that stops it.
+   *
+   * It listens to every event type, so each instance builds every event it emits; an instance's own `on(type, ...)`
+   * listens to one.
+   *
+   * ```ts
+   * registry.on(e => {
+   *   if (e.kind === 'circuitBreaker' && e.type === 'stateChange') {
+   *     logger.warn({ breaker: e.name, from: e.event.from, to: e.event.to }, 'circuit breaker')
+   *   }
+   * })
+   * ```
+   */
+  on(listener: (event: ResilienceEvent) => unknown): () => void {
+    const offs: (() => void)[] = []
+    const kinds = [
+      ['circuitBreaker', this.#circuitBreakers.values()],
+      ['retry', this.#retries.values()],
+      ['timeLimiter', this.#timeLimiters.values()],
+      ['bulkhead', this.#bulkheads.values()],
+      ['rateLimiter', this.#rateLimiters.values()],
+      ['fallback', this.#fallbacks.values()],
+    ] as const
+    for (const [kind, instances] of kinds) {
+      for (const instance of instances) {
+        offs.push(subscribe(kind, instance, listener))
+      }
+    }
+    // Each call is its own subscription, even of a listener already added.
+    const key: Listener = event => listener(event)
+    this.#listeners.set(key, offs)
+
+    return () => {
+      if (this.#listeners.delete(key)) {
+        for (const off of offs) {
+          off()
+        }
+      }
+    }
   }
 
   /**

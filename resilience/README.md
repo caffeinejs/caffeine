@@ -927,7 +927,19 @@ off()
 | rate limiter    | `permitted` (with how long it waited), `rejected` (with `retryAfter`)                                                                                |
 | fallback        | `recovered`, `failure` (the handler or `on` threw), `ignored` (not handled, or the caller aborted)                                                   |
 
-Every payload carries the policy's `name`. Listeners run synchronously. A listener that throws, or returns a
+Every payload carries the policy's `name`. With the annotations, `registry.on(listener)` hands one listener every
+event of every instance the `ResilienceRegistry` holds, fallbacks included, each tagged with its `kind`, `type` and
+`name`, and returns the function that removes it:
+
+```ts
+const off = registry.on(({ kind, type, name, event }) => {
+  if (type === 'stateChange' || type === 'rejected') {
+    log.warn({ kind, name, event }, 'resilience')
+  }
+})
+```
+
+Listeners run synchronously. A listener that throws, or returns a
 promise that rejects, never changes the outcome of the call; its error is rethrown on the next microtask, where
 the runtime reports it as uncaught (in Node, that ends the process by default). Listeners must not throw.
 
@@ -959,6 +971,17 @@ const stop = [
 stopBreaker()
 stopRetry()
 stop.forEach(off => off())
+```
+
+With the annotations, `instrumentRegistry(registry, options?)` instruments every instance the
+`ResilienceRegistry` holds, fallbacks included, and returns one function that stops them all. Call it once the
+application has started: a fallback joins the registry when its class is checked at start-up.
+
+```ts
+import { instrumentRegistry } from '@caffeinejs/resilience/otel'
+
+await app.bootstrap()
+const stop = instrumentRegistry(app.container.get(ResilienceRegistry))
 ```
 
 Instruments are created under the scope `@caffeinejs/resilience`. Give every instrumented policy its own `name`.

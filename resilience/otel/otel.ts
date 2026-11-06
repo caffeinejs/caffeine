@@ -8,6 +8,7 @@ import {
   type ObservableResult,
 } from '@opentelemetry/api'
 
+import type { ResilienceRegistry } from '../aop/registry.js'
 import type { Bulkhead } from '../bulkhead/bulkhead.js'
 import { CIRCUIT_BREAKER_STATES, type CircuitBreaker } from '../circuitbreaker/circuitbreaker.js'
 import type { Fallback } from '../fallback/fallback.js'
@@ -333,5 +334,31 @@ export function instrumentRateLimiter(quota: RateLimiter, options: ResilienceIns
 
   return () => {
     meter.removeBatchObservableCallback(observe, observables)
+  }
+}
+
+/**
+ * Records OpenTelemetry metrics for every instance a registry holds, with the `instrument*` function of its kind,
+ * and the fallback of every `@Fallback` method. Returns the function that stops them all.
+ *
+ * Call it once the application has started: a fallback is in the registry once its method's class was prepared, and
+ * one added later is not instrumented.
+ */
+export function instrumentRegistry(
+  registry: ResilienceRegistry,
+  options: ResilienceInstrumentationOptions = {},
+): () => void {
+  const stops = [
+    ...registry.circuitBreakers().map(breaker => instrumentCircuitBreaker(breaker, options)),
+    ...registry.retries().map(retries => instrumentRetry(retries, options)),
+    ...registry.timeLimiters().map(limiter => instrumentTimeLimiter(limiter, options)),
+    ...registry.bulkheads().map(pool => instrumentBulkhead(pool, options)),
+    ...registry.rateLimiters().map(quota => instrumentRateLimiter(quota, options)),
+    ...registry.fallbacks().map(stale => instrumentFallback(stale, options)),
+  ]
+  return () => {
+    for (const stop of stops) {
+      stop()
+    }
   }
 }
