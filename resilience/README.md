@@ -580,7 +580,42 @@ createApplication({ container, config }).install(
   outermost first, each of `retry`, `circuitBreaker`, `rateLimiter`, `timeLimiter` and `bulkhead` once; the
   fallback stays outermost. The usual reason is one breaker call per whole retry sequence:
   `r.order(['circuitBreaker', 'retry', 'rateLimiter', 'timeLimiter', 'bulkhead'])`.
-- **Methods returning a promise only.** On a synchronous method, a class or a field, the decorators are a type error.
+- **Methods returning a promise only.** On a synchronous method or a field, the decorators are a type error.
+- **On a class.** `@Resilient` and the stage annotations also go on a class, and reach every method it declares or
+  inherits with `async`, except one a `@Fallback` names. A method that returns a promise without `async` is not
+  reached, because nothing at run time says it returns one: mark it `async` or annotate it. A method's own
+  annotations win, kind by kind, and at each level a stage annotation wins over `@Resilient`.
+- **`false` takes one away.** `@Retry(false)`, `@CircuitBreaker(false)` and the others remove the policy `@Resilient`
+  or the class would give one method; `@Resilient(false)` keeps the class's preset off it, while the class's stage
+  annotations still reach it.
+
+```ts
+@Resilient('inventory')
+@Injectable()
+export class InventoryClient {
+  async stock(id: string): Promise<Stock> { … } // every policy of inventory
+
+  @Retry(false)
+  async reserve(id: string): Promise<void> { … } // inventory without its retry
+
+  refresh(): Promise<void> { … } // not async: not reached
+}
+```
+
+- **Defaults.** `r.defaults(p => ...)` takes the builder a preset does and sets the options every policy of a kind
+  starts from. A default shapes a policy a preset defines and never adds one. Lowest first, an option comes from the
+  built-in default, the configuration's `defaults`, `r.defaults(...)`, the configured preset, then the preset in code.
+
+```ts
+r.defaults(p =>
+  p
+    .retry({ maxAttempts: 3, backoff: exponential({ initialDelay: 200 * Millisecond }) })
+    .circuitBreaker({ waitDurationInOpenState: 30 * Second }),
+)
+  .preset('inventory', p => p.retry().circuitBreaker()) // 3 attempts from 200ms, open for 30s
+  .preset('ledger', p => p.retry({ maxAttempts: 5 })) // 5 attempts, the same backoff, no breaker
+```
+
 - **`@Fallback(method)`** names a method of the same class that takes the error, then the original arguments, and
   resolves to what the decorated method does; anything else is a type error. `on` takes a predicate or a list of
   error classes. It never runs once the caller's signal has aborted.
@@ -595,8 +630,8 @@ createApplication({ container, config }).install(
   wraps every aspect with a positive order or none, so a retry runs a transaction aspect once per attempt. An aspect
   with a negative order wraps the whole call instead. An aspect with order `0` ties with it, and the order they were
   registered in decides which runs outside: give such an aspect a non-zero order rather than rely on it.
-- **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a preset or one of its policies
-  twice, a preset defines no policy, a method names a preset nothing defines or a policy its preset lacks, a
+- **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a preset, the defaults or one of
+  their policies twice, a preset defines no policy, a method names a preset nothing defines or a policy its preset lacks, a
   `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a policy's options are
   out of range, a controller is retried without `ResilienceHTTP()`, the order does not list each kind once, or a
   bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
@@ -618,7 +653,7 @@ instance it holds.
 ### Configuration
 
 A preset is defined in code, in the configuration tree, or both. Code wins, option by option, configuration may add
-a policy code left out, and `r.order(...)` wins over `order`. The application declares the block in its own schema, a
+a policy code left out, `defaults` fills what both leave open, and `r.order(...)` wins over `order`. The application declares the block in its own schema, a
 record of presets by name, each holding the data options of its policies:
 
 ```ts
@@ -643,6 +678,7 @@ export const ConfigSchema = $t.Object({
 ```sh
 APP_RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS=5
 APP_RESILIENCE__PRESETS__INVENTORY__TIME_LIMITER__TIMEOUT_DURATION=1500ms
+APP_RESILIENCE__DEFAULTS__RETRY__MAX_ATTEMPTS=4
 APP_RESILIENCE__ORDER=circuitBreaker,retry,rateLimiter,timeLimiter,bulkhead
 ```
 

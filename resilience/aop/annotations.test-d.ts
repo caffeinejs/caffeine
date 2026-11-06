@@ -53,11 +53,23 @@ describe('resilience annotations', () => {
     void InventoryClient
   })
 
-  it('refuse a class and a field', () => {
-    // @ts-expect-error -- method decorators only
+  it('go on a class, and take false on a method', () => {
+    @Resilient('inventory')
     @TimeLimiter('inventory')
     class InventoryClient {
-      // @ts-expect-error -- method decorators only
+      @Retry(false)
+      @CircuitBreaker(false)
+      @Resilient(false)
+      async reserve(id: string): Promise<Stock> {
+        return { id, count: 1 }
+      }
+    }
+    void InventoryClient
+  })
+
+  it('refuse a field', () => {
+    class InventoryClient {
+      // @ts-expect-error -- a class or a method only
       @Bulkhead('inventory')
       pool = 1
     }

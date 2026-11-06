@@ -8,7 +8,7 @@ import { fallback } from '../fallback/fallback.js'
 import type { Operation, PolicyLike } from '../policy.js'
 import { ANNOTATIONS, Fallback } from './annotations.js'
 import { kAddFallback, labelOf, type ResilienceKind, type ResilienceRegistry } from './registry.js'
-import { annotatedMembers, stagesOf } from './stages.js'
+import { stagesOf, woven, wovenMembers } from './stages.js'
 
 type Member = string | symbol
 
@@ -59,19 +59,13 @@ function checkedOrder(order: readonly ResilienceKind[]): readonly ResilienceKind
 /** Where the resilience aspect sits among aspects: outside every aspect with a positive order or none. */
 export const RESILIENCE_ASPECT_ORDER = 0
 
-function annotated(cls: AnyClass, member: Member): boolean {
-  for (const annotation of ANNOTATIONS.keys()) {
-    if (reflect.effective(cls, annotation, member) !== undefined) {
-      return true
-    }
-  }
-  return false
-}
-
-/** Every method that carries a resilience annotation, in every class the container builds. */
+/**
+ * Every method that carries a resilience annotation, and every method a class-level one reaches, in every class the
+ * container builds.
+ */
 export const resiliencePointcut: Pointcut = $aop.pointcut(
-  (_descriptor, cls) => annotatedMembers(cls).size > 0,
-  (member, _descriptor, cls) => annotated(cls, member),
+  (_descriptor, cls) => wovenMembers(cls).size > 0,
+  (member, _descriptor, cls) => woven(cls, member),
 )
 
 // What one method runs through, built once, the first time it is needed. The join point is the input.
@@ -138,7 +132,7 @@ export class ResilienceAspect implements MethodAspect {
       }
     }
 
-    for (const member of annotatedMembers(cls)) {
+    for (const member of wovenMembers(cls)) {
       this.#plan(cls, member)
     }
   }

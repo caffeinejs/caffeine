@@ -231,6 +231,75 @@ describe('Resilience()', () => {
     expect(app.container.get(ResilienceRegistry).circuitBreaker('inventory').metrics().failedCalls).toBe(2)
   })
 
+  // Each layer is more specific than the one before: a value written for one preset beats one written for all.
+  it('takes an option from the most specific of defaults and preset, configured and coded', async () => {
+    const attemptsOf = async (config: object, code: (r: ResilienceBuilder) => ResilienceBuilder) => {
+      const app = await boot(Resilience(r => code(inventory(r).config(config))))
+      let attempts = 0
+      await run(
+        app.container
+          .get(ResilienceRegistry)
+          .retry('ledger')
+          .wrap(async () => {
+            attempts++
+            throw new Error('down')
+          }),
+      ).catch(() => undefined)
+      return attempts
+    }
+    const ledger = (maxAttempts?: number) => (r: ResilienceBuilder) =>
+      r.preset('ledger', p => p.retry({ maxAttempts, backoff: 0 }))
+    const defaults =
+      (maxAttempts: number, then: (r: ResilienceBuilder) => ResilienceBuilder) => (r: ResilienceBuilder) =>
+        then(r.defaults(p => p.retry({ maxAttempts })))
+
+    expect(await attemptsOf({}, ledger())).toBe(3)
+    expect(await attemptsOf({ defaults: { retry: { maxAttempts: 4 } } }, ledger())).toBe(4)
+    expect(await attemptsOf({ defaults: { retry: { maxAttempts: 4 } } }, defaults(2, ledger()))).toBe(2)
+    expect(
+      await attemptsOf(
+        { defaults: { retry: { maxAttempts: 4 } }, presets: { ledger: { retry: { maxAttempts: 6 } } } },
+        defaults(2, ledger()),
+      ),
+    ).toBe(6)
+    expect(
+      await attemptsOf(
+        { defaults: { retry: { maxAttempts: 4 } }, presets: { ledger: { retry: { maxAttempts: 6 } } } },
+        defaults(2, ledger(5)),
+      ),
+    ).toBe(5)
+  })
+
+  // Defaults shape the policies a preset has; which policies it has stays the preset's decision.
+  it('adds no policy to a preset from the defaults', async () => {
+    const app = await boot(
+      Resilience(r =>
+        inventory(r)
+          .config({ defaults: { bulkhead: { maxConcurrentCalls: 3 } } })
+          .defaults(p => p.timeLimiter({ timeoutDuration: 1 * Second }))
+          .preset('ledger', p => p.retry()),
+      ),
+    )
+    const registry = app.container.get(ResilienceRegistry)
+
+    expect(registry.has('ledger', 'retry')).toBe(true)
+    expect(registry.has('ledger', 'timeLimiter')).toBe(false)
+    expect(registry.has('ledger', 'bulkhead')).toBe(false)
+  })
+
+  it('refuses the defaults defined twice', async () => {
+    const error = await boot(
+      Resilience(r =>
+        inventory(r)
+          .defaults(p => p.retry())
+          .defaults(p => p.bulkhead()),
+      ),
+    ).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message.split('\n')[0]).toBe('Cannot define the defaults twice')
+  })
+
   // Two test applications must never share a breaker: one opened by a test leaks into every test after it otherwise.
   it('gives each application a registry of its own', async () => {
     const first = await boot(Resilience(inventory))

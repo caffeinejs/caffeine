@@ -70,13 +70,15 @@ const Preset = $t.Object({
  * `Resilience((r, { config }) => r.config(...))`.
  *
  * `presets` is a record of presets by name, each holding at most one policy of each kind:
- * `RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS=5` sets the retry of preset `inventory`. Every member is
+ * `RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS=5` sets the retry of preset `inventory`, and
+ * `RESILIENCE__DEFAULTS__RETRY__MAX_ATTEMPTS=5` that of every preset with a retry. Every member is
  * optional and nothing is defaulted here: the policies own their defaults. The durations are `$t.Duration()`, so
  * `…__TIMEOUT_DURATION=2s` is two seconds and a bare `2000` fails validation at `bootstrap()`.
  */
 export const ResilienceConfigSchema = $t.Object({
   // `$t.List`, so `RESILIENCE__ORDER=circuitBreaker,retry,rateLimiter,timeLimiter,bulkhead` is five kinds.
   order: $t.Optional($t.List($t.UnionEnum(['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']))),
+  defaults: $t.Optional(Preset),
   presets: $t.Optional($t.Record($t.String(), Preset)),
 })
 

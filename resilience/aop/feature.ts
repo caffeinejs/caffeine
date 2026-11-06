@@ -26,7 +26,7 @@ import {
   type ResilienceKind,
   ResilienceRegistry,
 } from './registry.js'
-import { annotatedMembers, stagesOf, written } from './stages.js'
+import { stagesOf, written, wovenMembers } from './stages.js'
 
 // Bound to `true` by `ResilienceHTTP()`. A retried controller needs it: without the check, a handler for any method
 // would replay.
@@ -67,29 +67,35 @@ export interface PresetConfig {
   readonly rateLimiter?: RateLimiterConfig
 }
 
-/** What `Resilience(r => r.config(...))` takes: the presets, by name, and the order. */
+/** What `Resilience(r => r.config(...))` takes: the presets, by name, the defaults and the order. */
 export interface ResilienceConfig {
   /** The order of the policies around an annotated method, as `r.order(...)` sets it. */
   readonly order?: readonly ResilienceKind[]
+  /** The options every policy of a kind starts from, as `r.defaults(...)` sets them. They never add a policy. */
+  readonly defaults?: PresetConfig
   readonly presets?: Readonly<Record<string, PresetConfig>>
 }
 
 const KINDS: readonly ResilienceKind[] = ['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']
 
-// What code sets for one option wins over what configuration sets; an option code passes as `undefined` leaves the
-// configured one in place.
-function mergedOptions(fromConfig: object | undefined, fromCode: object | undefined): object {
-  const options: Record<string, unknown> = { ...fromConfig }
-  for (const [option, value] of Object.entries(fromCode ?? {})) {
-    if (value !== undefined) {
-      options[option] = value
+type Policies = Partial<Record<ResilienceKind, object>>
+
+// Each layer wins over the ones before it, option by option; an option a layer passes as `undefined` leaves the one
+// before in place.
+function mergedOptions(...layers: (object | undefined)[]): object {
+  const options: Record<string, unknown> = {}
+  for (const layer of layers) {
+    for (const [option, value] of Object.entries(layer ?? {})) {
+      if (value !== undefined) {
+        options[option] = value
+      }
     }
   }
   return options
 }
 
 // The backoff a retry takes for the one configuration describes.
-function backoffOf(preset: string, backoff: unknown): RetryOptions['backoff'] {
+function backoffOf(where: string, backoff: unknown): RetryOptions['backoff'] {
   const { type, delay, ...options } = (typeof backoff === 'object' && backoff !== null ? backoff : {}) as {
     type?: unknown
     delay?: Duration
@@ -104,7 +110,7 @@ function backoffOf(preset: string, backoff: unknown): RetryOptions['backoff'] {
   const got = typeof type === 'string' ? `type "${type}"` : described(backoff)
   throw new ErrInvalidOption(
     errMessage(
-      `Cannot define the retry of preset "${preset}": the configured backoff must be an object of type "fixed" or "exponential", got ${got}`,
+      `Cannot define the retry of ${where}: the configured backoff must be an object of type "fixed" or "exponential", got ${got}`,
     )
       .solutions(
         "Set backoff to { type: 'exponential' } and its options, such as initialDelay: 200 * Millisecond",
@@ -115,34 +121,36 @@ function backoffOf(preset: string, backoff: unknown): RetryOptions['backoff'] {
   )
 }
 
-// A configured preset with its retry's backoff as a retry takes it.
-function withBackoff(
-  name: string,
-  preset: PresetConfig | undefined,
-): Record<ResilienceKind, object | undefined> | undefined {
-  const retry = preset?.retry
+// Configured policies with the retry's backoff as a retry takes it.
+function withBackoff(where: string, policies: PresetConfig | undefined): Policies | undefined {
+  const retry = policies?.retry
   if (retry?.backoff === undefined) {
-    return preset as Record<ResilienceKind, object | undefined> | undefined
+    return policies as Policies | undefined
   }
-  return { ...preset, retry: { ...retry, backoff: backoffOf(name, retry.backoff) } } as Record<
-    ResilienceKind,
-    object | undefined
-  >
+  return { ...policies, retry: { ...retry, backoff: backoffOf(where, retry.backoff) } }
 }
 
-// Every preset either side defines, each policy either side defines in it, merged option by option.
+// Every preset either side defines, each policy either side defines in it, merged option by option over the defaults:
+// built in, then configured defaults, coded defaults, the configured preset and the coded preset.
 function mergedPresets(
-  fromConfig: Readonly<Record<string, PresetConfig>> | undefined,
-  fromCode: Map<string, PresetDefinition>,
+  config: Partial<ResilienceConfig>,
+  fromCode: Map<string, Policies>,
+  codedDefaults: Policies | undefined,
 ): ResilienceDefinitions {
+  const configuredDefaults = withBackoff('the defaults', config.defaults)
   const presets: Record<string, PresetDefinition> = {}
-  for (const name of new Set([...Object.keys(fromConfig ?? {}), ...fromCode.keys()])) {
-    const configured = withBackoff(name, fromConfig?.[name])
-    const coded = fromCode.get(name) as Record<ResilienceKind, object | undefined> | undefined
-    const preset: Partial<Record<ResilienceKind, object>> = {}
+  for (const name of new Set([...Object.keys(config.presets ?? {}), ...fromCode.keys()])) {
+    const configured = withBackoff(`preset "${name}"`, config.presets?.[name])
+    const coded = fromCode.get(name)
+    const preset: Policies = {}
     for (const kind of KINDS) {
       if (configured?.[kind] !== undefined || coded?.[kind] !== undefined) {
-        preset[kind] = mergedOptions(configured?.[kind], coded?.[kind])
+        preset[kind] = mergedOptions(
+          configuredDefaults?.[kind],
+          codedDefaults?.[kind],
+          configured?.[kind],
+          coded?.[kind],
+        )
       }
     }
 
@@ -164,35 +172,36 @@ function mergedPresets(
  * not the order the policies run in: `p.timeLimiter().retry()` still runs the retry outside the time limiter.
  */
 export class PresetBuilder {
-  readonly #name: string
-  readonly #policies: Partial<Record<ResilienceKind, object>>
+  readonly #where: string
+  readonly #policies: Policies
 
-  constructor(name: string, policies: Partial<Record<ResilienceKind, object>>) {
-    this.#name = name
+  /** `where` names what is built in messages: `preset "inventory"` or `the defaults`. */
+  constructor(where: string, policies: Policies) {
+    this.#where = where
     this.#policies = policies
   }
 
-  /** @throws {@link ErrInvalidOption} when the preset already defines a circuit breaker. */
+  /** @throws {@link ErrInvalidOption} when it already defines a circuit breaker. */
   circuitBreaker(options: Omit<CircuitBreakerOptions, 'name'> = {}): this {
     return this.#define('circuitBreaker', options)
   }
 
-  /** @throws {@link ErrInvalidOption} when the preset already defines a retry. */
+  /** @throws {@link ErrInvalidOption} when it already defines a retry. */
   retry(options: Omit<RetryOptions, 'name'> = {}): this {
     return this.#define('retry', options)
   }
 
-  /** @throws {@link ErrInvalidOption} when the preset already defines a time limiter. */
+  /** @throws {@link ErrInvalidOption} when it already defines a time limiter. */
   timeLimiter(options: Partial<Omit<TimeLimiterOptions, 'name'>> = {}): this {
     return this.#define('timeLimiter', options)
   }
 
-  /** @throws {@link ErrInvalidOption} when the preset already defines a bulkhead. */
+  /** @throws {@link ErrInvalidOption} when it already defines a bulkhead. */
   bulkhead(options: Omit<BulkheadOptions, 'name'> = {}): this {
     return this.#define('bulkhead', options)
   }
 
-  /** @throws {@link ErrInvalidOption} when the preset already defines a rate limiter. */
+  /** @throws {@link ErrInvalidOption} when it already defines a rate limiter. */
   rateLimiter(options: Partial<Omit<RateLimiterOptions, 'name'>> = {}): this {
     return this.#define('rateLimiter', options)
   }
@@ -200,7 +209,7 @@ export class PresetBuilder {
   #define(kind: ResilienceKind, options: object): this {
     if (this.#policies[kind] !== undefined) {
       throw new ErrInvalidOption(
-        errMessage(`Cannot define the ${labelOf(kind)} of preset "${this.#name}" twice`)
+        errMessage(`Cannot define the ${labelOf(kind)} of ${this.#where} twice`)
           .solutions(`Pass every option of the ${labelOf(kind)} in one p.${kind}({ ... }) call`)
           .reference('@caffeinejs/resilience', ErrInvalidOption)
           .build(),
@@ -216,11 +225,12 @@ export class PresetBuilder {
  * classes the container builds.
  *
  * A preset is defined by code, by configuration, or both. Code wins, option by option, and an option code passes as
- * `undefined` keeps the configured one; configuration may add a policy code left out. `bootstrap()` fails when code
- * defines a preset or one of its policies twice, a preset defines no policy, a method names a preset nothing defines
- * or a policy its preset lacks, a `@Fallback` names a method its class lacks, an annotation is on a static or a
- * private method, a controller is retried without `ResilienceHTTP()`, the order does not list each kind once, or a
- * bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+ * `undefined` keeps the configured one; configuration may add a policy code left out, and the defaults fill what both
+ * leave open. `bootstrap()` fails when code defines a preset, the defaults or one of their policies twice, a preset
+ * defines no policy, a method names a preset nothing defines or a policy its preset lacks, a `@Fallback` names a
+ * method its class lacks, an annotation is on a static or a private method, a controller is retried without
+ * `ResilienceHTTP()`, the order does not list each kind once, or a bulkhead or rate limiter inside a method's time
+ * limiter may wait as long as its limit.
  *
  * ```ts
  * .install(Resilience((r, { config }) => r.config(config.resilience).preset('inventory', p => p.retry().circuitBreaker())))
@@ -231,7 +241,8 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
 
   #config: Partial<ResilienceConfig> | undefined
   #order: readonly ResilienceKind[] | undefined
-  readonly #presets = new Map<string, PresetDefinition>()
+  readonly #presets = new Map<string, Policies>()
+  #defaults: Policies | undefined
 
   /** The presets the configuration tree defines. What code sets for a preset's policy wins, option by option. */
   config(config: Partial<ResilienceConfig>): this {
@@ -266,15 +277,38 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
       )
     }
 
-    const policies: Partial<Record<ResilienceKind, object>> = {}
-    configure(new PresetBuilder(name, policies))
-    this.#presets.set(name, policies as PresetDefinition)
+    const policies: Policies = {}
+    configure(new PresetBuilder(`preset "${name}"`, policies))
+    this.#presets.set(name, policies)
+    return this
+  }
+
+  /**
+   * Sets the options every policy of a kind starts from, in every preset, over what the configuration tree's
+   * `defaults` sets. A default shapes a policy a preset defines and never adds one: `r.defaults(p => p.circuitBreaker())`
+   * gives no preset a breaker. Lowest first, an option comes from the built-in default, the configured defaults, these,
+   * the configured preset, then the preset in code.
+   *
+   * @throws {@link ErrInvalidOption} when called twice, or `configure` defines one policy twice.
+   */
+  defaults(configure: (defaults: PresetBuilder) => unknown): this {
+    if (this.#defaults !== undefined) {
+      throw new ErrInvalidOption(
+        errMessage('Cannot define the defaults twice')
+          .solutions('Define every default in one r.defaults(p => ...) call')
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
+    }
+
+    this.#defaults = {}
+    configure(new PresetBuilder('the defaults', this.#defaults))
     return this
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
     const config = this.#config ?? {}
-    const registry = new ResilienceRegistry(mergedPresets(config.presets, this.#presets))
+    const registry = new ResilienceRegistry(mergedPresets(config, this.#presets, this.#defaults))
     const aspect = new ResilienceAspect(registry, this.#order ?? config.order)
 
     // Disposed at shutdown, so no backoff or queued call holds it.
@@ -289,7 +323,7 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
       const registry = kit.container.get(ResilienceRegistry)
       for (const { binding } of kit.container.getBindingsByLabel(kController)) {
         const cls = binding.type as AnyClass | undefined
-        for (const member of cls === undefined ? [] : annotatedMembers(cls)) {
+        for (const member of cls === undefined ? [] : wovenMembers(cls)) {
           const retry = stagesOf(cls!, member, registry).stages.retry
           if (retry !== undefined) {
             throw new ErrInvalidOption(

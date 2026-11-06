@@ -23,7 +23,9 @@ describe('resilience annotations', () => {
     ['Bulkhead', () => Bulkhead('')],
     ['RateLimiter', () => RateLimiter('')],
   ])('refuses an empty name on @%s, quoting what it got', (decorator, apply) => {
-    expect(firstLine(apply)).toBe(`Cannot apply @${decorator}: the preset name must be a non-empty string, got ""`)
+    expect(firstLine(apply)).toBe(
+      `Cannot apply @${decorator}: the preset name must be a non-empty string or false, got ""`,
+    )
   })
 
   // Called from plain JavaScript, or through a cast, a decorator can get anything; the message names its kind.
@@ -34,7 +36,7 @@ describe('resilience annotations', () => {
     ['undefined', undefined],
   ])('refuses %s as a name, saying what it got', (shown, name) => {
     expect(firstLine(() => Retry(name as never))).toBe(
-      `Cannot apply @Retry: the preset name must be a non-empty string, got ${shown}`,
+      `Cannot apply @Retry: the preset name must be a non-empty string or false, got ${shown}`,
     )
   })
 

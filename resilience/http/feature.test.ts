@@ -275,6 +275,55 @@ describe('ResilienceHTTP() by default', () => {
   })
 })
 
+describe('ResilienceHTTP() on a class-level annotation', () => {
+  @Resilient('feed')
+  @Controller('/stock')
+  @Profile('rh-class')
+  class StockController {
+    @Get('/')
+    async list(): Promise<string> {
+      return 'listed'
+    }
+
+    @Post('/')
+    async add(): Promise<string> {
+      return 'added'
+    }
+  }
+  void StockController
+
+  // A class-level retry reaches every handler, the unsafe ones included: each route is checked on its own.
+  it('checks every route a class-level preset retries', async () => {
+    const error = await refusal(boot('rh-class', Resilience(instances), ResilienceHTTP()))
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect(error!.message).toContain('Cannot retry "POST /stock" (StockController.add): POST is not a retryable method')
+  })
+
+  @Resilient('feed')
+  @Controller('/stock')
+  @Profile('rh-class-opt-out')
+  class OptedOutController {
+    @Get('/')
+    async list(): Promise<string> {
+      return 'listed'
+    }
+
+    @Retry(false)
+    @Post('/')
+    async add(): Promise<string> {
+      return 'added'
+    }
+  }
+  void OptedOutController
+
+  it('boots once the unsafe route opts out of the retry', async () => {
+    const app = await boot('rh-class-opt-out', Resilience(instances), ResilienceHTTP())
+
+    expect((await app.request('/stock', { method: 'POST' })).status).toBe(200)
+  })
+})
+
 describe('ResilienceHTTP() widened', () => {
   @Controller('/orders')
   @Profile('rh-repeatable')

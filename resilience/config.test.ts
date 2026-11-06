@@ -101,6 +101,25 @@ describe('resilience configuration', () => {
   })
 })
 
+describe('configured defaults', () => {
+  it('tunes every preset that defines the policy from one environment variable', async () => {
+    vi.stubEnv('APP_RESILIENCE__DEFAULTS__RETRY__MAX_ATTEMPTS', '4')
+    const registry = await registryFrom(new EnvConfigSource({ prefix: 'APP_' }), r =>
+      r.preset('inventory', p => p.retry({ backoff: 0 })),
+    )
+    let attempts = 0
+
+    await run(
+      registry.retry('inventory').wrap(async () => {
+        attempts++
+        throw new Error('down')
+      }),
+    ).catch(() => undefined)
+
+    expect(attempts).toBe(4)
+  })
+})
+
 describe('a configured backoff', () => {
   // The delays a retry of three attempts waits, driven on the fake clock.
   async function delaysOf(registry: ResilienceRegistry): Promise<number[]> {

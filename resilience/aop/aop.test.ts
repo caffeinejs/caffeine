@@ -294,6 +294,114 @@ describe('@Resilient', () => {
   })
 })
 
+describe('class-level annotations and false', () => {
+  const definitions: ResilienceDefinitions = {
+    stock: { retry: { maxAttempts: 3, backoff: 0 }, timeLimiter: { timeoutDuration: 100 * Millisecond } },
+    ledger: { retry: { maxAttempts: 2, backoff: 0 } },
+  }
+
+  @Resilient('stock')
+  class Stock {
+    calls: Record<string, number> = {}
+
+    #count(name: string): number {
+      this.calls[name] = (this.calls[name] ?? 0) + 1
+      return this.calls[name]
+    }
+
+    async read(): Promise<string> {
+      this.#count('read')
+      throw new Error('down')
+    }
+
+    @Retry('ledger')
+    async post(): Promise<string> {
+      this.#count('post')
+      throw new Error('down')
+    }
+
+    @Retry(false)
+    async reserve(signal?: AbortSignal): Promise<string> {
+      this.#count('reserve')
+      await new Promise(resolve => setTimeout(resolve, 150))
+      signal?.throwIfAborted()
+      return 'reserved'
+    }
+
+    @Resilient(false)
+    async release(): Promise<string> {
+      this.#count('release')
+      throw new Error('down')
+    }
+
+    // Returns a promise, but without `async`: nothing at run time says so.
+    plain(): Promise<string> {
+      this.#count('plain')
+      return Promise.reject(new Error('down'))
+    }
+
+    @Fallback('cached')
+    async guarded(): Promise<string> {
+      this.#count('guarded')
+      throw new Error('down')
+    }
+
+    async cached(): Promise<string> {
+      this.#count('cached')
+      throw new Error('cache down')
+    }
+  }
+
+  it('runs every async method of the class through the class’s preset', async () => {
+    const { di } = await containerWith(di => di.bind(Stock, t => t.toSelf()), definitions)
+    const stock = di.get(Stock)
+
+    await expect(stock.read()).rejects.toThrow('down')
+
+    expect(stock.calls.read).toBe(3)
+  })
+
+  it('lets a method’s own annotation win, kind by kind', async () => {
+    const { di } = await containerWith(di => di.bind(Stock, t => t.toSelf()), definitions)
+    const stock = di.get(Stock)
+
+    await expect(stock.post()).rejects.toThrow('down')
+
+    expect(stock.calls.post).toBe(2)
+  })
+
+  it('takes one policy away with false and keeps the rest', async () => {
+    const { di } = await containerWith(di => di.bind(Stock, t => t.toSelf()), definitions)
+    const stock = di.get(Stock)
+
+    const call = stock.reserve().catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(150)
+
+    expect(await call).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(stock.calls.reserve).toBe(1)
+  })
+
+  it('keeps the class’s preset off a method with @Resilient(false)', async () => {
+    const { di } = await containerWith(di => di.bind(Stock, t => t.toSelf()), definitions)
+    const stock = di.get(Stock)
+
+    await expect(stock.release()).rejects.toThrow('down')
+
+    expect(stock.calls.release).toBe(1)
+  })
+
+  // A fallback method retried by the class would multiply every failure; a method without `async` is invisible.
+  it('reaches neither a method a @Fallback names nor one declared without async', async () => {
+    const { di } = await containerWith(di => di.bind(Stock, t => t.toSelf()), definitions)
+    const stock = di.get(Stock)
+
+    await expect(stock.plain()).rejects.toThrow('down')
+    await expect(stock.guarded()).rejects.toThrow('cache down')
+
+    expect(stock.calls).toEqual({ plain: 1, guarded: 3, cached: 1 })
+  })
+})
+
 // One fixed order, whatever order the decorators are written in: retry outside the breaker, so an open breaker fails
 // the call at once instead of being retried.
 describe('the order of the strategies', () => {
