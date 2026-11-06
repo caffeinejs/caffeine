@@ -365,16 +365,31 @@ export class Retry implements Wrapper {
       call.reject(thrown)
       return
     }
+    // A backoff function, a `retry` listener or `discard` may dispose the retry before the call joins the ones dispose()
+    // ends: each is checked for, so no call waits after dispose() returns.
+    if (this.#disposed) {
+      this.#endDisposed(call, false)
+      return
+    }
 
     if (this.#emitter.has('retry')) {
       this.#emitter.emit(
         'retry',
         failed ? { name: this.#name, attempt, delay, error } : { name: this.#name, attempt, delay, result },
       )
+      if (this.#disposed) {
+        this.#endDisposed(call, false)
+        return
+      }
     }
 
-    if (!failed && this.#discard !== undefined) {
-      detached(this.#discard, result)
+    const discard = failed ? undefined : this.#discard
+    if (discard !== undefined) {
+      detached(discard, result)
+    }
+    if (this.#disposed) {
+      this.#endDisposed(call, discard !== undefined)
+      return
     }
 
     const waiting = call as RetriedCall<unknown, unknown>

@@ -905,6 +905,137 @@ describe('retry, dispose', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  // dispose() promises that no call waits once it returns, whoever calls it: a callback the retry runs on the way to
+  // a wait included. Otherwise the call waits out its backoff and sends another attempt after the shutdown.
+  describe('from a callback the retry runs before it waits', () => {
+    // Records how the call settled, so a call left waiting reads as pending instead of hanging the test.
+    function settle(call: Promise<unknown>) {
+      const state: { outcome: unknown } = { outcome: 'pending' }
+      void call.then(
+        value => (state.outcome = { value }),
+        (error: unknown) => (state.outcome = { error }),
+      )
+      return state
+    }
+
+    it('ends the call at once when a retry listener disposes, with no second attempt', async () => {
+      const retries = retryOf({ maxAttempts: 3, backoff: 1 * Second })
+      retries.on('retry', () => retries.dispose())
+      const seen = listen(retries, 'ignored')
+      const { operation, attempts } = flaky(1)
+
+      const call = settle(run(retries.wrap(operation)))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(call.outcome).toEqual({ error: new Error('failure 1') })
+      expect(vi.getTimerCount()).toBe(0)
+      await vi.advanceTimersByTimeAsync(1 * Second)
+      expect(attempts).toEqual([1])
+      expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, error: new Error('failure 1') }]])
+    })
+
+    // Disposed before its result went to discard, the call hands the result back, as dispose() does for a waiting call
+    // whose result was never discarded.
+    it('hands back a retried result untouched when a retry listener disposes', async () => {
+      const discard = vi.fn()
+      const retries = retryOf({
+        maxAttempts: 3,
+        backoff: 1 * Second,
+        retryOnResult: result => result === 'busy',
+        discard,
+      })
+      retries.on('retry', () => retries.dispose())
+      const operation = vi.fn().mockResolvedValueOnce('busy').mockResolvedValue('ready')
+
+      const call = settle(run(retries.wrap(operation)))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(call.outcome).toEqual({ value: 'busy' })
+      expect(discard).not.toHaveBeenCalled()
+      expect(vi.getTimerCount()).toBe(0)
+      expect(operation).toHaveBeenCalledTimes(1)
+    })
+
+    it('ends the call at once when the backoff function disposes, with no retry event', async () => {
+      const retries = retryOf({
+        maxAttempts: 3,
+        backoff: () => {
+          retries.dispose()
+          return 1 * Second
+        },
+      })
+      const seen = listen(retries, 'retry', 'ignored')
+      const { operation, attempts } = flaky(1)
+
+      const call = settle(run(retries.wrap(operation)))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(call.outcome).toEqual({ error: new Error('failure 1') })
+      expect(vi.getTimerCount()).toBe(0)
+      await vi.advanceTimersByTimeAsync(1 * Second)
+      expect(attempts).toEqual([1])
+      expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, error: new Error('failure 1') }]])
+    })
+
+    // The result already went to discard, which may have released it: handing it back would hand back a closed body.
+    it('rejects with the discarded result on the error when discard disposes', async () => {
+      const retries = retryOf({
+        maxAttempts: 3,
+        backoff: 1 * Second,
+        retryOnResult: result => result === 'busy',
+        discard: () => retries.dispose(),
+      })
+      const operation = vi.fn().mockResolvedValueOnce('busy').mockResolvedValue('ready')
+
+      const call = settle(run(retries.wrap(operation)))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(call.outcome).toEqual({ error: expect.any(ErrMaxRetriesExceeded) })
+      expect((call.outcome as { error: ErrMaxRetriesExceeded }).error).toMatchObject({ attempts: 1, result: 'busy' })
+      expect(vi.getTimerCount()).toBe(0)
+      await vi.advanceTimersByTimeAsync(1 * Second)
+      expect(operation).toHaveBeenCalledTimes(1)
+    })
+
+    it('ends the call at once when retryOn disposes', async () => {
+      const retries = retryOf({
+        maxAttempts: 3,
+        backoff: 1 * Second,
+        retryOn: () => {
+          retries.dispose()
+          return true
+        },
+      })
+      const { operation, attempts } = flaky(1)
+
+      const call = settle(run(retries.wrap(operation)))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(call.outcome).toEqual({ error: new Error('failure 1') })
+      expect(vi.getTimerCount()).toBe(0)
+      expect(attempts).toEqual([1])
+    })
+
+    it('ends the call at once with its result when retryOnResult disposes', async () => {
+      const retries = retryOf({
+        maxAttempts: 3,
+        backoff: 1 * Second,
+        retryOnResult: result => {
+          retries.dispose()
+          return result === 'busy'
+        },
+      })
+      const operation = vi.fn().mockResolvedValueOnce('busy').mockResolvedValue('ready')
+
+      const call = settle(run(retries.wrap(operation)))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(call.outcome).toEqual({ value: 'busy' })
+      expect(vi.getTimerCount()).toBe(0)
+      expect(operation).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('is what a using declaration calls at the end of its block', async () => {
     const { operation } = flaky(5)
     let call: Promise<unknown> | undefined
