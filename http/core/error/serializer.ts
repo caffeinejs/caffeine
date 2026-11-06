@@ -33,7 +33,7 @@ export function defaultProblemFormats(): Map<string, ProblemFormat> {
 
 /** The `type/subtype` of a media type, lower-cased and without its parameters. */
 export function mediaTypeEssence(mediaType: string): string {
-  return mediaType.replace(/;.*$/s, '').trim().toLowerCase()
+  return mediaType.split(';', 1)[0].trim().toLowerCase()
 }
 
 /**
@@ -69,7 +69,7 @@ export function mediaTypeCharset(mediaType: string): string | undefined {
 function withoutParameters(accept: string): string {
   return splitOutsideQuotes(accept, ',')
     .map(range => {
-      const type = range.replace(/;.*$/s, '').trim()
+      const type = range.split(';', 1)[0].trim()
       const q = parametersOf(range).find(parameter => /^q=/i.test(parameter))
       return q === undefined ? type : `${type};${q}`
     })

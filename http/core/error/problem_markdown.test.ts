@@ -229,6 +229,28 @@ describe('problemMarkdown', () => {
     expect(page).not.toMatch(/[\u2028\u2029\u0085]/)
   })
 
+  // An entry names a key the client chose, and a body holds a million spaces of one: rendering it must not hold the
+  // server for as long as the client likes.
+  it('keeps a long run of spaces in one line without retrying it at every space', () => {
+    const key = ' '.repeat(100_000)
+    const problem: Problem = {
+      type: 'about:blank',
+      title: 'Unprocessable Content',
+      status: 422,
+      detail: 'Invalid request body',
+      code: 'ERR_VALIDATION',
+      errors: [
+        { code: 'ERR_VALIDATION_TYPE', detail: `${key} must be integer`, source: { in: 'body', pointer: `/${key}` } },
+      ],
+    }
+
+    const started = performance.now()
+    const page = problemMarkdown(ctx, problem)
+
+    expect(page).toContain(`- \`body /${key}\` \`ERR_VALIDATION_TYPE\`: ${key} must be integer\n`)
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+
   // YAML 1.1 reads these as a boolean or null, so a key spelled like one would not come back as a string.
   it('quotes an extension named like a YAML keyword', () => {
     const problem: Problem = {

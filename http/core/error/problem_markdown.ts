@@ -76,9 +76,10 @@ function escapeSeparators(json: string): string {
   return json.replaceAll(SEPARATORS, char => ESCAPED_SEPARATORS[char])
 }
 
-// One line, for a heading or a list item: a line break there would end it and start a block of the text's own.
+// One line, for a heading or a list item: a line break there would end it and start a block of the text's own. A run
+// of white space with a break in it becomes one space; each run is matched whole, so no space is read twice.
 function inline(text: string): string {
-  return text.replaceAll(/\s*(?:\r\n|[\r\n\u0085\u2028\u2029])\s*/g, ' ')
+  return text.replaceAll(/[\s\u0085]+/g, run => (LINE_BREAK.test(run) ? ' ' : run))
 }
 
 // Inline markup in a line of text a client may have chosen, such as a key it sent: a link with text of its own, an
