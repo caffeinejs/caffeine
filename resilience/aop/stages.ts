@@ -38,11 +38,12 @@ const STAGES: readonly (readonly [ResilienceKind, Annotation<unknown, 'class' | 
   ['bulkhead', Bulkhead, 'Bulkhead'],
 ]
 
+// The preset an annotation names, `false` when it takes the policy away, or `undefined` when there is none.
+type Named = string | false | undefined
+
 // What a stage annotation or `@Resilient` stored: the preset it names, or `false`.
-function presetOf(value: unknown): string | false | undefined {
-  return typeof value === 'object' && value !== null
-    ? (value as { preset: string | false }).preset
-    : (value as string | false | undefined)
+function presetOf(value: unknown): Named {
+  return typeof value === 'object' && value !== null ? (value as { preset: string | false }).preset : (value as Named)
 }
 
 function onClass(cls: AnyClass): boolean {
@@ -158,6 +159,32 @@ function missingPolicy(where: string, preset: string, kind: ResilienceKind, deco
   )
 }
 
+// The first candidate that names a preset or `false` decides the kind. A `@Resilient` preset that defines no policy of
+// the kind is passed over; a stage annotation's is refused.
+function firstStage(
+  where: string,
+  kind: ResilienceKind,
+  decorator: string,
+  registry: ResilienceRegistry,
+  candidates: readonly (readonly [Named, string])[],
+): StageSource | undefined {
+  for (const [preset, from] of candidates) {
+    if (preset === false) {
+      return undefined
+    }
+    if (preset === undefined) {
+      continue
+    }
+    if (registry.has(preset, kind)) {
+      return { preset, decorator: from }
+    }
+    if (from !== 'Resilient') {
+      throw missingPolicy(where, preset, kind, decorator)
+    }
+  }
+  return undefined
+}
+
 /** How a message writes the decorator that names a stage, such as `@Retry('ledger')`. */
 export function written(source: StageSource): string {
   return `@${source.decorator}('${source.preset}')`
@@ -173,7 +200,7 @@ export function written(source: StageSource): string {
  */
 export function stagesOf(cls: AnyClass, member: Member, registry: ResilienceRegistry): MethodStages {
   const where = `${cls.name}.${String(member)}`
-  const checked = (preset: string | false | undefined, decorator: string): string | false | undefined => {
+  const checked = (preset: Named, decorator: string): Named => {
     if (typeof preset === 'string' && !registry.has(preset)) {
       throw undefinedPreset(where, preset, decorator)
     }
@@ -195,24 +222,14 @@ export function stagesOf(cls: AnyClass, member: Member, registry: ResilienceRegi
     const own = checked(presetOf(reflect.get(cls, annotation, member)), decorator)
     const inherited = fromClass ? checked(presetOf(reflect.get(cls, annotation)), decorator) : undefined
     // Method before class; at each level, the stage annotation before `@Resilient`.
-    const candidates: [string | false | undefined, string][] = [
+    const source = firstStage(where, kind, decorator, registry, [
       [own, decorator],
       [resilient[0], 'Resilient'],
       [inherited, decorator],
       [resilient[1], 'Resilient'],
-    ]
-
-    for (const [preset, from] of candidates) {
-      if (preset === undefined || (from === 'Resilient' && preset !== false && !registry.has(preset, kind))) {
-        continue
-      }
-      if (preset !== false && !registry.has(preset, kind)) {
-        throw missingPolicy(where, preset, kind, decorator)
-      }
-      if (preset !== false) {
-        stages[kind] = { preset, decorator: from }
-      }
-      break
+    ])
+    if (source !== undefined) {
+      stages[kind] = source
     }
   }
 

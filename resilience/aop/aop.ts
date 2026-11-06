@@ -21,9 +21,10 @@ type Stages = { readonly [K in ResilienceKind]: Stage<K> | undefined }
 const ORDER: readonly ResilienceKind[] = ['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']
 
 function orderError(reason: string): ErrInvalidOption {
+  const kinds = ORDER.map(kind => `"${kind}"`).join(', ')
   return new ErrInvalidOption(
     errMessage(`Cannot order the resilience policies: ${reason}`)
-      .solutions(`List each of ${ORDER.map(kind => `"${kind}"`).join(', ')} once, outermost first`)
+      .solutions(`List each of ${kinds} once, outermost first`)
       .reference('@caffeinejs/resilience', ErrInvalidOption)
       .build(),
   )
@@ -40,9 +41,8 @@ function checkedOrder(order: readonly ResilienceKind[]): readonly ResilienceKind
       throw orderError('order names "fallback", which is always outermost')
     }
     if (!ORDER.includes(kind as ResilienceKind)) {
-      throw orderError(
-        `order names ${typeof kind === 'string' ? `"${kind}"` : described(kind)}, which is not a policy kind`,
-      )
+      const named = typeof kind === 'string' ? `"${kind}"` : described(kind)
+      throw orderError(`order names ${named}, which is not a policy kind`)
     }
     if (seen.has(kind)) {
       throw orderError(`order names "${String(kind)}" twice`)
@@ -269,6 +269,7 @@ export class ResilienceAspect implements MethodAspect {
 
       const outside = this.#order.filter(other => other !== kind)
       outside.splice(outside.indexOf('timeLimiter'), 0, kind)
+      const order = outside.map(other => `'${other}'`).join(', ')
       throw new ErrInvalidOption(
         errMessage(
           `Cannot weave "${where}": ${labelOf(kind)} "${waiting.name}" may wait ${formatDuration(waiting.maxWaitDuration)}, ` +
@@ -277,7 +278,7 @@ export class ResilienceAspect implements MethodAspect {
         )
           .solutions(
             `Set maxWaitDuration of ${labelOf(kind)} "${waiting.name}" below ${formatDuration(limiter.timeoutDuration)}`,
-            `Order the ${labelOf(kind)} outside the time limiter with r.order([${outside.map(other => `'${other}'`).join(', ')}])`,
+            `Order the ${labelOf(kind)} outside the time limiter with r.order([${order}])`,
           )
           .reference('@caffeinejs/resilience', ErrInvalidOption)
           .build(),

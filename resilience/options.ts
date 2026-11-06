@@ -107,8 +107,8 @@ export class Options {
 
     const classes: readonly ErrorClass[] = [...value]
     return (error: unknown) => {
-      for (let i = 0; i < classes.length; i++) {
-        if (error instanceof classes[i]!) {
+      for (const cls of classes) {
+        if (error instanceof cls) {
           return true
         }
       }

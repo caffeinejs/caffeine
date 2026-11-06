@@ -40,12 +40,12 @@ function fullMessage(
   disposed: boolean,
 ): string {
   const running = `${maxConcurrentCalls} ${maxConcurrentCalls === 1 ? 'call' : 'calls'} running`
-  const reason =
-    waited === undefined
-      ? `bulkhead is full with ${running} and ${queuedCalls} queued`
-      : disposed
-        ? `bulkhead was disposed while the call waited ${formatDuration(waited)} for a slot`
-        : `no slot freed within ${formatDuration(waited)} with ${running}`
+  let reason = `bulkhead is full with ${running} and ${queuedCalls} queued`
+  if (waited !== undefined) {
+    reason = disposed
+      ? `bulkhead was disposed while the call waited ${formatDuration(waited)} for a slot`
+      : `no slot freed within ${formatDuration(waited)} with ${running}`
+  }
   return `Cannot call "${bulkhead}": ${reason}${footer}`
 }
 

@@ -46,9 +46,10 @@ function exceededMessage(
   limitRefreshPeriod: Duration,
   disposed: boolean,
 ): string {
+  const calls = limitForPeriod === 1 ? 'call' : 'calls'
   const reason = disposed
     ? 'rate limiter was disposed while the call waited for a permit'
-    : `rate limit of ${limitForPeriod} ${limitForPeriod === 1 ? 'call' : 'calls'} per ${formatDuration(limitRefreshPeriod)} reached`
+    : `rate limit of ${limitForPeriod} ${calls} per ${formatDuration(limitRefreshPeriod)} reached`
   return `Cannot call "${rateLimiter}": ${reason}${footer}`
 }
 
@@ -169,7 +170,7 @@ export class RateLimiter implements Wrapper {
   metrics(): RateLimiterMetrics {
     this.#refresh(this.#clock.now())
     return {
-      availablePermissions: this.#permits > 0 ? this.#permits : 0,
+      availablePermissions: Math.max(this.#permits, 0),
       waitingCalls: this.#queue.size,
       rejectedCalls: this.#rejected,
     }

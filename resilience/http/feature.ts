@@ -13,9 +13,62 @@ import { getRouteGroup } from '@caffeinejs/http/decorators/registrar'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { ResilienceRegistry } from '../aop/registry.js'
-import { stagesOf, written } from '../aop/stages.js'
+import { type MethodStages, stagesOf, written } from '../aop/stages.js'
 import { ResilienceTransport } from '../aop/transport.js'
 import { ErrInvalidOption } from '../errors.js'
+
+// The route's path as a request names it: no trailing slash, and `/` for the root.
+function routePath(joined: string): string {
+  let path = joined
+  while (path.length > 1 && path.endsWith('/')) {
+    path = path.slice(0, -1)
+  }
+  return path || '/'
+}
+
+// Refuses a retry on `route` that replaying the request would make unsafe.
+function checkReplay(
+  cls: AnyClass,
+  path: string,
+  route: { readonly name: string | symbol; readonly method: readonly string[]; readonly bodyAs?: string },
+  { stages, repeatable }: MethodStages,
+  retryableMethods: ReadonlySet<string>,
+): void {
+  const retry = stages.retry
+  if (retry === undefined) {
+    return
+  }
+
+  const where = `${cls.name}.${String(route.name)}`
+  const methods = route.method.map(method => method.toUpperCase())
+  if (route.bodyAs === 'stream') {
+    throw new ErrInvalidOption(
+      errMessage(
+        `Cannot retry "${methods.join(',')} ${path}" (${where}): the route reads its body as a stream, which cannot be read twice`,
+      )
+        .solutions(
+          `Move ${written(retry)} to the outbound client method the handler calls`,
+          'Read the body as a buffer instead of a stream',
+        )
+        .reference('@caffeinejs/resilience', ErrInvalidOption)
+        .build(),
+    )
+  }
+
+  const unsafe = repeatable ? undefined : methods.find(method => !retryableMethods.has(method))
+  if (unsafe !== undefined) {
+    throw new ErrInvalidOption(
+      errMessage(`Cannot retry "${unsafe} ${path}" (${where}): ${unsafe} is not a retryable method`)
+        .solutions(
+          `Move ${written(retry)} to the outbound client method the handler calls`,
+          `Declare the handler repeatable with @${retry.decorator}('${retry.preset}', { repeatable: true }) if running it twice is safe`,
+          `Allow ${unsafe} with ResilienceHTTP(h => h.retryableMethods(...)) if every ${unsafe} handler is safe to replay`,
+        )
+        .reference('@caffeinejs/resilience', ErrInvalidOption)
+        .build(),
+    )
+  }
+}
 
 // Claims every controller for the replay check below.
 class HTTPTransport extends ResilienceTransport {
@@ -82,50 +135,8 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
       }
 
       for (const route of group.routes) {
-        const { stages, repeatable } = stagesOf(cls, route.name, registry)
-        const retry = stages.retry
-        if (retry === undefined) {
-          continue
-        }
-
-        const where = `${cls.name}.${String(route.name)}`
-        let path = `${group.prefix ?? ''}${group.path}${route.path}`
-        while (path.length > 1 && path.endsWith('/')) {
-          path = path.slice(0, -1)
-        }
-        path ||= '/'
-        if (route.bodyAs === 'stream') {
-          throw new ErrInvalidOption(
-            errMessage(
-              `Cannot retry "${route.method.map(method => method.toUpperCase()).join(',')} ${path}" (${where}): the route reads its body as a stream, which cannot be read twice`,
-            )
-              .solutions(
-                `Move ${written(retry)} to the outbound client method the handler calls`,
-                'Read the body as a buffer instead of a stream',
-              )
-              .reference('@caffeinejs/resilience', ErrInvalidOption)
-              .build(),
-          )
-        }
-
-        if (repeatable) {
-          continue
-        }
-
-        for (const method of route.method.map(verb => verb.toUpperCase())) {
-          if (!retryableMethods.has(method)) {
-            throw new ErrInvalidOption(
-              errMessage(`Cannot retry "${method} ${path}" (${where}): ${method} is not a retryable method`)
-                .solutions(
-                  `Move ${written(retry)} to the outbound client method the handler calls`,
-                  `Declare the handler repeatable with @${retry.decorator}('${retry.preset}', { repeatable: true }) if running it twice is safe`,
-                  `Allow ${method} with ResilienceHTTP(h => h.retryableMethods(...)) if every ${method} handler is safe to replay`,
-                )
-                .reference('@caffeinejs/resilience', ErrInvalidOption)
-                .build(),
-            )
-          }
-        }
+        const path = routePath(`${group.prefix ?? ''}${group.path}${route.path}`)
+        checkReplay(cls, path, route, stagesOf(cls, route.name, registry), retryableMethods)
       }
     }
   }
