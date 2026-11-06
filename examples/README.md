@@ -11,5 +11,6 @@ application architectures.
 3. [@caffeinejs/example-petstore](03-petstore): Pet store application with HTML, OpenAPI, authentication, and PostgreSQL
 4. [@caffeinejs/example-spa-dashboard](04-spa-dashboard): Single-page dashboard with authentication, CSRF protection, and static assets
 5. [@caffeinejs/example-watt](05-watt): Multiple Caffeine applications running in a Platformatic Watt runtime
+6. [@caffeinejs/example-ad-exchange](06-ad-exchange): Ad exchange that fans bid requests out to eight DSPs, three of them faulty, and stays fast with resilience policies
 
 <!-- examples:end -->
