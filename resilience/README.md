@@ -650,6 +650,54 @@ Possible Solutions:
 fallbacks included (`registry.fallbacks()`, one per method, named `Class.method`). Its `dispose()` disposes every
 instance it holds.
 
+### The attempt context
+
+A method with a time limiter receives each attempt's signal in place of its own `AbortSignal` argument, which it
+must then pass to every call below it. `r.context(...)` hands that signal, and the attempt's number, to code anywhere
+below the method instead, through an injected `ResilienceContext`:
+
+```ts
+import { AsyncLocalStorage } from 'node:async_hooks'
+
+import { ResilienceContext } from '@caffeinejs/resilience/aop'
+
+Resilience(r =>
+  r
+    .context(new AsyncLocalStorage())
+    .preset('inventory', p => p.retry({ maxAttempts: 3 }).timeLimiter({ timeoutDuration: 2 * Second })),
+)
+
+@Injectable([InventoryHTTP])
+class InventoryClient {
+  constructor(private readonly http: InventoryHTTP) {}
+
+  @Resilient('inventory')
+  async stock(id: string): Promise<Stock> {
+    return this.http.get(`/stock/${id}`) // no signal parameter
+  }
+}
+
+@Injectable([ResilienceContext])
+class InventoryHTTP {
+  constructor(private readonly attempt: ResilienceContext) {}
+
+  async get<T>(path: string): Promise<T> {
+    const res = await fetch(base + path, {
+      signal: this.attempt.signal, // aborts at 2s, attempt by attempt
+      headers: { 'x-attempt': String(this.attempt.attempt) }, // 1, 2, 3
+    })
+    return (await res.json()) as T
+  }
+}
+```
+
+- Inside nested annotated methods, the innermost attempt is the one read. Outside every attempt, `signal` and
+  `attempt` are `undefined`, so the same class works when called directly.
+- The package imports nothing from Node: any object with `run(store, callback)` and `getStore()` works. Give it a
+  storage of its own.
+- Without `r.context(...)`, `ResilienceContext` is still bound, and reading it throws `ErrInvalidOption`. The
+  method's own signal argument works either way.
+
 ### Configuration
 
 A preset is defined in code, in the configuration tree, or both. Code wins, option by option, configuration may add

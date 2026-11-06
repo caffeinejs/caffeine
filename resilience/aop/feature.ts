@@ -19,6 +19,7 @@ import type { RetryOptions } from '../retry/retry.js'
 import type { TimeLimiterOptions } from '../timelimiter/timelimiter.js'
 import { ANNOTATIONS } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
+import { checkedStorage, ResilienceContext, type ResilienceContextStorage } from './context.js'
 import {
   labelOf,
   type PresetDefinition,
@@ -243,6 +244,7 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   #order: readonly ResilienceKind[] | undefined
   readonly #presets = new Map<string, Policies>()
   #defaults: Policies | undefined
+  #storage: ResilienceContextStorage | undefined
 
   /** The presets the configuration tree defines. What code sets for a preset's policy wins, option by option. */
   config(config: Partial<ResilienceConfig>): this {
@@ -306,13 +308,26 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
+  /**
+   * Runs every attempt of an annotated method inside `storage`, so an injected {@link ResilienceContext} reads the
+   * attempt's signal and number anywhere below the method: `r.context(new AsyncLocalStorage())`. The package imports
+   * nothing from Node; any object with `run(store, callback)` and `getStore()` works.
+   *
+   * @throws {@link ErrInvalidOption} when `storage` has no `run` or no `getStore` method.
+   */
+  context(storage: ResilienceContextStorage): this {
+    this.#storage = checkedStorage(storage)
+    return this
+  }
+
   protected override configure(kit: FeatureConfigureKit<C>): void {
     const config = this.#config ?? {}
     const registry = new ResilienceRegistry(mergedPresets(config, this.#presets, this.#defaults))
-    const aspect = new ResilienceAspect(registry, this.#order ?? config.order)
+    const aspect = new ResilienceAspect(registry, this.#order ?? config.order, this.#storage)
 
     // Disposed at shutdown, so no backoff or queued call holds it.
     kit.container.bind(ResilienceRegistry, t => t.toValue(registry).preDestroy(instances => instances.dispose()))
+    kit.container.bind(ResilienceContext, t => t.toValue(new ResilienceContext(this.#storage)))
     kit.container.aspect(ResilienceAspect, s =>
       s.toValue(aspect).pointcuts(resiliencePointcut).order(RESILIENCE_ASPECT_ORDER),
     )

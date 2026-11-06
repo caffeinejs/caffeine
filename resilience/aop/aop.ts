@@ -7,6 +7,7 @@ import { described, ErrInvalidOption } from '../errors.js'
 import { fallback } from '../fallback/fallback.js'
 import type { Operation, PolicyLike } from '../policy.js'
 import { ANNOTATIONS, Fallback } from './annotations.js'
+import { Attempt, type ResilienceContextStorage } from './context.js'
 import { kAddFallback, labelOf, type ResilienceKind, type ResilienceRegistry } from './registry.js'
 import { stagesOf, woven, wovenMembers } from './stages.js'
 
@@ -82,16 +83,25 @@ type Plan = Operation<unknown, JoinPoint>
 export class ResilienceAspect implements MethodAspect {
   readonly #registry: ResilienceRegistry
   readonly #order: readonly ResilienceKind[]
+  readonly #storage: ResilienceContextStorage | undefined
+  // How many attempts each call has started, kept only with a storage.
+  readonly #attempts = new WeakMap<JoinPoint, number>()
   readonly #plans = new WeakMap<AnyClass, Map<Member, Plan>>()
 
   /**
-   * `order` lists the policy kinds outermost first, each once.
+   * `order` lists the policy kinds outermost first, each once. With `storage`, each attempt runs inside
+   * `storage.run(...)`, where a `ResilienceContext` reads it.
    *
    * @throws {@link ErrInvalidOption} when `order` leaves a kind out, names one twice or names anything else.
    */
-  constructor(registry: ResilienceRegistry, order: readonly ResilienceKind[] = ORDER) {
+  constructor(
+    registry: ResilienceRegistry,
+    order: readonly ResilienceKind[] = ORDER,
+    storage?: ResilienceContextStorage,
+  ) {
     this.#registry = registry
     this.#order = checkedOrder(order)
+    this.#storage = storage
   }
 
   /**
@@ -190,9 +200,20 @@ export class ResilienceAspect implements MethodAspect {
       .map((kind): PolicyLike | undefined => stages[kind])
       .filter((policy): policy is PolicyLike => policy !== undefined)
 
-    const method = lift<unknown, JoinPoint>(
-      (ctx, jp) => jp.proceed(...withSignal(jp.args as unknown[], ctx.signal, undefined)) as Promise<unknown>,
-    )
+    const storage = this.#storage
+    const method =
+      storage === undefined
+        ? lift<unknown, JoinPoint>(
+            (ctx, jp) => jp.proceed(...withSignal(jp.args as unknown[], ctx.signal, undefined)) as Promise<unknown>,
+          )
+        : lift<unknown, JoinPoint>((ctx, jp) => {
+            const attempt = (this.#attempts.get(jp) ?? 0) + 1
+            this.#attempts.set(jp, attempt)
+            return storage.run(
+              new Attempt(ctx.signal, attempt),
+              () => jp.proceed(...withSignal(jp.args as unknown[], ctx.signal, undefined)) as Promise<unknown>,
+            )
+          })
     const recovery = reflect.effective(cls, Fallback, member)
     if (recovery === undefined) {
       return compose(...policies)(method)
