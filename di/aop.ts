@@ -1,4 +1,6 @@
 import type { BindingDescriptor, Container } from './container_interface.js'
+import { ErrInvalidAspect } from './errors.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import type { TypedKey } from './key.js'
 import type { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { type Annotation, isAnnotated, reflect } from './reflect.js'
@@ -71,6 +73,14 @@ export interface JoinPoint<T = unknown> {
  * An advised method runs with the instance itself as `this`, so its private members (`#field`) work. An instance that
  * takes no new property, such as a frozen one, is wrapped in a proxy instead: its methods run with the proxy as
  * `this`, and a private member refuses it.
+ *
+ * Only methods are advised. Weaving reads no member, so it runs no getter, and a function a getter returns is not
+ * advised. A method the class declares is looked up on each call, so a later change to it, such as a spy on the
+ * prototype, reaches the call. An own method that is neither writable nor configurable cannot be advised: resolving
+ * its instance fails with {@link ErrInvalidAspect}.
+ *
+ * An instance is woven once, by the first container that resolves it: another container that resolves the same object
+ * runs the first container's aspects, not its own.
  */
 export interface MethodAspect<T = unknown> {
   before?(joinPoint: JoinPoint<T>): void | Promise<void>
@@ -202,61 +212,136 @@ interface ResolvedEntry {
 // Woven in place: each advised method becomes an own property of the instance that runs the chain with the instance
 // itself as `this`. A proxy would hand every method the proxy instead, and a native private member (`#field`) refuses
 // a receiver that is not the instance its class built. A call through `this` still finds the woven property first.
+//
+// A member is found by its descriptor, never read, so weaving runs no getter and advises no accessor. A method the
+// class declares is read from the prototype on each call, so a later change to it reaches the call. A method the
+// instance holds itself, such as one bound in the constructor, keeps its attributes and takes the wrapper as its value.
+//
 // An instance resolved again, such as a value binding, is woven once. One that takes no new property, such as a frozen
 // one, is proxied instead.
 const woven = new WeakSet<object>()
+
+interface AdvisedMethod {
+  readonly prop: string | symbol
+  readonly aspects: MethodAspect[]
+  // The function the instance held under `prop`, or `undefined` for a method its class declares.
+  readonly own: Function | undefined
+}
 
 function weave(instance: unknown, methodMap: Map<string | symbol, MethodAspect[]>, cls: AnyClass): unknown {
   const target = instance as Record<string | symbol, unknown>
   if (woven.has(target)) {
     return instance
   }
+  // Every method is checked before any is replaced, so a refusal leaves the instance as it was.
+  const advised = advisedMethods(target, methodMap, cls)
   if (!Object.isExtensible(target)) {
-    return proxied(target, methodMap, cls)
+    return proxied(target, advised, cls)
   }
   woven.add(target)
 
-  for (const [prop, aspects] of methodMap) {
-    const method = target[prop]
-    if (aspects.length === 0 || typeof method !== 'function') {
-      continue
+  // A plain read: `Reflect.get` with the instance as receiver costs about a fifth of an advised call.
+  const proto = Object.getPrototypeOf(target) as Record<string | symbol, Function>
+  for (const { prop, aspects, own } of advised) {
+    if (own === undefined) {
+      Object.defineProperty(target, prop, {
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        value: function (this: unknown, ...args: unknown[]) {
+          return executeChain(target, proto[prop], prop, args, aspects, cls)
+        },
+      })
+    } else {
+      Object.defineProperty(target, prop, {
+        value: function (this: unknown, ...args: unknown[]) {
+          return executeChain(target, own, prop, args, aspects, cls)
+        },
+      })
     }
-
-    Object.defineProperty(target, prop, {
-      configurable: true,
-      enumerable: false,
-      writable: true,
-      value: function (this: unknown, ...args: unknown[]) {
-        return executeChain(target, method, prop, args, aspects, cls)
-      },
-    })
   }
   return instance
 }
 
-// Every method gets the proxy as `this`, so a call through `this` is advised too, and a private member is refused.
-function proxied(
-  instance: Record<string | symbol, unknown>,
+// The members of the method map that are methods of `instance`: data properties holding a function, found by their
+// nearest descriptor without reading them.
+function advisedMethods(
+  instance: object,
   methodMap: Map<string | symbol, MethodAspect[]>,
-  cls: AnyClass,
-): unknown {
-  const wrappers = new Map<string | symbol, Function>()
+  cls: AnyClass | undefined,
+): AdvisedMethod[] {
+  const advised: AdvisedMethod[] = []
+  for (const [prop, aspects] of methodMap) {
+    const own = Object.getOwnPropertyDescriptor(instance, prop)
+    if (own !== undefined) {
+      if (typeof own.value !== 'function') {
+        continue
+      }
+      if (!own.writable && !own.configurable) {
+        throw lockedMethod(cls, instance, prop)
+      }
+      advised.push({ prop, aspects, own: own.value as Function })
+    } else if (typeof declared(Object.getPrototypeOf(instance) as object | null, prop)?.value === 'function') {
+      advised.push({ prop, aspects, own: undefined })
+    }
+  }
+  return advised
+}
+
+// The nearest declaration of `prop` up a prototype chain.
+function declared(proto: object | null, prop: string | symbol): PropertyDescriptor | undefined {
+  for (let p = proto; p !== null; p = Object.getPrototypeOf(p) as object | null) {
+    const descriptor = Object.getOwnPropertyDescriptor(p, prop)
+    if (descriptor !== undefined) {
+      return descriptor
+    }
+  }
+  return undefined
+}
+
+// A property that can be neither replaced nor proxied with another value: a proxy breaks an invariant reading it.
+function lockedMethod(cls: AnyClass | undefined, instance: object, prop: string | symbol): ErrInvalidAspect {
+  const name = cls?.name ?? (Object.getPrototypeOf(instance) as { constructor?: Function } | null)?.constructor?.name
+  const member = String(prop)
+  return new ErrInvalidAspect(
+    errMessage(
+      `Cannot weave "${name}.${member}": its own "${member}" is neither writable nor configurable, so no advice can replace it`,
+    )
+      .solutions(
+        `Declare "${member}" only as a method of "${name}", without binding or defining it on each instance`,
+        `Keep the own "${member}" writable or configurable: do not freeze the instance, or define it with writable: true`,
+        `Leave "${member}" out of the pointcut that matches "${name}"`,
+      )
+      .reference('@caffeinejs/di', ErrInvalidAspect)
+      .build(),
+  )
+}
+
+// Every method gets the proxy as `this`, so a call through `this` is advised too, and a private member is refused.
+// The proxy reads a method on each access, and keeps one wrapper per method for as long as the method stays the same.
+function proxied(instance: Record<string | symbol, unknown>, advised: AdvisedMethod[], cls: AnyClass): unknown {
+  const methods = new Map(advised.map(({ prop, aspects }) => [prop, aspects]))
+  const wrappers = new Map<string | symbol, { readonly method: Function; readonly wrapper: Function }>()
   const proxy: Record<string | symbol, unknown> = new Proxy(instance, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver)
-      const aspects = methodMap.get(prop)
-      if (aspects === undefined || aspects.length === 0 || typeof value !== 'function') {
+      const aspects = methods.get(prop)
+      if (aspects === undefined || typeof value !== 'function') {
         return value
       }
 
-      let wrapper = wrappers.get(prop)
-      if (wrapper === undefined) {
-        wrapper = function (...args: unknown[]) {
-          return executeChain(proxy, value, prop, args, aspects, cls)
+      let entry = wrappers.get(prop)
+      if (entry === undefined || entry.method !== value) {
+        const method = value
+        entry = {
+          method,
+          wrapper: function (...args: unknown[]) {
+            return executeChain(proxy, method, prop, args, aspects, cls)
+          },
         }
-        wrappers.set(prop, wrapper)
+        wrappers.set(prop, entry)
       }
-      return wrapper
+      return entry.wrapper
     },
   })
   return proxy
