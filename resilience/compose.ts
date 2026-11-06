@@ -156,7 +156,8 @@ export function decorate(
     policy(
       mark((ctx: CallContext, args: unknown[]): Promise<unknown> => {
         try {
-          const result = fn(...withSignal(args, ctx.signal, at))
+          // A call without arguments skips the copy and the spread: it is the common decorated thunk, and both cost.
+          const result = at === undefined && args.length === 0 ? fn() : fn(...withSignal(args, ctx.signal, at))
           return result instanceof Promise ? result : Promise.resolve(result)
         } catch (error) {
           return Promise.reject(error)
@@ -166,7 +167,9 @@ export function decorate(
   )
 
   return (...args: unknown[]): Promise<unknown> => {
-    const caller = (at === undefined ? args[signalIndex(args)] : args[at]) as AbortSignal | undefined
+    const i = at ?? signalIndex(args)
+    // Never `args[-1]`: reading a negative index leaves the fast element path and slows every call.
+    const caller = (i === -1 ? undefined : args[i]) as AbortSignal | undefined
     if (caller !== undefined && caller.aborted) {
       return Promise.reject(caller.reason)
     }

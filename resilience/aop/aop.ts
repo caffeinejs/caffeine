@@ -161,7 +161,9 @@ export class ResilienceAspect implements MethodAspect {
       return Promise.reject(error)
     }
 
-    const signal = jp.args[signalIndex(jp.args)] as AbortSignal | undefined
+    const i = signalIndex(jp.args)
+    // Never `args[-1]`: reading a negative index leaves the fast element path and slows every call.
+    const signal = (i === -1 ? undefined : jp.args[i]) as AbortSignal | undefined
     if (signal !== undefined && signal.aborted) {
       return Promise.reject(signal.reason)
     }
