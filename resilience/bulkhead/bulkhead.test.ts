@@ -401,6 +401,120 @@ describe('bulkhead', () => {
   })
 })
 
+// A call may wait for at most maxWaitDuration. Work whose wait has run out must not reach the dependency because its
+// timer came late: the freed slot skips it.
+describe('bulkhead, a waiting call past its wait', () => {
+  // The bulkhead's clock runs `late` ahead of the fake timers: a wait's timer the event loop has not delivered yet, as
+  // under load, while a running call settles and frees its slot.
+  function pool() {
+    const time = { late: 0 }
+    const bh = bulkheadOf({
+      maxConcurrentCalls: 1,
+      maxWaitDuration: 100 * Millisecond,
+      maxQueuedCalls: 2,
+      clock: { ...fakeTimersClock, now: () => performance.now() + time.late },
+    })
+    return { time, bh, g: gate() }
+  }
+
+  it('refuses a waiting call whose wait ran out before the slot freed, and never runs it', async () => {
+    const { time, bh, g } = pool()
+    const a = run(bh.wrap(g.operation('a')))
+    const b = outcome(run(bh.wrap(g.operation('b'))))
+
+    time.late = 200
+    g.resolve('a')
+    await a
+    expect(g.started).toEqual(['a'])
+    const { error } = (await b) as { error: Error }
+
+    expect(error).toBeInstanceOf(ErrBulkheadFull)
+    expect(error.message.split('\n')[0]).toBe('Cannot call "payments": no slot freed within 100ms with 1 call running')
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('gives the slot to the first waiting call still within its wait', async () => {
+    const { time, bh, g } = pool()
+    const a = run(bh.wrap(g.operation('a')))
+    const b = outcome(run(bh.wrap(g.operation('b'))))
+    time.late = 150
+    const c = outcome(run(bh.wrap(g.operation('c'))))
+
+    time.late = 200
+    g.resolve('a')
+    await a
+    expect(g.started).toEqual(['a', 'c'])
+    g.resolve('c')
+
+    expect(await c).toEqual({ value: 'c' })
+    expect(await b).toEqual({ error: expect.any(ErrBulkheadFull) })
+  })
+
+  it('puts the slot back in the pool when every waiting call is past its wait', async () => {
+    const { time, bh, g } = pool()
+    const a = run(bh.wrap(g.operation('a')))
+    const b = outcome(run(bh.wrap(g.operation('b'))))
+
+    time.late = 200
+    g.resolve('a')
+    await a
+    expect(bh.metrics()).toEqual({
+      availableConcurrentCalls: 1,
+      maxAllowedConcurrentCalls: 1,
+      queuedCalls: 0,
+      rejectedCalls: 1,
+    })
+    expect(await b).toEqual({ error: expect.any(ErrBulkheadFull) })
+
+    void run(bh.wrap(g.operation('d')))
+    expect(g.started).toEqual(['a', 'd'])
+  })
+
+  // The same boundary as the rate limiter: a call is past its wait only once it waited longer than allowed.
+  it('admits a waiting call whose slot frees exactly at the end of its wait', async () => {
+    const { time, bh, g } = pool()
+    const a = run(bh.wrap(g.operation('a')))
+    const b = outcome(run(bh.wrap(g.operation('b'))))
+
+    time.late = 100
+    g.resolve('a')
+    await a
+    g.resolve('b')
+
+    expect(await b).toEqual({ value: 'b' })
+    expect(g.started).toEqual(['a', 'b'])
+  })
+
+  it('reports the finished call, then each refused one, then the call that got the slot', async () => {
+    const { time, bh, g } = pool()
+    const seen = listen(bh, 'permitted', 'rejected', 'finished')
+    let atFinished: unknown
+    bh.on('finished', () => (atFinished = bh.metrics()))
+    const a = run(bh.wrap(g.operation('a')))
+    void outcome(run(bh.wrap(g.operation('b'))))
+    time.late = 150
+    void outcome(run(bh.wrap(g.operation('c'))))
+
+    time.late = 200
+    g.resolve('a')
+    await a
+
+    expect(seen).toEqual([
+      ['permitted', { name: 'payments', waited: 0 }],
+      ['finished', { name: 'payments', duration: 200 }],
+      ['rejected', { name: 'payments' }],
+      ['permitted', { name: 'payments', waited: 50 }],
+    ])
+    // Every change is made before the first event: the refusal is counted by the time the slot is reported free.
+    expect(atFinished).toEqual({
+      availableConcurrentCalls: 0,
+      maxAllowedConcurrentCalls: 1,
+      queuedCalls: 0,
+      rejectedCalls: 1,
+    })
+  })
+})
+
 describe('bulkhead, dispose', () => {
   // A shutdown must not wait for slots that free up only when running calls end.
   it('refuses every waiting call at once, leaving no timer, while the running calls keep their slots', async () => {

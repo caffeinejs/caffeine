@@ -272,19 +272,39 @@ export class Bulkhead implements Wrapper {
     return true
   }
 
-  // A call that held a slot settled: the slot goes to the first in line, or back to the pool. The slot changes hands
-  // before `finished` is emitted, so a listener that starts another call finds it where it is.
+  // A call that held a slot settled: the slot goes to the first in line still within its wait, or back to the pool.
+  // One past its wait, whose timer has not fired yet, leaves the line refused, as that timer would have refused it.
+  // The slot changes hands before `finished` is emitted, so a listener that starts another call finds it where it is.
   #release(start: number): void {
-    const duration = this.#clock.now() - start
-    const call = this.#queue.first
+    const now = this.#clock.now()
+    let call = this.#queue.first
+    let expired: Array<QueuedCall<unknown, unknown>> | undefined
+    while (call !== undefined && now - call.since > this.#maxWaitMs) {
+      this.#leave(call)
+      expired ??= []
+      expired.push(call)
+      call = this.#queue.first
+    }
     if (call === undefined) {
       this.#available++
     } else {
       this.#leave(call)
     }
+    if (expired !== undefined) {
+      this.#rejected += expired.length
+    }
 
     if (this.#emitter.has('finished')) {
-      this.#emitter.emit('finished', { name: this.#name, duration })
+      this.#emitter.emit('finished', { name: this.#name, duration: now - start })
+    }
+
+    if (expired !== undefined) {
+      for (const refused of expired) {
+        if (this.#emitter.has('rejected')) {
+          this.#emitter.emit('rejected', { name: this.#name })
+        }
+        refused.reject(this.#full(this.#maxWaitMs))
+      }
     }
 
     if (call !== undefined) {
