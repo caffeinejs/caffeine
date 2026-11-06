@@ -227,7 +227,8 @@ export class PresetBuilder {
  * defines no policy, a method names a preset nothing defines or a policy its preset lacks, a `@Fallback` names a
  * method its class lacks, an annotation is on a static or a private method, a request entrypoint is retried with no
  * transport integration installed, such as `ResilienceHTTP()` for a controller, `r.health(...)` is called twice or
- * its `critical` names a breaker it cannot watch, the order does not list each kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+ * its `critical` names a breaker it cannot watch, the order does not list each kind once, or a bulkhead or rate
+ * limiter inside a method's time limiter may wait as long as its limit.
  *
  * ```ts
  * .install(Resilience((r, { config }) => r.config(config.resilience).preset('inventory', p => p.retry().circuitBreaker())))
@@ -359,7 +360,8 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override bootstrap(kit: BootstrapKit<C>): void {
-    // A retried entrypoint replays a request: only the transport that serves it can tell whether that is safe.
+    // A retried entrypoint replays a request: only the transport that serves it can tell whether that is safe. The
+    // bootstrap kit has no getManyOptional, and getMany refuses a key nothing binds.
     const transports =
       kit.container.getBindings(ResilienceTransport).length === 0 ? [] : kit.container.getMany(ResilienceTransport)
     const claimed = new Set(transports.map(transport => transport.label))

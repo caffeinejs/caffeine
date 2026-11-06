@@ -62,7 +62,8 @@ export class ResilienceContext {
 
   /**
    * The attempt's signal, aborted at its time limit or when the caller aborts, or the caller's signal when no time
-   * limiter gives the attempt one of its own.
+   * limiter gives the attempt one of its own. A method called with no signal inside another attempt takes that
+   * attempt's signal as its caller's.
    *
    * @throws {@link ErrInvalidOption} when `Resilience()` was given no storage.
    */

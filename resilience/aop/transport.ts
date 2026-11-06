@@ -14,7 +14,6 @@ export const kEntrypoint = Symbol.for('@caffeinejs:entrypoint')
  *
  * ```ts
  * class GRPCTransport extends ResilienceTransport {
- *   readonly name = 'grpc'
  *   readonly label = kGRPCService
  * }
  *
@@ -22,8 +21,6 @@ export const kEntrypoint = Symbol.for('@caffeinejs:entrypoint')
  * ```
  */
 export abstract class ResilienceTransport {
-  /** Names the transport in messages, such as `http`. */
-  abstract readonly name: string
   /** The label the transport gives its entrypoint classes, beside {@link kEntrypoint}. */
   abstract readonly label: symbol
 }

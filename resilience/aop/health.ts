@@ -46,10 +46,11 @@ export function criticalBreakers(options: ResilienceHealthOptions, definitions: 
   }
 
   for (const name of critical as string[]) {
-    const breaker = definitions[name]?.circuitBreaker
+    const defined = Object.hasOwn(definitions, name)
+    const breaker = defined ? definitions[name]!.circuitBreaker : undefined
     if (breaker === undefined) {
       throw healthError(
-        `Cannot report the health of preset "${name}": ${name in definitions ? 'the preset defines no circuit breaker' : 'no preset by that name is defined'}`,
+        `Cannot report the health of preset "${name}": ${defined ? 'the preset defines no circuit breaker' : 'no preset by that name is defined'}`,
         `Add one with r.preset('${name}', p => p.circuitBreaker({ ... }))`,
         'Fix the name in r.health({ critical: [...] })',
       )

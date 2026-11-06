@@ -19,7 +19,6 @@ import { ErrInvalidOption } from '../errors.js'
 
 // Claims every controller for the replay check below.
 class HTTPTransport extends ResilienceTransport {
-  readonly name = 'http'
   readonly label = Keys.CONTROLLER
 }
 

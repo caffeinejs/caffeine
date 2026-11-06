@@ -9,7 +9,7 @@ import type { Operation, PolicyLike } from '../policy.js'
 import { ANNOTATIONS, Fallback } from './annotations.js'
 import { Attempt, type ResilienceContextStorage } from './context.js'
 import { kAddFallback, labelOf, type ResilienceKind, type ResilienceRegistry } from './registry.js'
-import { stagesOf, woven, wovenMembers } from './stages.js'
+import { checkClassPresets, stagesOf, woven, wovenMembers } from './stages.js'
 
 type Member = string | symbol
 
@@ -142,6 +142,7 @@ export class ResilienceAspect implements MethodAspect {
       }
     }
 
+    checkClassPresets(cls, this.#registry)
     for (const member of wovenMembers(cls)) {
       this.#plan(cls, member)
     }
@@ -157,12 +158,19 @@ export class ResilienceAspect implements MethodAspect {
     }
 
     const i = signalIndex(jp.args)
-    // Never `args[-1]`: reading a negative index leaves the fast element path and slows every call.
-    const signal = (i === -1 ? undefined : jp.args[i]) as AbortSignal | undefined
+    // Never `args[-1]`: reading a negative index leaves the fast element path and slows every call. A method given no
+    // signal runs under the attempt it is called from, so a deadline set above still reaches the code below it.
+    const signal = (i === -1 ? this.#enclosing() : jp.args[i]) as AbortSignal | undefined
     if (signal !== undefined && signal.aborted) {
       return Promise.reject(signal.reason)
     }
     return plan({ signal }, jp)
+  }
+
+  // The signal of the attempt the current code runs in, when the aspect stores attempts.
+  #enclosing(): AbortSignal | undefined {
+    const store = this.#storage?.getStore()
+    return store instanceof Attempt ? store.signal : undefined
   }
 
   #plan(cls: AnyClass, member: Member): Plan {

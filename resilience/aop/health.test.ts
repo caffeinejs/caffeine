@@ -119,6 +119,11 @@ describe('Resilience(r => r.health(...))', () => {
       'Cannot report the health of preset "payment": no preset by that name is defined',
     ],
     [
+      'a name every object inherits',
+      ['constructor'],
+      'Cannot report the health of preset "constructor": no preset by that name is defined',
+    ],
+    [
       'a preset with no breaker',
       ['ledger'],
       'Cannot report the health of preset "ledger": the preset defines no circuit breaker',

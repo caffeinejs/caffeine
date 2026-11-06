@@ -583,8 +583,10 @@ createApplication({ container, config }).install(
 - **Methods returning a promise only.** On a synchronous method or a field, the decorators are a type error.
 - **On a class.** `@Resilient` and the stage annotations also go on a class, and reach every method it declares or
   inherits with `async`, except one a `@Fallback` names. A method that returns a promise without `async` is not
-  reached, because nothing at run time says it returns one: mark it `async` or annotate it. A method's own
-  annotations win, kind by kind, and at each level a stage annotation wins over `@Resilient`.
+  reached, because nothing at run time says it returns one: mark it `async` or annotate it. A public `async` helper
+  is reached too, and a transport's replay check covers only the entrypoint methods it serves, such as a
+  controller's routes: give a helper that writes `@Retry(false)`. A method's own annotations win, kind by kind, and
+  at each level a stage annotation wins over `@Resilient`.
 - **`false` takes one away.** `@Retry(false)`, `@CircuitBreaker(false)` and the others remove the policy `@Resilient`
   or the class would give one method; `@Resilient(false)` keeps the class's preset off it, while the class's stage
   annotations still reach it.
@@ -635,8 +637,7 @@ r.defaults(p =>
   lacks, a `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a policy's
   options are out of range, a request entrypoint such as a controller is retried with no transport integration
   installed, `r.health(...)` is called twice or its `critical` names a breaker it cannot watch, the order does not
-  list each kind once, or a bulkhead or rate limiter inside a method's time limiter may
-  wait as long as its limit.
+  list each kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
 
 ```text
 ErrInvalidOption: Cannot weave "LedgerClient.post": preset "ledger" defines no time limiter
@@ -693,8 +694,9 @@ class InventoryHTTP {
 }
 ```
 
-- Inside nested annotated methods, the innermost attempt is the one read. Outside every attempt, `signal` and
-  `attempt` are `undefined`, so the same class works when called directly.
+- Inside nested annotated methods, the innermost attempt is the one read. An inner method that takes no signal runs
+  under the outer attempt's, so the outer deadline still reaches the code below it. Outside every attempt, `signal`
+  and `attempt` are `undefined`, so the same class works when called directly.
 - The package imports nothing from Node: any object with `run(store, callback)` and `getStore()` works. Give it a
   storage of its own.
 - Without `r.context(...)`, `ResilienceContext` is still bound, and reading it throws `ErrInvalidOption`. The
@@ -892,7 +894,6 @@ on the same seam. It has four duties:
 ```ts
 // kGRPCService and isIdempotent are the gRPC package's own
 class GRPCTransport extends ResilienceTransport {
-  readonly name = 'grpc'
   readonly label = kGRPCService
 }
 

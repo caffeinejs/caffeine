@@ -400,6 +400,42 @@ describe('class-level annotations and false', () => {
 
     expect(stock.calls).toEqual({ plain: 1, guarded: 3, cached: 1 })
   })
+
+  // A class-level name reaches no method until one is added: a typo must not wait that long to be reported.
+  @Resilient('stok')
+  class Misnamed {
+    read(): string {
+      return 'sync'
+    }
+  }
+
+  @TimeLimiter('ledger')
+  class Unlimited {
+    read(): string {
+      return 'sync'
+    }
+  }
+
+  it.each([
+    [
+      'a preset nothing defines',
+      Misnamed,
+      'Cannot weave "Misnamed": no preset named "stok" is defined\nPossible Solutions:\n' +
+        "  - Define it with Resilience(r => r.preset('stok', p => ...))\n" +
+        "  - Fix the name in @Resilient('stok')",
+    ],
+    [
+      'a preset that lacks the policy',
+      Unlimited,
+      'Cannot weave "Unlimited": preset "ledger" defines no time limiter\nPossible Solutions:\n' +
+        "  - Add one with r.preset('ledger', p => p.timeLimiter({ ... }))\n" +
+        '  - Name a preset that defines one in @TimeLimiter(...)',
+    ],
+  ])('refuses a class-level annotation naming %s, even with no method it reaches', async (_, cls, message) => {
+    const { di } = await containerWith(di => di.bind(cls, t => t.toSelf()), definitions)
+
+    expect(() => di.get(ResilienceAspect).prepare(cls)).toThrow(message)
+  })
 })
 
 // One fixed order, whatever order the decorators are written in: retry outside the breaker, so an open breaker fails

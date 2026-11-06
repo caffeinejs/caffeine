@@ -428,7 +428,6 @@ describe('Resilience() and transports', () => {
   }
 
   class GRPCTransport extends ResilienceTransport {
-    readonly name = 'grpc'
     readonly label = kService
   }
 

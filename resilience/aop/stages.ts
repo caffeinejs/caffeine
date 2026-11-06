@@ -113,6 +113,51 @@ export function woven(cls: AnyClass, member: Member): boolean {
   return onClass(cls) && reaches(cls, member)
 }
 
+/**
+ * Checks the presets the annotations on `cls` itself name, whether or not they reach a method.
+ *
+ * @throws {@link ErrInvalidOption} when one names a preset nothing defines, or a stage annotation names a preset that
+ * defines no policy of its kind.
+ */
+export function checkClassPresets(cls: AnyClass, registry: ResilienceRegistry): void {
+  const resilient = presetOf(reflect.get(cls, Resilient))
+  if (typeof resilient === 'string' && !registry.has(resilient)) {
+    throw undefinedPreset(cls.name, resilient, 'Resilient')
+  }
+  for (const [kind, annotation, decorator] of STAGES) {
+    const preset = presetOf(reflect.get(cls, annotation))
+    if (typeof preset === 'string' && !registry.has(preset, kind)) {
+      throw registry.has(preset)
+        ? missingPolicy(cls.name, preset, kind, decorator)
+        : undefinedPreset(cls.name, preset, decorator)
+    }
+  }
+}
+
+function undefinedPreset(where: string, preset: string, decorator: string): ErrInvalidOption {
+  return new ErrInvalidOption(
+    errMessage(`Cannot weave "${where}": no preset named "${preset}" is defined`)
+      .solutions(
+        `Define it with Resilience(r => r.preset('${preset}', p => ...))`,
+        `Fix the name in ${written({ preset, decorator })}`,
+      )
+      .reference('@caffeinejs/resilience', ErrInvalidOption)
+      .build(),
+  )
+}
+
+function missingPolicy(where: string, preset: string, kind: ResilienceKind, decorator: string): ErrInvalidOption {
+  return new ErrInvalidOption(
+    errMessage(`Cannot weave "${where}": preset "${preset}" defines no ${labelOf(kind)}`)
+      .solutions(
+        `Add one with r.preset('${preset}', p => p.${kind}({ ... }))`,
+        `Name a preset that defines one in @${decorator}(...)`,
+      )
+      .reference('@caffeinejs/resilience', ErrInvalidOption)
+      .build(),
+  )
+}
+
 /** How a message writes the decorator that names a stage, such as `@Retry('ledger')`. */
 export function written(source: StageSource): string {
   return `@${source.decorator}('${source.preset}')`
@@ -130,15 +175,7 @@ export function stagesOf(cls: AnyClass, member: Member, registry: ResilienceRegi
   const where = `${cls.name}.${String(member)}`
   const checked = (preset: string | false | undefined, decorator: string): string | false | undefined => {
     if (typeof preset === 'string' && !registry.has(preset)) {
-      throw new ErrInvalidOption(
-        errMessage(`Cannot weave "${where}": no preset named "${preset}" is defined`)
-          .solutions(
-            `Define it with Resilience(r => r.preset('${preset}', p => ...))`,
-            `Fix the name in ${written({ preset, decorator })}`,
-          )
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
+      throw undefinedPreset(where, preset, decorator)
     }
     return preset
   }
@@ -170,15 +207,7 @@ export function stagesOf(cls: AnyClass, member: Member, registry: ResilienceRegi
         continue
       }
       if (preset !== false && !registry.has(preset, kind)) {
-        throw new ErrInvalidOption(
-          errMessage(`Cannot weave "${where}": preset "${preset}" defines no ${labelOf(kind)}`)
-            .solutions(
-              `Add one with r.preset('${preset}', p => p.${kind}({ ... }))`,
-              `Name a preset that defines one in @${decorator}(...)`,
-            )
-            .reference('@caffeinejs/resilience', ErrInvalidOption)
-            .build(),
-        )
+        throw missingPolicy(where, preset, kind, decorator)
       }
       if (preset !== false) {
         stages[kind] = { preset, decorator: from }

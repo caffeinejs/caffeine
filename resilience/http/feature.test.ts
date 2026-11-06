@@ -441,7 +441,7 @@ describe('ResilienceHTTP() and how a controller is bound', () => {
   // POST handler must not slip past the check.
   it('refuses a POST handler retried by the class a controller key is bound to', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(OrdersController, t => t.toClass(RetriedOrders).labels(Keys.CONTROLLER))
+    container.bind(OrdersController, t => t.toClass(RetriedOrders).labels(Keys.CONTROLLER, Keys.ENTRYPOINT))
     const app = createWebApplication({ container, logger: false })
       .install(Resilience(instances))
       .install(ResilienceHTTP())
