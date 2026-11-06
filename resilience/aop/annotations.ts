@@ -37,7 +37,10 @@ export interface RetryAnnotation {
 }
 
 export interface FallbackAnnotationOptions {
-  /** Which errors are handed to the fallback method: a predicate, or a list of error classes. Defaults to every error. */
+  /**
+   * Which errors are handed to the fallback method: a predicate, or a list of error classes. Defaults to every error,
+   * a programming error included.
+   */
   readonly on?: ErrorMatcher
 }
 
@@ -102,6 +105,8 @@ export const RateLimiter = createAnnotation.on('method')((name: string): string 
  * arguments: `@Fallback('cachedStock')` on `stock(id)` calls `cachedStock(error, id)`.
  *
  * It wraps every other resilience annotation on the method, and never runs once the caller's signal has aborted.
+ * Without `on`, it answers every error, a bug such as a `TypeError` included, which then looks like an outage: narrow
+ * it with `on`, such as `{ on: [ErrCallRefused] }`.
  */
 export const Fallback = createAnnotation.on('method')(
   (method: string | symbol, options?: FallbackAnnotationOptions): FallbackAnnotation => {

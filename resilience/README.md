@@ -178,7 +178,13 @@ export const getStock = decorate(compose(staleStock, retries, breaker, deadline)
 The handler receives the error and the call's input, because a useful fallback needs the call's own data, such as
 the id to look up.
 
-- An error `on` declines passes through unchanged, so a bug is not hidden as an outage.
+- Without `on`, every error is answered, a bug included: a typo that throws `TypeError` on every call returns the
+  fallback's value on every call, and looks like an outage that never ends. Leaving `TypeError` out by default would
+  be wrong too, since `fetch` rejects with one when the network fails. Narrow `on` to what the fallback is for.
+- An error `on` declines passes through unchanged, and the `recovered` event carries the error it replaced, so a log
+  listener still sees it.
+- On an HTTP handler, `{ on: error => !isClientError(error) }` answers anything but the client's own mistake; see
+  [Client errors](#client-errors).
 - Once the caller's signal has aborted, the handler never runs: nobody is waiting for the value.
 - A handler that throws, or rejects, rejects the call with what it threw.
 - An `on` predicate that returns anything but a boolean rejects the call with `ErrInvalidOption`.
@@ -583,9 +589,10 @@ createApplication({ container, config }).install(
   with a negative order wraps the whole call instead. An aspect with order `0` ties with it, and the order they were
   registered in decides which runs outside: give such an aspect a non-zero order rather than rely on it.
 - **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a name twice, a method names an
-  instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static method, an
-  instance's options are out of range, a controller carries `@Retry` without `ResilienceHTTP()`, the order does not
-  list each kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+  instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static or a private
+  method, an instance's options are out of range, a controller carries `@Retry` without `ResilienceHTTP()`, the order
+  does not list each kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its
+  limit.
 - **Shutdown.** The instances are disposed when the application shuts down; see [Shutdown](#shutdown).
 
 `Resilience()` binds a `ResilienceRegistry`: inject it to use the same instances by hand, or to instrument them,

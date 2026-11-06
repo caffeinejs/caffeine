@@ -80,9 +80,9 @@ function merged<O>(
  *
  * An instance is defined by code, by configuration, or both; code wins, option by option, and an option code passes as
  * `undefined` keeps the configured one. `bootstrap()` fails when code defines a name twice, a method names an instance
- * nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static method, a controller
- * carries `@Retry` without `ResilienceHTTP()`, the order does not list each kind once, or a bulkhead or rate limiter
- * inside a method's time limiter may wait as long as its limit.
+ * nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a
+ * controller carries `@Retry` without `ResilienceHTTP()`, the order does not list each kind once, or a bulkhead or
+ * rate limiter inside a method's time limiter may wait as long as its limit.
  *
  * ```ts
  * .install(Resilience((r, { config }) => r.config(config.resilience).retry('inventory', { maxAttempts: 3 })))
@@ -238,8 +238,8 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
  *
  * @throws {@link ErrInvalidOption} at `bootstrap()` when an instance's options are out of range, code defines a name
  * twice, a method names an instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on
- * a static method, a controller carries `@Retry` without `ResilienceHTTP()`, the order does not list each kind once,
- * or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+ * a static or a private method, a controller carries `@Retry` without `ResilienceHTTP()`, the order does not list each
+ * kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
  */
 export function Resilience<C = unknown>(configure?: FeatureConfigurer<ResilienceBuilder<C>, C>): Feature<C> {
   return new ResilienceBuilder<C>(configure as never)

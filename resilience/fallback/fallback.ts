@@ -16,8 +16,9 @@ export interface FallbackOptions {
   /** Names the fallback in events and metrics. Defaults to `fallback`. */
   name?: string
   /**
-   * Which errors the handler answers: a predicate, or a list of error classes. Defaults to every error. A predicate
-   * must return a boolean; anything else rejects the call with {@link ErrInvalidOption}.
+   * Which errors the handler answers: a predicate, or a list of error classes. Defaults to every error, a programming
+   * error such as a `TypeError` included. A predicate must return a boolean; anything else rejects the call with
+   * {@link ErrInvalidOption}.
    */
   on?: ErrorMatcher
 }
