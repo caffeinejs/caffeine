@@ -10,9 +10,10 @@ import { type AnyClass, token } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
+import { exponential, type ExponentialOptions } from '../backoff.js'
 import type { BulkheadOptions } from '../bulkhead/bulkhead.js'
 import type { CircuitBreakerOptions } from '../circuitbreaker/circuitbreaker.js'
-import { ErrInvalidOption } from '../errors.js'
+import { described, ErrInvalidOption } from '../errors.js'
 import type { RateLimiterOptions } from '../ratelimiter/ratelimiter.js'
 import type { RetryOptions } from '../retry/retry.js'
 import type { TimeLimiterOptions } from '../timelimiter/timelimiter.js'
@@ -40,9 +41,17 @@ export type CircuitBreakerConfig = Omit<
   'name' | 'waitDurationInOpenState' | 'recordError' | 'ignoreError' | 'recordResult' | 'clock'
 > & { readonly waitDurationInOpenState?: Duration }
 
-/** The retry options a configuration tree can carry: data only. */
+/**
+ * A backoff a configuration tree can carry: a fixed delay, or an exponential one with the options `exponential()`
+ * takes, each defaulted as there.
+ */
+export type BackoffConfig =
+  | { readonly type: 'fixed'; readonly delay: Duration }
+  | ({ readonly type: 'exponential' } & Readonly<ExponentialOptions>)
+
+/** The retry options a configuration tree can carry: data only. A backoff code sets replaces the configured one. */
 export type RetryConfig = Omit<RetryOptions, 'name' | 'backoff' | 'retryOn' | 'retryOnResult' | 'discard' | 'clock'> & {
-  readonly backoff?: Duration
+  readonly backoff?: BackoffConfig
 }
 
 export type TimeLimiterConfig = Partial<Omit<TimeLimiterOptions, 'name' | 'discard' | 'clock'>>
@@ -79,6 +88,48 @@ function mergedOptions(fromConfig: object | undefined, fromCode: object | undefi
   return options
 }
 
+// The backoff a retry takes for the one configuration describes.
+function backoffOf(preset: string, backoff: unknown): RetryOptions['backoff'] {
+  const { type, delay, ...options } = (typeof backoff === 'object' && backoff !== null ? backoff : {}) as {
+    type?: unknown
+    delay?: Duration
+  } & ExponentialOptions
+  if (type === 'fixed') {
+    return delay
+  }
+  if (type === 'exponential') {
+    return exponential(options)
+  }
+
+  const got = typeof type === 'string' ? `type "${type}"` : described(backoff)
+  throw new ErrInvalidOption(
+    errMessage(
+      `Cannot define the retry of preset "${preset}": the configured backoff must be an object of type "fixed" or "exponential", got ${got}`,
+    )
+      .solutions(
+        "Set backoff to { type: 'exponential' } and its options, such as initialDelay: 200 * Millisecond",
+        "Set backoff to { type: 'fixed', delay } for a wait that never changes, such as delay: 1 * Second",
+      )
+      .reference('@caffeinejs/resilience', ErrInvalidOption)
+      .build(),
+  )
+}
+
+// A configured preset with its retry's backoff as a retry takes it.
+function withBackoff(
+  name: string,
+  preset: PresetConfig | undefined,
+): Record<ResilienceKind, object | undefined> | undefined {
+  const retry = preset?.retry
+  if (retry?.backoff === undefined) {
+    return preset as Record<ResilienceKind, object | undefined> | undefined
+  }
+  return { ...preset, retry: { ...retry, backoff: backoffOf(name, retry.backoff) } } as Record<
+    ResilienceKind,
+    object | undefined
+  >
+}
+
 // Every preset either side defines, each policy either side defines in it, merged option by option.
 function mergedPresets(
   fromConfig: Readonly<Record<string, PresetConfig>> | undefined,
@@ -86,7 +137,7 @@ function mergedPresets(
 ): ResilienceDefinitions {
   const presets: Record<string, PresetDefinition> = {}
   for (const name of new Set([...Object.keys(fromConfig ?? {}), ...fromCode.keys()])) {
-    const configured = fromConfig?.[name] as Record<ResilienceKind, object | undefined> | undefined
+    const configured = withBackoff(name, fromConfig?.[name])
     const coded = fromCode.get(name) as Record<ResilienceKind, object | undefined> | undefined
     const preset: Partial<Record<ResilienceKind, object>> = {}
     for (const kind of KINDS) {

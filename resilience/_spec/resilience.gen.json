@@ -130,8 +130,54 @@
                   "type": "integer"
                 },
                 "backoff": {
-                  "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "delay"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "fixed",
+                          "type": "string"
+                        },
+                        "delay": {
+                          "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "type"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "exponential",
+                          "type": "string"
+                        },
+                        "initialDelay": {
+                          "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+                          "type": "string"
+                        },
+                        "multiplier": {
+                          "minimum": 1,
+                          "type": "number"
+                        },
+                        "maxDelay": {
+                          "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+                          "type": "string"
+                        },
+                        "jitter": {
+                          "minimum": 0,
+                          "exclusiveMaximum": 1,
+                          "type": "number"
+                        }
+                      }
+                    }
+                  ]
                 },
                 "failAfterMaxAttempts": {
                   "type": "boolean"

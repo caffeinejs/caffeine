@@ -85,7 +85,8 @@ describe('resilience configuration', () => {
   // An operator defines or retunes a preset with an environment variable alone, by name.
   it('defines a preset from an environment variable, its name a key of the record', async () => {
     vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS', '5')
-    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__BACKOFF', '0')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__BACKOFF__TYPE', 'fixed')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__BACKOFF__DELAY', '0s')
     const registry = await registryFrom(new EnvConfigSource({ prefix: 'APP_' }))
     let attempts = 0
 
@@ -97,5 +98,54 @@ describe('resilience configuration', () => {
     ).catch(() => undefined)
 
     expect(attempts).toBe(5)
+  })
+})
+
+describe('a configured backoff', () => {
+  // The delays a retry of three attempts waits, driven on the fake clock.
+  async function delaysOf(registry: ResilienceRegistry): Promise<number[]> {
+    const delays: number[] = []
+    registry.retry('inventory').on('retry', e => delays.push(e.delay))
+    const call = run(
+      registry.retry('inventory').wrap(async () => {
+        throw new Error('down')
+      }),
+    ).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(10_000)
+    await call
+    return delays
+  }
+
+  // An exponential backoff spreads its waits, or every client retries in step; configuring one must keep that.
+  it('builds an exponential backoff from the environment, keeping the default jitter', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__BACKOFF__TYPE', 'exponential')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__BACKOFF__INITIAL_DELAY', '200ms')
+    const registry = await registryFrom(new EnvConfigSource({ prefix: 'APP_' }), r =>
+      r.preset('inventory', p => p.retry({ clock: fakeTimersClock })),
+    )
+
+    // 200ms then 400ms, each at the low end of a band half its width either way.
+    expect(await delaysOf(registry)).toEqual([100, 200])
+  })
+
+  it('waits exactly the delay of a fixed backoff', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const registry = await registryFrom(
+      new InlineConfigSource({
+        resilience: { presets: { inventory: { retry: { backoff: { type: 'fixed', delay: '1s' } } } } },
+      }),
+      r => r.preset('inventory', p => p.retry({ clock: fakeTimersClock })),
+    )
+
+    expect(await delaysOf(registry)).toEqual([1_000, 1_000])
+  })
+
+  // A bare duration once meant a fixed wait; refusing it fails the deployment instead of changing what it waits.
+  it('refuses a backoff written as a bare duration', async () => {
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__BACKOFF', '200ms')
+
+    await expect(registryFrom(new EnvConfigSource({ prefix: 'APP_' }))).rejects.toBeInstanceOf(ErrConfigValidation)
   })
 })

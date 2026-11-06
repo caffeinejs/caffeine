@@ -648,6 +648,17 @@ APP_RESILIENCE__ORDER=circuitBreaker,retry,rateLimiter,timeLimiter,bulkhead
 
 Durations are text with a unit: a bare `1500` fails validation at `bootstrap()`.
 
+A retry's backoff is an object, never a bare duration: `{ type: 'exponential' }` with any of `initialDelay`,
+`multiplier`, `maxDelay` and `jitter`, each defaulted as `exponential()` defaults it, or `{ type: 'fixed', delay }`
+for a wait that never changes. A backoff code sets replaces the configured one whole.
+
+```sh
+APP_RESILIENCE__PRESETS__INVENTORY__RETRY__BACKOFF__TYPE=exponential
+APP_RESILIENCE__PRESETS__INVENTORY__RETRY__BACKOFF__INITIAL_DELAY=200ms
+APP_RESILIENCE__PRESETS__LEDGER__RETRY__BACKOFF__TYPE=fixed
+APP_RESILIENCE__PRESETS__LEDGER__RETRY__BACKOFF__DELAY=1s
+```
+
 ## HTTP
 
 ```sh

@@ -34,9 +34,7 @@ const schema = $t.Object({
         $t.Record(
           $t.String(),
           $t.Object({
-            retry: $t.Optional(
-              $t.Object({ maxAttempts: $t.Optional($t.Integer()), backoff: $t.Optional($t.Duration()) }),
-            ),
+            retry: $t.Optional($t.Object({ maxAttempts: $t.Optional($t.Integer()) })),
             timeLimiter: $t.Optional($t.Object({ timeoutDuration: $t.Optional($t.Duration()) })),
             circuitBreaker: $t.Optional($t.Object({ minimumNumberOfCalls: $t.Optional($t.Integer()) })),
           }),

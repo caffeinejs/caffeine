@@ -71,7 +71,11 @@ describe('Resilience()', () => {
     const app = await boot(
       Resilience(r =>
         inventory(r)
-          .config({ presets: { polling: { retry: { maxAttempts: 5, failAfterMaxAttempts: true, backoff: 0 } } } })
+          .config({
+            presets: {
+              polling: { retry: { maxAttempts: 5, failAfterMaxAttempts: true, backoff: { type: 'fixed', delay: 0 } } },
+            },
+          })
           .preset('polling', p => p.retry({ maxAttempts: 3, retryOnResult: result => result === 'busy' })),
       ),
     )
@@ -152,6 +156,40 @@ describe('Resilience()', () => {
       expect(error).toBeInstanceOf(ErrInvalidOption)
       expect((error as Error).message.split('\n')[0]).toBe('Cannot define preset "empty": it defines no policy')
     }
+  })
+
+  // A function cannot be merged with fields: the backoff code sets replaces the configured one whole.
+  it('lets a backoff code sets replace the configured one whole', async () => {
+    const app = await boot(
+      Resilience(r =>
+        inventory(r)
+          .config({ presets: { polling: { retry: { backoff: { type: 'fixed', delay: 30 * Second } } } } })
+          .preset('polling', p => p.retry({ backoff: attempt => attempt * 10 })),
+      ),
+    )
+    const retry = app.container.get(ResilienceRegistry).retry('polling')
+    const delays: number[] = []
+    retry.on('retry', e => delays.push(e.delay))
+
+    await run(
+      retry.wrap(async () => {
+        throw new Error('down')
+      }),
+    ).catch(() => undefined)
+
+    expect(delays).toEqual([10, 20])
+  })
+
+  // Configuration read without the schema, or written by hand, can still hold yesterday's bare duration.
+  it('refuses a configured backoff that is not a fixed or an exponential one', async () => {
+    const error = await boot(
+      Resilience(r => inventory(r).config({ presets: { polling: { retry: { backoff: 200 as never } } } })),
+    ).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'Cannot define the retry of preset "polling": the configured backoff must be an object of type "fixed" or "exponential", got a number',
+    )
   })
 
   it('defines a preset named only in configuration', async () => {

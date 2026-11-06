@@ -14,6 +14,7 @@ export {
   TimeLimiter,
 } from './annotations.js'
 export {
+  type BackoffConfig,
   type BulkheadConfig,
   type CircuitBreakerConfig,
   type PresetBuilder,

@@ -23,7 +23,19 @@ const CircuitBreaker = $t.Object({
 
 const Retry = $t.Object({
   maxAttempts: $t.Optional($t.Integer({ minimum: 1 })),
-  backoff: $t.Optional($t.Duration()),
+  // An object, never a bare duration: `…__BACKOFF__TYPE=exponential` and `…__BACKOFF__INITIAL_DELAY=200ms`.
+  backoff: $t.Optional(
+    $t.Union([
+      $t.Object({ type: $t.Literal('fixed'), delay: $t.Duration() }),
+      $t.Object({
+        type: $t.Literal('exponential'),
+        initialDelay: $t.Optional($t.Duration()),
+        multiplier: $t.Optional($t.Number({ minimum: 1 })),
+        maxDelay: $t.Optional($t.Duration()),
+        jitter: $t.Optional($t.Number({ minimum: 0, exclusiveMaximum: 1 })),
+      }),
+    ]),
+  ),
   failAfterMaxAttempts: $t.Optional($t.Boolean()),
 })
 
