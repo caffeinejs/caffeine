@@ -30,7 +30,7 @@ import {
   ResilienceRegistry,
 } from './registry.js'
 import { stagesOf, written, wovenMembers } from './stages.js'
-import { kEntrypoint, ResilienceTransport } from './transport.js'
+import { ENTRYPOINT_LABELS, ResilienceTransport } from './transport.js'
 
 /** The circuit breaker options a configuration tree can carry: data only. */
 export type CircuitBreakerConfig = Omit<
@@ -384,7 +384,11 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
     const registry = kit.container.get(ResilienceRegistry)
     // The transport that claims each entrypoint class, which tells its client errors apart.
     const served = new Map<AnyClass, ResilienceTransport>()
-    for (const { binding } of kit.container.getBindingsByLabel(kEntrypoint)) {
+    // A controller from `@Controller` carries both labels: one binding, checked once.
+    const entrypoints = new Set(
+      ENTRYPOINT_LABELS.flatMap(label => kit.container.getBindingsByLabel(label).map(({ binding }) => binding)),
+    )
+    for (const binding of entrypoints) {
       const cls = binding.type as AnyClass | undefined
       if (cls === undefined) {
         continue

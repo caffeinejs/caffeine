@@ -2,9 +2,13 @@
  * The label a transport gives every class whose methods it calls on a request, such as an HTTP controller. A
  * retry on such a class replays what the request did, and a circuit breaker or a fallback on it judges errors the
  * client caused, so `Resilience()` refuses any of the three on a class that no installed
- * {@link ResilienceTransport} claims.
+ * {@link ResilienceTransport} claims. An HTTP controller bound by hand with `Keys.CONTROLLER` alone counts as one too.
  */
 export const kEntrypoint = Symbol.for('@caffeinejs:entrypoint')
+
+// The labels `Resilience()` finds request entrypoints by. A controller bound by hand may carry only the label the HTTP
+// package serves it by, so that label counts too, read by its `Symbol.for` key without importing the HTTP package.
+export const ENTRYPOINT_LABELS: readonly symbol[] = [kEntrypoint, Symbol.for('@caffeinejs/http:controller')]
 
 /**
  * A transport's integration with the resilience annotations, such as `ResilienceHTTP()`. It claims the entrypoint

@@ -507,6 +507,21 @@ describe('Resilience() and transports', () => {
     )
   })
 
+  // A controller bound by hand carries the label the HTTP package reads, and may lack the neutral one: a retry on it
+  // replays requests all the same.
+  it('refuses a retried controller bound with only the HTTP controller label', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(Resilience(inventory))
+    app.container.bind(StockService, t => t.toSelf().labels(Symbol.for('@caffeinejs/http:controller')))
+    opened.push(() => app.close())
+
+    const error = await app.bootstrap().catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'Cannot retry "StockService.get": @Retry(\'inventory\') retries a request entrypoint that no installed transport integration checks',
+    )
+  })
+
   it('leaves a retried entrypoint to the transport that claims its label', async () => {
     const app = await serve(true, StockService)
 

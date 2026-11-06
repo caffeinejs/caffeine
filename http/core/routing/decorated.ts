@@ -38,10 +38,6 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
       if (rd === undefined) {
         throw missingRouteDefinition(key.name)
       }
-      // `@Controller` gives both labels; a binding written by hand may carry only the first.
-      if (!binding.labels.includes(Keys.ENTRYPOINT)) {
-        throw unlabelledEntrypoint(key.name)
-      }
 
       const spec = rd.toRouteGroup<R>()
 
@@ -204,16 +200,4 @@ function buildErrorHandlerMap(
   }
 
   return map
-}
-
-function unlabelledEntrypoint(name: string): ErrCaffeineWebApplication {
-  return new ErrCaffeineWebApplication(
-    errMessage(
-      `Cannot build router: controller "${name}" is labelled Keys.CONTROLLER without Keys.ENTRYPOINT, so packages that act on every request entrypoint do not see it`,
-    )
-      .solutions('Bind it with .labels(Keys.CONTROLLER, Keys.ENTRYPOINT)')
-      .reference('@caffeinejs/http', ErrCaffeineWebApplication)
-      .build(),
-    'ERR_HTTP_UNLABELLED_ENTRYPOINT',
-  )
 }
