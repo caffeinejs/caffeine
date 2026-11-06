@@ -918,3 +918,19 @@ describe('retry, dispose', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 })
+
+describe('ErrMaxRetriesExceeded', () => {
+  // A logger copies an error's enumerable fields into the log line: the last result, such as a polled body holding a
+  // token, would land there with every 5xx an HTTP handler logs.
+  it('keeps the last result readable on the error and out of what a logger serializes', () => {
+    const result = { status: 'pending', sessionToken: 'tok_123' }
+
+    const error = new ErrMaxRetriesExceeded('inventory', 3, result)
+
+    expect(error.result).toBe(result)
+    expect(Object.keys(error)).toEqual(['code', 'name', 'attempts'])
+    expect(JSON.stringify(error)).toBe(
+      '{"code":"ERR_MAX_RETRIES_EXCEEDED","name":"ErrMaxRetriesExceeded","attempts":3}',
+    )
+  })
+})

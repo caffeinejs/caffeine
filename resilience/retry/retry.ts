@@ -18,7 +18,11 @@ import { sleep } from './_sleep.js'
  */
 export class ErrMaxRetriesExceeded extends ErrResilience {
   readonly attempts: number
-  readonly result: unknown
+  /**
+   * The last retryable result. It is not enumerable, so a logger that copies an error's fields leaves out what the
+   * dependency answered.
+   */
+  declare readonly result: unknown
 
   /** `ending` says why the call ended: every attempt was used, the next one was refused, or the retry was disposed. */
   constructor(
@@ -35,7 +39,7 @@ export class ErrMaxRetriesExceeded extends ErrResilience {
     )
     this.name = 'ErrMaxRetriesExceeded'
     this.attempts = attempts
-    this.result = result
+    Object.defineProperty(this, 'result', { value: result, enumerable: false })
   }
 }
 
