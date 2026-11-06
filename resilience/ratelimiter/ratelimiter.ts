@@ -2,6 +2,7 @@ import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { lift, mark } from '../compose.js'
+import { disposable } from '../dispose.js'
 import { Emitter } from '../emitter.js'
 import { ErrCallRefused, refusal } from '../errors.js'
 import { Options } from '../options.js'
@@ -69,7 +70,7 @@ interface WaitingCall<T, I> extends Waiter {
   readonly reject: (reason: unknown) => void
   readonly since: number
   // The period whose permit this call reserved.
-  readonly cycle: number
+  cycle: number
   onAbort: (() => void) | undefined
 }
 
@@ -90,10 +91,11 @@ interface WaitingCall<T, I> extends Waiter {
  * them.
  */
 export class RateLimiter implements Wrapper {
+  declare [Symbol.dispose]: () => void
   readonly #name: string
-  readonly #limitForPeriod: number
+  #limitForPeriod: number
   readonly #limitRefreshPeriod: Duration
-  readonly #maxWaitMs: number
+  #maxWaitMs: number
   readonly #captureStackTrace: boolean
   readonly #clock: Clock
   readonly #origin: number
@@ -104,6 +106,7 @@ export class RateLimiter implements Wrapper {
   #permits: number
   #rejected = 0
   #timer: unknown
+  #disposed = false
 
   constructor(options: RateLimiterOptions) {
     const o = new Options('rate limiter', options)
@@ -148,6 +151,82 @@ export class RateLimiter implements Wrapper {
     }
   }
 
+  /**
+   * Changes how many calls may start in each period, from the next period on: the current one keeps the permits it
+   * has left. The calls waiting for a permit line up again under the new limit, in the order they came, and one whose
+   * permit now lies further away than it may wait is refused with {@link ErrRateLimitExceeded}.
+   *
+   * @throws {@link ErrInvalidOption} when `limitForPeriod` is not an integer of at least 1.
+   */
+  changeLimitForPeriod(limitForPeriod: number): void {
+    const limit = new Options('rate limiter', { name: this.#name }, 'change').integer(
+      'limitForPeriod',
+      limitForPeriod,
+      1,
+    )
+    const now = this.#clock.now()
+    this.#catchUp(now)
+    this.#limitForPeriod = limit
+
+    // Every call still waiting reserved a later period, so the current one has no permit left. Lined up again, the
+    // calls fill the coming periods in order; a call that left the line no longer holds a place.
+    let kept = 0
+    let call = this.#queue.first
+    while (call !== undefined) {
+      const next = call.next as WaitingCall<unknown, unknown> | undefined
+      const cycle = this.#cycle + 1 + Math.floor(kept / limit)
+      const at = this.#origin + cycle * this.#limitRefreshPeriod
+      if (at - call.since > this.#maxWaitMs) {
+        this.#leave(call)
+        this.#refuse(call, at - now)
+      } else {
+        call.cycle = cycle
+        kept++
+      }
+      call = next
+    }
+    // Below zero, the current period has no permit left and the rest are reservations, which are now the calls kept.
+    if (this.#permits <= 0) {
+      this.#permits = -kept
+    }
+    this.#schedule()
+  }
+
+  /**
+   * Changes how long a call may wait for a permit. It applies to the calls that arrive from now on: a call already
+   * waiting keeps the permit it reserved.
+   *
+   * @throws {@link ErrInvalidOption} when `maxWaitDuration` is not a finite Duration of at least 0s.
+   */
+  changeMaxWaitDuration(maxWaitDuration: Duration): void {
+    const o = new Options('rate limiter', { name: this.#name }, 'change')
+    this.#maxWaitMs = clampDelay(
+      o.duration('maxWaitDuration', maxWaitDuration, 0),
+      `the wait of rate limiter "${this.#name}"`,
+    )
+  }
+
+  /**
+   * Refuses every call waiting for a permit now, with {@link ErrRateLimitExceeded}, and from then on refuses a call at
+   * once where it would wait, so no wait holds a shutdown. A call that finds a permit left still starts. The
+   * `[Symbol.dispose]` alias does the same.
+   */
+  dispose(): void {
+    this.#disposed = true
+    const now = this.#clock.now()
+    let call = this.#queue.first
+    while (call !== undefined) {
+      this.#leave(call)
+      this.#refuse(call, this.#origin + call.cycle * this.#limitRefreshPeriod - now)
+      call = this.#queue.first
+    }
+    // Nobody holds a later period any more, and the current one had no permit left while anybody did.
+    if (this.#permits < 0) {
+      this.#permits = 0
+    }
+    this.#schedule()
+  }
+
   wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
     const inner = lift(op)
     return mark((ctx, input) => {
@@ -170,7 +249,7 @@ export class RateLimiter implements Wrapper {
       // The permits of the coming periods go, in order, to the calls that reserved them; this call would get the next.
       const cycle = this.#cycle + Math.ceil((1 - this.#permits) / this.#limitForPeriod)
       const wait = this.#origin + cycle * this.#limitRefreshPeriod - now
-      if (wait > this.#maxWaitMs) {
+      if (wait > this.#maxWaitMs || this.#disposed) {
         this.#rejected++
         if (this.#emitter.has('rejected')) {
           this.#emitter.emit('rejected', { name: this.#name, retryAfter: wait })
@@ -240,6 +319,32 @@ export class RateLimiter implements Wrapper {
     })
   }
 
+  // Moves to the period `now` falls in and starts the calls whose period has come, as a call arriving now would.
+  #catchUp(now: number): void {
+    this.#refresh(now)
+    const first = this.#queue.first
+    if (first !== undefined && first.cycle <= this.#cycle) {
+      this.#wake()
+    }
+  }
+
+  // Takes a waiting call out of line and drops its abort listener.
+  #leave(call: WaitingCall<any, any>): void {
+    this.#queue.remove(call)
+    if (call.onAbort !== undefined) {
+      call.ctx.signal?.removeEventListener('abort', call.onAbort)
+    }
+  }
+
+  // Refuses a call that was waiting: its permit lies `retryAfter` away.
+  #refuse(call: WaitingCall<any, any>, retryAfter: Duration): void {
+    this.#rejected++
+    if (this.#emitter.has('rejected')) {
+      this.#emitter.emit('rejected', { name: this.#name, retryAfter })
+    }
+    call.reject(this.#exceeded(retryAfter))
+  }
+
   // Moves to the period `now` falls in, granting a full set of permits per period passed, less what was reserved.
   #refresh(now: number): void {
     const cycle = Math.floor((now - this.#origin) / this.#limitRefreshPeriod)
@@ -280,10 +385,7 @@ export class RateLimiter implements Wrapper {
 
     let call = this.#queue.first
     while (call !== undefined && call.cycle <= cycle) {
-      this.#queue.remove(call)
-      if (call.onAbort !== undefined) {
-        call.ctx.signal?.removeEventListener('abort', call.onAbort)
-      }
+      this.#leave(call)
       this.#admit(call, now)
       call = this.#queue.first
     }
@@ -301,6 +403,8 @@ export class RateLimiter implements Wrapper {
     void call.inner(call.ctx, call.input).then(call.resolve, call.reject)
   }
 }
+
+disposable(RateLimiter)
 
 /**
  * Creates a {@link RateLimiter}.

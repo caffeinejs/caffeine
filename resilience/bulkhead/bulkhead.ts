@@ -2,6 +2,7 @@ import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { lift, mark } from '../compose.js'
+import { disposable } from '../dispose.js'
 import { Emitter } from '../emitter.js'
 import { ErrCallRefused, refusal } from '../errors.js'
 import { Options } from '../options.js'
@@ -93,6 +94,7 @@ interface QueuedCall<T, I> extends Waiter {
  * a call does not free the slot while the operation is still running.
  */
 export class Bulkhead implements Wrapper {
+  declare [Symbol.dispose]: () => void
   readonly #name: string
   readonly #maxConcurrentCalls: number
   readonly #maxWaitMs: number
@@ -103,6 +105,7 @@ export class Bulkhead implements Wrapper {
   readonly #emitter = new Emitter<BulkheadEvents>()
   #available: number
   #rejected = 0
+  #disposed = false
 
   constructor(options: BulkheadOptions) {
     const o = new Options('bulkhead', options)
@@ -137,6 +140,23 @@ export class Bulkhead implements Wrapper {
     }
   }
 
+  /**
+   * Refuses every call waiting for a slot now, with {@link ErrBulkheadFull}, and from then on refuses a call at once
+   * where it would wait, so no wait holds a shutdown. A call that finds a free slot still starts, and running calls
+   * keep theirs. The `[Symbol.dispose]` alias does the same.
+   */
+  dispose(): void {
+    this.#disposed = true
+    const now = this.#clock.now()
+    let call = this.#queue.first
+    while (call !== undefined) {
+      this.#leave(call)
+      this.#refused()
+      call.reject(this.#full(now - call.since))
+      call = this.#queue.first
+    }
+  }
+
   wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
     const inner = lift(op)
     return mark((ctx, input) => {
@@ -159,7 +179,7 @@ export class Bulkhead implements Wrapper {
         )
       }
 
-      if (this.#maxWaitMs === 0 || this.#queue.size >= this.#maxQueuedCalls) {
+      if (this.#maxWaitMs === 0 || this.#queue.size >= this.#maxQueuedCalls || this.#disposed) {
         this.#refused()
         // Returned, not thrown: throwing costs more than the rest of the refusal together.
         return Promise.reject(this.#full(undefined))
@@ -280,6 +300,8 @@ export class Bulkhead implements Wrapper {
     }
   }
 }
+
+disposable(Bulkhead)
 
 /**
  * Creates a {@link Bulkhead}.

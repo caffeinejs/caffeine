@@ -7,6 +7,7 @@ import { fakeTimersClock } from '../clock.testkit.js'
 import { compose, run } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
 import type { CallContext } from '../policy.js'
+import { unhandledRejections } from '../unhandled.testkit.js'
 import { ErrRateLimitExceeded, rateLimiter, type RateLimiterEvents, type RateLimiterOptions } from './ratelimiter.js'
 
 beforeEach(() => {
@@ -375,5 +376,189 @@ describe('rate limiter on a busy event loop', () => {
     await Promise.all([b, c])
 
     expect(order).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('rate limiter, changing its limits', () => {
+  // A partner that lowers its quota mid-day must not see the period already under way change its count.
+  it('applies a new limitForPeriod from the next period, leaving the current one its permits', async () => {
+    const quota = limiterOf({ limitForPeriod: 2 })
+    const { starts, operation } = recorder()
+    await run(quota.wrap(operation('a')))
+
+    quota.changeLimitForPeriod(5)
+
+    await run(quota.wrap(operation('b')))
+    expect(await run(quota.wrap(operation('c'))).catch((error: unknown) => error)).toBeInstanceOf(ErrRateLimitExceeded)
+    await vi.advanceTimersByTimeAsync(1_000)
+    await Promise.all(['d', 'e', 'f', 'g', 'h'].map(id => run(quota.wrap(operation(id)))))
+    expect(await run(quota.wrap(operation('i'))).catch((error: unknown) => error)).toBeInstanceOf(ErrRateLimitExceeded)
+    expect(starts.map(([id, at]) => `${id}@${at}`)).toEqual([
+      'a@0',
+      'b@0',
+      'd@1000',
+      'e@1000',
+      'f@1000',
+      'g@1000',
+      'h@1000',
+    ])
+  })
+
+  // Calls that reserved a period under the old limit would otherwise start more calls in it than the new one allows.
+  it('lines the waiting calls up again under a lower limit, refusing those that would now wait too long', async () => {
+    const quota = limiterOf({ limitForPeriod: 2, maxWaitDuration: 2 * Second })
+    const { starts, operation } = recorder()
+    const calls = ['a', 'b', 'c', 'd', 'e', 'f'].map(id =>
+      run(quota.wrap(operation(id))).catch((error: unknown) => error),
+    )
+    expect(quota.metrics().waitingCalls).toBe(4)
+
+    quota.changeLimitForPeriod(1)
+
+    expect(quota.metrics()).toMatchObject({ waitingCalls: 2, rejectedCalls: 2 })
+    await vi.advanceTimersByTimeAsync(2 * Second)
+    const outcomes = await Promise.all(calls)
+    expect(outcomes.slice(0, 4)).toEqual(['a', 'b', 'c', 'd'])
+    // Once e is refused, f would take its place in the third period, still past its wait.
+    expect(outcomes.slice(4).map(error => (error as ErrRateLimitExceeded).retryAfter)).toEqual([3_000, 3_000])
+    expect(starts.map(([id, at]) => `${id}@${at}`)).toEqual(['a@0', 'b@0', 'c@1000', 'd@2000'])
+  })
+
+  it('moves the waiting calls forward under a higher limit', async () => {
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
+    const { starts, operation } = recorder()
+    const calls = ['a', 'b', 'c', 'd'].map(id => run(quota.wrap(operation(id))))
+
+    quota.changeLimitForPeriod(3)
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    await Promise.all(calls)
+    expect(starts.map(([id, at]) => `${id}@${at}`)).toEqual(['a@0', 'b@1000', 'c@1000', 'd@1000'])
+    const e = run(quota.wrap(operation('e')))
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    await e
+    expect(starts.at(-1)).toEqual(['e', 2_000])
+  })
+
+  it('lets a later call wait as long as a new maxWaitDuration allows, leaving waiting calls their permit', async () => {
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 1 * Second })
+    const { starts, operation } = recorder()
+    const calls = ['a', 'b'].map(id => run(quota.wrap(operation(id))))
+
+    quota.changeMaxWaitDuration(0)
+    expect(await run(quota.wrap(operation('c'))).catch((error: unknown) => error)).toBeInstanceOf(ErrRateLimitExceeded)
+    quota.changeMaxWaitDuration(5 * Second)
+    calls.push(run(quota.wrap(operation('d'))))
+    await vi.advanceTimersByTimeAsync(2 * Second)
+
+    await Promise.all(calls)
+    expect(starts.map(([id, at]) => `${id}@${at}`)).toEqual(['a@0', 'b@1000', 'd@2000'])
+  })
+
+  it.each([
+    [
+      'limitForPeriod',
+      (quota: ReturnType<typeof limiterOf>) => quota.changeLimitForPeriod(0),
+      'an integer of at least 1, got 0',
+    ],
+    [
+      'maxWaitDuration',
+      (quota: ReturnType<typeof limiterOf>) => quota.changeMaxWaitDuration(-1),
+      'a finite Duration of at least 0s, got -1ms',
+    ],
+  ])('refuses an invalid %s, keeping the one it had', (option, change, reason) => {
+    const quota = limiterOf()
+
+    expect(() => change(quota)).toThrow(ErrInvalidOption)
+    expect(() => change(quota)).toThrow(`Cannot change rate limiter "partner-api": ${option} must be ${reason}`)
+    expect(quota.metrics().availablePermissions).toBe(2)
+  })
+})
+
+describe('rate limiter, dispose', () => {
+  // A shutdown must not wait for the periods its waiting calls reserved.
+  it('refuses every waiting call at once with the time its permit was away, leaving no timer', async () => {
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
+    const { starts, operation } = recorder()
+    await run(quota.wrap(operation('a')))
+    const waiting = ['b', 'c'].map(id => run(quota.wrap(operation(id))).catch((error: unknown) => error))
+    await vi.advanceTimersByTimeAsync(400)
+
+    quota.dispose()
+
+    const refused = (await Promise.all(waiting)) as ErrRateLimitExceeded[]
+    expect(refused.map(error => error.retryAfter)).toEqual([600, 1_600])
+    expect(refused.every(error => error instanceof ErrRateLimitExceeded)).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(quota.metrics()).toMatchObject({ waitingCalls: 0, rejectedCalls: 2 })
+    expect(starts.map(([id]) => id)).toEqual(['a'])
+  })
+
+  it('still starts a call that finds a permit, and refuses at once one that would wait', async () => {
+    const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
+    const { operation } = recorder()
+    quota.dispose()
+
+    await expect(run(quota.wrap(operation('a')))).resolves.toBe('a')
+    const refused = await run(quota.wrap(operation('b'))).catch((error: unknown) => error)
+
+    expect(refused).toBeInstanceOf(ErrRateLimitExceeded)
+    expect((refused as ErrRateLimitExceeded).retryAfter).toBe(1_000)
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    await expect(run(quota.wrap(operation('c')))).resolves.toBe('c')
+  })
+
+  it('is what a using declaration calls at the end of its block', async () => {
+    const { operation } = recorder()
+    let waiting: Promise<unknown> | undefined
+    {
+      using quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
+      await run(quota.wrap(operation('a')))
+      waiting = run(quota.wrap(operation('b'))).catch((error: unknown) => error)
+    }
+
+    expect(await waiting).toBeInstanceOf(ErrRateLimitExceeded)
+  })
+})
+
+describe('rate limiter, unhandled rejections', () => {
+  // Every way a call can end must settle the caller's promise and leave no other one rejected behind it.
+  it('leaves no rejection unhandled, whichever way a call ends', async () => {
+    const reasons = await unhandledRejections(async () => {
+      const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 2 * Second })
+      const caller = new AbortController()
+      const calls = [
+        run(
+          quota.wrap(async () => {
+            throw new Error('down')
+          }),
+        ),
+        run(
+          quota.wrap(async () => 'aborted'),
+          caller.signal,
+        ),
+        run(
+          quota.wrap(async () => {
+            throw new Error('down after waiting')
+          }),
+        ),
+        run(quota.wrap(async () => 'refused when the limit drops')),
+        run(quota.wrap(async () => 'refused at once')),
+      ].map(call => call.catch(() => undefined))
+      caller.abort()
+      await vi.advanceTimersByTimeAsync(1 * Second)
+      const disposed = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
+      calls.push(
+        ...[run(disposed.wrap(async () => 'ok')), run(disposed.wrap(async () => 'disposed'))].map(call =>
+          call.catch(() => undefined),
+        ),
+      )
+      quota.changeLimitForPeriod(1)
+      disposed.dispose()
+      await vi.advanceTimersByTimeAsync(2 * Second)
+      await Promise.all(calls)
+    })
+
+    expect(reasons).toEqual([])
   })
 })

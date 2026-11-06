@@ -8,6 +8,7 @@ import { compose, run } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
 import type { CallContext, Operation } from '../policy.js'
 import { timeLimiter } from '../timelimiter/timelimiter.js'
+import { unhandledRejections } from '../unhandled.testkit.js'
 import { bulkhead, type BulkheadEvents, type BulkheadOptions, ErrBulkheadFull } from './bulkhead.js'
 
 beforeEach(() => {
@@ -385,5 +386,84 @@ describe('bulkhead', () => {
     } finally {
       errorClass.stackTraceLimit = original
     }
+  })
+})
+
+describe('bulkhead, dispose', () => {
+  // A shutdown must not wait for slots that free up only when running calls end.
+  it('refuses every waiting call at once, leaving no timer, while the running calls keep their slots', async () => {
+    const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 10 * Second, maxQueuedCalls: 2 })
+    const g = gate()
+    const running = run(pool.wrap(g.operation('a')))
+    const waiting = ['b', 'c'].map(id => run(pool.wrap(g.operation(id))).catch((error: unknown) => error))
+    await vi.advanceTimersByTimeAsync(300)
+
+    pool.dispose()
+
+    for (const refused of await Promise.all(waiting)) {
+      expect(refused).toBeInstanceOf(ErrBulkheadFull)
+      expect((refused as Error).message).toContain('no slot freed within 300ms with 1 call running')
+    }
+    expect(vi.getTimerCount()).toBe(0)
+    expect(pool.metrics()).toMatchObject({ availableConcurrentCalls: 0, queuedCalls: 0, rejectedCalls: 2 })
+    g.resolve('a')
+    await expect(running).resolves.toBe('a')
+    expect(g.started).toEqual(['a'])
+    expect(pool.metrics().availableConcurrentCalls).toBe(1)
+  })
+
+  it('still starts a call that finds a free slot, and refuses at once one that would wait', async () => {
+    const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 10 * Second })
+    const g = gate()
+    pool.dispose()
+
+    const running = run(pool.wrap(g.operation('a')))
+    const refused = await run(pool.wrap(g.operation('b'))).catch((error: unknown) => error)
+
+    expect(refused).toBeInstanceOf(ErrBulkheadFull)
+    expect(pool.metrics().queuedCalls).toBe(0)
+    g.resolve('a')
+    await expect(running).resolves.toBe('a')
+  })
+
+  it('is what a using declaration calls at the end of its block', async () => {
+    const g = gate()
+    let waiting: Promise<unknown> | undefined
+    {
+      using pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 10 * Second })
+      void run(pool.wrap(g.operation('a')))
+      waiting = run(pool.wrap(g.operation('b'))).catch((error: unknown) => error)
+    }
+
+    expect(await waiting).toBeInstanceOf(ErrBulkheadFull)
+  })
+})
+
+describe('bulkhead, unhandled rejections', () => {
+  // Every way a call can end must settle the caller's promise and leave no other one rejected behind it.
+  it('leaves no rejection unhandled, whichever way a call ends', async () => {
+    const reasons = await unhandledRejections(async () => {
+      const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 100 * Millisecond, maxQueuedCalls: 3 })
+      const disposed = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 10 * Second })
+      const g = gate()
+      const caller = new AbortController()
+      const calls = [
+        run(pool.wrap(g.operation('failing'))),
+        run(pool.wrap(g.operation('timed out'))),
+        run(pool.wrap(g.operation('aborted')), caller.signal),
+        run(pool.wrap(g.operation('waiting'))),
+        run(pool.wrap(g.operation('refused'))),
+        run(disposed.wrap(g.operation('held'))),
+        run(disposed.wrap(g.operation('disposed'))),
+      ].map(call => call.catch(() => undefined))
+      caller.abort()
+      await vi.advanceTimersByTimeAsync(100)
+      g.reject('failing', new Error('down'))
+      disposed.dispose()
+      g.reject('held', new Error('down'))
+      await Promise.all(calls)
+    })
+
+    expect(reasons).toEqual([])
   })
 })

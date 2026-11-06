@@ -85,4 +85,62 @@ describe('rate limiter (property)', () => {
     expect(violations).toEqual([])
     expect(quota.metrics().waitingCalls).toBe(0)
   })
+
+  // A quota a partner changes mid-day: the period under way keeps the old limit, every later one holds the new one,
+  // and the calls waiting at the change never wait longer than they were allowed to.
+  it.prop(
+    [
+      fc.integer({ min: 1, max: 3 }),
+      fc.integer({ min: 1, max: 3 }),
+      fc.integer({ min: 0, max: 1_500 }),
+      fc.integer({ min: 0, max: 1_000 }),
+      fc.array(arrival, { minLength: 1, maxLength: 40 }),
+    ],
+    { numRuns: 200 },
+  )(
+    'holds the old limit until the period ends and the new one after',
+    async (before, after, changeAt, maxWait, arrivals) => {
+      vi.clearAllTimers()
+      const period = 200
+      const origin = performance.now()
+      const quota = rateLimiter({
+        name: 'partner-api',
+        limitForPeriod: before,
+        limitRefreshPeriod: period * Millisecond,
+        maxWaitDuration: maxWait * Millisecond,
+        clock: fakeTimersClock,
+      })
+      const startsPerPeriod = new Map<number, number>()
+      const waits: number[] = []
+      const changedIn = Math.floor(changeAt / period)
+
+      setTimeout(() => quota.changeLimitForPeriod(after), changeAt)
+      for (const { at, abortAfter } of arrivals) {
+        setTimeout(() => {
+          const controller = new AbortController()
+          if (abortAfter !== undefined) {
+            setTimeout(() => controller.abort(), abortAfter)
+          }
+          const arrived = performance.now()
+          run(
+            quota.wrap(async () => {
+              const now = performance.now()
+              const cycle = Math.floor((now - origin) / period)
+              startsPerPeriod.set(cycle, (startsPerPeriod.get(cycle) ?? 0) + 1)
+              waits.push(now - arrived)
+            }),
+            controller.signal,
+          ).catch(() => undefined)
+        }, at)
+      }
+
+      await vi.advanceTimersByTimeAsync(1_500 + maxWait + period)
+
+      for (const [cycle, starts] of startsPerPeriod) {
+        expect(starts).toBeLessThanOrEqual(cycle > changedIn ? after : before)
+      }
+      expect(Math.max(...waits, 0)).toBeLessThanOrEqual(maxWait)
+      expect(quota.metrics().waitingCalls).toBe(0)
+    },
+  )
 })
