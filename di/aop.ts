@@ -67,6 +67,10 @@ export interface JoinPoint<T = unknown> {
  * 3. `afterReturn` on success — always receives the resolved value, never a raw Promise.
  * 4. `afterThrow` on error.
  * 5. `after` always. It works as a final catch-all handler.
+ *
+ * An advised method runs with the instance itself as `this`, so its private members (`#field`) work. An instance that
+ * takes no new property, such as a frozen one, is wrapped in a proxy instead: its methods run with the proxy as
+ * `this`, and a private member refuses it.
  */
 export interface MethodAspect<T = unknown> {
   before?(joinPoint: JoinPoint<T>): void | Promise<void>
@@ -198,13 +202,17 @@ interface ResolvedEntry {
 // Woven in place: each advised method becomes an own property of the instance that runs the chain with the instance
 // itself as `this`. A proxy would hand every method the proxy instead, and a native private member (`#field`) refuses
 // a receiver that is not the instance its class built. A call through `this` still finds the woven property first.
-// An instance resolved again, such as a value binding, is woven once.
+// An instance resolved again, such as a value binding, is woven once. One that takes no new property, such as a frozen
+// one, is proxied instead.
 const woven = new WeakSet<object>()
 
 function weave(instance: unknown, methodMap: Map<string | symbol, MethodAspect[]>, cls: AnyClass): unknown {
   const target = instance as Record<string | symbol, unknown>
   if (woven.has(target)) {
     return instance
+  }
+  if (!Object.isExtensible(target)) {
+    return proxied(target, methodMap, cls)
   }
   woven.add(target)
 
@@ -224,6 +232,34 @@ function weave(instance: unknown, methodMap: Map<string | symbol, MethodAspect[]
     })
   }
   return instance
+}
+
+// Every method gets the proxy as `this`, so a call through `this` is advised too, and a private member is refused.
+function proxied(
+  instance: Record<string | symbol, unknown>,
+  methodMap: Map<string | symbol, MethodAspect[]>,
+  cls: AnyClass,
+): unknown {
+  const wrappers = new Map<string | symbol, Function>()
+  const proxy: Record<string | symbol, unknown> = new Proxy(instance, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver)
+      const aspects = methodMap.get(prop)
+      if (aspects === undefined || aspects.length === 0 || typeof value !== 'function') {
+        return value
+      }
+
+      let wrapper = wrappers.get(prop)
+      if (wrapper === undefined) {
+        wrapper = function (...args: unknown[]) {
+          return executeChain(proxy, value, prop, args, aspects, cls)
+        }
+        wrappers.set(prop, wrapper)
+      }
+      return wrapper
+    },
+  })
+  return proxy
 }
 
 function buildMethodMap(

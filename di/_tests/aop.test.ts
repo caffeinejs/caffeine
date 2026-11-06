@@ -1540,6 +1540,43 @@ describe('this binding and instanceof', function () {
     expect(target.plain()).toBe(2)
   })
 
+  // An instance that cannot take a property, such as one that freezes itself, cannot be woven in place.
+  class FrozenTarget {
+    readonly label = 'frozen'
+
+    constructor() {
+      Object.freeze(this)
+    }
+
+    describe(): string {
+      return this.label
+    }
+  }
+
+  const frozenSpy = vi.fn()
+
+  @Aspect([$aop.forClass(FrozenTarget, 'describe')])
+  @Profile('aop-frozen')
+  class FrozenAspect implements MethodAspect<FrozenTarget> {
+    before(jp: JoinPoint<FrozenTarget>) {
+      frozenSpy(jp.methodName)
+    }
+  }
+  void FrozenAspect
+
+  it('advises a frozen instance instead of failing to resolve it', async function () {
+    frozenSpy.mockClear()
+    const di = new CaffeineIoC({ profiles: ['aop-frozen'] })
+    di.bind(FrozenTarget, t => t.toSelf())
+    await di.init()
+    const target = di.get(FrozenTarget)
+
+    expect(target.describe()).toBe('frozen')
+    expect(frozenSpy.mock.calls).toEqual([['describe']])
+    expect(target).toBeInstanceOf(FrozenTarget)
+    expect(Object.isFrozen(target)).toBe(true)
+  })
+
   // (b) return this: builder chaining returns the woven instance
   class BuilderTarget {
     private _name = ''
