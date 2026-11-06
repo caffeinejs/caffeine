@@ -331,7 +331,7 @@ function proxied(instance: Record<string | symbol, unknown>, advised: AdvisedMet
       }
 
       let entry = wrappers.get(prop)
-      if (entry === undefined || entry.method !== value) {
+      if (entry?.method !== value) {
         const method = value
         entry = {
           method,

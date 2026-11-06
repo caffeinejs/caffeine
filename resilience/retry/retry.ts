@@ -289,7 +289,7 @@ export class Retry implements Wrapper {
       retryable =
         !(ctx.signal !== undefined && ctx.signal.aborted) &&
         !(error instanceof ErrCallRefused) &&
-        !(ctx.isClientError !== undefined && ctx.isClientError(error)) &&
+        !ctx.isClientError?.(error) &&
         (this.#retryOn === undefined || this.#verdict('retryOn', this.#retryOn(error, attempt)))
     } catch (thrown) {
       this.#ignored(attempt, thrown)

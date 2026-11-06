@@ -114,8 +114,7 @@ export class Fallback<R = unknown> implements RecoveryWrapper<R> {
     let handled: unknown
     try {
       // A client error is the caller's own answer, never the fallback's to replace.
-      handled =
-        !(ctx.isClientError !== undefined && ctx.isClientError(error)) && (this.#on === undefined || this.#on(error))
+      handled = !ctx.isClientError?.(error) && (this.#on === undefined || this.#on(error))
       if (typeof handled !== 'boolean') {
         throw new ErrInvalidOption(
           errMessage(`Cannot run fallback "${this.#name}": on must return a boolean, got ${described(handled)}`)

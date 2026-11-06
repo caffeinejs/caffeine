@@ -612,15 +612,12 @@ export class CircuitBreaker implements Wrapper {
     let reason: 'ignored' | 'aborted' | 'refused' | undefined
     let failed: boolean
     try {
-      if (ctx !== undefined && ctx.signal !== undefined && ctx.signal.aborted) {
+      if (ctx?.signal?.aborted) {
         reason = 'aborted'
       } else if (error instanceof ErrCallRefused) {
         // This process turned the call away; the dependency never saw it.
         reason = 'refused'
-      } else if (
-        (ctx !== undefined && ctx.isClientError !== undefined && ctx.isClientError(error)) ||
-        (this.#ignoreError !== undefined && this.#ignoreError(error))
-      ) {
+      } else if (ctx?.isClientError?.(error) || (this.#ignoreError !== undefined && this.#ignoreError(error))) {
         reason = 'ignored'
       }
       failed = reason === undefined && (this.#recordError === undefined || this.#recordError(error))
