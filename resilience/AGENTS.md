@@ -6,8 +6,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - `process`, `Buffer` and `node:*` do not exist here.
 - Time is `clock.now()` from `timers.ts`, never `Date.now()`.
-- A test that fakes time calls `useFakeClock()` from `fake_clock.testkit.ts`; fake timers alone miss the captured
-  `performance`.
+- A test that fakes time passes `fakeTimersClock` from `clock.testkit.ts` as the `clock` option; fake timers alone
+  miss the `performance` the system clock captured.
 - Besides `@caffeinejs/std`, itself dependency-free and runtime-agnostic, every package this one imports is an
   optional peer, reached only from an integration directory; the root entry and the concept subpaths reach none of
   them.
