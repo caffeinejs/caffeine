@@ -897,7 +897,7 @@ on the same seam. It has four duties:
    no installed transport claims.
 2. **Check replays.** At `bootstrap()`, it resolves each entrypoint method with `stagesOf(cls, method, registry)`,
    which sees a retry from `@Retry`, `@Resilient` and the class alike, and refuses the ones it cannot replay, unless
-   `repeatable` says otherwise.
+   the annotation that gives the method its retry declares it `repeatable`.
 3. **Map failures.** `failureOf(error)` from the root entry classifies a refusal as `unavailable`, with its
    `retryAfter`, and a time limit as `timeout`; anything else is `undefined`, left to the transport's own handlers.
    HTTP answers 503 and 504; gRPC would answer `UNAVAILABLE` and `DEADLINE_EXCEEDED`.

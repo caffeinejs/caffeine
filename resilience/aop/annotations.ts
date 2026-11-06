@@ -89,7 +89,9 @@ function nameOf(decorator: string, name: unknown): string | false {
  *
  * A stage annotation next to it replaces one policy and keeps the rest: `@Resilient('inventory')` with
  * `@TimeLimiter('inventory-export')` runs the retry and the circuit breaker of `inventory`, the same instances every
- * other method of `inventory` uses, with the time limiter of `inventory-export`. `repeatable` is that of `@Retry`.
+ * other method of `inventory` uses, with the time limiter of `inventory-export`. `repeatable` is that of the annotation
+ * that gives the method its retry, so a method's own `@Retry('orders', { repeatable: false })` stays unrepeatable under
+ * a class's `@Resilient('all', { repeatable: true })`.
  *
  * On a class, it reaches every method the class declares or inherits with `async`, except one a `@Fallback` names; a
  * method that returns a promise without `async` is not reached. A method's own annotations win, kind by kind, and

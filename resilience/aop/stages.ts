@@ -26,6 +26,7 @@ export interface StageSource {
 /** The policies a method runs through, by kind, and whether it declares that running it twice is safe. */
 export interface MethodStages {
   readonly stages: { readonly [K in ResilienceKind]?: StageSource }
+  /** The `repeatable` of the annotation that gives the method its retry; `false` when nothing retries it. */
   readonly repeatable: boolean
 }
 
@@ -45,6 +46,14 @@ type Named = string | false | undefined
 function presetOf(value: unknown): Named {
   return typeof value === 'object' && value !== null ? (value as { preset: string | false }).preset : (value as Named)
 }
+
+// Whether an annotation declares the method safe to run twice, as `@Retry` and `@Resilient` can.
+function repeatableOf(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && (value as { repeatable?: unknown }).repeatable === true
+}
+
+// A preset an annotation names, the decorator that names it, and whether that annotation declares the method repeatable.
+type Candidate = readonly [preset: Named, decorator: string, repeatable: boolean]
 
 function onClass(cls: AnyClass): boolean {
   return reflect.get(cls, Resilient) !== undefined || STAGES.some(([, annotation]) => reflect.get(cls, annotation))
@@ -160,15 +169,16 @@ function missingPolicy(where: string, preset: string, kind: ResilienceKind, deco
 }
 
 // The first candidate that names a preset or `false` decides the kind. A `@Resilient` preset that defines no policy of
-// the kind is passed over; a stage annotation's is refused.
+// the kind is passed over; a stage annotation's is refused. The candidate that supplies the policy also says whether
+// the method is repeatable.
 function firstStage(
   where: string,
   kind: ResilienceKind,
   decorator: string,
   registry: ResilienceRegistry,
-  candidates: readonly (readonly [Named, string])[],
-): StageSource | undefined {
-  for (const [preset, from] of candidates) {
+  candidates: readonly Candidate[],
+): { readonly source: StageSource; readonly repeatable: boolean } | undefined {
+  for (const [preset, from, repeatable] of candidates) {
     if (preset === false) {
       return undefined
     }
@@ -176,7 +186,7 @@ function firstStage(
       continue
     }
     if (registry.has(preset, kind)) {
-      return { preset, decorator: from }
+      return { source: { preset, decorator: from }, repeatable }
     }
     if (from !== 'Resilient') {
       throw missingPolicy(where, preset, kind, decorator)
@@ -212,28 +222,36 @@ export function stagesOf(cls: AnyClass, member: Member, registry: ResilienceRegi
   const classResilient = fromClass ? reflect.get(cls, Resilient) : undefined
   // `@Resilient(false)` on the method keeps the class's preset off it; the class's stage annotations still reach it.
   const ownPreset = checked(ownResilient?.preset, 'Resilient')
-  const resilient = [
-    ownPreset === false ? undefined : ownPreset,
-    ownPreset === false || classResilient?.preset === false ? undefined : checked(classResilient?.preset, 'Resilient'),
+  const resilient: readonly [Candidate, Candidate] = [
+    [ownPreset === false ? undefined : ownPreset, 'Resilient', repeatableOf(ownResilient)],
+    [
+      ownPreset === false || classResilient?.preset === false
+        ? undefined
+        : checked(classResilient?.preset, 'Resilient'),
+      'Resilient',
+      repeatableOf(classResilient),
+    ],
   ]
 
   const stages: { [K in ResilienceKind]?: StageSource } = {}
+  let repeatable = false
   for (const [kind, annotation, decorator] of STAGES) {
-    const own = checked(presetOf(reflect.get(cls, annotation, member)), decorator)
-    const inherited = fromClass ? checked(presetOf(reflect.get(cls, annotation)), decorator) : undefined
+    const own = reflect.get(cls, annotation, member)
+    const inherited = fromClass ? reflect.get(cls, annotation) : undefined
     // Method before class; at each level, the stage annotation before `@Resilient`.
-    const source = firstStage(where, kind, decorator, registry, [
-      [own, decorator],
-      [resilient[0], 'Resilient'],
-      [inherited, decorator],
-      [resilient[1], 'Resilient'],
+    const found = firstStage(where, kind, decorator, registry, [
+      [checked(presetOf(own), decorator), decorator, repeatableOf(own)],
+      resilient[0],
+      [checked(presetOf(inherited), decorator), decorator, repeatableOf(inherited)],
+      resilient[1],
     ])
-    if (source !== undefined) {
-      stages[kind] = source
+    if (found !== undefined) {
+      stages[kind] = found.source
+      if (kind === 'retry') {
+        repeatable = found.repeatable
+      }
     }
   }
 
-  const retry = reflect.get(cls, Retry, member) ?? (fromClass ? reflect.get(cls, Retry) : undefined)
-  const repeatable = (retry?.repeatable ?? false) || ((ownResilient ?? classResilient)?.repeatable ?? false)
   return { stages, repeatable }
 }

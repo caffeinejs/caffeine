@@ -338,6 +338,31 @@ describe('ResilienceHTTP() on a class-level annotation', () => {
 
     expect((await app.request('/stock', { method: 'POST' })).status).toBe(200)
   })
+
+  @Resilient('feed', { repeatable: true })
+  @Controller('/orders')
+  @Profile('rh-class-repeatable')
+  class RepeatableOrdersController {
+    @Retry('orders', { repeatable: false })
+    @Post('/')
+    async place(): Promise<string> {
+      return 'placed'
+    }
+  }
+  void RepeatableOrdersController
+
+  // The handler's own annotation says a replay is unsafe: the class saying otherwise must not let it be retried.
+  it('refuses a POST handler whose own @Retry is not repeatable under a class that says it is', async () => {
+    const presets = (r: ResilienceBuilder) =>
+      instances(r).preset('orders', p => p.retry({ maxAttempts: 2, backoff: 0 }))
+    const error = await refusal(boot('rh-class-repeatable', Resilience(presets), ResilienceHTTP()))
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect(error!.message).toContain(
+      'Cannot retry "POST /orders" (RepeatableOrdersController.place): POST is not a retryable method',
+    )
+    expect(error!.message).toContain("Declare the handler repeatable with @Retry('orders', { repeatable: true })")
+  })
 })
 
 describe('ResilienceHTTP() widened', () => {
