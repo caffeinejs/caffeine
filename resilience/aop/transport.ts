@@ -1,6 +1,7 @@
 /**
  * The label a transport gives every class whose methods it calls on a request, such as an HTTP controller. A
- * retry on such a class replays what the request did, so `Resilience()` refuses one that no installed
+ * retry on such a class replays what the request did, and a circuit breaker or a fallback on it judges errors the
+ * client caused, so `Resilience()` refuses any of the three on a class that no installed
  * {@link ResilienceTransport} claims.
  */
 export const kEntrypoint = Symbol.for('@caffeinejs:entrypoint')

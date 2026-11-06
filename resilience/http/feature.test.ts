@@ -497,7 +497,12 @@ describe('the two halves', () => {
     expect(error!.message).toContain(
       'Cannot retry "FeedController.list": @Retry(\'feed\') retries a request entrypoint that no installed transport integration checks',
     )
-    expect(error!.message).toContain('ResilienceHTTP() from @caffeinejs/resilience/http for a controller')
+    expect(error!.message).toContain(
+      'Install ResilienceHTTP() from @caffeinejs/resilience/http with .install(ResilienceHTTP()) if "FeedController" is an HTTP controller',
+    )
+    expect(error!.message).toContain(
+      'Move @Retry(\'feed\') to the outbound client method that "FeedController.list" calls',
+    )
   })
 
   it('refuses ResilienceHTTP() without Resilience()', async () => {
@@ -517,10 +522,36 @@ describe('the two halves', () => {
   }
   void PlainController
 
-  it('needs no ResilienceHTTP() when no controller carries @Retry', async () => {
-    const app = await boot('rh-plain', Resilience(instances))
+  // Without ResilienceHTTP(), nothing tells the breaker a client's 404 from a failing dependency.
+  it('refuses @CircuitBreaker on a controller when ResilienceHTTP() is not installed', async () => {
+    const error = await refusal(boot('rh-plain', Resilience(instances)))
 
-    expect((await app.request('/plain')).status).toBe(200)
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect(error!.message.split('\n')[0]).toBe(
+      "Cannot weave \"PlainController.get\": no installed transport integration claims this request entrypoint, so @CircuitBreaker('feed') would count a client's own error, such as a 404 it throws, as a failure",
+    )
+    expect(error!.message).toContain(
+      'Install ResilienceHTTP() from @caffeinejs/resilience/http with .install(ResilienceHTTP()) if "PlainController" is an HTTP controller',
+    )
+  })
+
+  @Controller('/timed')
+  @Profile('rh-timed')
+  class TimedController {
+    @TimeLimiter('feed')
+    @Bulkhead('feed')
+    @RateLimiter('feed')
+    @Get('/')
+    async get(): Promise<string> {
+      return 'ok'
+    }
+  }
+  void TimedController
+
+  it('needs no ResilienceHTTP() when no controller policy judges an error', async () => {
+    const app = await boot('rh-timed', Resilience(instances))
+
+    expect((await app.request('/timed')).status).toBe(200)
   })
 
   // `aop/` recognises an entrypoint by this registered symbol, without importing the HTTP package: if the HTTP package

@@ -144,7 +144,8 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
  * It also keeps the client's own errors, as {@link isClientError} tells them, out of the policies of every controller
  * method: such an error is never retried, a circuit breaker records it as ignored, and a fallback never answers it.
  *
- * It needs `Resilience()`, and `Resilience()` needs it once any controller is retried.
+ * It needs `Resilience()`, and `Resilience()` needs it once any controller carries a retry, a circuit breaker or a
+ * fallback.
  *
  * @throws {@link ErrInvalidOption} at `bootstrap()` naming the route, the handler and the method.
  */

@@ -183,8 +183,8 @@ the id to look up.
   be wrong too, since `fetch` rejects with one when the network fails. Narrow `on` to what the fallback is for.
 - An error `on` declines passes through unchanged, and the `recovered` event carries the error it replaced, so a log
   listener still sees it.
-- On a controller, with `ResilienceHTTP()` installed, a client error, such as the 403 a handler throws to refuse a
-  caller, never reaches the fallback; see [Client errors](#client-errors).
+- On a controller, a client error, such as the 403 a handler throws to refuse a caller, never reaches the fallback;
+  see [Client errors](#client-errors).
 - Once the caller's signal has aborted, the handler never runs: nobody is waiting for the value.
 - A handler that throws, or rejects, rejects the call with what it threw.
 - An `on` predicate that returns anything but a boolean rejects the call with `ErrInvalidOption`.
@@ -637,9 +637,10 @@ r.defaults(p =>
 - **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a preset, the defaults or one of
   their policies twice, a preset defines no policy, a method names a preset nothing defines or a policy its preset
   lacks, a `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a policy's
-  options are out of range, a request entrypoint such as a controller is retried with no transport integration
-  installed, `r.health(...)` is called twice or its `critical` names a breaker it cannot watch, the order does not
-  list each kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+  options are out of range, a request entrypoint such as a controller carries a retry, a circuit breaker or a
+  fallback with no transport integration installed, `r.health(...)` is called twice or its `critical` names a breaker
+  it cannot watch, the order does not list each kind once, or a bulkhead or rate limiter inside a method's time
+  limiter may wait as long as its limit.
 
 ```text
 ErrInvalidOption: Cannot weave "LedgerClient.post": preset "ledger" defines no time limiter
@@ -816,8 +817,9 @@ A 4xx answer a handler throws is the client's own, not a failing dependency. On 
 circuit breaker records it as ignored, and a fallback never answers it. A burst of requests for missing records cannot
 open the breaker for every client, and a fallback that serves cached orders cannot answer a 403 with the order it
 refused. No option turns this off: a handler that wants to answer a client error itself, such as a 404 turned into an
-empty list, catches it in the handler. Without `ResilienceHTTP()`, nothing tells a controller's policies which errors
-are the client's: install it wherever a controller carries a resilience annotation.
+empty list, catches it in the handler. `Resilience()` refuses to start when a controller carries a retry, a circuit
+breaker or a fallback and `ResilienceHTTP()` is not installed, since nothing would tell those policies which errors
+are the client's.
 
 An `ErrHTTP` with a 4xx status, such as `ErrHTTPNotFound`, is a client error. Any other error is one when it carries a
 numeric `status` or `statusCode` from 400 to 499, except 408 and 429: a dependency that timed out or throttled is
@@ -879,10 +881,10 @@ async place(key: string, order: NewOrder): Promise<Order> { … }
 The better answer is usually none of them: put `@Retry` on the outbound client method the handler calls, where the
 repeated unit is one dependency call. A service's `@Retry` is never checked, and neither is one on a controller method
 that is not a route handler: a helper the handler calls through `this` is woven, so its writes replay unchecked; keep
-`@Retry` on the outbound client method. `Resilience()` refuses to start when a controller is retried and
-`ResilienceHTTP()` is not installed; see [Writing a transport integration](#writing-a-transport-integration). Nothing
-checks that a response was already sent before a retry or a fallback
-(hazard 4): keep handler retries for handlers that answer only by returning.
+`@Retry` on the outbound client method. `Resilience()` refuses to start when a controller carries a retry, a circuit
+breaker or a fallback and `ResilienceHTTP()` is not installed; see [Client errors](#client-errors) and
+[Writing a transport integration](#writing-a-transport-integration). Nothing checks that a response was already sent
+before a retry or a fallback (hazard 4): keep handler retries for handlers that answer only by returning.
 
 ### Writing a transport integration
 
@@ -891,7 +893,8 @@ on the same seam. It has four duties:
 
 1. **Claim its entrypoints.** The transport labels every class whose methods it calls on a request with
    `kEntrypoint`, as `@Controller` does, beside a label of its own. The integration binds a `ResilienceTransport` that
-   names that label. `Resilience()` refuses a retried entrypoint whose labels no installed transport claims.
+   names that label. `Resilience()` refuses an entrypoint with a retry, a circuit breaker or a fallback whose labels
+   no installed transport claims.
 2. **Check replays.** At `bootstrap()`, it resolves each entrypoint method with `stagesOf(cls, method, registry)`,
    which sees a retry from `@Retry`, `@Resilient` and the class alike, and refuses the ones it cannot replay, unless
    `repeatable` says otherwise.

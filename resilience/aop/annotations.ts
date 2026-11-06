@@ -173,9 +173,8 @@ export const RateLimiter = createAnnotation.on(
  *
  * It wraps every other resilience annotation on the method, and never runs once the caller's signal has aborted.
  * Without `on`, it answers every error, a bug such as a `TypeError` included, which then looks like an outage: narrow
- * it with `on`, such as `{ on: [ErrCallRefused] }`. On an entrypoint whose transport integration is installed, such
- * as a controller with `ResilienceHTTP()`, it never answers an error the transport calls the client's own, such as a
- * 403 the method throws to refuse a caller, whatever `on` says.
+ * it with `on`, such as `{ on: [ErrCallRefused] }`. On an entrypoint, such as a controller, it never answers an error
+ * the transport calls the client's own, such as a 403 the method throws to refuse a caller, whatever `on` says.
  */
 export const Fallback = createAnnotation.on('method')(
   (method: string | symbol, options?: FallbackAnnotationOptions): FallbackAnnotation => {
