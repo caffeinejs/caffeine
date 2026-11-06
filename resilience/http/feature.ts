@@ -12,10 +12,16 @@ import { Keys, SAFE_METHODS } from '@caffeinejs/http'
 import { getRouteGroup } from '@caffeinejs/http/decorators/registrar'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { kResilienceHTTP } from '../aop/feature.js'
 import { ResilienceRegistry } from '../aop/registry.js'
 import { stagesOf, written } from '../aop/stages.js'
+import { ResilienceTransport } from '../aop/transport.js'
 import { ErrInvalidOption } from '../errors.js'
+
+// Claims every controller for the replay check below.
+class HTTPTransport extends ResilienceTransport {
+  readonly name = 'http'
+  readonly label = Keys.CONTROLLER
+}
 
 /** What `ResilienceHTTP(h => h.config(...))` takes. */
 export interface ResilienceHTTPConfig {
@@ -54,7 +60,7 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    kit.container.bind(kResilienceHTTP, t => t.toValue(true))
+    kit.container.bind(HTTPTransport, t => t.toSelf().extends(ResilienceTransport))
   }
 
   protected override bootstrap(kit: BootstrapKit<C>): void {

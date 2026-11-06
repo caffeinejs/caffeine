@@ -50,6 +50,31 @@ export class ErrCallRefused extends ErrResilience {
 }
 
 /**
+ * What a resilience error means to a transport answering a client: `unavailable`, a policy refused the call and it
+ * never ran, or `timeout`, a time limit passed and the outcome is unknown. A transport maps it to its own status,
+ * such as HTTP 503 and 504, or gRPC `UNAVAILABLE` and `DEADLINE_EXCEEDED`.
+ */
+export interface ResilienceFailure {
+  readonly kind: 'unavailable' | 'timeout'
+  /** The error's `code`, such as `ERR_CALL_NOT_PERMITTED`. */
+  readonly code: string
+  /** How long until the policy lets a call through again, when it knows. */
+  readonly retryAfter: Duration | undefined
+}
+
+/** Classifies a refusal or a time limit for a transport; any other error, whatever it is, is `undefined`. */
+export function failureOf(error: unknown): ResilienceFailure | undefined {
+  if (error instanceof ErrCallRefused) {
+    return { kind: 'unavailable', code: error.code, retryAfter: error.retryAfter }
+  }
+  // Read by its code: the time limiter is a subpath of its own, which the root never imports.
+  if (error instanceof ErrResilience && error.code === 'ERR_TIME_LIMIT_EXCEEDED') {
+    return { kind: 'timeout', code: error.code, retryAfter: undefined }
+  }
+  return undefined
+}
+
+/**
  * A refusal built without running its class's constructor, so no stack trace is captured: refusals come in bulk
  * while a dependency is down, and a capture costs several times the rest of a refusal. `fields` are set in order after
  * `message`, as the constructors set them, and `stack` is the first line alone, as an error without frames prints.

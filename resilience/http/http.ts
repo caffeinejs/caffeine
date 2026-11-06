@@ -1,7 +1,7 @@
 import { Catch, ErrHTTP, type ErrorHandler, type HTTPErrorBody, type IContext, statusErrorBody } from '@caffeinejs/http'
 import { Second } from '@caffeinejs/std/duration'
 
-import { ErrCallRefused } from '../errors.js'
+import { ErrCallRefused, failureOf } from '../errors.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
 
 /**
@@ -15,16 +15,17 @@ import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
 @Catch([ErrCallRefused, ErrTimeLimitExceeded])
 export class ResilienceErrorHandler implements ErrorHandler<ErrCallRefused | ErrTimeLimitExceeded> {
   handle(ctx: IContext, error: ErrCallRefused | ErrTimeLimitExceeded): HTTPErrorBody {
-    if (error instanceof ErrTimeLimitExceeded) {
+    const { kind, code, retryAfter } = failureOf(error)!
+    if (kind === 'timeout') {
       ctx.status(504)
-      return statusErrorBody(504, error.code)
+      return statusErrorBody(504, code)
     }
 
     ctx.status(503)
-    if (error.retryAfter !== undefined) {
-      ctx.header('retry-after', String(Math.max(1, Math.ceil(error.retryAfter / Second))))
+    if (retryAfter !== undefined) {
+      ctx.header('retry-after', String(Math.max(1, Math.ceil(retryAfter / Second))))
     }
-    return statusErrorBody(503, error.code)
+    return statusErrorBody(503, code)
   }
 }
 

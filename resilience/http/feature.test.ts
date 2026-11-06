@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Resilient, Retry, TimeLimiter } from '../aop/annotations.js'
 import { Resilience, type ResilienceBuilder } from '../aop/feature.js'
+import { kEntrypoint } from '../aop/transport.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ResilienceHTTP } from './feature.js'
 
@@ -479,9 +480,9 @@ describe('the two halves', () => {
 
     expect(error).toBeInstanceOf(ErrInvalidOption)
     expect(error!.message).toContain(
-      'Cannot retry "FeedController.list": @Retry(\'feed\') retries a controller, which needs the HTTP replay check',
+      'Cannot retry "FeedController.list": @Retry(\'feed\') retries a request entrypoint that no installed transport integration checks',
     )
-    expect(error!.message).toContain('Install ResilienceHTTP() from @caffeinejs/resilience/http')
+    expect(error!.message).toContain('ResilienceHTTP() from @caffeinejs/resilience/http for a controller')
   })
 
   it('refuses ResilienceHTTP() without Resilience()', async () => {
@@ -507,9 +508,9 @@ describe('the two halves', () => {
     expect((await app.request('/plain')).status).toBe(200)
   })
 
-  // `aop/` recognises a controller by this registered symbol, without importing the HTTP package: if the HTTP package
+  // `aop/` recognises an entrypoint by this registered symbol, without importing the HTTP package: if the HTTP package
   // renamed its label, controllers would silently escape the check.
-  it('reads the controller label the HTTP package writes', () => {
-    expect(Keys.CONTROLLER).toBe(Symbol.for('@caffeinejs/http:controller'))
+  it('reads the entrypoint label the HTTP package writes', () => {
+    expect(Keys.ENTRYPOINT).toBe(kEntrypoint)
   })
 })

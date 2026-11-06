@@ -9,6 +9,7 @@ import { ErrMaxRetriesExceeded } from '../retry/retry.js'
 import { CircuitBreaker, Fallback, Retry } from './annotations.js'
 import { Resilience, type ResilienceBuilder } from './feature.js'
 import { ResilienceRegistry } from './registry.js'
+import { kEntrypoint, ResilienceTransport } from './transport.js'
 
 const opened: Array<() => Promise<unknown>> = []
 
@@ -413,5 +414,48 @@ describe('Resilience() at bootstrap', () => {
         'Cannot create time limiter "reports": timeoutDuration must be a finite Duration greater than 0s, got 0s',
       )
     }
+  })
+})
+
+describe('Resilience() and transports', () => {
+  const kService = Symbol('grpc service')
+
+  class StockService {
+    @Retry('inventory')
+    async get(): Promise<string> {
+      return 'stock'
+    }
+  }
+
+  class GRPCTransport extends ResilienceTransport {
+    readonly name = 'grpc'
+    readonly label = kService
+  }
+
+  // An entrypoint of a transport this package has never heard of: a request, replayed by a retry.
+  async function serve(transport: boolean) {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(Resilience(inventory))
+    app.container.bind(StockService, t => t.toSelf().labels(kService, kEntrypoint))
+    if (transport) {
+      app.container.bind(GRPCTransport, t => t.toSelf().extends(ResilienceTransport))
+    }
+    opened.push(() => app.close())
+    await app.bootstrap()
+    return app
+  }
+
+  it('refuses a retried entrypoint that no installed transport integration claims', async () => {
+    const error = await serve(false).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'Cannot retry "StockService.get": @Retry(\'inventory\') retries a request entrypoint that no installed transport integration checks',
+    )
+  })
+
+  it('leaves a retried entrypoint to the transport that claims its label', async () => {
+    const app = await serve(true)
+
+    await expect(app.container.get(StockService).get()).resolves.toBe('stock')
   })
 })

@@ -631,10 +631,11 @@ r.defaults(p =>
   with a negative order wraps the whole call instead. An aspect with order `0` ties with it, and the order they were
   registered in decides which runs outside: give such an aspect a non-zero order rather than rely on it.
 - **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a preset, the defaults or one of
-  their policies twice, a preset defines no policy, a method names a preset nothing defines or a policy its preset lacks, a
-  `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a policy's options are
-  out of range, a controller is retried without `ResilienceHTTP()`, the order does not list each kind once, or a
-  bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+  their policies twice, a preset defines no policy, a method names a preset nothing defines or a policy its preset
+  lacks, a `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a policy's
+  options are out of range, a request entrypoint such as a controller is retried with no transport integration
+  installed, the order does not list each kind once, or a bulkhead or rate limiter inside a method's time limiter may
+  wait as long as its limit.
 
 ```text
 ErrInvalidOption: Cannot weave "LedgerClient.post": preset "ledger" defines no time limiter
@@ -839,8 +840,53 @@ The better answer is usually none of them: put `@Retry` on the outbound client m
 repeated unit is one dependency call. A service's `@Retry` is never checked, and neither is one on a controller method
 that is not a route handler: a helper the handler calls through `this` is woven, so its writes replay unchecked; keep
 `@Retry` on the outbound client method. `Resilience()` refuses to start when a controller is retried and
-`ResilienceHTTP()` is not installed. Nothing checks that a response was already sent before a retry or a fallback
+`ResilienceHTTP()` is not installed; see [Writing a transport integration](#writing-a-transport-integration). Nothing
+checks that a response was already sent before a retry or a fallback
 (hazard 4): keep handler retries for handlers that answer only by returning.
+
+### Writing a transport integration
+
+`ResilienceHTTP()` is the integration for HTTP; another transport, such as gRPC or GraphQL, would ship its own, built
+on the same seam. It has four duties:
+
+1. **Claim its entrypoints.** The transport labels every class whose methods it calls on a request with
+   `kEntrypoint`, as `@Controller` does, beside a label of its own. The integration binds a `ResilienceTransport` that
+   names that label. `Resilience()` refuses a retried entrypoint whose labels no installed transport claims.
+2. **Check replays.** At `bootstrap()`, it resolves each entrypoint method with `stagesOf(cls, method, registry)`,
+   which sees a retry from `@Retry`, `@Resilient` and the class alike, and refuses the ones it cannot replay, unless
+   `repeatable` says otherwise.
+3. **Map failures.** `failureOf(error)` from the root entry classifies a refusal as `unavailable`, with its
+   `retryAfter`, and a time limit as `timeout`; anything else is `undefined`, left to the transport's own handlers.
+   HTTP answers 503 and 504; gRPC would answer `UNAVAILABLE` and `DEADLINE_EXCEEDED`.
+4. **Tell client mistakes apart,** if it can: `isClientError` is HTTP's.
+
+```ts
+// kGRPCService and isIdempotent are the gRPC package's own
+class GRPCTransport extends ResilienceTransport {
+  readonly name = 'grpc'
+  readonly label = kGRPCService
+}
+
+class ResilienceGRPCBuilder<C = unknown> extends FeatureBuilder<C> {
+  readonly [kFeatureName] = 'resilience-grpc'
+
+  protected override configure(kit: FeatureConfigureKit<C>): void {
+    kit.container.bind(GRPCTransport, t => t.toSelf().extends(ResilienceTransport))
+  }
+
+  protected override bootstrap(kit: BootstrapKit<C>): void {
+    const registry = kit.container.get(ResilienceRegistry)
+    for (const { binding } of kit.container.getBindingsByLabel(kGRPCService)) {
+      for (const method of wovenMembers(binding.type)) {
+        const { stages, repeatable } = stagesOf(binding.type, method, registry)
+        if (stages.retry !== undefined && !repeatable && !isIdempotent(binding.type, method)) {
+          throw new ErrInvalidOption(/* the gRPC replay rule */)
+        }
+      }
+    }
+  }
+}
+```
 
 ## Errors
 

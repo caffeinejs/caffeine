@@ -33,3 +33,5 @@ export {
   type ResilienceKind,
   ResilienceRegistry,
 } from './registry.js'
+export { type MethodStages, type StageSource, stagesOf, wovenMembers } from './stages.js'
+export { kEntrypoint, ResilienceTransport } from './transport.js'

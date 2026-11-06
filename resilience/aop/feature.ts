@@ -6,7 +6,7 @@ import {
   type FeatureConfigureKit,
   kFeatureName,
 } from '@caffeinejs/application'
-import { type AnyClass, token } from '@caffeinejs/di'
+import type { AnyClass } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -28,13 +28,7 @@ import {
   ResilienceRegistry,
 } from './registry.js'
 import { stagesOf, written, wovenMembers } from './stages.js'
-
-// Bound to `true` by `ResilienceHTTP()`. A retried controller needs it: without the check, a handler for any method
-// would replay.
-export const kResilienceHTTP = token<boolean>('@caffeinejs/resilience:http')
-
-// The label `@Controller` gives a class, registered so it is read here without importing the HTTP package.
-const kController = Symbol.for('@caffeinejs/http:controller')
+import { kEntrypoint, ResilienceTransport } from './transport.js'
 
 /** The circuit breaker options a configuration tree can carry: data only. */
 export type CircuitBreakerConfig = Omit<
@@ -229,9 +223,9 @@ export class PresetBuilder {
  * `undefined` keeps the configured one; configuration may add a policy code left out, and the defaults fill what both
  * leave open. `bootstrap()` fails when code defines a preset, the defaults or one of their policies twice, a preset
  * defines no policy, a method names a preset nothing defines or a policy its preset lacks, a `@Fallback` names a
- * method its class lacks, an annotation is on a static or a private method, a controller is retried without
- * `ResilienceHTTP()`, the order does not list each kind once, or a bulkhead or rate limiter inside a method's time
- * limiter may wait as long as its limit.
+ * method its class lacks, an annotation is on a static or a private method, a request entrypoint is retried with no
+ * transport integration installed, such as `ResilienceHTTP()` for a controller, the order does not list each kind
+ * once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
  *
  * ```ts
  * .install(Resilience((r, { config }) => r.config(config.resilience).preset('inventory', p => p.retry().circuitBreaker())))
@@ -334,25 +328,30 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override bootstrap(kit: BootstrapKit<C>): void {
-    if (!kit.container.has(kResilienceHTTP)) {
-      const registry = kit.container.get(ResilienceRegistry)
-      for (const { binding } of kit.container.getBindingsByLabel(kController)) {
-        const cls = binding.type as AnyClass | undefined
-        for (const member of cls === undefined ? [] : wovenMembers(cls)) {
-          const retry = stagesOf(cls!, member, registry).stages.retry
-          if (retry !== undefined) {
-            throw new ErrInvalidOption(
-              errMessage(
-                `Cannot retry "${cls!.name}.${String(member)}": ${written(retry)} retries a controller, which needs the HTTP replay check`,
-              )
-                .solutions(
-                  'Install ResilienceHTTP() from @caffeinejs/resilience/http',
-                  `Move ${written(retry)} to the outbound client method the handler calls`,
-                )
-                .reference('@caffeinejs/resilience', ErrInvalidOption)
-                .build(),
+    // A retried entrypoint replays a request: only the transport that serves it can tell whether that is safe.
+    const transports =
+      kit.container.getBindings(ResilienceTransport).length === 0 ? [] : kit.container.getMany(ResilienceTransport)
+    const claimed = new Set(transports.map(transport => transport.label))
+    const registry = kit.container.get(ResilienceRegistry)
+    for (const { binding } of kit.container.getBindingsByLabel(kEntrypoint)) {
+      const cls = binding.type as AnyClass | undefined
+      if (cls === undefined || binding.labels.some(label => claimed.has(label))) {
+        continue
+      }
+      for (const member of wovenMembers(cls)) {
+        const retry = stagesOf(cls, member, registry).stages.retry
+        if (retry !== undefined) {
+          throw new ErrInvalidOption(
+            errMessage(
+              `Cannot retry "${cls.name}.${String(member)}": ${written(retry)} retries a request entrypoint that no installed transport integration checks`,
             )
-          }
+              .solutions(
+                'Install the resilience integration of the transport that serves it, such as ResilienceHTTP() from @caffeinejs/resilience/http for a controller',
+                `Move ${written(retry)} to the outbound client method the entrypoint calls`,
+              )
+              .reference('@caffeinejs/resilience', ErrInvalidOption)
+              .build(),
+          )
         }
       }
     }
