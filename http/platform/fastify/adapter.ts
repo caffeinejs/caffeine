@@ -51,6 +51,7 @@ import { CONSTRAINTS_PLUGIN } from './constraints/constraints.js'
 import { Context } from './context.js'
 import { cookiePlugin } from './cookie/cookie.js'
 import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './error/error.js'
+import { validationFormatter } from './error/validation.js'
 import { fetchInProcess } from './fetch.js'
 import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
@@ -241,7 +242,9 @@ export class Adapter implements IAdapter<AdapterTypes> {
     const { factory = {}, listener } = input.server
     // Fastify's HTTP/1 overload whatever `factory` asks for: the instance is one type whichever server it builds.
     const fastify = Fastify(
-      withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath) as FastifyHttpOptions<Server>,
+      withValidationFormatter(
+        withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath),
+      ) as FastifyHttpOptions<Server>,
     )
 
     // Node's `close()` waits on what it does not end itself, so the adapter keeps what the server has open. An HTTP/1
@@ -632,6 +635,20 @@ function withApplicationLogger(factory: FactoryOptions, logger: Logger): Factory
     loggerInstance: logger,
     logController: factory.logController ?? new LogController({ disableRequestLogging: true }),
   }
+}
+
+/**
+ * Writes a request validation error's message as its slot and its count, such as `Invalid request body: 31 errors`,
+ * unless the factory settings name a formatter of their own. Fastify's own formatter joins every message the validator
+ * reported, so one request could fill that message, and every log line printing it, with each of its failures.
+ *
+ * One set later, through `setSchemaErrorFormatter` in a server callback, replaces this one, and a route's own wins
+ * over both. Whichever formats it, the error handler answers with the same problem.
+ */
+function withValidationFormatter(factory: FactoryOptions): FactoryOptions {
+  return factory.schemaErrorFormatter === undefined
+    ? { ...factory, schemaErrorFormatter: validationFormatter }
+    : factory
 }
 
 /**

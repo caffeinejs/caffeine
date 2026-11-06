@@ -1,5 +1,5 @@
 import type { IContext } from '../../context.js'
-import type { Problem } from './problem.js'
+import type { Problem, ProblemIssueSource } from './problem.js'
 
 // What a machine reads goes in the frontmatter, in this order; extensions follow. The rest is prose, in sections.
 const FRONTMATTER = ['type', 'title', 'status', 'code', 'category', 'instance', 'correlation_id', 'timestamp']
@@ -48,8 +48,8 @@ export function problemMarkdown(_ctx: IContext, problem: Problem): string {
   if (problem.errors !== undefined && problem.errors.length > 0) {
     lines.push('', '## Errors', '')
     for (const issue of problem.errors) {
-      const rule = issue.code === undefined ? '' : ` (${inline(issue.code)})`
-      lines.push(`- ${codeSpan(issue.path)}${rule}: ${inline(issue.message)}`)
+      const location = issue.source === undefined ? '' : `${codeSpan(locationOf(issue.source))} `
+      lines.push(`- ${location}${codeSpan(issue.code)}: ${escapeInline(inline(issue.detail))}`)
     }
   }
 
@@ -73,6 +73,21 @@ function escapeSeparators(json: string): string {
 // One line, for a heading or a list item: a line break there would end it and start a block of the text's own.
 function inline(text: string): string {
   return text.replace(/\s*(?:\r\n|[\r\n\u0085\u2028\u2029])\s*/g, ' ')
+}
+
+// Inline markup in a line of text a client may have chosen, such as a key it sent: a link with text of its own, an
+// image, HTML, emphasis or a code span would render as markup. Each marker is escaped, and reads as itself. A bare URL
+// has no marker: a renderer that links one shows the URL itself.
+function escapeInline(text: string): string {
+  return text.replace(/[\\`*_[\]<>&~]/g, '\\$&')
+}
+
+// Where an entry failed, as one line: `body /items/0`, `query ids /1`, or `query` for the whole query string.
+function locationOf(source: ProblemIssueSource): string {
+  const name = source.in === 'body' ? undefined : source.name
+  const pointer = source.pointer === undefined || source.pointer === '' ? [] : [source.pointer]
+
+  return [source.in, ...(name === undefined ? [] : [name]), ...pointer].join(' ')
 }
 
 // A character that opens a block at the start of a line — a heading, a fence, a quote, a list, a thematic break

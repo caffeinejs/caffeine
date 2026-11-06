@@ -431,9 +431,9 @@ describe('an unexpected failure', () => {
     await app.close()
   })
 
-  // A 4xx describes what the caller got wrong, so its message is the detail and each failed rule is listed — and a
-  // request somebody got wrong is not a fault for an operator to be paged about.
-  it('renders a schema failure as a problem listing each failed rule, and logs it as information', async () => {
+  // A request that fails its schema is the caller's mistake: the problem lists each error, and the log records it as
+  // information, holding what was sent and never the validator's own report.
+  it('renders a schema failure as a problem listing each error, and logs it as information', async () => {
     const logged: LogEntry[] = []
     const app = loggingTo(logged)
     await app.bootstrap()
@@ -444,26 +444,35 @@ describe('an unexpected failure', () => {
       body: JSON.stringify({ name: '' }),
     })
 
-    expect(res.status).toBe(400)
+    const issue = {
+      code: 'ERR_VALIDATION_MIN_LENGTH',
+      detail: 'name must NOT have fewer than 1 characters',
+      source: { in: 'body', pointer: '/name' },
+      params: { limit: 1 },
+    }
+    expect(res.status).toBe(422)
     expect(res.headers.get('content-type')).toBe(JSON_UTF8)
     expect(await res.json()).toEqual({
       type: 'about:blank',
-      title: 'Bad Request',
-      status: 400,
-      detail: 'body/name must NOT have fewer than 1 characters',
-      code: 'FST_ERR_VALIDATION',
-      errors: [{ path: 'body.name', message: 'must NOT have fewer than 1 characters', code: 'minLength' }],
+      title: 'Unprocessable Content',
+      status: 422,
+      detail: 'Invalid request body',
+      code: 'ERR_VALIDATION',
+      errors: [issue],
       ...STAMPED,
     })
 
-    const entries = logged.filter(entry => entry.msg === 'body/name must NOT have fewer than 1 characters')
-    expect(entries.map(entry => entry.level)).toEqual([30])
+    const entries = logged.filter(entry => entry.msg === 'Invalid request body: 1 error')
+    expect(entries).toEqual([
+      expect.objectContaining({ level: 30, validation: { slot: 'body', total: 1, errors: [issue] } }),
+    ])
+    expect(entries[0]).not.toHaveProperty('err')
 
     await app.close()
   })
 
-  // Ajv reports a missing property at the object that lacks it; the path names the property itself.
-  it('names a missing property in its path', async () => {
+  // Ajv reports a missing property at the object that lacks it; the pointer goes on to the property itself.
+  it('points at a missing property', async () => {
     const app = createWebApplication()
     await app.bootstrap()
 
@@ -473,9 +482,14 @@ describe('an unexpected failure', () => {
       body: JSON.stringify({}),
     })
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
     expect((await bodyOf(res)).errors).toEqual([
-      { path: 'body.name', message: "must have required property 'name'", code: 'required' },
+      {
+        code: 'ERR_VALIDATION_REQUIRED',
+        detail: "must have required property 'name'",
+        source: { in: 'body', pointer: '/name' },
+        params: { missingProperty: 'name' },
+      },
     ])
 
     await app.close()
@@ -687,6 +701,71 @@ describe('ErrHTTP.builder', () => {
       instance: '/pets/42',
     })
   })
+
+  // A business rule that rejects several fields at once lists each, with a title naming its kind of problem.
+  it('sends its title and the entries each call added, in order', () => {
+    const unavailable = {
+      code: 'ERR_ITEM_UNAVAILABLE',
+      detail: 'Item 7 is sold out',
+      source: { in: 'body' as const, pointer: '/items/0' },
+    }
+    const limit = { code: 'ERR_QUANTITY_LIMIT', detail: 'At most 3 of item 9', params: { maximum: 3 } }
+
+    const err = ErrHTTP.builder()
+      .statusCode(422)
+      .type('https://api.example.com/problems/checkout-rejected')
+      .title('Checkout rejected')
+      .code('ERR_CHECKOUT_REJECTED')
+      .message('2 items cannot be bought')
+      .errors(unavailable)
+      .errors(limit)
+      .build()
+
+    expect(err.toProblem()).toEqual({
+      type: 'https://api.example.com/problems/checkout-rejected',
+      title: 'Checkout rejected',
+      status: 422,
+      detail: '2 items cannot be bought',
+      code: 'ERR_CHECKOUT_REJECTED',
+      errors: [unavailable, limit],
+    })
+  })
+
+  // `options(...)` is a merge of whole members: its `errors` is the list, and later calls add to it.
+  it('replaces the entries with those options() names, and adds later ones after them', () => {
+    const entry = (code: string) => ({ code, detail: code })
+
+    const err = ErrHTTP.builder()
+      .statusCode(422)
+      .errors(entry('ERR_A'))
+      .options({ errors: [entry('ERR_B')] })
+      .errors(entry('ERR_C'))
+      .build()
+
+    expect(err.toProblem().errors).toEqual([entry('ERR_B'), entry('ERR_C')])
+  })
+
+  // Every entry an application lists goes out: the cap is the validation problem's, which the framework builds.
+  it('sends every entry it was given, past the validation cap', async () => {
+    const entries = Array.from({ length: 40 }, (_, i) => ({ code: 'ERR_ROW', detail: `Row ${i} is invalid` }))
+    const app = createWebApplication().mount(
+      newRouter('/imports').post('/', () => {
+        throw ErrHTTP.builder()
+          .statusCode(422)
+          .message('40 rows are invalid')
+          .errors(...entries)
+          .build()
+      }),
+    )
+    await app.bootstrap()
+
+    const res = await app.request('/imports', { method: 'POST' })
+
+    expect(res.status).toBe(422)
+    expect((await bodyOf(res)).errors).toEqual(entries)
+
+    await app.close()
+  })
 })
 
 class ErrInventory extends Error {}
@@ -795,24 +874,58 @@ describe('failures from the real world', () => {
     await app.close()
   })
 
-  // A webhook handler that checks its payload with its own Ajv instance and throws what Ajv reported, the way
-  // Fastify does. Ajv built with `messages: false` leaves each message out, and there is no request slot to name.
-  it('lists the issues of a validation a handler ran itself', async () => {
+  // A webhook handler that checks its payload itself knows where each failure is, and lists them as entries.
+  it('lists the entries of a check a handler ran itself', async () => {
+    const errors = [
+      {
+        code: 'ERR_WEBHOOK_FIELD_MISSING',
+        detail: "data must have required property 'id'",
+        source: { in: 'body' as const, pointer: '/data/id' },
+      },
+      {
+        code: 'ERR_WEBHOOK_EVENT',
+        detail: 'a/b~c is not an event this endpoint takes',
+        source: { in: 'body' as const, pointer: '/event/a~1b~0c' },
+        params: { allowedValues: ['created', 'deleted'] },
+      },
+    ]
+    const app = createWebApplication().mount(
+      newRouter('/webhooks').post('/', () => {
+        throw ErrHTTP.builder()
+          .statusCode(422)
+          .code('ERR_WEBHOOK_PAYLOAD')
+          .message('Webhook payload is invalid')
+          .errors(...errors)
+          .build()
+      }),
+    )
+    await app.bootstrap()
+
+    const res = await app.request('/webhooks', { method: 'POST' })
+
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({
+      type: 'about:blank',
+      title: 'Unprocessable Content',
+      status: 422,
+      detail: 'Webhook payload is invalid',
+      code: 'ERR_WEBHOOK_PAYLOAD',
+      errors,
+      ...STAMPED,
+    })
+
+    await app.close()
+  })
+
+  // Only a request validation names the slot its pointers are in. A `validation` array on any other error has none,
+  // so its entries could not say where they failed, and the error answers as any other 4xx.
+  it('lists nothing from a validation array on an error that is not a request validation', async () => {
     const app = createWebApplication().mount(
       newRouter('/webhooks').post('/', () => {
         throw Object.assign(new Error('Webhook payload is invalid'), {
           statusCode: 422,
           code: 'ERR_WEBHOOK_PAYLOAD',
-          validation: [
-            { keyword: 'required', instancePath: '/data', schemaPath: '#/required', params: { missingProperty: 'id' } },
-            {
-              keyword: 'enum',
-              instancePath: '/event/a~1b~0c',
-              schemaPath: '#/enum',
-              params: {},
-              message: 'must be equal to one of the allowed values',
-            },
-          ],
+          validation: [{ keyword: 'required', instancePath: '/data', schemaPath: '#/required', params: {} }],
         })
       }),
     )
@@ -827,11 +940,6 @@ describe('failures from the real world', () => {
       status: 422,
       detail: 'Webhook payload is invalid',
       code: 'ERR_WEBHOOK_PAYLOAD',
-      // JSON pointer escapes are undone: `~1` is a slash and `~0` a tilde inside one property name.
-      errors: [
-        { path: 'data.id', message: 'is invalid', code: 'required' },
-        { path: 'event.a/b~c', message: 'must be equal to one of the allowed values', code: 'enum' },
-      ],
       ...STAMPED,
     })
 
@@ -935,7 +1043,7 @@ describe('a route that declares an error response schema', () => {
     await app.close()
   })
 
-  it('still answers a failed validation with 400 and the issues', async () => {
+  it('still answers a failed validation with 400 and its entries', async () => {
     const app = createWebApplication().mount(orders())
     await app.bootstrap()
 
@@ -944,8 +1052,15 @@ describe('a route that declares an error response schema', () => {
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({
       status: 400,
-      code: 'FST_ERR_VALIDATION',
-      errors: [{ path: 'querystring.limit', message: 'must be integer', code: 'type' }],
+      code: 'ERR_VALIDATION',
+      errors: [
+        {
+          code: 'ERR_VALIDATION_TYPE',
+          detail: 'limit must be integer',
+          source: { in: 'query', name: 'limit' },
+          params: { type: 'integer' },
+        },
+      ],
     })
 
     await app.close()

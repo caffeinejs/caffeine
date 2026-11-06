@@ -63,4 +63,30 @@ describe('newProblem', () => {
   it('names a status Node has no phrase for generically', () => {
     expect(newProblem({ status: 499, code: 'ERR_CLIENT_GONE' }).title).toBe('Unknown Error')
   })
+
+  // RFC 9457 §3.1.3: a title summarizes the kind of problem, which a `type` of its own can name better than a status.
+  it('takes a title of its own over the status phrase, and the detail from it when there is none', () => {
+    const problem = newProblem({ status: 422, code: 'ERR_CHECKOUT_REJECTED', title: 'Checkout rejected' })
+
+    expect(problem.title).toBe('Checkout rejected')
+    expect(problem.detail).toBe('Checkout rejected')
+  })
+
+  it('sends its entries as errors, in order', () => {
+    const errors = [
+      {
+        code: 'ERR_ITEM_UNAVAILABLE',
+        detail: 'Item 7 is sold out',
+        source: { in: 'body' as const, pointer: '/items/0' },
+      },
+      { code: 'ERR_QUANTITY_LIMIT', detail: 'At most 3 of item 9', params: { maximum: 3 } },
+    ]
+
+    expect(newProblem({ status: 422, code: 'ERR_CHECKOUT_REJECTED', errors }).errors).toEqual(errors)
+  })
+
+  // An empty list would tell a client every entry is fine, which is not why the problem was sent.
+  it('leaves out an empty list of entries', () => {
+    expect(newProblem({ status: 422, code: 'ERR_CHECKOUT_REJECTED', errors: [] })).not.toHaveProperty('errors')
+  })
 })

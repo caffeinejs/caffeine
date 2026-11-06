@@ -143,7 +143,7 @@ describe('openapi endpoints', () => {
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
-    expect(Object.keys(operationAt(document, '/pets', 'post')?.responses?.['400'].content ?? {})).toEqual([
+    expect(Object.keys(operationAt(document, '/pets', 'post')?.responses?.['422'].content ?? {})).toEqual([
       'application/json',
       'application/problem+json',
       'text/markdown',

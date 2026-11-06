@@ -827,3 +827,51 @@ describe('correlationID', () => {
     await app.close()
   })
 })
+
+describe('validation', () => {
+  function signup() {
+    return newRouter('/signup').post('/', { body: $t.Object({ email: $t.String({ minLength: 3 }) }) }, () => ({}))
+  }
+
+  // A cap of 0 would send a problem that lists nothing and says so; a fraction or Infinity is a typo for a number.
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('refuses a maxErrors of %s at start-up', async n => {
+    const app = createWebApplication().errorHandling(e => e.validation({ maxErrors: n }))
+
+    const failure = await app.bootstrap().then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+
+    expect(failure).toBeInstanceOf(ErrConfiguration)
+    expect((failure as Error).message.split('\n')[0]).toBe(
+      `Cannot set the validation "maxErrors" to "${n}": it is not an integer of at least 1`,
+    )
+  })
+
+  // A shared block sets the type, the place that knows the audience sets the title; neither undoes the other.
+  it('merges calls key by key, over the defaults', async () => {
+    const app = createWebApplication()
+      .errorHandling(e =>
+        e
+          .validation({ type: 'https://api.example.com/problems/validation-error', title: 'Draft' })
+          .validation({ title: 'Request validation failed' }),
+      )
+      .mount(signup())
+    await app.bootstrap()
+
+    const res = await app.request('/signup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'x' }),
+    })
+
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({
+      type: 'https://api.example.com/problems/validation-error',
+      title: 'Request validation failed',
+      code: 'ERR_VALIDATION',
+    })
+
+    await app.close()
+  })
+})

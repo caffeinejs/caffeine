@@ -1,4 +1,4 @@
-import { $t, type SchemaIssue } from '@caffeinejs/application/schema'
+import { $t } from '@caffeinejs/application/schema'
 
 import { statusPhrase } from '../../status.js'
 
@@ -9,6 +9,38 @@ export const PROBLEM_CONTENT_TYPE = 'application/problem+json'
 const PROBLEM_TYPE_BLANK = 'about:blank'
 
 /**
+ * Where a {@link ProblemIssue} failed: a place in the request body, or a request parameter.
+ *
+ * `pointer` is an RFC 6901 JSON pointer: into the body, where `''` is the body itself, or into a parameter's value,
+ * such as `/1` for the second value of `?ids=1&ids=x`. A parameter entry leaves it out when the failure is the value
+ * as a whole. `name` is the parameter's name, unescaped, and is absent when the failure is the whole slot, such as
+ * too few query parameters.
+ *
+ * `name`, `pointer` and the entry's `detail` can hold a key the client chose: escape them before writing them into
+ * HTML.
+ */
+export type ProblemIssueSource =
+  | { in: 'body'; pointer: string }
+  | { in: 'query' | 'path' | 'header' | 'cookie'; name?: string; pointer?: string }
+
+/**
+ * One entry of a problem's `errors`: a rule a request broke.
+ *
+ * The framework lists one per error its validator reported for a request that fails its schema; an application lists
+ * its own with `ErrHTTP.builder().errors(...)`.
+ */
+export interface ProblemIssue {
+  /** What failed, to branch on, such as `ERR_VALIDATION_MIN_LENGTH`. */
+  code: string
+  /** What failed, written for the reader, such as `q must be >= 1`. */
+  detail: string
+  /** Where it failed. Absent on an entry that names no place. */
+  source?: ProblemIssueSource
+  /** What the rule was checked against, such as `{ limit: 3 }`. */
+  params?: Record<string, unknown>
+}
+
+/**
  * An RFC 9457 problem details object: the body of every error response the framework renders itself.
  *
  * Any other member is an extension the application added to the error.
@@ -16,13 +48,16 @@ const PROBLEM_TYPE_BLANK = 'about:blank'
 export interface Problem {
   /** URI reference. `about:blank` unless the application set one. */
   type: string
-  /** The status phrase for `status`, as {@link statusPhrase} gives it. Stable for that status. */
+  /**
+   * A short summary of the kind of problem, the same on every occurrence. The status phrase for `status` unless the
+   * error or the validation settings name one.
+   */
   title: string
   /** Same number as the status line. */
   status: number
   /** This occurrence. Safe to show a client. */
   detail: string
-  /** The error's code, such as `ERR_HTTP_NOT_FOUND` or Fastify's `FST_ERR_VALIDATION`. */
+  /** The error's code, such as `ERR_HTTP_NOT_FOUND`, or `ERR_VALIDATION` for a request that fails its schema. */
   code: string
   /** The class of error a client branches on, such as `rate_limit`. Present only when the application set one. */
   category?: string
@@ -34,10 +69,10 @@ export interface Problem {
   /** URI reference. Present only when the application set one. */
   instance?: string
   /**
-   * Present only on a schema failure: each rule that failed, its `path` dotted from the request slot
-   * (`body.owner.name`) and its `code` the rule (`minLength`).
+   * Each rule the request broke. Present on a request that fails its schema, at most `maxErrors` of them, and on an
+   * `ErrHTTP` given entries.
    */
-  errors?: SchemaIssue[]
+  errors?: ProblemIssue[]
   /**
    * Ties the response to the server's logs and traces: the request ID unless error handling was given a
    * provider. Absent when there is none. Present only on problems the framework sends.
@@ -57,7 +92,7 @@ export interface Problem {
 export const ProblemSchema = $t.Object(
   {
     type: $t.String({ description: 'URI reference. `about:blank` unless the application set one.' }),
-    title: $t.String({ description: 'The status phrase. Stable for that status.' }),
+    title: $t.String({ description: 'A short summary of the kind of problem. The same on every occurrence.' }),
     status: $t.Integer({ description: 'Same number as the status line.' }),
     detail: $t.String({ description: 'This occurrence. Safe to show a client.' }),
     code: $t.String({ description: 'The error code, to look up.' }),
@@ -68,13 +103,24 @@ export const ProblemSchema = $t.Object(
       $t.Array(
         $t.Object(
           {
-            path: $t.String({ description: 'Dotted, starting with the request slot that failed.' }),
-            message: $t.String(),
-            code: $t.Optional($t.String({ description: 'The rule that failed.' })),
+            code: $t.String({ description: 'What failed, to branch on.' }),
+            detail: $t.String({ description: 'What failed, written for the reader.' }),
+            source: $t.Optional(
+              $t.Object({
+                in: $t.UnionEnum(['body', 'query', 'path', 'header', 'cookie']),
+                name: $t.Optional($t.String({ description: 'The parameter. Absent when the whole slot failed.' })),
+                pointer: $t.Optional(
+                  $t.String({ description: 'An RFC 6901 JSON pointer into the body or the value.' }),
+                ),
+              }),
+            ),
+            params: $t.Optional(
+              $t.Record($t.String(), $t.Unknown(), { description: 'What the rule was checked against.' }),
+            ),
           },
-          { $id: 'SchemaIssue' },
+          { $id: 'ProblemIssue' },
         ),
-        { description: 'Each rule a schema failure broke.' },
+        { description: 'Each rule the request broke.' },
       ),
     ),
     correlation_id: $t.Optional($t.String({ description: "Ties the response to the server's logs and traces." })),
@@ -89,12 +135,15 @@ export interface ProblemInit {
   status: number
   code: string
   /** The status phrase when absent. */
+  title?: string
+  /** The title when absent. */
   detail?: string
   type?: string
   instance?: string
   category?: string
   whatYouShouldDo?: string
-  errors?: SchemaIssue[]
+  /** Left out of the problem when empty. */
+  errors?: ProblemIssue[]
   extensions?: Readonly<Record<string, unknown>>
 }
 
@@ -122,7 +171,7 @@ const MEMBERS = new Set([
  * framework adds them when it sends the problem, not here.
  */
 export function newProblem(init: ProblemInit): Problem {
-  const title = statusPhrase(init.status) ?? 'Unknown Error'
+  const title = init.title ?? statusPhrase(init.status) ?? 'Unknown Error'
   const extensions = Object.entries(init.extensions ?? {}).filter(([name]) => !MEMBERS.has(name))
 
   return {
@@ -135,6 +184,6 @@ export function newProblem(init: ProblemInit): Problem {
     ...(init.category === undefined ? {} : { category: init.category }),
     ...(init.whatYouShouldDo === undefined ? {} : { what_you_should_do: init.whatYouShouldDo }),
     ...(init.instance === undefined ? {} : { instance: init.instance }),
-    ...(init.errors === undefined ? {} : { errors: init.errors }),
+    ...(init.errors === undefined || init.errors.length === 0 ? {} : { errors: init.errors }),
   }
 }

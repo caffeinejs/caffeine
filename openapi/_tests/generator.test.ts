@@ -210,32 +210,44 @@ describe('generateDocument', () => {
 })
 
 describe('response inference', () => {
-  it('adds the validation status when a request slot has a schema', () => {
-    const router = fixtureRouter('/pets', r =>
-      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
-    )
+  // The error handler answers a failed body with 422 and failed parameters with 400; the document lists what a route
+  // can answer, so a route validating both lists both.
+  it.each([
+    ['a body', { body: petSchema }, ['200', '422']],
+    ['path parameters', { params: $t.Object({ id: $t.Integer() }) }, ['200', '400']],
+    ['a query string', { querystring: $t.Object({ page: $t.Integer() }) }, ['200', '400']],
+    ['headers', { headers: $t.Object({ 'x-tenant': $t.String() }) }, ['200', '400']],
+    // A file body is streamed, never validated, so it cannot fail its schema.
+    ['a file body', { body: $t.Object({ file: $t.File(), caption: $t.String() }) }, ['200']],
+    [
+      'a body and a query string',
+      { body: petSchema, querystring: $t.Object({ page: $t.Integer() }) },
+      ['200', '400', '422'],
+    ],
+  ])('adds the validation status of each slot it validates, for %s', (_name, schema, statuses) => {
+    const router = fixtureRouter('/pets', r => r.routes([fixtureRoute('POST', '/', 'create').schema(schema)]))
 
-    const document = generateDocument({
-      routeGroups: [router],
-      options: fixtureOptions({ errorSchema: errorSchema }),
-    })
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions({ errorSchema: errorSchema }) })
 
-    expect(Object.keys(operationAt(document, '/pets', 'post')?.responses ?? {})).toContain('400')
+    expect(Object.keys(operationAt(document, '/pets', 'post')?.responses ?? {})).toEqual(statuses)
   })
 
   it('honours a configured validation status', () => {
     const router = fixtureRouter('/pets', r =>
-      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
+      r.routes([
+        fixtureRoute('POST', '/', 'create').schema({ body: petSchema, querystring: $t.Object({ page: $t.Integer() }) }),
+      ]),
     )
 
     const document = generateDocument({
       routeGroups: [router],
-      options: fixtureOptions({ errors: { validation: 422, unauthorized: 401, forbidden: 403 } }),
+      options: fixtureOptions({
+        errors: { bodyValidation: 400, parameterValidation: 409, unauthorized: 401, forbidden: 403 },
+      }),
     })
     const statuses = Object.keys(operationAt(document, '/pets', 'post')?.responses ?? {})
 
-    expect(statuses).toContain('422')
-    expect(statuses).not.toContain('400')
+    expect(statuses).toEqual(['200', '400', '409'])
   })
 
   it('adds 401 and 403 on a protected route', () => {
@@ -292,7 +304,7 @@ describe('response inference', () => {
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const responses = operationAt(document, '/pets', 'post')?.responses ?? {}
 
-    for (const status of ['400', '401', '403']) {
+    for (const status of ['422', '401', '403']) {
       expect(responses[status]?.content).toEqual({
         'application/json': { schema: { $ref: '#/components/schemas/Problem' } },
         'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } },
@@ -308,13 +320,27 @@ describe('response inference', () => {
         instance: { type: 'string' },
         correlation_id: { type: 'string' },
         timestamp: { type: 'string', format: 'date-time' },
-        errors: { type: 'array', items: { $ref: '#/components/schemas/SchemaIssue' } },
+        errors: { type: 'array', items: { $ref: '#/components/schemas/ProblemIssue' } },
         stacktrace: { type: 'string' },
       },
     })
-    expect(document.components?.schemas?.SchemaIssue).toMatchObject({
+    expect(document.components?.schemas?.ProblemIssue).toMatchObject({
       type: 'object',
-      required: ['path', 'message'],
+      required: ['code', 'detail'],
+      properties: {
+        source: {
+          type: 'object',
+          required: ['in'],
+          properties: {
+            in: {
+              anyOf: ['body', 'query', 'path', 'header', 'cookie'].map(value => ({ const: value, type: 'string' })),
+            },
+            name: { type: 'string' },
+            pointer: { type: 'string' },
+          },
+        },
+        params: { type: 'object' },
+      },
     })
   })
 
@@ -324,7 +350,7 @@ describe('response inference', () => {
     )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions({ errorSchema }) })
-    const content = operationAt(document, '/pets', 'post')?.responses?.['400'].content
+    const content = operationAt(document, '/pets', 'post')?.responses?.['422'].content
 
     for (const mediaType of ['application/json', 'application/problem+json']) {
       expect(content?.[mediaType].schema).toMatchObject({
@@ -345,7 +371,7 @@ describe('response inference', () => {
       options: fixtureOptions(),
       problemMediaTypes: ['application/json', 'application/problem+json', 'text/markdown', 'text/html'],
     })
-    const content = operationAt(document, '/pets', 'post')?.responses?.['400'].content ?? {}
+    const content = operationAt(document, '/pets', 'post')?.responses?.['422'].content ?? {}
 
     expect(Object.keys(content)).toEqual(['application/json', 'application/problem+json', 'text/markdown', 'text/html'])
     expect(content['text/html']).toEqual({})
@@ -361,7 +387,7 @@ describe('response inference', () => {
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const responses = operationAt(document, '/pets', 'post')?.responses ?? {}
 
-    expect(Object.keys(responses['400']?.content ?? {})).toEqual([
+    expect(Object.keys(responses['422']?.content ?? {})).toEqual([
       'application/json',
       'application/problem+json',
       'text/markdown',
@@ -1067,7 +1093,7 @@ describe('responses', () => {
   it('describes an inferred status with no standard reason generically', () => {
     const responses = responsesOf(
       fixtureRoute('POST', '/', 'create').schema({ body: petSchema }),
-      fixtureOptions({ errors: { validation: 499, unauthorized: 401, forbidden: 403 } }),
+      fixtureOptions({ errors: { bodyValidation: 499, parameterValidation: 400, unauthorized: 401, forbidden: 403 } }),
     )
 
     expect(responses['499']).toEqual({

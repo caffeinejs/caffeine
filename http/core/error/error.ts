@@ -6,6 +6,7 @@ import type { IContext } from '../../context.js'
 import { ErrConfiguration } from './common.js'
 import { buildCatchByMap, ErrorHandlerProvider, type ErrorHandlerRef } from './handler.js'
 import { kErrorHandlingOptions } from './keys.js'
+import type { ProblemIssue } from './problem.js'
 import {
   defaultProblemFormats,
   mediaTypeCharset,
@@ -21,6 +22,29 @@ import {
 export type CorrelationIDProvider = (ctx: IContext) => string | undefined
 
 const requestID: CorrelationIDProvider = ctx => ctx.req.id
+
+/**
+ * Rewrites one entry of a validation problem before it is sent, such as to rename its code or translate its detail.
+ *
+ * Called on the error path, so it is synchronous, and only for the entries sent, at most `maxErrors` of them. It
+ * cannot drop an entry. One that throws is logged once, and that entry and every later one go out as the framework
+ * built them.
+ */
+export type ProblemIssueMapper = (ctx: IContext, issue: ProblemIssue) => ProblemIssue
+
+/** The problem a request that fails its schema answers with. */
+export interface ValidationProblemOptions {
+  /** URI reference naming the kind of problem. `about:blank` by default. */
+  type?: string
+  /** The status phrase by default: "Unprocessable Content" for the body, "Bad Request" for the other slots. */
+  title?: string
+  /** `ERR_VALIDATION` by default. */
+  code?: string
+  /** The most entries a problem lists, an integer of at least 1. 25 by default. */
+  maxErrors?: number
+  /** Rewrites each entry before it is sent. */
+  issue?: ProblemIssueMapper
+}
 
 /** What the error-handling feature settled on, for the server's error handler. */
 export interface GlobalErrorHandlerOptions {
@@ -38,6 +62,8 @@ export interface GlobalErrorHandlerOptions {
   formats?: ReadonlyMap<string, ProblemFormat>
   /** Where `correlation_id` comes from. The request ID by default. */
   correlationID?: CorrelationIDProvider
+  /** The problem a request that fails its schema answers with, its defaults applied. */
+  validation?: ValidationProblemOptions & Required<Pick<ValidationProblemOptions, 'type' | 'code' | 'maxErrors'>>
 }
 
 /**
@@ -71,6 +97,7 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
   #exposeStacktrace = false
   readonly #formats = defaultProblemFormats()
   #correlationID = requestID
+  #validation: ValidationProblemOptions = {}
 
   /**
    * Enrols handler classes as the application's global error handlers, each rendering the error types its own
@@ -162,6 +189,42 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
+  /**
+   * Configures the problem a request that fails its schema answers with: 422 for the body, 400 for path parameters,
+   * the query string and headers, each error the validator reported an entry of `errors`.
+   *
+   * ```ts
+   * .errorHandling(e => e.validation({
+   *   type: 'https://api.example.com/problems/validation-error',
+   *   title: 'Request validation failed',
+   *   issue: (ctx, issue) => ({ ...issue, detail: translate(ctx.req.header('accept-language'), issue) }),
+   * }))
+   * ```
+   *
+   * Merges over earlier calls key by key. Unset, `type` is `about:blank`, `title` the status phrase, `code`
+   * `ERR_VALIDATION`, and a problem lists at most 25 entries, its `detail` saying how many there were.
+   *
+   * Fastify's validator reports the first error it meets. An application that wants every one turns on Ajv's
+   * `allErrors` through `.server()`, and pays for it: Ajv then records every error a request holds, as many as its
+   * items times the fields each one fails, before any cap applies.
+   *
+   * @throws ErrConfiguration when `maxErrors` is not an integer of at least 1.
+   */
+  validation(options: ValidationProblemOptions): this {
+    const { maxErrors } = options
+    if (maxErrors !== undefined && !(Number.isInteger(maxErrors) && maxErrors >= 1)) {
+      throw new ErrConfiguration(
+        errMessage(`Cannot set the validation "maxErrors" to "${maxErrors}": it is not an integer of at least 1`)
+          .solutions('Pass an integer of at least 1, such as 25')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    this.#validation = { ...this.#validation, ...options }
+    return this
+  }
+
   protected override configure(kit: FeatureConfigureKit<C>): void {
     // Built when the provider resolves: the handlers are bindings, and nothing is registered while features configure.
     kit.container.bind(ErrorHandlerProvider, t =>
@@ -186,6 +249,12 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
           exposeStacktrace: this.#exposeStacktrace,
           formats: this.#formats,
           correlationID: this.#correlationID,
+          validation: {
+            ...this.#validation,
+            type: this.#validation.type ?? 'about:blank',
+            code: this.#validation.code ?? 'ERR_VALIDATION',
+            maxErrors: this.#validation.maxErrors ?? 25,
+          },
         })
         .lifetime(Scopes.SINGLETON)
         .internal(),

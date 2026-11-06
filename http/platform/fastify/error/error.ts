@@ -1,21 +1,13 @@
-import type { SchemaIssue } from '@caffeinejs/application/schema'
 import { errMessage } from '@caffeinejs/std/err'
-import type {
-  FastifyError,
-  FastifyInstance,
-  FastifyPluginAsync,
-  FastifyReply,
-  FastifyRequest,
-  FastifySchemaValidationError,
-} from 'fastify'
+import type { FastifyError, FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
 import type { IContext } from '../../../context.js'
 import { ErrCaffeineWebApplication } from '../../../core/error/common.js'
-import type { CorrelationIDProvider, GlobalErrorHandlerOptions } from '../../../core/error/error.js'
+import type { CorrelationIDProvider, GlobalErrorHandlerOptions, ProblemIssueMapper } from '../../../core/error/error.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from '../../../core/error/handler.js'
 import { ErrHTTP } from '../../../core/error/http.js'
-import { newProblem, type Problem } from '../../../core/error/problem.js'
+import { newProblem, type Problem, type ProblemIssue } from '../../../core/error/problem.js'
 import { negotiateProblemFormat } from '../../../core/error/serializer.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
 import { statusPhrase } from '../../../status.js'
@@ -23,11 +15,21 @@ import { appendVary } from '../../../vary.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
 import { answer, payloadOf } from '../response.js'
+import {
+  isValidationSlot,
+  validationDetail,
+  validationIssues,
+  validationMessage,
+  type ValidationSlot,
+} from './validation.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
 /** The context of a request, made when no hook has made it yet: one an earlier `onRequest` hook failed. */
 export type ContextOf = (request: FastifyRequest, reply: FastifyReply) => Context
+
+/** The validation problem's settings, as the error handling feature bound them. */
+type ValidationProblem = Required<GlobalErrorHandlerOptions>['validation']
 
 /** A problem encoded for the request it answers: the media type its client negotiated, and the body. */
 export interface EncodedProblem {
@@ -92,7 +94,7 @@ export function globalErrorHandlerPlugin(
   const plugin: FastifyPluginAsync = async instance => {
     instance.decorate(kProblemEncoder, problemEncoder(options))
     instance.decorate(kContextOf, contextOf)
-    ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider))
+    ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider), options.validation)
   }
 
   return fp(plugin, { name: 'caffeine-error-handling' })
@@ -169,6 +171,7 @@ function correlationOf(
 export function installGlobalErrorHandler(
   fastify: FastifyInstance,
   errorManager: ErrorHandlerProvider,
+  validation: ValidationProblem,
 ): GlobalErrorHandler {
   // In the format the request asks for, so the response varies on Accept. Encoded here, so a route's error
   // response schema, written for the bodies the application sends, neither refuses a problem nor strips its members.
@@ -189,6 +192,12 @@ export function installGlobalErrorHandler(
     if (handler) {
       // The handler may respond via ctx or return a value (JSON payload or a View to render).
       return respond(ctx, await handler.get().handle(ctx, err))
+    }
+
+    // A request that fails its schema: Fastify names the slot on that error, whichever validator ran, and on no other.
+    const slot = (err as Partial<FastifyError>).validationContext
+    if (isValidationSlot(slot)) {
+      return sendProblem(request, reply, validationProblem(request, ctx, err, slot, validation), err)
     }
 
     if (err instanceof ErrHTTP) {
@@ -232,19 +241,11 @@ export function installGlobalErrorHandler(
       }
 
       const code = (err as { code?: unknown }).code
-      const validation = (err as Partial<FastifyError>).validation
 
       return sendProblem(
         request,
         reply,
-        newProblem({
-          status,
-          code: typeof code === 'string' ? code : codeForStatus(status),
-          detail: err.message,
-          ...(validation === undefined
-            ? {}
-            : { errors: problemErrors(validation, (err as Partial<FastifyError>).validationContext) }),
-        }),
+        newProblem({ status, code: typeof code === 'string' ? code : codeForStatus(status), detail: err.message }),
         err,
       )
     }
@@ -351,25 +352,53 @@ function codeForStatus(status: number): string {
         .replace(/[^A-Z0-9]+/g, '_')}`
 }
 
-// Ajv reports where a value failed as a JSON pointer inside the slot, and a missing property at the object that
-// lacks it. Both become one dotted path from the slot, as a configuration issue is written.
-function problemErrors(validation: FastifySchemaValidationError[], slot: string | undefined): SchemaIssue[] {
-  return validation.map(issue => {
-    const segments = issue.instancePath
-      .split('/')
-      .slice(1)
-      .map(segment => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
-    const missing = (issue.params as { missingProperty?: unknown } | undefined)?.missingProperty
-    if (typeof missing === 'string') {
-      segments.push(missing)
-    }
+// The body's failures answer 422, the request's parameters' 400. The log line is bounded like the response: the slot,
+// the count and the entries sent, never the validator's own array or a message joined from it.
+function validationProblem(
+  request: FastifyRequest,
+  ctx: IContext,
+  err: Error,
+  slot: ValidationSlot,
+  validation: ValidationProblem,
+): Problem {
+  const reported = (err as Partial<FastifyError>).validation
+  const status = slot === 'body' ? 422 : 400
+  const base = { status, type: validation.type, title: validation.title, code: validation.code }
 
-    return {
-      path: [...(slot === undefined ? [] : [slot]), ...segments].join('.'),
-      message: issue.message ?? 'is invalid',
-      code: issue.keyword,
+  // A validator compiled by the application returned an `Error` of its own, so there is nothing to list.
+  if (!Array.isArray(reported)) {
+    request.log.info({ err }, err.message)
+    return newProblem({ ...base, detail: validationDetail(slot, 0, validation.maxErrors) })
+  }
+
+  const built = validationIssues(reported, slot, validation.maxErrors)
+  const errors = validation.issue === undefined ? built : mapIssues(request, ctx, built, validation.issue)
+  const total = reported.length
+
+  request.log.info({ validation: { slot, total, errors } }, validationMessage(slot, total))
+
+  return newProblem({ ...base, detail: validationDetail(slot, total, validation.maxErrors), errors })
+}
+
+// A mapper that throws is the application's bug, logged once per response rather than once per entry.
+function mapIssues(
+  request: FastifyRequest,
+  ctx: IContext,
+  issues: ProblemIssue[],
+  mapper: ProblemIssueMapper,
+): ProblemIssue[] {
+  const mapped: ProblemIssue[] = []
+
+  for (const issue of issues) {
+    try {
+      mapped.push(mapper(ctx, issue))
+    } catch (err) {
+      request.log.error({ err }, 'Cannot map a validation issue: sending the issues as the framework built them')
+      return [...mapped, ...issues.slice(mapped.length)]
     }
-  })
+  }
+
+  return mapped
 }
 
 // Node prints a cause as a "Caused by" section of its own, and that section is usually where the detail is —

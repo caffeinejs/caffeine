@@ -1,3 +1,4 @@
+import { hasFileSchema } from '@caffeinejs/application/schema'
 import { mediaTypeEssence, ProblemSchema, statusPhrase, type IRoute } from '@caffeinejs/http'
 
 import type { ResponseDetail } from '../decorators/detail.js'
@@ -23,7 +24,8 @@ const RANGES: Record<string, string> = {
  * schema — where the declaration also drives Fastify's serialization, so it earns its keep twice.
  *
  * Two additions come from route metadata that is unambiguous rather than from a schema, and both are opt-out:
- * the validation failure Ajv produces whenever a request slot has a schema, and the 401/403 pair on a route
+ * the validation failure the error handler answers whenever a request slot has a schema, one status for the body
+ * and another for the parameters, and the 401/403 pair on a route
  * the authorization pipeline protects. Anything declared explicitly always wins over an inferred entry.
  */
 export function deriveResponses(
@@ -67,9 +69,15 @@ export function deriveResponses(
     })
   }
 
-  // 3. Inferred, never overwriting anything declared.
-  if (options.infer.validation && hasRequestSchema(route)) {
-    addInferred(responses, String(options.errors.validation), options, registry, context, problemMediaTypes)
+  // 3. Inferred, never overwriting anything declared. A failed body and failed parameters answer apart, and a file body
+  // is streamed, never validated.
+  const body = route.schema?.body
+  if (options.infer.validation && body !== undefined && !hasFileSchema(body)) {
+    addInferred(responses, String(options.errors.bodyValidation), options, registry, context, problemMediaTypes)
+  }
+
+  if (options.infer.validation && hasParameterSchema(route)) {
+    addInferred(responses, String(options.errors.parameterValidation), options, registry, context, problemMediaTypes)
   }
 
   if (options.infer.auth && route.authorization.hasProtection) {
@@ -202,18 +210,13 @@ function normalizeStatus(status: string): string {
   return /^[1-5]xx$/i.test(status) ? status.toUpperCase() : status
 }
 
-function hasRequestSchema(route: IRoute<unknown>): boolean {
+function hasParameterSchema(route: IRoute<unknown>): boolean {
   const schema = route.schema
   if (schema === undefined) {
     return false
   }
 
-  return (
-    schema.params !== undefined ||
-    schema.querystring !== undefined ||
-    schema.headers !== undefined ||
-    schema.body !== undefined
-  )
+  return schema.params !== undefined || schema.querystring !== undefined || schema.headers !== undefined
 }
 
 // Numeric statuses ascending, then the wildcard ranges, then `default` — the order a reader expects.

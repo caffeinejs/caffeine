@@ -201,7 +201,10 @@ export class OpenAPIOptionsBuilder {
     return this
   }
 
-  /** The status codes used for inferred responses — set `validation` to match your error handler. */
+  /**
+   * The status codes used for inferred responses, over those set before. Set `bodyValidation` and
+   * `parameterValidation` to match an error handler that answers a failed request validation differently.
+   */
   errors(errors: Partial<ErrorStatusOptions>): this {
     this.#options.errors = { ...this.#options.errors, ...errors }
     return this

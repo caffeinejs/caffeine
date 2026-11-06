@@ -1,5 +1,5 @@
 import { ErrCaffeineWebApplication } from './common.js'
-import { newProblem, type Problem } from './problem.js'
+import { newProblem, type Problem, type ProblemIssue } from './problem.js'
 
 export interface ErrHTTPOptions {
   cause?: unknown
@@ -12,6 +12,8 @@ export interface ErrHTTPOptions {
   code?: string
   /** URI reference naming the kind of problem, sent as {@link Problem.type}. `about:blank` when absent. */
   type?: string
+  /** A short summary of the kind of problem, sent as {@link Problem.title}. The status phrase when absent. */
+  title?: string
   /** URI reference naming this occurrence, sent as {@link Problem.instance}. */
   instance?: string
   /** The class of error a client branches on, sent as {@link Problem.category}. */
@@ -20,6 +22,8 @@ export interface ErrHTTPOptions {
   whatYouShouldDo?: string
   /** RFC 9457 extension members, sent beside the members a {@link Problem} defines, which they cannot replace. */
   extensions?: Record<string, unknown>
+  /** Each rule the request broke, sent as {@link Problem.errors}. Left out when empty. */
+  errors?: ProblemIssue[]
 }
 
 /**
@@ -31,10 +35,12 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
   readonly body?: unknown
   readonly headers?: Record<string, string>
   readonly type?: string
+  readonly title?: string
   readonly instance?: string
   readonly category?: string
   readonly whatYouShouldDo?: string
   readonly extensions?: Record<string, unknown>
+  readonly errors?: ProblemIssue[]
 
   constructor(
     readonly statusCode: number,
@@ -47,10 +53,12 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
     this.body = options?.body
     this.headers = options?.headers
     this.type = options?.type
+    this.title = options?.title
     this.instance = options?.instance
     this.category = options?.category
     this.whatYouShouldDo = options?.whatYouShouldDo
     this.extensions = options?.extensions
+    this.errors = options?.errors
   }
 
   /**
@@ -64,10 +72,12 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
       code: this.code,
       detail: this.message,
       type: this.type,
+      title: this.title,
       instance: this.instance,
       category: this.category,
       whatYouShouldDo: this.whatYouShouldDo,
       extensions: this.extensions,
+      errors: this.errors,
     })
   }
 
@@ -85,6 +95,7 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
  *   .message('Order 42 is already paid')
  *   .code('ERR_ORDER_PAID')
  *   .type('https://example.com/problems/order-paid')
+ *   .title('Order already paid')
  *   .instance('/orders/42')
  *   .category('billing')
  *   .whatYouShouldDo('Fetch the order to read its receipt instead of paying again')
@@ -133,6 +144,12 @@ export class ErrHTTPBuilder {
     return this
   }
 
+  /** The problem's `title`: a short summary of the kind of problem, the same on every occurrence. */
+  title(title: string) {
+    this.#options.title = title
+    return this
+  }
+
   instance(instance: string) {
     this.#options.instance = instance
     return this
@@ -159,6 +176,27 @@ export class ErrHTTPBuilder {
   /** Adds extension members, over those added before. A name {@link Problem} defines itself is not sent. */
   extensions(extensions: Record<string, unknown>) {
     this.#options.extensions = { ...this.#options.extensions, ...extensions }
+    return this
+  }
+
+  /**
+   * Adds entries to the problem's `errors`, after those added before, such as each rule a business check broke:
+   *
+   * ```ts
+   * throw ErrHTTP.builder()
+   *   .statusCode(422)
+   *   .message('2 items cannot be bought')
+   *   .errors(
+   *     { code: 'ERR_ITEM_UNAVAILABLE', detail: 'Item 7 is sold out', source: { in: 'body', pointer: '/items/0' } },
+   *     { code: 'ERR_QUANTITY_LIMIT', detail: 'At most 3 of item 9', params: { maximum: 3 } },
+   *   )
+   *   .build()
+   * ```
+   *
+   * Every entry is sent, with no cap. `.options({ errors })` replaces what earlier calls added.
+   */
+  errors(...issues: ProblemIssue[]) {
+    this.#options.errors = [...(this.#options.errors ?? []), ...issues]
     return this
   }
 
