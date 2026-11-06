@@ -318,6 +318,86 @@ describe('a validator the application compiled', () => {
   })
 })
 
+// A validator that throws is the server's bug, not a request to correct: Fastify marks its error 500, and it stays one,
+// for the client, for 5xx monitoring and in the error log.
+describe('a validator that throws', () => {
+  let app: App
+  const logged: LogEntry[] = []
+
+  beforeAll(async () => {
+    app = createWebApplication()
+      .server(() => ({ factory: { logger: pinoTo(logged) } }))
+      .serverCallback((_kit, instance) => {
+        instance.setValidatorCompiler(() => () => {
+          throw new Error('Cannot reach the tenant registry: t-9')
+        })
+      })
+      .mount(
+        newRouter('/broken')
+          .post('/', { body: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true }))
+          .get('/', { querystring: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true })),
+      )
+    await app.bootstrap()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  it.each([
+    ['body', () => post(app, '/broken', '{"a":1}')],
+    ['query string', () => app.request('/broken?a=1')],
+  ] as const)('answers a valid %s with a 500 and logs it as an error', async (_, send) => {
+    logged.length = 0
+    const res = await send()
+    const text = await res.text()
+
+    expect(res.status).toBe(500)
+    expect(JSON.parse(text)).toEqual(expect.objectContaining({ status: 500, code: 'ERR_INTERNAL' }))
+    expect(JSON.parse(text)).not.toHaveProperty('errors')
+    expect(text).not.toContain('t-9')
+    expect(logged.filter(entry => entry.msg === 'Cannot reach the tenant registry: t-9')).toEqual([
+      expect.objectContaining({ level: 50 }),
+    ])
+  })
+})
+
+// Ajv rejects an `$async` schema with an error of its own, its list under `errors`: the entries are a plain schema's.
+describe('an $async schema', () => {
+  let app: App
+
+  beforeAll(async () => {
+    app = createWebApplication().mount(
+      newRouter('/later').post(
+        '/',
+        { body: $t.Unsafe({ $async: true, type: 'object', properties: { a: { type: 'integer' } } }) },
+        () => ({ ok: true }),
+      ),
+    )
+    await app.bootstrap()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  it('lists the errors Ajv rejected the body with', async () => {
+    const res = await post(app, '/later', '{"a":"x"}')
+    const problem = await problemOf(res)
+
+    expect(res.status).toBe(422)
+    expect(problem.detail).toBe('Invalid request body')
+    expect(problem.errors).toEqual([
+      {
+        code: 'ERR_VALIDATION_TYPE',
+        detail: 'a must be integer',
+        source: { in: 'body', pointer: '/a' },
+        params: { type: 'integer' },
+      },
+    ])
+  })
+})
+
 // A formatter decides the error's message; what the client gets is the framework's problem either way.
 describe('an application schemaErrorFormatter', () => {
   it('cannot change the status or the code', async () => {

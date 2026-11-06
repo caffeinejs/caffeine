@@ -142,7 +142,7 @@ A request that fails its schema answers 422 for the body and 400 for path parame
 
 `anyOf` and `propertyNames` report after the errors of what they contain: a value that fails `anyOf: [string, integer]` gives three entries. `contains` does so only with `allErrors` on, and `if` is reported only with it on. A Zod email is a `pattern` beside the `format`, and the pattern fails first: `ERR_VALIDATION_PATTERN`.
 
-A problem lists at most 25 entries. When there were more, `detail` says so: `Invalid request body: showing the first 25 of 31 errors`. A validator the application compiled itself, through `setValidatorCompiler`, that returns an `Error` gives a problem with no `errors`, its message going to the log only.
+A problem lists at most 25 entries. When there were more, `detail` says so: `Invalid request body: showing the first 25 of 31 errors`. A validator the application compiled itself, through `setValidatorCompiler`, that returns an `Error` gives a problem with no `errors`, its message going to the log only. One that throws is the server's failure, not the request's: Fastify marks its error 500, and the framework answers the generic 500 `ERR_INTERNAL` and logs the error at level error.
 
 `.errorHandling(e => e.validation({ … }))` configures this problem. Each call merges over the last, key by key:
 
@@ -164,7 +164,7 @@ A problem lists at most 25 entries. When there were more, `detail` says so: `Inv
 
 `issue` is synchronous, runs only on the entries sent, and can rewrite an entry but not drop one. One that throws is logged once, and that entry and every later one go out as the framework built them.
 
-A `@Catch` or `@CatchWith` handler for the error still runs first, and is handed Fastify's error with its `validation` array. Its message is `Invalid request body: 31 errors` unless the application set a `schemaErrorFormatter`. When no handler answers it, the framework renders the problem and, whichever formatter ran, logs one line at level info, `Invalid request body: 31 errors` with `{ validation: { slot, total, errors } }`: the entries sent, never the validator's own report.
+A `@Catch` or `@CatchWith` handler for the error still runs first, and is handed Fastify's error with its `validation` array. Its message is `Invalid request body: 31 errors` unless the application set a `schemaErrorFormatter`. An `$async` schema's failure is Ajv's own `ValidationError` instead, message `validation failed`, with the list under `errors`; its problem lists the entries as any other's. When no handler answers it, the framework renders the problem and, whichever formatter ran, logs one line at level info, `Invalid request body: 31 errors` with `{ validation: { slot, total, errors } }`: the entries sent, never the validator's own report.
 
 Ajv stops at the first error by default, as Fastify ships it. An application that wants every one turns on `allErrors`:
 

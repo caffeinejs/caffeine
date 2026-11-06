@@ -1,5 +1,12 @@
 import { errMessage } from '@caffeinejs/std/err'
-import type { FastifyError, FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
+import type {
+  FastifyError,
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+  FastifySchemaValidationError,
+} from 'fastify'
 import fp from 'fastify-plugin'
 
 import type { IContext } from '../../../context.js'
@@ -209,9 +216,10 @@ export function installGlobalErrorHandler(
       return respond(ctx, await handler.get().handle(ctx, err))
     }
 
-    // A request that fails its schema: Fastify names the slot on that error, whichever validator ran, and on no other.
+    // A request that fails its schema: Fastify names the slot on that error, whichever validator ran. It names it on a
+    // validator that threw too, marked 500: that is the server's failure, and the paths below answer it as one.
     const slot = (err as Partial<FastifyError>).validationContext
-    if (isValidationSlot(slot)) {
+    if (isValidationSlot(slot) && errorStatus(err) < 500) {
       return sendProblem(request, reply, validationProblem(request, ctx, err, slot, validation), err)
     }
 
@@ -365,12 +373,12 @@ function validationProblem(
   slot: ValidationSlot,
   validation: ValidationProblem,
 ): Problem {
-  const reported = (err as Partial<FastifyError>).validation
+  const reported = reportedErrors(err)
   const status = slot === 'body' ? 422 : 400
   const base = { status, type: validation.type, title: validation.title, code: validation.code }
 
   // A validator compiled by the application returned an `Error` of its own, so there is nothing to list.
-  if (!Array.isArray(reported)) {
+  if (reported === undefined) {
     request.log.info({ err }, err.message)
     return newProblem({ ...base, detail: validationDetail(slot, 0, validation.maxErrors) })
   }
@@ -382,6 +390,17 @@ function validationProblem(
   request.log.info({ validation: { slot, total, errors } }, validationMessage(slot, total))
 
   return newProblem({ ...base, detail: validationDetail(slot, total, validation.maxErrors), errors })
+}
+
+// Fastify's list, or the one Ajv rejects an `$async` schema with: an error of Ajv's own, the list under `errors`.
+function reportedErrors(err: Error): FastifySchemaValidationError[] | undefined {
+  const { validation, ajv, errors } = err as Partial<FastifyError> & { ajv?: unknown; errors?: unknown }
+
+  if (Array.isArray(validation)) {
+    return validation
+  }
+
+  return ajv === true && Array.isArray(errors) ? (errors as FastifySchemaValidationError[]) : undefined
 }
 
 // A mapper that throws is the application's bug, logged once per response rather than once per entry.

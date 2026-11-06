@@ -720,4 +720,20 @@ describe('a validator the application compiled', () => {
 
     await app.close()
   })
+
+  // Only Ajv's rejection of an `$async` schema is read for a list: an error that says it is Ajv's and holds none lists
+  // nothing.
+  it("answers an error marked as Ajv's but holding no list with the slot alone", async () => {
+    const app = appReporting(Object.assign(new Error('Rejected'), { ajv: true, errors: 'none' }))
+    await app.bootstrap()
+
+    const res = await app.request('/own', { method: 'POST', headers: JSON_BODY, body: '{"sku":"x"}' })
+    const problem = (await res.json()) as Problem
+
+    expect(res.status).toBe(422)
+    expect(problem.detail).toBe('Invalid request body')
+    expect(problem).not.toHaveProperty('errors')
+
+    await app.close()
+  })
 })
