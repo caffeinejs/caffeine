@@ -512,32 +512,21 @@ const breaker = circuitBreaker({ name: 'inventory', clock: fakeTimersClock })
 npm install @caffeinejs/di @caffeinejs/application
 ```
 
-`@caffeinejs/resilience/aop` applies the policies to methods of the classes the container builds, by name. The
-`Resilience()` feature defines the named instances and weaves them in.
+`@caffeinejs/resilience/aop` applies the policies to methods of the classes the container builds. The `Resilience()`
+feature defines presets, one per dependency, each holding at most one policy of each kind under the preset's name,
+and weaves them in.
 
 ```ts
 import { Injectable } from '@caffeinejs/di'
 import { ErrCallRefused } from '@caffeinejs/resilience'
-import {
-  Bulkhead,
-  CircuitBreaker,
-  Fallback,
-  RateLimiter,
-  Resilience,
-  Retry,
-  TimeLimiter,
-} from '@caffeinejs/resilience/aop'
+import { Fallback, Resilience, Resilient, Retry, TimeLimiter } from '@caffeinejs/resilience/aop'
 
 @Injectable([StockCache])
 export class InventoryClient {
   constructor(private readonly cache: StockCache) {}
 
   @Fallback('cachedStock', { on: [ErrCallRefused] })
-  @Retry('inventory')
-  @CircuitBreaker('inventory')
-  @RateLimiter('inventory')
-  @TimeLimiter('inventory')
-  @Bulkhead('inventory')
+  @Resilient('inventory')
   async stock(id: string, signal?: AbortSignal): Promise<Stock> {
     const res = await fetch(`https://inventory/stock/${id}`, { signal })
     if (!res.ok) {
@@ -550,24 +539,42 @@ export class InventoryClient {
   async cachedStock(error: unknown, id: string): Promise<Stock> {
     return this.cache.get(id)
   }
+
+  // the retry and the breaker of `inventory`, the same instances `stock` uses, with a longer time limit
+  @Resilient('inventory')
+  @TimeLimiter('inventory-export')
+  async export(signal?: AbortSignal): Promise<Report> { … }
+
+  // one policy of a one-policy preset
+  @Retry('ledger')
+  async post(entry: Entry): Promise<void> { … }
 }
 
 createApplication({ container, config }).install(
   Resilience((r, { config }) =>
     r
       .config(config.resilience)
-      .circuitBreaker('inventory', { recordResult: res => res instanceof Response && res.status >= 500 })
-      .retry('inventory', { maxAttempts: 3 })
-      .rateLimiter('inventory', { limitForPeriod: 100, limitRefreshPeriod: 1 * Second })
-      .timeLimiter('inventory', { timeoutDuration: 2 * Second })
-      .bulkhead('inventory', { maxConcurrentCalls: 20 }),
+      .preset('inventory', p =>
+        p
+          .retry({ maxAttempts: 3 })
+          .circuitBreaker({ recordResult: res => res instanceof Response && res.status >= 500 })
+          .rateLimiter({ limitForPeriod: 100, limitRefreshPeriod: 1 * Second })
+          .timeLimiter({ timeoutDuration: 2 * Second })
+          .bulkhead({ maxConcurrentCalls: 20 }),
+      )
+      .preset('inventory-export', p => p.timeLimiter({ timeoutDuration: 30 * Second }))
+      .preset('ledger', p => p.retry({ maxAttempts: 5 })),
   ),
 )
 ```
 
-- **Names, not options.** `@Retry('inventory')` uses the retry named `inventory`. Every method naming it shares one
-  instance, and so one state, in that container; two applications never share one.
-- **One order.** Whatever order the decorators are written in, a method runs
+- **Presets, not options.** `@Resilient('inventory')` runs every policy preset `inventory` defines. A stage
+  annotation, `@Retry`, `@CircuitBreaker`, `@RateLimiter`, `@TimeLimiter` or `@Bulkhead`, takes one policy of the
+  preset it names, and next to `@Resilient` replaces that one policy and keeps the rest. Every method naming a preset
+  shares its instances, and so their state, in that container; two applications never share one. A variant such as
+  `inventory-export` above keeps one breaker per dependency on purpose: a full preset of its own would split the
+  dependency's failures across two breakers, and neither might open.
+- **One order.** Whatever order the decorators, or a preset's builder calls, are written in, a method runs
   `fallback(retry(circuitBreaker(rateLimiter(timeLimiter(bulkhead(method))))))`, any subset keeping that order, as
   [Composing policies](#composing-policies) explains. `r.order([...])` sets another order for the whole application,
   outermost first, each of `retry`, `circuitBreaker`, `rateLimiter`, `timeLimiter` and `bulkhead` once; the
@@ -588,36 +595,45 @@ createApplication({ container, config }).install(
   wraps every aspect with a positive order or none, so a retry runs a transaction aspect once per attempt. An aspect
   with a negative order wraps the whole call instead. An aspect with order `0` ties with it, and the order they were
   registered in decides which runs outside: give such an aspect a non-zero order rather than rely on it.
-- **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a name twice, a method names an
-  instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static or a private
-  method, an instance's options are out of range, a controller carries `@Retry` without `ResilienceHTTP()`, the order
-  does not list each kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its
-  limit.
+- **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a preset or one of its policies
+  twice, a preset defines no policy, a method names a preset nothing defines or a policy its preset lacks, a
+  `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a policy's options are
+  out of range, a controller is retried without `ResilienceHTTP()`, the order does not list each kind once, or a
+  bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+
+```text
+ErrInvalidOption: Cannot weave "LedgerClient.post": preset "ledger" defines no time limiter
+Possible Solutions:
+  - Add one with r.preset('ledger', p => p.timeLimiter({ ... }))
+  - Name a preset that defines one in @TimeLimiter(...)
+```
+
 - **Shutdown.** The instances are disposed when the application shuts down; see [Shutdown](#shutdown).
 
 `Resilience()` binds a `ResilienceRegistry`: inject it to use the same instances by hand, or to instrument them,
+`registry.retry('inventory')` being the retry of preset `inventory`,
 fallbacks included (`registry.fallbacks()`, one per method, named `Class.method`). Its `dispose()` disposes every
 instance it holds.
 
 ### Configuration
 
-An instance is defined in code, in the configuration tree, or both; code wins, option by option, and `r.order(...)`
-wins over `order`. The application declares the block in its own schema, with records of named instances holding the
-data options only:
+A preset is defined in code, in the configuration tree, or both. Code wins, option by option, configuration may add
+a policy code left out, and `r.order(...)` wins over `order`. The application declares the block in its own schema, a
+record of presets by name, each holding the data options of its policies:
 
 ```ts
 export const ConfigSchema = $t.Object({
   resilience: $t.Object(
     {
       order: $t.Optional($t.List($t.UnionEnum(['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']))),
-      retries: $t.Record(
+      presets: $t.Record(
         $t.String(),
-        $t.Object({ maxAttempts: $t.Optional($t.Integer()), backoff: $t.Optional($t.Duration()) }),
+        $t.Object({
+          retry: $t.Optional($t.Object({ maxAttempts: $t.Optional($t.Integer()) })),
+          timeLimiter: $t.Optional($t.Object({ timeoutDuration: $t.Optional($t.Duration()) })),
+        }),
         { default: {} },
       ),
-      timeLimiters: $t.Record($t.String(), $t.Object({ timeoutDuration: $t.Optional($t.Duration()) }), {
-        default: {},
-      }),
     },
     { default: {} },
   ),
@@ -625,8 +641,8 @@ export const ConfigSchema = $t.Object({
 ```
 
 ```sh
-APP_RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS=5
-APP_RESILIENCE__TIME_LIMITERS__INVENTORY__TIMEOUT_DURATION=1500ms
+APP_RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS=5
+APP_RESILIENCE__PRESETS__INVENTORY__TIME_LIMITER__TIMEOUT_DURATION=1500ms
 APP_RESILIENCE__ORDER=circuitBreaker,retry,rateLimiter,timeLimiter,bulkhead
 ```
 
@@ -646,7 +662,7 @@ import { Resilience } from '@caffeinejs/resilience/aop'
 import { ResilienceErrorHandler, ResilienceHTTP } from '@caffeinejs/resilience/http'
 
 createWebApplication({ container, config })
-  .install(Resilience(r => r.retry('feed', { maxAttempts: 3 })))
+  .install(Resilience(r => r.preset('feed', p => p.retry({ maxAttempts: 3 }))))
   .install(ResilienceHTTP())
   .errorHandling(e => e.globalHandlers(ResilienceErrorHandler))
 ```
@@ -669,15 +685,15 @@ left to the application's handlers.
 A policy treats every error alike, on a controller as anywhere else: a 404 a handler throws is retried, counts as a
 breaker failure, and is handed to a fallback, so a burst of requests for missing records can open the breaker for
 every client. Nothing is excluded by default. `isClientError` tells a client's mistake from a failing dependency; pass
-it to each instance that should not blame the dependency for one:
+it to each policy that should not blame the dependency for one:
 
 ```ts
 import { isClientError } from '@caffeinejs/resilience/http'
 
 Resilience(r =>
-  r
-    .retry('catalog', { maxAttempts: 3, retryOn: error => !isClientError(error) })
-    .circuitBreaker('catalog', { ignoreError: isClientError }),
+  r.preset('catalog', p =>
+    p.retry({ maxAttempts: 3, retryOn: error => !isClientError(error) }).circuitBreaker({ ignoreError: isClientError }),
+  ),
 )
 
 @Fallback('cachedItem', { on: error => !isClientError(error) })
@@ -688,8 +704,8 @@ numeric `status` or `statusCode` from 400 to 499, except 408 and 429: a dependen
 failing for now. The breaker counts an ignored error neither as a failure nor as a success.
 
 Resilience annotations work on controller methods as on any other: a controller is a class the container builds.
-`@Retry` on a handler runs the whole handler again, every service it calls, every write and every outbound
-request included:
+A retry on a handler, from `@Retry` or from the preset `@Resilient` names, runs the whole handler again, every service
+it calls, every write and every outbound request included:
 
 1. **Side effects run again.** A `POST /orders` that wrote the order, then failed, writes a second one.
 2. **Attempts overlap after a timeout.** A time limiter gives up on an attempt the dependency may still be running;
@@ -697,7 +713,7 @@ request included:
 3. **A body read as a stream is gone.** The second attempt reads nothing.
 4. **A response already sent** cannot be replaced by a second attempt or a fallback.
 
-`ResilienceHTTP()` refuses, at `bootstrap()`, `@Retry` on a handler routed for any method that is not safe, and on any
+`ResilienceHTTP()` refuses, at `bootstrap()`, a retry on a handler routed for any method that is not safe, and on any
 route that reads its body as a stream. The safe methods are `SAFE_METHODS` from `@caffeinejs/http`: `GET`, `HEAD`,
 `OPTIONS` and `TRACE` (RFC 9110), and `QUERY`, the same list the cross-site request check exempts. `PUT` and `DELETE`
 are idempotent but not safe: idempotence promises only the final state of the resource, while a replayed handler repeats
@@ -711,7 +727,7 @@ There are three ways out, narrowest first:
 
 ```ts
 // 1. The handler declares that running it twice is safe, such as an upsert by a client-sent Idempotency-Key.
-//    This permits the replay; it deduplicates nothing.
+//    This permits the replay; it deduplicates nothing. @Resilient('orders', { repeatable: true }) says the same.
 @Retry('orders', { repeatable: true })
 @Post('/', p => [p.header('idempotency-key'), p.body()])
 async place(key: string, order: NewOrder): Promise<Order> { … }
@@ -727,7 +743,7 @@ async place(key: string, order: NewOrder): Promise<Order> { … }
 The better answer is usually none of them: put `@Retry` on the outbound client method the handler calls, where the
 repeated unit is one dependency call. A service's `@Retry` is never checked, and neither is one on a controller method
 that is not a route handler: a helper the handler calls through `this` is woven, so its writes replay unchecked; keep
-`@Retry` on the outbound client method. `Resilience()` refuses to start when a controller carries `@Retry` and
+`@Retry` on the outbound client method. `Resilience()` refuses to start when a controller is retried and
 `ResilienceHTTP()` is not installed. Nothing checks that a response was already sent before a retry or a fallback
 (hazard 4): keep handler retries for handlers that answer only by returning.
 

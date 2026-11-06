@@ -21,7 +21,7 @@ import { startApp, type RunningApp } from './internal/app.js'
 import { startUpstream, type Upstream } from './internal/upstream.js'
 
 /**
- * Operators tune resilience from the environment, by instance name, without a code change: attempts, deadlines, a
+ * Operators tune resilience from the environment, by preset name, without a code change: attempts, deadlines, a
  * breaker defined by configuration alone, and the HTTP methods a handler may retry. A bad value fails the start-up,
  * not a request.
  */
@@ -30,15 +30,17 @@ import { startUpstream, type Upstream } from './internal/upstream.js'
 const schema = $t.Object({
   resilience: $t.Object(
     {
-      retries: $t.Optional(
+      presets: $t.Optional(
         $t.Record(
           $t.String(),
-          $t.Object({ maxAttempts: $t.Optional($t.Integer()), backoff: $t.Optional($t.Duration()) }),
+          $t.Object({
+            retry: $t.Optional(
+              $t.Object({ maxAttempts: $t.Optional($t.Integer()), backoff: $t.Optional($t.Duration()) }),
+            ),
+            timeLimiter: $t.Optional($t.Object({ timeoutDuration: $t.Optional($t.Duration()) })),
+            circuitBreaker: $t.Optional($t.Object({ minimumNumberOfCalls: $t.Optional($t.Integer()) })),
+          }),
         ),
-      ),
-      timeLimiters: $t.Optional($t.Record($t.String(), $t.Object({ timeoutDuration: $t.Optional($t.Duration()) }))),
-      circuitBreakers: $t.Optional(
-        $t.Record($t.String(), $t.Object({ minimumNumberOfCalls: $t.Optional($t.Integer()) })),
       ),
     },
     { default: {} },
@@ -145,7 +147,7 @@ afterEach(async () => {
 
 // What code defines when a test does not say otherwise; the environment tunes what it leaves open.
 const inventory = (r: ResilienceBuilder<Config>): unknown =>
-  r.retry('inventory', { backoff: 0 }).timeLimiter('inventory', { timeoutDuration: 5 * Second })
+  r.preset('inventory', p => p.retry({ backoff: 0 }).timeLimiter({ timeoutDuration: 5 * Second }))
 
 async function shop(
   profile = 'e2e-resilience-config',
@@ -174,7 +176,7 @@ async function shop(
 
 describe('resilience tuned from the environment', { timeout: 30_000 }, () => {
   it('retries as many times as the environment says', async () => {
-    vi.stubEnv('APP_RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS', '5')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS', '5')
     const { running } = await shop()
 
     expect((await fetch(`${running.origin}/stock/42`)).status).toBe(500)
@@ -182,11 +184,11 @@ describe('resilience tuned from the environment', { timeout: 30_000 }, () => {
   })
 
   it('cuts a call at the deadline the environment sets for a time limiter code defines without one', async () => {
-    vi.stubEnv('APP_RESILIENCE__TIME_LIMITERS__INVENTORY__TIMEOUT_DURATION', '150ms')
-    vi.stubEnv('APP_RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS', '1')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__TIME_LIMITER__TIMEOUT_DURATION', '150ms')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS', '1')
     upstream.setDefault('hang')
     const { running, registry } = await shop('e2e-resilience-config', r =>
-      r.retry('inventory', { backoff: 0 }).timeLimiter('inventory', {}),
+      r.preset('inventory', p => p.retry({ backoff: 0 }).timeLimiter()),
     )
     const limit = new Promise<number>(resolve =>
       registry.timeLimiter('inventory').on('timeout', e => resolve(e.timeoutDuration)),
@@ -199,9 +201,9 @@ describe('resilience tuned from the environment', { timeout: 30_000 }, () => {
 
   // An author who pinned an option in code meant it: the environment tunes only what code left open.
   it('lets code win over the environment for the same option', async () => {
-    vi.stubEnv('APP_RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS', '5')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS', '5')
     const { running } = await shop('e2e-resilience-config', r =>
-      r.retry('inventory', { maxAttempts: 2, backoff: 0 }).timeLimiter('inventory', { timeoutDuration: 5 * Second }),
+      r.preset('inventory', p => p.retry({ maxAttempts: 2, backoff: 0 }).timeLimiter({ timeoutDuration: 5 * Second })),
     )
 
     await fetch(`${running.origin}/stock/42`)
@@ -209,16 +211,16 @@ describe('resilience tuned from the environment', { timeout: 30_000 }, () => {
     expect(upstream.arrivals).toHaveLength(2)
   })
 
-  it('refuses to start when a decorator names an instance only a missing variable would define', async () => {
+  it('refuses to start when a decorator names a preset only a missing variable would define', async () => {
     const error = await shop('e2e-resilience-config-reports').catch((reason: unknown) => reason as Error)
 
     expect((error as Error).message.split('\n')[0]).toBe(
-      'Cannot weave "ReportsClient.report": no circuit breaker named "reports" is defined',
+      'Cannot weave "ReportsClient.report": no preset named "reports" is defined',
     )
   })
 
-  it('serves a decorator from an instance the environment alone defines', async () => {
-    vi.stubEnv('APP_RESILIENCE__CIRCUIT_BREAKERS__REPORTS__MINIMUM_NUMBER_OF_CALLS', '2')
+  it('serves a decorator from a preset the environment alone defines', async () => {
+    vi.stubEnv('APP_RESILIENCE__PRESETS__REPORTS__CIRCUIT_BREAKER__MINIMUM_NUMBER_OF_CALLS', '2')
     const { running, registry } = await shop('e2e-resilience-config-reports')
 
     await fetch(`${running.origin}/report`)
@@ -248,17 +250,17 @@ describe('resilience tuned from the environment', { timeout: 30_000 }, () => {
 })
 
 describe('bad resilience settings fail the start-up', { timeout: 30_000 }, () => {
-  it('names the method and the instance when a decorator names one nothing defines', async () => {
+  it('names the method and the preset when a decorator names one nothing defines', async () => {
     const error = await shop('e2e-resilience-config-typo').catch((reason: unknown) => reason as Error)
 
     expect(error).toBeInstanceOf(ErrInvalidOption)
     expect((error as Error).message.split('\n')[0]).toBe(
-      'Cannot weave "Misnamed.call": no circuit breaker named "inventroy" is defined',
+      'Cannot weave "Misnamed.call": no preset named "inventroy" is defined',
     )
   })
 
   it('refuses a deadline of 0, which would mean no deadline at all', async () => {
-    vi.stubEnv('APP_RESILIENCE__TIME_LIMITERS__REPORTS__TIMEOUT_DURATION', '0')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__REPORTS__TIME_LIMITER__TIMEOUT_DURATION', '0')
 
     const error = await shop().catch((reason: unknown) => reason as Error)
 
@@ -270,7 +272,7 @@ describe('bad resilience settings fail the start-up', { timeout: 30_000 }, () =>
 
   // Milliseconds or seconds? A duration without its unit is refused rather than guessed.
   it('refuses a duration written as a bare number', async () => {
-    vi.stubEnv('APP_RESILIENCE__TIME_LIMITERS__REPORTS__TIMEOUT_DURATION', '150')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__REPORTS__TIME_LIMITER__TIMEOUT_DURATION', '150')
 
     await expect(shop()).rejects.toBeInstanceOf(ErrConfigValidation)
   })

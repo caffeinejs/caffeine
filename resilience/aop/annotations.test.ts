@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ErrInvalidOption } from '../errors.js'
-import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from './annotations.js'
+import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Resilient, Retry, TimeLimiter } from './annotations.js'
 
 function firstLine(apply: () => unknown): string {
   try {
@@ -16,13 +16,14 @@ function firstLine(apply: () => unknown): string {
 // A blank name can never match a definition: it fails where it is written, before the class is even defined.
 describe('resilience annotations', () => {
   it.each([
+    ['Resilient', () => Resilient('')],
     ['Retry', () => Retry('')],
     ['CircuitBreaker', () => CircuitBreaker('')],
     ['TimeLimiter', () => TimeLimiter('')],
     ['Bulkhead', () => Bulkhead('')],
     ['RateLimiter', () => RateLimiter('')],
   ])('refuses an empty name on @%s, quoting what it got', (decorator, apply) => {
-    expect(firstLine(apply)).toBe(`Cannot apply @${decorator}: the name must be a non-empty string, got ""`)
+    expect(firstLine(apply)).toBe(`Cannot apply @${decorator}: the preset name must be a non-empty string, got ""`)
   })
 
   // Called from plain JavaScript, or through a cast, a decorator can get anything; the message names its kind.
@@ -33,7 +34,7 @@ describe('resilience annotations', () => {
     ['undefined', undefined],
   ])('refuses %s as a name, saying what it got', (shown, name) => {
     expect(firstLine(() => Retry(name as never))).toBe(
-      `Cannot apply @Retry: the name must be a non-empty string, got ${shown}`,
+      `Cannot apply @Retry: the preset name must be a non-empty string, got ${shown}`,
     )
   })
 

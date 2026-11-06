@@ -243,13 +243,13 @@ describe('isClientError on a controller', () => {
     })
       .install(
         Resilience(r =>
-          r
-            .retry('catalog', { maxAttempts: 3, backoff: 0, retryOn: error => !isClientError(error) })
-            .circuitBreaker('catalog', {
+          r.preset('catalog', p =>
+            p.retry({ maxAttempts: 3, backoff: 0, retryOn: error => !isClientError(error) }).circuitBreaker({
               slidingWindow: { type: 'count', size: 4 },
               minimumNumberOfCalls: 4,
               ignoreError: isClientError,
             }),
+          ),
         ),
       )
       .install(ResilienceHTTP())

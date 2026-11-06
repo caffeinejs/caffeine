@@ -59,7 +59,7 @@ beforeAll(async () => {
   running = await startApp(
     app =>
       app
-        .install(Resilience(r => r.timeLimiter('export', { timeoutDuration: 100 * Millisecond })))
+        .install(Resilience(r => r.preset('export', p => p.timeLimiter({ timeoutDuration: 100 * Millisecond }))))
         .errorHandling(e => e.globalHandlers(ResilienceErrorHandler)),
     { container },
   )

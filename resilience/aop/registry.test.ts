@@ -15,13 +15,15 @@ afterEach(() => {
 })
 
 describe('ResilienceRegistry', () => {
-  it('builds one instance per name and kind, named after its key', () => {
+  it('builds each policy a preset defines, named after the preset', () => {
     const registry = new ResilienceRegistry({
-      circuitBreakers: { inventory: { failureRateThreshold: 50 } },
-      retries: { inventory: { maxAttempts: 2 } },
-      timeLimiters: { inventory: { timeoutDuration: 2 * Second } },
-      bulkheads: { payments: { maxConcurrentCalls: 4 } },
-      rateLimiters: { partner: { limitForPeriod: 10, limitRefreshPeriod: 1 * Second } },
+      inventory: {
+        circuitBreaker: { failureRateThreshold: 50 },
+        retry: { maxAttempts: 2 },
+        timeLimiter: { timeoutDuration: 2 * Second },
+      },
+      payments: { bulkhead: { maxConcurrentCalls: 4 } },
+      partner: { rateLimiter: { limitForPeriod: 10, limitRefreshPeriod: 1 * Second } },
     })
 
     expect(registry.circuitBreaker('inventory')).toBeInstanceOf(CircuitBreaker)
@@ -34,40 +36,42 @@ describe('ResilienceRegistry', () => {
 
   // One name, one state: two lookups must reach the same breaker, or neither would see the other's failures.
   it('hands back the same instance on every lookup', () => {
-    const registry = new ResilienceRegistry({ circuitBreakers: { inventory: {} } })
+    const registry = new ResilienceRegistry({ inventory: { circuitBreaker: {} } })
 
     expect(registry.circuitBreaker('inventory')).toBe(registry.circuitBreaker('inventory'))
   })
 
-  it('keeps instances of the same name and different kinds apart', () => {
-    const registry = new ResilienceRegistry({ circuitBreakers: { inventory: {} }, retries: { inventory: {} } })
+  it('tells which presets exist and which policies each defines', () => {
+    const registry = new ResilienceRegistry({ inventory: { circuitBreaker: {}, retry: {} } })
 
-    expect(registry.has('circuitBreaker', 'inventory')).toBe(true)
-    expect(registry.has('retry', 'inventory')).toBe(true)
-    expect(registry.has('bulkhead', 'inventory')).toBe(false)
+    expect(registry.has('inventory')).toBe(true)
+    expect(registry.has('inventory', 'circuitBreaker')).toBe(true)
+    expect(registry.has('inventory', 'retry')).toBe(true)
+    expect(registry.has('inventory', 'bulkhead')).toBe(false)
+    expect(registry.has('payments')).toBe(false)
   })
 
-  it('refuses a lookup for a name nothing defines', () => {
-    const registry = new ResilienceRegistry()
+  it('refuses a lookup for a preset nothing defines, or a policy the preset lacks', () => {
+    const registry = new ResilienceRegistry({ inventory: { retry: {} } })
 
     expect(() => registry.circuitBreaker('payment')).toThrow(ErrInvalidOption)
     expect(() => registry.circuitBreaker('payment')).toThrow(
-      'Cannot find circuit breaker "payment": no circuit breaker by that name is defined',
+      'Cannot find the circuit breaker of preset "payment": no preset by that name is defined',
     )
-    expect(() => registry.rateLimiter('partner')).toThrow(
-      'Cannot find rate limiter "partner": no rate limiter by that name is defined',
+    expect(() => registry.rateLimiter('inventory')).toThrow(
+      'Cannot find the rate limiter of preset "inventory": the preset defines no rate limiter',
     )
   })
 
   // Built when the registry is, so a bad option fails at start-up, not on the first call that reaches it.
   it('refuses a bad option when it is built, naming the instance', () => {
-    expect(() => new ResilienceRegistry({ timeLimiters: { inventory: { timeoutDuration: 0 } } })).toThrow(
+    expect(() => new ResilienceRegistry({ inventory: { timeLimiter: { timeoutDuration: 0 } } })).toThrow(
       'Cannot create time limiter "inventory": timeoutDuration must be a finite Duration greater than 0s, got 0s',
     )
   })
 
   it('lists the instances of each kind', () => {
-    const registry = new ResilienceRegistry({ circuitBreakers: { a: {}, b: {} }, retries: { a: {} } })
+    const registry = new ResilienceRegistry({ a: { circuitBreaker: {}, retry: {} }, b: { circuitBreaker: {} } })
 
     expect(registry.circuitBreakers().map(breaker => breaker.name)).toEqual(['a', 'b'])
     expect(registry.retries().map(retries => retries.name)).toEqual(['a'])
@@ -81,10 +85,10 @@ describe('ResilienceRegistry', () => {
   it('disposes every instance it holds', async () => {
     vi.useFakeTimers()
     const registry = new ResilienceRegistry({
-      circuitBreakers: { inventory: { automaticTransitionFromOpenToHalfOpen: true, clock: fakeTimersClock } },
-      bulkheads: { payments: { maxConcurrentCalls: 1, maxWaitDuration: 10 * Second, clock: fakeTimersClock } },
-      rateLimiters: {
-        partner: {
+      inventory: { circuitBreaker: { automaticTransitionFromOpenToHalfOpen: true, clock: fakeTimersClock } },
+      payments: { bulkhead: { maxConcurrentCalls: 1, maxWaitDuration: 10 * Second, clock: fakeTimersClock } },
+      partner: {
+        rateLimiter: {
           limitForPeriod: 1,
           limitRefreshPeriod: 10 * Second,
           maxWaitDuration: 10 * Second,

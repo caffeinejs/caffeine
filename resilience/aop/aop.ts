@@ -6,8 +6,9 @@ import { compose, lift, signalIndex, withSignal } from '../compose.js'
 import { described, ErrInvalidOption } from '../errors.js'
 import { fallback } from '../fallback/fallback.js'
 import type { Operation, PolicyLike } from '../policy.js'
-import { ANNOTATIONS, Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from './annotations.js'
+import { ANNOTATIONS, Fallback } from './annotations.js'
 import { kAddFallback, labelOf, type ResilienceKind, type ResilienceRegistry } from './registry.js'
+import { annotatedMembers, stagesOf } from './stages.js'
 
 type Member = string | symbol
 
@@ -67,16 +68,6 @@ function annotated(cls: AnyClass, member: Member): boolean {
   return false
 }
 
-function annotatedMembers(cls: AnyClass): Set<Member> {
-  const members = new Set<Member>()
-  for (const annotation of ANNOTATIONS.keys()) {
-    for (const member of reflect.members(cls, annotation).keys()) {
-      members.add(member)
-    }
-  }
-  return members
-}
-
 /** Every method that carries a resilience annotation, in every class the container builds. */
 export const resiliencePointcut: Pointcut = $aop.pointcut(
   (_descriptor, cls) => annotatedMembers(cls).size > 0,
@@ -112,9 +103,9 @@ export class ResilienceAspect implements MethodAspect {
   /**
    * Builds the plan of every annotated method of `cls`.
    *
-   * @throws {@link ErrInvalidOption} when a method names an instance nothing defines, a `@Fallback` names a method
-   * `cls` lacks, an annotation is on a static or a private method, or a bulkhead or rate limiter inside a method's
-   * time limiter may wait as long as its limit.
+   * @throws {@link ErrInvalidOption} when a method names a preset nothing defines or a policy its preset lacks, a
+   * `@Fallback` names a method `cls` lacks, an annotation is on a static or a private method, or a bulkhead or rate
+   * limiter inside a method's time limiter may wait as long as its limit.
    */
   prepare(cls: AnyClass): void {
     for (const [annotation, decorator] of ANNOTATIONS) {
@@ -187,34 +178,18 @@ export class ResilienceAspect implements MethodAspect {
 
   #build(cls: AnyClass, member: Member): Plan {
     const where = `${cls.name}.${String(member)}`
-    const named = <K extends ResilienceKind>(
-      kind: K,
-      decorator: string,
-      name: string | undefined,
-    ): Stage<K> | undefined => {
-      if (name === undefined) {
-        return undefined
-      }
-      if (!this.#registry.has(kind, name)) {
-        throw new ErrInvalidOption(
-          errMessage(`Cannot weave "${where}": no ${labelOf(kind)} named "${name}" is defined`)
-            .solutions(
-              `Define it with Resilience(r => r.${kind}('${name}', { ... }))`,
-              `Fix the name in @${decorator}('${name}')`,
-            )
-            .reference('@caffeinejs/resilience', ErrInvalidOption)
-            .build(),
-        )
-      }
-      return this.#registry[kind](name) as Stage<K>
+    const sources = stagesOf(cls, member, this.#registry).stages
+    const stage = <K extends ResilienceKind>(kind: K): Stage<K> | undefined => {
+      const source = sources[kind]
+      return source === undefined ? undefined : (this.#registry[kind](source.preset) as Stage<K>)
     }
 
     const stages: Stages = {
-      retry: named('retry', 'Retry', reflect.effective(cls, Retry, member)?.name),
-      circuitBreaker: named('circuitBreaker', 'CircuitBreaker', reflect.effective(cls, CircuitBreaker, member)),
-      rateLimiter: named('rateLimiter', 'RateLimiter', reflect.effective(cls, RateLimiter, member)),
-      timeLimiter: named('timeLimiter', 'TimeLimiter', reflect.effective(cls, TimeLimiter, member)),
-      bulkhead: named('bulkhead', 'Bulkhead', reflect.effective(cls, Bulkhead, member)),
+      retry: stage('retry'),
+      circuitBreaker: stage('circuitBreaker'),
+      rateLimiter: stage('rateLimiter'),
+      timeLimiter: stage('timeLimiter'),
+      bulkhead: stage('bulkhead'),
     }
     this.#checkWaits(where, stages)
     const policies = this.#order

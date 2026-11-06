@@ -104,20 +104,23 @@ beforeEach(async () => {
         .install(
           Resilience(r =>
             r
-              .retry('inventory', { maxAttempts: 3, backoff: 0 })
-              .circuitBreaker('inventory', {
-                minimumNumberOfCalls: 4,
-                slidingWindow: { type: 'count', size: 4 },
-                slowCallDurationThreshold: 200 * Millisecond,
-                // Long enough that the requests a test sends while the breaker is open never meet a trial call.
-                waitDurationInOpenState: 2 * Second,
-                automaticTransitionFromOpenToHalfOpen: true,
-                permittedNumberOfCallsInHalfOpenState: 1,
-              })
-              // Far above the slow-call threshold, so a slow call on a busy machine is still slow, not cut.
-              .timeLimiter('inventory', { timeoutDuration: 1 * Second })
+              .preset('inventory', p =>
+                p
+                  .retry({ maxAttempts: 3, backoff: 0 })
+                  .circuitBreaker({
+                    minimumNumberOfCalls: 4,
+                    slidingWindow: { type: 'count', size: 4 },
+                    slowCallDurationThreshold: 200 * Millisecond,
+                    // Long enough that the requests a test sends while the breaker is open never meet a trial call.
+                    waitDurationInOpenState: 2 * Second,
+                    automaticTransitionFromOpenToHalfOpen: true,
+                    permittedNumberOfCallsInHalfOpenState: 1,
+                  })
+                  // Far above the slow-call threshold, so a slow call on a busy machine is still slow, not cut.
+                  .timeLimiter({ timeoutDuration: 1 * Second }),
+              )
               // Half-way through the second attempt, so the page's budget, not an attempt's, ends the call.
-              .timeLimiter('page', { timeoutDuration: 1500 * Millisecond }),
+              .preset('page', p => p.timeLimiter({ timeoutDuration: 1500 * Millisecond })),
           ),
         )
         .install(ResilienceHTTP())

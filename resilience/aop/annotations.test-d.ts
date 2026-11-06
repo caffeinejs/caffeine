@@ -1,6 +1,6 @@
 import { describe, it } from 'vitest'
 
-import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from './annotations.js'
+import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Resilient, Retry, TimeLimiter } from './annotations.js'
 
 interface Stock {
   readonly id: string
@@ -20,6 +20,11 @@ describe('resilience annotations', () => {
         void signal
         return { id, count: 1 }
       }
+
+      @Resilient('inventory', { repeatable: true })
+      async reserve(id: string): Promise<Stock> {
+        return { id, count: 1 }
+      }
     }
     void InventoryClient
   })
@@ -36,6 +41,12 @@ describe('resilience annotations', () => {
       // @ts-expect-error -- not a promise-returning method
       @CircuitBreaker('inventory')
       name(): string {
+        return 'inventory'
+      }
+
+      // @ts-expect-error -- not a promise-returning method
+      @Resilient('inventory')
+      label(): string {
         return 'inventory'
       }
     }

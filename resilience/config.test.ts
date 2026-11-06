@@ -52,9 +52,9 @@ describe('resilience configuration', () => {
     vi.useFakeTimers({ toFake: ['performance'] })
     const registry = await registryFrom(
       new InlineConfigSource({
-        resilience: { rateLimiters: { partner: { limitForPeriod: 1, limitRefreshPeriod: '1500ms' } } },
+        resilience: { presets: { partner: { rateLimiter: { limitForPeriod: 1, limitRefreshPeriod: '1500ms' } } } },
       }),
-      r => r.rateLimiter('partner', { clock: fakeTimersClock }),
+      r => r.preset('partner', p => p.rateLimiter({ clock: fakeTimersClock })),
     )
     const quota = registry.rateLimiter('partner')
 
@@ -68,7 +68,7 @@ describe('resilience configuration', () => {
   // A bare number has no unit: is 150 milliseconds or seconds? The deployment fails rather than guess.
   it('refuses a duration written as a bare number at bootstrap', async () => {
     const error = await registryFrom(
-      new InlineConfigSource({ resilience: { timeLimiters: { inventory: { timeoutDuration: '150' } } } }),
+      new InlineConfigSource({ resilience: { presets: { inventory: { timeLimiter: { timeoutDuration: '150' } } } } }),
     ).catch((reason: unknown) => reason)
 
     expect(error).toBeInstanceOf(ErrConfigValidation)
@@ -76,16 +76,16 @@ describe('resilience configuration', () => {
 
   it('refuses an option out of range at bootstrap', async () => {
     const error = await registryFrom(
-      new InlineConfigSource({ resilience: { bulkheads: { exports: { maxConcurrentCalls: 0 } } } }),
+      new InlineConfigSource({ resilience: { presets: { exports: { bulkhead: { maxConcurrentCalls: 0 } } } } }),
     ).catch((reason: unknown) => reason)
 
     expect(error).toBeInstanceOf(ErrConfigValidation)
   })
 
-  // An operator defines or retunes an instance with an environment variable alone, by name.
-  it('defines an instance from an environment variable, its name a key of the record', async () => {
-    vi.stubEnv('APP_RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS', '5')
-    vi.stubEnv('APP_RESILIENCE__RETRIES__INVENTORY__BACKOFF', '0')
+  // An operator defines or retunes a preset with an environment variable alone, by name.
+  it('defines a preset from an environment variable, its name a key of the record', async () => {
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS', '5')
+    vi.stubEnv('APP_RESILIENCE__PRESETS__INVENTORY__RETRY__BACKOFF', '0')
     const registry = await registryFrom(new EnvConfigSource({ prefix: 'APP_' }))
     let attempts = 0
 

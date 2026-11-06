@@ -45,23 +45,27 @@ const RateLimiter = $t.Object({
   captureStackTrace: $t.Optional($t.Boolean()),
 })
 
+const Preset = $t.Object({
+  circuitBreaker: $t.Optional(CircuitBreaker),
+  retry: $t.Optional(Retry),
+  timeLimiter: $t.Optional(TimeLimiter),
+  bulkhead: $t.Optional(Bulkhead),
+  rateLimiter: $t.Optional(RateLimiter),
+})
+
 /**
  * The schema of the resilience configuration block, satisfying {@link ResilienceConfig}. Hand the node to
  * `Resilience((r, { config }) => r.config(...))`.
  *
- * Each kind is a record of named instances: `RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS=5` defines the retry
- * `inventory`. Every member is optional and nothing is defaulted here: the policies own their defaults. The
- * durations are `$t.Duration()`, so `…__TIMEOUT_DURATION=2s` is two seconds and a bare `2000` fails validation at
- * `bootstrap()`.
+ * `presets` is a record of presets by name, each holding at most one policy of each kind:
+ * `RESILIENCE__PRESETS__INVENTORY__RETRY__MAX_ATTEMPTS=5` sets the retry of preset `inventory`. Every member is
+ * optional and nothing is defaulted here: the policies own their defaults. The durations are `$t.Duration()`, so
+ * `…__TIMEOUT_DURATION=2s` is two seconds and a bare `2000` fails validation at `bootstrap()`.
  */
 export const ResilienceConfigSchema = $t.Object({
   // `$t.List`, so `RESILIENCE__ORDER=circuitBreaker,retry,rateLimiter,timeLimiter,bulkhead` is five kinds.
   order: $t.Optional($t.List($t.UnionEnum(['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']))),
-  circuitBreakers: $t.Optional($t.Record($t.String(), CircuitBreaker)),
-  retries: $t.Optional($t.Record($t.String(), Retry)),
-  timeLimiters: $t.Optional($t.Record($t.String(), TimeLimiter)),
-  bulkheads: $t.Optional($t.Record($t.String(), Bulkhead)),
-  rateLimiters: $t.Optional($t.Record($t.String(), RateLimiter)),
+  presets: $t.Optional($t.Record($t.String(), Preset)),
 })
 
 type _Satisfies = SchemaSatisfies<ResilienceConfig, InferConfig<typeof ResilienceConfigSchema>>

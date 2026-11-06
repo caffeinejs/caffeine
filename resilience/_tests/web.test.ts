@@ -273,29 +273,43 @@ async function storefront() {
     .install(
       Resilience(r =>
         r
-          .timeLimiter('page', { clock: fakeTimersClock, timeoutDuration: 100 * Millisecond })
-          .retry('inventory', { clock: fakeTimersClock, maxAttempts: 3, backoff: 0 })
-          .timeLimiter('inventory', { clock: fakeTimersClock, timeoutDuration: 10 * Second })
-          .bulkhead('exports', { clock: fakeTimersClock, maxConcurrentCalls: 1 })
-          .rateLimiter('search', { clock: fakeTimersClock, limitForPeriod: 1, limitRefreshPeriod: 1 * Hour })
-          .rateLimiter('lookup', { clock: fakeTimersClock, limitForPeriod: 1, limitRefreshPeriod: 1 * Hour })
-          .rateLimiter('local', { clock: fakeTimersClock, limitForPeriod: 1, limitRefreshPeriod: 1 * Hour })
-          .circuitBreaker('reports', {
-            clock: fakeTimersClock,
-            minimumNumberOfCalls: 2,
-            slidingWindow: { type: 'count', size: 2 },
-            waitDurationInOpenState: 1 * Minute,
-          })
-          .circuitBreaker('scoped', {
-            clock: fakeTimersClock,
-            minimumNumberOfCalls: 2,
-            slidingWindow: { type: 'count', size: 2 },
-          })
-          .circuitBreaker('prices', { clock: fakeTimersClock })
-          .retry('feed', { clock: fakeTimersClock, maxAttempts: 2, backoff: 0 })
-          .retry('orders', { clock: fakeTimersClock, maxAttempts: 2, backoff: 0 })
-          .retry('streamed', { clock: fakeTimersClock, maxAttempts: 2, backoff: 0 })
-          .circuitBreaker('streamed', { clock: fakeTimersClock }),
+          .preset('page', p => p.timeLimiter({ clock: fakeTimersClock, timeoutDuration: 100 * Millisecond }))
+          .preset('inventory', p =>
+            p
+              .retry({ clock: fakeTimersClock, maxAttempts: 3, backoff: 0 })
+              .timeLimiter({ clock: fakeTimersClock, timeoutDuration: 10 * Second }),
+          )
+          .preset('exports', p => p.bulkhead({ clock: fakeTimersClock, maxConcurrentCalls: 1 }))
+          .preset('search', p =>
+            p.rateLimiter({ clock: fakeTimersClock, limitForPeriod: 1, limitRefreshPeriod: 1 * Hour }),
+          )
+          .preset('lookup', p =>
+            p.rateLimiter({ clock: fakeTimersClock, limitForPeriod: 1, limitRefreshPeriod: 1 * Hour }),
+          )
+          .preset('local', p =>
+            p.rateLimiter({ clock: fakeTimersClock, limitForPeriod: 1, limitRefreshPeriod: 1 * Hour }),
+          )
+          .preset('reports', p =>
+            p.circuitBreaker({
+              clock: fakeTimersClock,
+              minimumNumberOfCalls: 2,
+              slidingWindow: { type: 'count', size: 2 },
+              waitDurationInOpenState: 1 * Minute,
+            }),
+          )
+          .preset('scoped', p =>
+            p.circuitBreaker({
+              clock: fakeTimersClock,
+              minimumNumberOfCalls: 2,
+              slidingWindow: { type: 'count', size: 2 },
+            }),
+          )
+          .preset('prices', p => p.circuitBreaker({ clock: fakeTimersClock }))
+          .preset('feed', p => p.retry({ clock: fakeTimersClock, maxAttempts: 2, backoff: 0 }))
+          .preset('orders', p => p.retry({ clock: fakeTimersClock, maxAttempts: 2, backoff: 0 }))
+          .preset('streamed', p =>
+            p.retry({ clock: fakeTimersClock, maxAttempts: 2, backoff: 0 }).circuitBreaker({ clock: fakeTimersClock }),
+          ),
       ),
     )
     .install(ResilienceHTTP())

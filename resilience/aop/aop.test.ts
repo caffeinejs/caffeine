@@ -17,7 +17,7 @@ import { fakeTimersClock } from '../clock.testkit.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
-import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from './annotations.js'
+import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Resilient, Retry, TimeLimiter } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
 import { type ResilienceDefinitions, type ResilienceKind, ResilienceRegistry } from './registry.js'
 
@@ -31,27 +31,24 @@ afterEach(() => {
 })
 
 const DEFINITIONS: ResilienceDefinitions = {
-  retries: { inventory: { maxAttempts: 3, backoff: 0 } },
-  circuitBreakers: {
-    inventory: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } },
-    shared: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } },
+  inventory: {
+    retry: { maxAttempts: 3, backoff: 0 },
+    circuitBreaker: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } },
+    timeLimiter: { timeoutDuration: 100 * Millisecond },
+    bulkhead: { maxConcurrentCalls: 1 },
+    rateLimiter: { limitForPeriod: 1, limitRefreshPeriod: 1 * Hour },
   },
-  timeLimiters: { inventory: { timeoutDuration: 100 * Millisecond } },
-  bulkheads: { inventory: { maxConcurrentCalls: 1 } },
-  rateLimiters: { inventory: { limitForPeriod: 1, limitRefreshPeriod: 1 * Hour } },
+  shared: { circuitBreaker: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } } },
 }
 
 // The definitions with every instance on the clock the test drives.
 function onFakeClock(definitions: ResilienceDefinitions): ResilienceDefinitions {
-  const timed = <O>(instances: Readonly<Record<string, O>> | undefined): Record<string, O> =>
-    Object.fromEntries(Object.entries(instances ?? {}).map(([name, o]) => [name, { ...o, clock: fakeTimersClock }]))
-  return {
-    circuitBreakers: timed(definitions.circuitBreakers),
-    retries: timed(definitions.retries),
-    timeLimiters: timed(definitions.timeLimiters),
-    bulkheads: timed(definitions.bulkheads),
-    rateLimiters: timed(definitions.rateLimiters),
-  }
+  return Object.fromEntries(
+    Object.entries(definitions).map(([name, preset]) => [
+      name,
+      Object.fromEntries(Object.entries(preset).map(([kind, o]) => [kind, { ...o, clock: fakeTimersClock }])),
+    ]),
+  )
 }
 
 // A container with the aspect and a registry bound by hand, decorators off, so no fixture registers anywhere else.
@@ -207,6 +204,96 @@ describe('resilience annotations on a class the container builds', () => {
   })
 })
 
+describe('@Resilient', () => {
+  class Stock {
+    attempts = 0
+
+    @Resilient('stock')
+    async read(): Promise<string> {
+      this.attempts++
+      throw new Error('down')
+    }
+
+    // Only the time limiter changes; the retry and the breaker are the ones `read` uses.
+    @Resilient('stock')
+    @TimeLimiter('export')
+    async export(signal?: AbortSignal): Promise<string> {
+      this.attempts++
+      await new Promise(resolve => setTimeout(resolve, 150))
+      signal?.throwIfAborted()
+      return 'exported'
+    }
+  }
+
+  const definitions: ResilienceDefinitions = {
+    stock: {
+      retry: { maxAttempts: 2, backoff: 0 },
+      circuitBreaker: { minimumNumberOfCalls: 4, slidingWindow: { type: 'count', size: 4 } },
+      timeLimiter: { timeoutDuration: 100 * Millisecond },
+    },
+    export: { timeLimiter: { timeoutDuration: 1 * Second } },
+  }
+
+  it('runs the method through every policy of the preset, retry outside the breaker', async () => {
+    const { di, registry } = await containerWith(di => di.bind(Stock, t => t.toSelf()), definitions)
+    const stock = di.get(Stock)
+
+    await expect(stock.read()).rejects.toThrow('down')
+    await expect(stock.read()).rejects.toThrow('down')
+
+    expect(stock.attempts).toBe(4)
+    expect(registry.circuitBreaker('stock').state).toBe('open')
+    await expect(stock.read()).rejects.toBeInstanceOf(ErrCallNotPermitted)
+    expect(stock.attempts).toBe(4)
+  })
+
+  // A variant of one dependency must count its failures in the dependency's one breaker, or neither might open.
+  it('replaces one policy with a stage annotation and keeps the preset’s other instances', async () => {
+    const { di, registry } = await containerWith(di => di.bind(Stock, t => t.toSelf()), definitions)
+    const stock = di.get(Stock)
+
+    const exported = stock.export()
+    await vi.advanceTimersByTimeAsync(150)
+    await expect(exported).resolves.toBe('exported')
+
+    registry.circuitBreaker('stock').transitionToOpen()
+    await expect(stock.export()).rejects.toBeInstanceOf(ErrCallNotPermitted)
+    expect(stock.attempts).toBe(1)
+  })
+
+  it('refuses a preset nothing defines, naming the decorator', async () => {
+    class Misnamed {
+      @Resilient('stok')
+      async call(): Promise<string> {
+        return 'ok'
+      }
+    }
+    const { di } = await containerWith(di => di.bind(Misnamed, t => t.toSelf()), definitions)
+
+    expect(() => di.get(ResilienceAspect).prepare(Misnamed)).toThrow(
+      'Cannot weave "Misnamed.call": no preset named "stok" is defined\nPossible Solutions:\n' +
+        "  - Define it with Resilience(r => r.preset('stok', p => ...))\n" +
+        "  - Fix the name in @Resilient('stok')",
+    )
+  })
+
+  it('refuses a stage annotation naming a preset that lacks that policy', async () => {
+    class Ledger {
+      @Bulkhead('export')
+      async post(): Promise<string> {
+        return 'ok'
+      }
+    }
+    const { di } = await containerWith(di => di.bind(Ledger, t => t.toSelf()), definitions)
+
+    expect(() => di.get(ResilienceAspect).prepare(Ledger)).toThrow(
+      'Cannot weave "Ledger.post": preset "export" defines no bulkhead\nPossible Solutions:\n' +
+        "  - Add one with r.preset('export', p => p.bulkhead({ ... }))\n" +
+        '  - Name a preset that defines one in @Bulkhead(...)',
+    )
+  })
+})
+
 // One fixed order, whatever order the decorators are written in: retry outside the breaker, so an open breaker fails
 // the call at once instead of being retried.
 describe('the order of the strategies', () => {
@@ -304,18 +391,17 @@ describe('the bulkhead inside the time limiter', () => {
   }
 
   const queued = (bulkheadWait: number, rateLimiterWait = 0): ResilienceDefinitions => ({
-    circuitBreakers: { queued: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } } },
-    timeLimiters: { queued: { timeoutDuration: 100 * Millisecond } },
-    bulkheads: { queued: { maxConcurrentCalls: 1, maxQueuedCalls: 5, maxWaitDuration: bulkheadWait } },
-    rateLimiters: {
-      queued: { limitForPeriod: 100, limitRefreshPeriod: 1 * Second, maxWaitDuration: rateLimiterWait },
+    queued: {
+      circuitBreaker: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } },
+      timeLimiter: { timeoutDuration: 100 * Millisecond },
+      bulkhead: { maxConcurrentCalls: 1, maxQueuedCalls: 5, maxWaitDuration: bulkheadWait },
+      rateLimiter: { limitForPeriod: 100, limitRefreshPeriod: 1 * Second, maxWaitDuration: rateLimiterWait },
     },
   })
 
   it('keeps the slot of a call that timed out until the call ends', async () => {
     const { di } = await containerWith(di => di.bind(Pooled, t => t.toSelf()), {
-      timeLimiters: { pooled: { timeoutDuration: 100 * Millisecond } },
-      bulkheads: { pooled: { maxConcurrentCalls: 1 } },
+      pooled: { timeLimiter: { timeoutDuration: 100 * Millisecond }, bulkhead: { maxConcurrentCalls: 1 } },
     })
     const pooled = di.get(Pooled)
 
@@ -674,7 +760,7 @@ describe('preparing a class', () => {
 
     expect(() => aspect.prepare(Misnamed)).toThrow(ErrInvalidOption)
     expect(() => aspect.prepare(Misnamed)).toThrow(
-      'Cannot weave "Misnamed.call": no circuit breaker named "inventroy" is defined',
+      'Cannot weave "Misnamed.call": no preset named "inventroy" is defined',
     )
   })
 
@@ -749,7 +835,7 @@ describe('preparing a class', () => {
     const { di } = await containerWith(di => di.bind(Misnamed, t => t.toSelf()))
 
     await expect(di.get(Misnamed).call()).rejects.toThrow(
-      'Cannot weave "Misnamed.call": no circuit breaker named "inventroy" is defined',
+      'Cannot weave "Misnamed.call": no preset named "inventroy" is defined',
     )
   })
 })

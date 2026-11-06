@@ -120,14 +120,20 @@ beforeEach(async () => {
         .install(
           Resilience(r =>
             r
-              .rateLimiter('partner', {
-                limitForPeriod: 5,
-                limitRefreshPeriod: 1 * Second,
-                maxWaitDuration: 1_500 * Millisecond,
-              })
-              .rateLimiter('partner-strict', { limitForPeriod: 2, limitRefreshPeriod: 1 * Hour })
-              .bulkhead('exports', { maxConcurrentCalls: 5, maxQueuedCalls: 10, maxWaitDuration: 10 * Second })
-              .bulkhead('solo', { maxConcurrentCalls: 1, maxQueuedCalls: 5, maxWaitDuration: 10 * Second }),
+              .preset('partner', p =>
+                p.rateLimiter({
+                  limitForPeriod: 5,
+                  limitRefreshPeriod: 1 * Second,
+                  maxWaitDuration: 1_500 * Millisecond,
+                }),
+              )
+              .preset('partner-strict', p => p.rateLimiter({ limitForPeriod: 2, limitRefreshPeriod: 1 * Hour }))
+              .preset('exports', p =>
+                p.bulkhead({ maxConcurrentCalls: 5, maxQueuedCalls: 10, maxWaitDuration: 10 * Second }),
+              )
+              .preset('solo', p =>
+                p.bulkhead({ maxConcurrentCalls: 1, maxQueuedCalls: 5, maxWaitDuration: 10 * Second }),
+              ),
           ),
         )
         .install(ResilienceHTTP())

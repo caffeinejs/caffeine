@@ -264,29 +264,34 @@ async function checkout(providerOptions: { quota?: number; processing?: number }
         .install(
           Resilience(r =>
             r
-              .retry('payments', {
-                maxAttempts: 6,
-                backoff: exponential({ initialDelay: 50 * Millisecond, maxDelay: 200 * Millisecond }),
-                retryOn: error => !(error instanceof CardDeclined),
-              })
-              .circuitBreaker('payments', {
-                minimumNumberOfCalls: 6,
-                slidingWindow: { type: 'count', size: 6 },
-                ignoreError: error => error instanceof CardDeclined,
-                waitDurationInOpenState: 200 * Millisecond,
-                automaticTransitionFromOpenToHalfOpen: true,
-                permittedNumberOfCallsInHalfOpenState: 2,
-              })
-              .rateLimiter('payments', {
-                limitForPeriod: 25,
-                limitRefreshPeriod: 1 * Second,
-                maxWaitDuration: 1 * Second,
-              })
-              .timeLimiter('payments', { timeoutDuration: 250 * Millisecond })
-              // Inside the time limiter, so a queued charge is refused before its limit passes, and deferred.
-              .bulkhead('payments', { maxConcurrentCalls: 10, maxQueuedCalls: 20, maxWaitDuration: 200 * Millisecond })
-              .bulkhead('checkout', { maxConcurrentCalls: 200, maxQueuedCalls: 200, maxWaitDuration: 10 * Second })
-              .retry('ledger', { maxAttempts: 3, backoff: 0 }),
+              .preset('payments', p =>
+                p
+                  .retry({
+                    maxAttempts: 6,
+                    backoff: exponential({ initialDelay: 50 * Millisecond, maxDelay: 200 * Millisecond }),
+                    retryOn: error => !(error instanceof CardDeclined),
+                  })
+                  .circuitBreaker({
+                    minimumNumberOfCalls: 6,
+                    slidingWindow: { type: 'count', size: 6 },
+                    ignoreError: error => error instanceof CardDeclined,
+                    waitDurationInOpenState: 200 * Millisecond,
+                    automaticTransitionFromOpenToHalfOpen: true,
+                    permittedNumberOfCallsInHalfOpenState: 2,
+                  })
+                  .rateLimiter({
+                    limitForPeriod: 25,
+                    limitRefreshPeriod: 1 * Second,
+                    maxWaitDuration: 1 * Second,
+                  })
+                  .timeLimiter({ timeoutDuration: 250 * Millisecond })
+                  // Inside the time limiter, so a queued charge is refused before its limit passes, and deferred.
+                  .bulkhead({ maxConcurrentCalls: 10, maxQueuedCalls: 20, maxWaitDuration: 200 * Millisecond }),
+              )
+              .preset('checkout', p =>
+                p.bulkhead({ maxConcurrentCalls: 200, maxQueuedCalls: 200, maxWaitDuration: 10 * Second }),
+              )
+              .preset('ledger', p => p.retry({ maxAttempts: 3, backoff: 0 })),
           ),
         )
         .install(ResilienceHTTP())
@@ -595,9 +600,12 @@ describe('the replay check on a money route', { timeout: 30_000 }, () => {
   void UnsafeCheckoutController
 
   it('refuses to start an application whose payment POST handler carries @Retry', async () => {
-    const error = await startApp(a => a.install(Resilience(r => r.retry('orders'))).install(ResilienceHTTP()), {
-      container: new CaffeineIoC({ profiles: ['e2e-resilience-payments-unsafe'] }),
-    }).then(
+    const error = await startApp(
+      a => a.install(Resilience(r => r.preset('orders', p => p.retry()))).install(ResilienceHTTP()),
+      {
+        container: new CaffeineIoC({ profiles: ['e2e-resilience-payments-unsafe'] }),
+      },
+    ).then(
       running => {
         cleanups.push(() => running.close())
         return undefined
@@ -636,7 +644,10 @@ describe('the replay check on a money route', { timeout: 30_000 }, () => {
 
   it('retries a repeatable POST that upserts by its key, leaving one payment', async () => {
     const running = await startApp(
-      a => a.install(Resilience(r => r.retry('orders', { maxAttempts: 2, backoff: 0 }))).install(ResilienceHTTP()),
+      a =>
+        a
+          .install(Resilience(r => r.preset('orders', p => p.retry({ maxAttempts: 2, backoff: 0 }))))
+          .install(ResilienceHTTP()),
       { container: new CaffeineIoC({ profiles: ['e2e-resilience-payments-upsert'] }) },
     )
     cleanups.push(() => running.close())

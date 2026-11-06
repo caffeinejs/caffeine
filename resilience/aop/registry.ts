@@ -9,17 +9,20 @@ import { type RateLimiter, rateLimiter, type RateLimiterOptions } from '../ratel
 import { type Retry, retry, type RetryOptions } from '../retry/retry.js'
 import { type TimeLimiter, timeLimiter, type TimeLimiterOptions } from '../timelimiter/timelimiter.js'
 
-/** The options of each named instance, by kind. The name is the record key. */
-export interface ResilienceDefinitions {
-  readonly circuitBreakers?: Readonly<Record<string, Omit<CircuitBreakerOptions, 'name'>>>
-  readonly retries?: Readonly<Record<string, Omit<RetryOptions, 'name'>>>
-  readonly timeLimiters?: Readonly<Record<string, Omit<TimeLimiterOptions, 'name'>>>
-  readonly bulkheads?: Readonly<Record<string, Omit<BulkheadOptions, 'name'>>>
-  readonly rateLimiters?: Readonly<Record<string, Omit<RateLimiterOptions, 'name'>>>
+/** A kind of policy a preset can define, one of each at most. */
+export type ResilienceKind = 'circuitBreaker' | 'retry' | 'timeLimiter' | 'bulkhead' | 'rateLimiter'
+
+/** The options of each policy one preset defines, by kind. */
+export interface PresetDefinition {
+  readonly circuitBreaker?: Omit<CircuitBreakerOptions, 'name'>
+  readonly retry?: Omit<RetryOptions, 'name'>
+  readonly timeLimiter?: Omit<TimeLimiterOptions, 'name'>
+  readonly bulkhead?: Omit<BulkheadOptions, 'name'>
+  readonly rateLimiter?: Omit<RateLimiterOptions, 'name'>
 }
 
-/** A kind of named instance the registry holds. */
-export type ResilienceKind = 'circuitBreaker' | 'retry' | 'timeLimiter' | 'bulkhead' | 'rateLimiter'
+/** The presets, by name. Each policy a preset defines is named after it. */
+export type ResilienceDefinitions = Readonly<Record<string, PresetDefinition>>
 
 const LABELS: Record<ResilienceKind, string> = {
   circuitBreaker: 'circuit breaker',
@@ -34,8 +37,9 @@ const LABELS: Record<ResilienceKind, string> = {
 export const kAddFallback = Symbol('@caffeinejs/resilience:add-fallback')
 
 /**
- * The named policies one container shares: every method that names an instance gets the same one, and so the
- * same state. Every instance is built when the registry is, so a bad option fails at start-up.
+ * The presets one container shares: every method that names a preset gets the same instances, and so the same state.
+ * Every instance is built when the registry is, so a bad option fails at start-up. Each is named after its preset, in
+ * events and metrics alike: `registry.retry('inventory')` is the retry of preset `inventory`.
  *
  * The `Resilience()` feature builds and binds it; inject it to use the same instances by hand, or to instrument them.
  */
@@ -48,51 +52,56 @@ export class ResilienceRegistry {
   readonly #rateLimiters = new Map<string, RateLimiter>()
   readonly #fallbacks: Fallback[] = []
 
+  readonly #presets = new Set<string>()
+
   /** @throws {@link ErrInvalidOption} when an instance's options are out of range. */
   constructor(definitions: ResilienceDefinitions = {}) {
-    for (const [name, options] of Object.entries(definitions.circuitBreakers ?? {})) {
-      this.#circuitBreakers.set(name, circuitBreaker({ ...options, name }))
-    }
-    for (const [name, options] of Object.entries(definitions.retries ?? {})) {
-      this.#retries.set(name, retry({ ...options, name }))
-    }
-    for (const [name, options] of Object.entries(definitions.timeLimiters ?? {})) {
-      this.#timeLimiters.set(name, timeLimiter({ ...options, name }))
-    }
-    for (const [name, options] of Object.entries(definitions.bulkheads ?? {})) {
-      this.#bulkheads.set(name, bulkhead({ ...options, name }))
-    }
-    for (const [name, options] of Object.entries(definitions.rateLimiters ?? {})) {
-      this.#rateLimiters.set(name, rateLimiter({ ...options, name }))
+    for (const [name, preset] of Object.entries(definitions)) {
+      this.#presets.add(name)
+      if (preset.circuitBreaker !== undefined) {
+        this.#circuitBreakers.set(name, circuitBreaker({ ...preset.circuitBreaker, name }))
+      }
+      if (preset.retry !== undefined) {
+        this.#retries.set(name, retry({ ...preset.retry, name }))
+      }
+      if (preset.timeLimiter !== undefined) {
+        this.#timeLimiters.set(name, timeLimiter({ ...preset.timeLimiter, name }))
+      }
+      if (preset.bulkhead !== undefined) {
+        this.#bulkheads.set(name, bulkhead({ ...preset.bulkhead, name }))
+      }
+      if (preset.rateLimiter !== undefined) {
+        this.#rateLimiters.set(name, rateLimiter({ ...preset.rateLimiter, name }))
+      }
     }
   }
 
-  /** Whether an instance of that kind and name is defined. */
-  has(kind: ResilienceKind, name: string): boolean {
-    return this.#of(kind).has(name)
+  /** Whether preset `name` is defined, or, with `kind`, whether it defines a policy of that kind. */
+  has(name: string, kind?: ResilienceKind): boolean {
+    return kind === undefined ? this.#presets.has(name) : this.#of(kind).has(name)
   }
 
-  /** @throws {@link ErrInvalidOption} when no circuit breaker of that name is defined. */
+  /** @throws {@link ErrInvalidOption} when preset `name` defines no circuit breaker. */
   circuitBreaker(name: string): CircuitBreaker {
     return this.#find(this.#circuitBreakers, 'circuitBreaker', name)
   }
 
-  /** @throws {@link ErrInvalidOption} when no retry of that name is defined. */
+  /** @throws {@link ErrInvalidOption} when preset `name` defines no retry. */
   retry(name: string): Retry {
     return this.#find(this.#retries, 'retry', name)
   }
 
-  /** @throws {@link ErrInvalidOption} when no time limiter of that name is defined. */
+  /** @throws {@link ErrInvalidOption} when preset `name` defines no time limiter. */
   timeLimiter(name: string): TimeLimiter {
     return this.#find(this.#timeLimiters, 'timeLimiter', name)
   }
 
-  /** @throws {@link ErrInvalidOption} when no bulkhead of that name is defined. */
+  /** @throws {@link ErrInvalidOption} when preset `name` defines no bulkhead. */
   bulkhead(name: string): Bulkhead {
     return this.#find(this.#bulkheads, 'bulkhead', name)
   }
 
-  /** @throws {@link ErrInvalidOption} when no rate limiter of that name is defined. */
+  /** @throws {@link ErrInvalidOption} when preset `name` defines no rate limiter. */
   rateLimiter(name: string): RateLimiter {
     return this.#find(this.#rateLimiters, 'rateLimiter', name)
   }
@@ -165,8 +174,12 @@ export class ResilienceRegistry {
     const instance = instances.get(name)
     if (instance === undefined) {
       throw new ErrInvalidOption(
-        errMessage(`Cannot find ${LABELS[kind]} "${name}": no ${LABELS[kind]} by that name is defined`)
-          .solutions(`Define it with Resilience(r => r.${kind}('${name}', { ... }))`)
+        errMessage(
+          this.#presets.has(name)
+            ? `Cannot find the ${LABELS[kind]} of preset "${name}": the preset defines no ${LABELS[kind]}`
+            : `Cannot find the ${LABELS[kind]} of preset "${name}": no preset by that name is defined`,
+        )
+          .solutions(`Define it with Resilience(r => r.preset('${name}', p => p.${kind}({ ... })))`)
           .reference('@caffeinejs/resilience', ErrInvalidOption)
           .build(),
       )

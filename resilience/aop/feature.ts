@@ -6,7 +6,7 @@ import {
   type FeatureConfigureKit,
   kFeatureName,
 } from '@caffeinejs/application'
-import { type AnyClass, reflect, token } from '@caffeinejs/di'
+import { type AnyClass, token } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -16,11 +16,18 @@ import { ErrInvalidOption } from '../errors.js'
 import type { RateLimiterOptions } from '../ratelimiter/ratelimiter.js'
 import type { RetryOptions } from '../retry/retry.js'
 import type { TimeLimiterOptions } from '../timelimiter/timelimiter.js'
-import { ANNOTATIONS, Retry } from './annotations.js'
+import { ANNOTATIONS } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
-import { type ResilienceDefinitions, type ResilienceKind, ResilienceRegistry } from './registry.js'
+import {
+  labelOf,
+  type PresetDefinition,
+  type ResilienceDefinitions,
+  type ResilienceKind,
+  ResilienceRegistry,
+} from './registry.js'
+import { annotatedMembers, stagesOf, written } from './stages.js'
 
-// Bound to `true` by `ResilienceHTTP()`. A controller's `@Retry` needs it: without the check, a handler for any method
+// Bound to `true` by `ResilienceHTTP()`. A retried controller needs it: without the check, a handler for any method
 // would replay.
 export const kResilienceHTTP = token<boolean>('@caffeinejs/resilience:http')
 
@@ -42,50 +49,130 @@ export type TimeLimiterConfig = Partial<Omit<TimeLimiterOptions, 'name' | 'disca
 export type BulkheadConfig = Omit<BulkheadOptions, 'name' | 'clock'>
 export type RateLimiterConfig = Partial<Omit<RateLimiterOptions, 'name' | 'clock'>>
 
-/** What `Resilience(r => r.config(...))` takes: the data options of each named instance, by kind, and the order. */
+/** The policies one preset's configuration can define, by kind: data only. */
+export interface PresetConfig {
+  readonly circuitBreaker?: CircuitBreakerConfig
+  readonly retry?: RetryConfig
+  readonly timeLimiter?: TimeLimiterConfig
+  readonly bulkhead?: BulkheadConfig
+  readonly rateLimiter?: RateLimiterConfig
+}
+
+/** What `Resilience(r => r.config(...))` takes: the presets, by name, and the order. */
 export interface ResilienceConfig {
   /** The order of the policies around an annotated method, as `r.order(...)` sets it. */
   readonly order?: readonly ResilienceKind[]
-  readonly circuitBreakers?: Readonly<Record<string, CircuitBreakerConfig>>
-  readonly retries?: Readonly<Record<string, RetryConfig>>
-  readonly timeLimiters?: Readonly<Record<string, TimeLimiterConfig>>
-  readonly bulkheads?: Readonly<Record<string, BulkheadConfig>>
-  readonly rateLimiters?: Readonly<Record<string, RateLimiterConfig>>
+  readonly presets?: Readonly<Record<string, PresetConfig>>
 }
 
-type Kinds = Exclude<keyof ResilienceConfig, 'order'>
+const KINDS: readonly ResilienceKind[] = ['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']
 
-// Each kind's instances: what configuration set, then what code set, merged per option with code winning.
-function merged<O>(
-  fromConfig: Readonly<Record<string, object>> | undefined,
-  fromCode: Map<string, object>,
-): Record<string, O> {
-  const instances: Record<string, O> = {}
+// What code sets for one option wins over what configuration sets; an option code passes as `undefined` leaves the
+// configured one in place.
+function mergedOptions(fromConfig: object | undefined, fromCode: object | undefined): object {
+  const options: Record<string, unknown> = { ...fromConfig }
+  for (const [option, value] of Object.entries(fromCode ?? {})) {
+    if (value !== undefined) {
+      options[option] = value
+    }
+  }
+  return options
+}
+
+// Every preset either side defines, each policy either side defines in it, merged option by option.
+function mergedPresets(
+  fromConfig: Readonly<Record<string, PresetConfig>> | undefined,
+  fromCode: Map<string, PresetDefinition>,
+): ResilienceDefinitions {
+  const presets: Record<string, PresetDefinition> = {}
   for (const name of new Set([...Object.keys(fromConfig ?? {}), ...fromCode.keys()])) {
-    const options: Record<string, unknown> = { ...fromConfig?.[name] }
-    // An option code passes as `undefined` leaves the configured one in place.
-    for (const [option, value] of Object.entries(fromCode.get(name) ?? {})) {
-      if (value !== undefined) {
-        options[option] = value
+    const configured = fromConfig?.[name] as Record<ResilienceKind, object | undefined> | undefined
+    const coded = fromCode.get(name) as Record<ResilienceKind, object | undefined> | undefined
+    const preset: Partial<Record<ResilienceKind, object>> = {}
+    for (const kind of KINDS) {
+      if (configured?.[kind] !== undefined || coded?.[kind] !== undefined) {
+        preset[kind] = mergedOptions(configured?.[kind], coded?.[kind])
       }
     }
-    instances[name] = options as O
+
+    if (Object.keys(preset).length === 0) {
+      throw new ErrInvalidOption(
+        errMessage(`Cannot define preset "${name}": it defines no policy`)
+          .solutions(`Add one with r.preset('${name}', p => p.retry({ ... }))`)
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
+    }
+    presets[name] = preset as PresetDefinition
   }
-  return instances
+  return presets
 }
 
 /**
- * Configures the named policies the resilience annotations use, and weaves them into every method that carries
- * one, in the classes the container builds.
+ * The policies one preset defines, at most one of each kind, each named after the preset. The order of the calls is
+ * not the order the policies run in: `p.timeLimiter().retry()` still runs the retry outside the time limiter.
+ */
+export class PresetBuilder {
+  readonly #name: string
+  readonly #policies: Partial<Record<ResilienceKind, object>>
+
+  constructor(name: string, policies: Partial<Record<ResilienceKind, object>>) {
+    this.#name = name
+    this.#policies = policies
+  }
+
+  /** @throws {@link ErrInvalidOption} when the preset already defines a circuit breaker. */
+  circuitBreaker(options: Omit<CircuitBreakerOptions, 'name'> = {}): this {
+    return this.#define('circuitBreaker', options)
+  }
+
+  /** @throws {@link ErrInvalidOption} when the preset already defines a retry. */
+  retry(options: Omit<RetryOptions, 'name'> = {}): this {
+    return this.#define('retry', options)
+  }
+
+  /** @throws {@link ErrInvalidOption} when the preset already defines a time limiter. */
+  timeLimiter(options: Partial<Omit<TimeLimiterOptions, 'name'>> = {}): this {
+    return this.#define('timeLimiter', options)
+  }
+
+  /** @throws {@link ErrInvalidOption} when the preset already defines a bulkhead. */
+  bulkhead(options: Omit<BulkheadOptions, 'name'> = {}): this {
+    return this.#define('bulkhead', options)
+  }
+
+  /** @throws {@link ErrInvalidOption} when the preset already defines a rate limiter. */
+  rateLimiter(options: Partial<Omit<RateLimiterOptions, 'name'>> = {}): this {
+    return this.#define('rateLimiter', options)
+  }
+
+  #define(kind: ResilienceKind, options: object): this {
+    if (this.#policies[kind] !== undefined) {
+      throw new ErrInvalidOption(
+        errMessage(`Cannot define the ${labelOf(kind)} of preset "${this.#name}" twice`)
+          .solutions(`Pass every option of the ${labelOf(kind)} in one p.${kind}({ ... }) call`)
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
+    }
+    this.#policies[kind] = options
+    return this
+  }
+}
+
+/**
+ * Defines the presets the resilience annotations name, and weaves them into every method that carries one, in the
+ * classes the container builds.
  *
- * An instance is defined by code, by configuration, or both; code wins, option by option, and an option code passes as
- * `undefined` keeps the configured one. `bootstrap()` fails when code defines a name twice, a method names an instance
- * nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a
- * controller carries `@Retry` without `ResilienceHTTP()`, the order does not list each kind once, or a bulkhead or
- * rate limiter inside a method's time limiter may wait as long as its limit.
+ * A preset is defined by code, by configuration, or both. Code wins, option by option, and an option code passes as
+ * `undefined` keeps the configured one; configuration may add a policy code left out. `bootstrap()` fails when code
+ * defines a preset or one of its policies twice, a preset defines no policy, a method names a preset nothing defines
+ * or a policy its preset lacks, a `@Fallback` names a method its class lacks, an annotation is on a static or a
+ * private method, a controller is retried without `ResilienceHTTP()`, the order does not list each kind once, or a
+ * bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
  *
  * ```ts
- * .install(Resilience((r, { config }) => r.config(config.resilience).retry('inventory', { maxAttempts: 3 })))
+ * .install(Resilience((r, { config }) => r.config(config.resilience).preset('inventory', p => p.retry().circuitBreaker())))
  * ```
  */
 export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
@@ -93,15 +180,9 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
 
   #config: Partial<ResilienceConfig> | undefined
   #order: readonly ResilienceKind[] | undefined
-  readonly #code: Record<Kinds, Map<string, object>> = {
-    circuitBreakers: new Map(),
-    retries: new Map(),
-    timeLimiters: new Map(),
-    bulkheads: new Map(),
-    rateLimiters: new Map(),
-  }
+  readonly #presets = new Map<string, PresetDefinition>()
 
-  /** The instances the configuration tree defines. What code sets for an instance wins, option by option. */
+  /** The presets the configuration tree defines. What code sets for a preset's policy wins, option by option. */
   config(config: Partial<ResilienceConfig>): this {
     this.#config = config
     return this
@@ -118,74 +199,31 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   /**
-   * Defines the circuit breaker `name`, over what the configuration tree sets for it.
+   * Defines the preset `name`: at most one policy of each kind, each named `name`, over what the configuration tree
+   * sets for it. `@Resilient(name)` runs all of them; `@Retry(name)` and the other stage annotations take one.
    *
-   * @throws {@link ErrInvalidOption} when code already defined a circuit breaker of that name.
+   * @throws {@link ErrInvalidOption} when code already defined a preset of that name, or `configure` defines one
+   * policy twice.
    */
-  circuitBreaker(name: string, options: Omit<CircuitBreakerOptions, 'name'> = {}): this {
-    return this.#define('circuitBreakers', 'circuit breaker', name, options)
-  }
-
-  /**
-   * Defines the retry `name`, over what the configuration tree sets for it.
-   *
-   * @throws {@link ErrInvalidOption} when code already defined a retry of that name.
-   */
-  retry(name: string, options: Omit<RetryOptions, 'name'> = {}): this {
-    return this.#define('retries', 'retry', name, options)
-  }
-
-  /**
-   * Defines the time limiter `name`, over what the configuration tree sets for it.
-   *
-   * @throws {@link ErrInvalidOption} when code already defined a time limiter of that name.
-   */
-  timeLimiter(name: string, options: Partial<Omit<TimeLimiterOptions, 'name'>> = {}): this {
-    return this.#define('timeLimiters', 'time limiter', name, options)
-  }
-
-  /**
-   * Defines the bulkhead `name`, over what the configuration tree sets for it.
-   *
-   * @throws {@link ErrInvalidOption} when code already defined a bulkhead of that name.
-   */
-  bulkhead(name: string, options: Omit<BulkheadOptions, 'name'> = {}): this {
-    return this.#define('bulkheads', 'bulkhead', name, options)
-  }
-
-  /**
-   * Defines the rate limiter `name`, over what the configuration tree sets for it.
-   *
-   * @throws {@link ErrInvalidOption} when code already defined a rate limiter of that name.
-   */
-  rateLimiter(name: string, options: Partial<Omit<RateLimiterOptions, 'name'>> = {}): this {
-    return this.#define('rateLimiters', 'rate limiter', name, options)
-  }
-
-  #define(kind: Kinds, label: string, name: string, options: object): this {
-    const instances = this.#code[kind]
-    if (instances.has(name)) {
+  preset(name: string, configure: (preset: PresetBuilder) => unknown): this {
+    if (this.#presets.has(name)) {
       throw new ErrInvalidOption(
-        errMessage(`Cannot define ${label} "${name}" twice`)
-          .solutions(`Pass every option of "${name}" in one call`)
+        errMessage(`Cannot define preset "${name}" twice`)
+          .solutions(`Define every policy of "${name}" in one r.preset('${name}', p => ...) call`)
           .reference('@caffeinejs/resilience', ErrInvalidOption)
           .build(),
       )
     }
-    instances.set(name, options)
+
+    const policies: Partial<Record<ResilienceKind, object>> = {}
+    configure(new PresetBuilder(name, policies))
+    this.#presets.set(name, policies as PresetDefinition)
     return this
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
     const config = this.#config ?? {}
-    const definitions: ResilienceDefinitions = {
-      circuitBreakers: merged(config.circuitBreakers, this.#code.circuitBreakers),
-      retries: merged(config.retries, this.#code.retries),
-      timeLimiters: merged(config.timeLimiters, this.#code.timeLimiters),
-      bulkheads: merged(config.bulkheads, this.#code.bulkheads),
-      rateLimiters: merged(config.rateLimiters, this.#code.rateLimiters),
-    }
-    const registry = new ResilienceRegistry(definitions)
+    const registry = new ResilienceRegistry(mergedPresets(config.presets, this.#presets))
     const aspect = new ResilienceAspect(registry, this.#order ?? config.order)
 
     // Disposed at shutdown, so no backoff or queued call holds it.
@@ -197,21 +235,24 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
 
   protected override bootstrap(kit: BootstrapKit<C>): void {
     if (!kit.container.has(kResilienceHTTP)) {
+      const registry = kit.container.get(ResilienceRegistry)
       for (const { binding } of kit.container.getBindingsByLabel(kController)) {
         const cls = binding.type as AnyClass | undefined
-        const retried = cls === undefined ? undefined : [...reflect.members(cls, Retry).keys()][0]
-        if (retried !== undefined) {
-          throw new ErrInvalidOption(
-            errMessage(
-              `Cannot retry "${cls!.name}.${String(retried)}": @Retry on a controller needs the HTTP replay check`,
-            )
-              .solutions(
-                'Install ResilienceHTTP() from @caffeinejs/resilience/http',
-                `Move @Retry('${reflect.members(cls!, Retry).get(retried)!.name}') to the outbound client method the handler calls`,
+        for (const member of cls === undefined ? [] : annotatedMembers(cls)) {
+          const retry = stagesOf(cls!, member, registry).stages.retry
+          if (retry !== undefined) {
+            throw new ErrInvalidOption(
+              errMessage(
+                `Cannot retry "${cls!.name}.${String(member)}": ${written(retry)} retries a controller, which needs the HTTP replay check`,
               )
-              .reference('@caffeinejs/resilience', ErrInvalidOption)
-              .build(),
-          )
+                .solutions(
+                  'Install ResilienceHTTP() from @caffeinejs/resilience/http',
+                  `Move ${written(retry)} to the outbound client method the handler calls`,
+                )
+                .reference('@caffeinejs/resilience', ErrInvalidOption)
+                .build(),
+            )
+          }
         }
       }
     }
@@ -233,13 +274,11 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
 }
 
 /**
- * Installs the resilience annotations: the named circuit breakers, retries, time limiters, bulkheads and rate
- * limiters they use, and the aspect that runs annotated methods through them.
+ * Installs the resilience annotations: the presets they name, each a set of named circuit breakers, retries, time
+ * limiters, bulkheads and rate limiters, and the aspect that runs annotated methods through them.
  *
- * @throws {@link ErrInvalidOption} at `bootstrap()` when an instance's options are out of range, code defines a name
- * twice, a method names an instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on
- * a static or a private method, a controller carries `@Retry` without `ResilienceHTTP()`, the order does not list each
- * kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+ * @throws {@link ErrInvalidOption} at `bootstrap()` when a policy's options are out of range, or for any of the
+ * reasons {@link ResilienceBuilder} lists.
  */
 export function Resilience<C = unknown>(configure?: FeatureConfigurer<ResilienceBuilder<C>, C>): Feature<C> {
   return new ResilienceBuilder<C>(configure as never)

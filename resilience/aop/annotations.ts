@@ -24,15 +24,24 @@ type FallbackDecorator<K extends string | symbol> = <
 
 export interface RetryAnnotationOptions {
   /**
-   * Declares that running the method twice is safe. An HTTP handler routed for a method that is not safe may carry
-   * `@Retry` only when it says so, unless the application allows that method; it deduplicates nothing.
+   * Declares that running the method twice is safe. An HTTP handler routed for a method that is not safe may be
+   * retried only when it says so, unless the application allows that method; it deduplicates nothing.
    */
   readonly repeatable?: boolean
 }
 
+/** What `@Resilient` takes. */
+export type ResilientAnnotationOptions = RetryAnnotationOptions
+
+/** What `@Resilient` stores. */
+export interface ResilientAnnotation {
+  readonly preset: string
+  readonly repeatable: boolean
+}
+
 /** What `@Retry` stores. */
 export interface RetryAnnotation {
-  readonly name: string
+  readonly preset: string
   readonly repeatable: boolean
 }
 
@@ -52,13 +61,12 @@ export interface FallbackAnnotation {
 
 function nameOf(decorator: string, name: unknown): string {
   if (typeof name !== 'string' || name.length === 0) {
+    const stage = decorator === 'Resilient' ? '...' : `${decorator[0]!.toLowerCase()}${decorator.slice(1)}({ ... })`
     throw new ErrInvalidOption(
       errMessage(
-        `Cannot apply @${decorator}: the name must be a non-empty string, got ${typeof name === 'string' ? '""' : described(name)}`,
+        `Cannot apply @${decorator}: the preset name must be a non-empty string, got ${typeof name === 'string' ? '""' : described(name)}`,
       )
-        .solutions(
-          `Name the instance defined with Resilience(r => r.${decorator[0]!.toLowerCase()}${decorator.slice(1)}('name', { ... }))`,
-        )
+        .solutions(`Name a preset defined with Resilience(r => r.preset('name', p => p.${stage}))`)
         .reference('@caffeinejs/resilience', ErrInvalidOption)
         .build(),
     )
@@ -68,37 +76,53 @@ function nameOf(decorator: string, name: unknown): string {
 }
 
 /**
- * Runs the method again when it fails, with the retry of that name defined by the `Resilience()` feature.
+ * Runs the method through every policy the preset of that name defines, in the order of the `Resilience()` feature,
+ * whatever order the preset's builder calls were written in.
+ *
+ * A stage annotation next to it replaces one policy and keeps the rest: `@Resilient('inventory')` with
+ * `@TimeLimiter('inventory-export')` runs the retry and the circuit breaker of `inventory`, the same instances every
+ * other method of `inventory` uses, with the time limiter of `inventory-export`. `repeatable` is that of `@Retry`.
+ */
+export const Resilient = createAnnotation.on('method')(
+  (preset: string, options?: ResilientAnnotationOptions): ResilientAnnotation => ({
+    preset: nameOf('Resilient', preset),
+    repeatable: options?.repeatable ?? false,
+  }),
+) as unknown as ((preset: string, options?: ResilientAnnotationOptions) => AsyncMethodDecorator) &
+  Annotation<ResilientAnnotation, 'method'>
+
+/**
+ * Runs the method again when it fails, with the retry of the preset of that name.
  *
  * Retrying a method repeats everything it does.
  */
 export const Retry = createAnnotation.on('method')(
-  (name: string, options?: RetryAnnotationOptions): RetryAnnotation => ({
-    name: nameOf('Retry', name),
+  (preset: string, options?: RetryAnnotationOptions): RetryAnnotation => ({
+    preset: nameOf('Retry', preset),
     repeatable: options?.repeatable ?? false,
   }),
-) as unknown as ((name: string, options?: RetryAnnotationOptions) => AsyncMethodDecorator) &
+) as unknown as ((preset: string, options?: RetryAnnotationOptions) => AsyncMethodDecorator) &
   Annotation<RetryAnnotation, 'method'>
 
-/** Guards the method with the circuit breaker of that name defined by the `Resilience()` feature. */
-export const CircuitBreaker = createAnnotation.on('method')((name: string): string =>
-  nameOf('CircuitBreaker', name),
-) as unknown as ((name: string) => AsyncMethodDecorator) & Annotation<string, 'method'>
+/** Guards the method with the circuit breaker of the preset of that name. */
+export const CircuitBreaker = createAnnotation.on('method')((preset: string): string =>
+  nameOf('CircuitBreaker', preset),
+) as unknown as ((preset: string) => AsyncMethodDecorator) & Annotation<string, 'method'>
 
-/** Bounds how long the method may run, with the time limiter of that name defined by the `Resilience()` feature. */
-export const TimeLimiter = createAnnotation.on('method')((name: string): string =>
-  nameOf('TimeLimiter', name),
-) as unknown as ((name: string) => AsyncMethodDecorator) & Annotation<string, 'method'>
+/** Bounds how long the method may run, with the time limiter of the preset of that name. */
+export const TimeLimiter = createAnnotation.on('method')((preset: string): string =>
+  nameOf('TimeLimiter', preset),
+) as unknown as ((preset: string) => AsyncMethodDecorator) & Annotation<string, 'method'>
 
-/** Limits how many calls of the method run at once, with the bulkhead of that name defined by `Resilience()`. */
-export const Bulkhead = createAnnotation.on('method')((name: string): string =>
-  nameOf('Bulkhead', name),
-) as unknown as ((name: string) => AsyncMethodDecorator) & Annotation<string, 'method'>
+/** Limits how many calls of the method run at once, with the bulkhead of the preset of that name. */
+export const Bulkhead = createAnnotation.on('method')((preset: string): string =>
+  nameOf('Bulkhead', preset),
+) as unknown as ((preset: string) => AsyncMethodDecorator) & Annotation<string, 'method'>
 
-/** Limits how often the method starts, with the rate limiter of that name defined by the `Resilience()` feature. */
-export const RateLimiter = createAnnotation.on('method')((name: string): string =>
-  nameOf('RateLimiter', name),
-) as unknown as ((name: string) => AsyncMethodDecorator) & Annotation<string, 'method'>
+/** Limits how often the method starts, with the rate limiter of the preset of that name. */
+export const RateLimiter = createAnnotation.on('method')((preset: string): string =>
+  nameOf('RateLimiter', preset),
+) as unknown as ((preset: string) => AsyncMethodDecorator) & Annotation<string, 'method'>
 
 /**
  * Answers a failed call with another method of the same class, called with the error first and then the original
@@ -130,6 +154,7 @@ export const ANNOTATIONS: ReadonlyMap<Annotation<unknown, 'method'>, string> = n
   Annotation<unknown, 'method'>,
   string
 >([
+  [Resilient, 'Resilient'],
   [Retry, 'Retry'],
   [CircuitBreaker, 'CircuitBreaker'],
   [TimeLimiter, 'TimeLimiter'],

@@ -7,14 +7,14 @@ import {
   type FeatureConfigureKit,
   kFeatureName,
 } from '@caffeinejs/application'
-import { type AnyClass, reflect } from '@caffeinejs/di'
+import type { AnyClass } from '@caffeinejs/di'
 import { Keys, SAFE_METHODS } from '@caffeinejs/http'
 import { getRouteGroup } from '@caffeinejs/http/decorators/registrar'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { Retry } from '../aop/annotations.js'
 import { kResilienceHTTP } from '../aop/feature.js'
 import { ResilienceRegistry } from '../aop/registry.js'
+import { stagesOf, written } from '../aop/stages.js'
 import { ErrInvalidOption } from '../errors.js'
 
 /** What `ResilienceHTTP(h => h.config(...))` takes. */
@@ -24,12 +24,14 @@ export interface ResilienceHTTPConfig {
 }
 
 /**
- * Refuses, at `bootstrap()`, a `@Retry` on a controller handler that running twice could harm.
+ * Refuses, at `bootstrap()`, a retry on a controller handler that running twice could harm, whether `@Retry` or the
+ * preset `@Resilient` names gives it.
  *
- * A handler may carry `@Retry` only when every HTTP method routed to it is retryable, by default `SAFE_METHODS` from
- * `@caffeinejs/http`, or when it declares itself repeatable with `@Retry(name, { repeatable: true })`. `PUT` and
- * `DELETE` are idempotent, not safe: a replay repeats every side effect of the handler, not only its final state. A
- * route that reads its body as a stream is refused even then. `@Retry` on a service a handler calls is not checked.
+ * A handler may be retried only when every HTTP method routed to it is retryable, by default `SAFE_METHODS` from
+ * `@caffeinejs/http`, or when it declares itself repeatable with `@Retry(name, { repeatable: true })` or
+ * `@Resilient(name, { repeatable: true })`. `PUT` and `DELETE` are idempotent, not safe: a replay repeats every side
+ * effect of the handler, not only its final state. A route that reads its body as a stream is refused even then. A
+ * retry on a service a handler calls is not checked.
  */
 export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'resilience-http'
@@ -63,6 +65,7 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
       )
     }
 
+    const registry = kit.container.get(ResilienceRegistry)
     const methods = this.#retryableMethods ?? this.#config?.retryableMethods ?? [...SAFE_METHODS]
     const retryableMethods = new Set(methods.map(method => method.toUpperCase()))
     for (const { key, binding } of kit.container.getBindingsByLabel(Keys.CONTROLLER)) {
@@ -74,7 +77,8 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
       }
 
       for (const route of group.routes) {
-        const retry = reflect.effective(cls, Retry, route.name as never)
+        const { stages, repeatable } = stagesOf(cls, route.name, registry)
+        const retry = stages.retry
         if (retry === undefined) {
           continue
         }
@@ -91,7 +95,7 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
               `Cannot retry "${route.method.map(method => method.toUpperCase()).join(',')} ${path}" (${where}): the route reads its body as a stream, which cannot be read twice`,
             )
               .solutions(
-                `Move @Retry('${retry.name}') to the outbound client method the handler calls`,
+                `Move ${written(retry)} to the outbound client method the handler calls`,
                 'Read the body as a buffer instead of a stream',
               )
               .reference('@caffeinejs/resilience', ErrInvalidOption)
@@ -99,7 +103,7 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
           )
         }
 
-        if (retry.repeatable) {
+        if (repeatable) {
           continue
         }
 
@@ -108,8 +112,8 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
             throw new ErrInvalidOption(
               errMessage(`Cannot retry "${method} ${path}" (${where}): ${method} is not a retryable method`)
                 .solutions(
-                  `Move @Retry('${retry.name}') to the outbound client method the handler calls`,
-                  `Declare the handler repeatable with @Retry('${retry.name}', { repeatable: true }) if running it twice is safe`,
+                  `Move ${written(retry)} to the outbound client method the handler calls`,
+                  `Declare the handler repeatable with @${retry.decorator}('${retry.preset}', { repeatable: true }) if running it twice is safe`,
                   `Allow ${method} with ResilienceHTTP(h => h.retryableMethods(...)) if every ${method} handler is safe to replay`,
                 )
                 .reference('@caffeinejs/resilience', ErrInvalidOption)
@@ -123,11 +127,11 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
 }
 
 /**
- * Installs the HTTP replay check for the resilience annotations: a `@Retry` on a controller handler for a method that
+ * Installs the HTTP replay check for the resilience annotations: a retry on a controller handler for a method that
  * is not safe (`SAFE_METHODS`: `GET`, `HEAD`, `OPTIONS`, `TRACE` and `QUERY`) fails `bootstrap()`, unless the handler
  * declares itself repeatable or the method is allowed with `retryableMethods(...)`.
  *
- * It needs `Resilience()`, and `Resilience()` needs it once any controller carries `@Retry`.
+ * It needs `Resilience()`, and `Resilience()` needs it once any controller is retried.
  *
  * @throws {@link ErrInvalidOption} at `bootstrap()` naming the route, the handler and the method.
  */

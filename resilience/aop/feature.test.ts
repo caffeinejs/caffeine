@@ -42,12 +42,14 @@ async function boot(feature: Feature, ...classes: Array<new () => object>) {
 }
 
 const inventory = (r: ResilienceBuilder) =>
-  r
-    .retry('inventory', { maxAttempts: 3, backoff: 0 })
-    .circuitBreaker('inventory', { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } })
+  r.preset('inventory', p =>
+    p
+      .retry({ maxAttempts: 3, backoff: 0 })
+      .circuitBreaker({ minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } }),
+  )
 
 describe('Resilience()', () => {
-  it('binds the registry it builds, holding the instances code defined', async () => {
+  it('binds the registry it builds, holding the policies of each preset code defined', async () => {
     const app = await boot(Resilience(inventory))
     const registry = app.container.get(ResilienceRegistry)
 
@@ -69,8 +71,8 @@ describe('Resilience()', () => {
     const app = await boot(
       Resilience(r =>
         inventory(r)
-          .config({ retries: { polling: { maxAttempts: 5, failAfterMaxAttempts: true, backoff: 0 } } })
-          .retry('polling', { maxAttempts: 3, retryOnResult: result => result === 'busy' }),
+          .config({ presets: { polling: { retry: { maxAttempts: 5, failAfterMaxAttempts: true, backoff: 0 } } } })
+          .preset('polling', p => p.retry({ maxAttempts: 3, retryOnResult: result => result === 'busy' })),
       ),
     )
     let attempts = 0
@@ -95,8 +97,8 @@ describe('Resilience()', () => {
     const app = await boot(
       Resilience(r =>
         inventory(r)
-          .config({ retries: { polling: { maxAttempts: 4 } } })
-          .retry('polling', { maxAttempts: undefined, backoff: 0 }),
+          .config({ presets: { polling: { retry: { maxAttempts: 4 } } } })
+          .preset('polling', p => p.retry({ maxAttempts: undefined, backoff: 0 })),
       ),
     )
     let attempts = 0
@@ -115,19 +117,80 @@ describe('Resilience()', () => {
   })
 
   // Two definitions of one name in code are a mistake to report, not a choice to make silently.
-  it('refuses a name defined twice in code', async () => {
+  it('refuses a preset defined twice in code', async () => {
     const error = await boot(
-      Resilience(r => inventory(r).retry('polling', { maxAttempts: 2 }).retry('polling', { maxAttempts: 5 })),
+      Resilience(r =>
+        inventory(r)
+          .preset('polling', p => p.retry())
+          .preset('polling', p => p.circuitBreaker()),
+      ),
     ).catch((reason: unknown) => reason)
 
     expect(error).toBeInstanceOf(ErrInvalidOption)
-    expect((error as Error).message.split('\n')[0]).toBe('Cannot define retry "polling" twice')
+    expect((error as Error).message.split('\n')[0]).toBe('Cannot define preset "polling" twice')
   })
 
-  it('defines an instance named only in configuration', async () => {
-    const app = await boot(Resilience(r => inventory(r).config({ bulkheads: { exports: { maxConcurrentCalls: 3 } } })))
+  it('refuses a policy defined twice in one preset', async () => {
+    const error = await boot(
+      Resilience(r => r.preset('polling', p => p.retry({ maxAttempts: 2 }).retry({ maxAttempts: 5 }))),
+    ).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message.split('\n')[0]).toBe('Cannot define the retry of preset "polling" twice')
+  })
+
+  // A preset with nothing in it would weave a method into nothing, silently.
+  it('refuses a preset that defines no policy, in code or in configuration', async () => {
+    const fromCode = await boot(Resilience(r => inventory(r).preset('empty', p => p))).catch(
+      (reason: unknown) => reason,
+    )
+    const fromConfig = await boot(Resilience(r => inventory(r).config({ presets: { empty: {} } }))).catch(
+      (reason: unknown) => reason,
+    )
+
+    for (const error of [fromCode, fromConfig]) {
+      expect(error).toBeInstanceOf(ErrInvalidOption)
+      expect((error as Error).message.split('\n')[0]).toBe('Cannot define preset "empty": it defines no policy')
+    }
+  })
+
+  it('defines a preset named only in configuration', async () => {
+    const app = await boot(
+      Resilience(r => inventory(r).config({ presets: { exports: { bulkhead: { maxConcurrentCalls: 3 } } } })),
+    )
 
     expect(app.container.get(ResilienceRegistry).bulkhead('exports').metrics().maxAllowedConcurrentCalls).toBe(3)
+  })
+
+  // An operator can add a policy to a preset without a code change, as they can tune one.
+  it('adds a policy that configuration defines and code left out', async () => {
+    const app = await boot(
+      Resilience(r => inventory(r).config({ presets: { inventory: { bulkhead: { maxConcurrentCalls: 3 } } } })),
+    )
+    const registry = app.container.get(ResilienceRegistry)
+
+    expect(registry.has('inventory', 'retry')).toBe(true)
+    expect(registry.bulkhead('inventory').metrics().maxAllowedConcurrentCalls).toBe(3)
+  })
+
+  // The run order is the application's; the order a preset's policies are written in says nothing about it.
+  it('runs the policies of a preset in the fixed order, whatever order the builder calls are in', async () => {
+    const app = await boot(
+      Resilience(r =>
+        r.preset('inventory', p =>
+          p
+            .circuitBreaker({ minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } })
+            .retry({ maxAttempts: 3, backoff: 0 }),
+        ),
+      ),
+    )
+    const target = app.container.get(Inventory)
+
+    await target.stock().catch(() => undefined)
+
+    // Retry outside the breaker: two failures open it, and the third attempt is refused without running.
+    expect(target.attempts).toBe(2)
+    expect(app.container.get(ResilienceRegistry).circuitBreaker('inventory').metrics().failedCalls).toBe(2)
   })
 
   // Two test applications must never share a breaker: one opened by a test leaks into every test after it otherwise.
@@ -163,7 +226,7 @@ describe('Resilience()', () => {
   // A retry sleeping out a long backoff would otherwise hold a deploy's shutdown until it woke.
   it('disposes its instances when the application closes, so a sleeping retry ends at once', async () => {
     const app = await boot(
-      Resilience(r => r.retry('inventory', { maxAttempts: 3, backoff: 30 * Second }).circuitBreaker('inventory')),
+      Resilience(r => r.preset('inventory', p => p.retry({ maxAttempts: 3, backoff: 30 * Second }).circuitBreaker())),
     )
     const target = app.container.get(Inventory)
     const call = target.stock().catch((reason: unknown) => reason)
@@ -198,14 +261,12 @@ describe('Resilience() at bootstrap', () => {
   }
 
   // A typo in a name must fail the deployment, not the first call that reaches the method in production.
-  it('fails when a method names an instance nothing defines', async () => {
+  it('fails when a method names a preset nothing defines', async () => {
     const error = await boot(Resilience(inventory), Misnamed).catch((reason: unknown) => reason)
 
     expect(error).toBeInstanceOf(ErrInvalidOption)
-    expect((error as Error).message).toContain(
-      'Cannot weave "Misnamed.call": no circuit breaker named "inventroy" is defined',
-    )
-    expect((error as Error).message).toContain("Define it with Resilience(r => r.circuitBreaker('inventroy', { ... }))")
+    expect((error as Error).message).toContain('Cannot weave "Misnamed.call": no preset named "inventroy" is defined')
+    expect((error as Error).message).toContain("Define it with Resilience(r => r.preset('inventroy', p => ...))")
   })
 
   it('fails when a @Fallback names a method its class lacks', async () => {
@@ -232,11 +293,11 @@ describe('Resilience() at bootstrap', () => {
   })
 
   it('fails on an option out of range, whether code or configuration set it', async () => {
-    const fromCode = await boot(Resilience(r => inventory(r).timeLimiter('reports', { timeoutDuration: 0 }))).catch(
-      (reason: unknown) => reason,
-    )
+    const fromCode = await boot(
+      Resilience(r => inventory(r).preset('reports', p => p.timeLimiter({ timeoutDuration: 0 }))),
+    ).catch((reason: unknown) => reason)
     const fromConfig = await boot(
-      Resilience(r => inventory(r).config({ timeLimiters: { reports: { timeoutDuration: 0 } } })),
+      Resilience(r => inventory(r).config({ presets: { reports: { timeLimiter: { timeoutDuration: 0 } } } })),
     ).catch((reason: unknown) => reason)
 
     for (const error of [fromCode, fromConfig]) {

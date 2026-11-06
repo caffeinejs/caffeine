@@ -5,7 +5,7 @@ import { createWebApplication } from '@caffeinejs/http/fastify'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from '../aop/annotations.js'
+import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Resilient, Retry, TimeLimiter } from '../aop/annotations.js'
 import { Resilience, type ResilienceBuilder } from '../aop/feature.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ResilienceHTTP } from './feature.js'
@@ -19,12 +19,14 @@ afterEach(async () => {
 })
 
 const instances = (r: ResilienceBuilder) =>
-  r
-    .retry('feed', { maxAttempts: 2, backoff: 0 })
-    .circuitBreaker('feed')
-    .timeLimiter('feed', { timeoutDuration: 1 * Second })
-    .bulkhead('feed')
-    .rateLimiter('feed', { limitForPeriod: 100, limitRefreshPeriod: 1 * Second })
+  r.preset('feed', p =>
+    p
+      .retry({ maxAttempts: 2, backoff: 0 })
+      .circuitBreaker()
+      .timeLimiter({ timeoutDuration: 1 * Second })
+      .bulkhead()
+      .rateLimiter({ limitForPeriod: 100, limitRefreshPeriod: 1 * Second }),
+  )
 
 // Boots a web application whose container sees the controllers of one profile only.
 async function boot(profile: string, ...features: Feature[]) {
@@ -121,6 +123,27 @@ describe('ResilienceHTTP() by default', () => {
     expect(error!.message).toContain("Move @Retry('feed') to the outbound client method the handler calls")
     expect(error!.message).toContain("Declare the handler repeatable with @Retry('feed', { repeatable: true })")
     expect(error!.message).toContain('Allow POST with ResilienceHTTP(h => h.retryableMethods(...))')
+  })
+
+  @Controller('/carts')
+  @Profile('rh-post-preset')
+  class CartsController {
+    @Resilient('feed')
+    @Post('/')
+    async add(): Promise<string> {
+      return 'added'
+    }
+  }
+  void CartsController
+
+  // A retry a preset brings replays the handler as surely as one written with @Retry.
+  it('refuses a POST handler that a preset retries, naming @Resilient in the fixes', async () => {
+    const error = await refusal(boot('rh-post-preset', Resilience(instances), ResilienceHTTP()))
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect(error!.message).toContain('Cannot retry "POST /carts" (CartsController.add): POST is not a retryable method')
+    expect(error!.message).toContain("Move @Resilient('feed') to the outbound client method the handler calls")
+    expect(error!.message).toContain("Declare the handler repeatable with @Resilient('feed', { repeatable: true })")
   })
 
   @Controller('/things')
@@ -270,6 +293,23 @@ describe('ResilienceHTTP() widened', () => {
     expect((await app.request('/orders', { method: 'POST' })).status).toBe(200)
   })
 
+  @Controller('/carts')
+  @Profile('rh-repeatable-preset')
+  class RepeatableCartsController {
+    @Resilient('feed', { repeatable: true })
+    @Post('/')
+    async add(): Promise<string> {
+      return 'added'
+    }
+  }
+  void RepeatableCartsController
+
+  it('lets a POST handler that @Resilient declares repeatable run through the preset', async () => {
+    const app = await boot('rh-repeatable-preset', Resilience(instances), ResilienceHTTP())
+
+    expect((await app.request('/carts', { method: 'POST' })).status).toBe(200)
+  })
+
   it('lets a PUT handler carry @Retry once PUT is retryable, and still refuses POST', async () => {
     await expect(
       boot(
@@ -390,7 +430,7 @@ describe('the two halves', () => {
 
     expect(error).toBeInstanceOf(ErrInvalidOption)
     expect(error!.message).toContain(
-      'Cannot retry "FeedController.list": @Retry on a controller needs the HTTP replay check',
+      'Cannot retry "FeedController.list": @Retry(\'feed\') retries a controller, which needs the HTTP replay check',
     )
     expect(error!.message).toContain('Install ResilienceHTTP() from @caffeinejs/resilience/http')
   })
