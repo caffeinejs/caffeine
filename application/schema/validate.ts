@@ -1,7 +1,10 @@
-import type { TSchema } from '@sinclair/typebox'
-import { HasTransform, TransformDecodeError, Value } from '@sinclair/typebox/value'
+import { FormatRegistry, type TSchema } from '@sinclair/typebox'
+import { TypeCompiler } from '@sinclair/typebox/compiler'
+import type { ValueError } from '@sinclair/typebox/errors'
+import { HasTransform, TransformDecode, TransformDecodeError, TransformEncode, Value } from '@sinclair/typebox/value'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
+import { compileAdditional } from './_additional.js'
 import { materializeObjects } from './_materialize.js'
 import { type AnySchema, type InferSchema, isTypeBoxSchema, type SchemaIssue } from './schema.js'
 
@@ -30,12 +33,13 @@ export interface SchemaValidateOptions {
 /**
  * Validates `input` synchronously and returns the coerced value or normalized issues.
  *
- * Used where Caffeine owns validation — configuration above all, which must be materialized before anything can be
- * injected and therefore cannot await. HTTP routes do *not* go through here: their schemas are compiled to JSON
- * Schema once and Fastify's Ajv validates every request.
+ * Used where Caffeine owns validation of a single value — configuration above all, which must be materialized before
+ * anything can be injected and therefore cannot await. An HTTP route validates many values against one schema, so it
+ * uses {@link compileValidator} instead.
  *
- * A TypeBox schema runs the pipeline below. A Standard Schema runs its own library's validator, so refinements and
- * transforms behave exactly as the author wrote them.
+ * A TypeBox schema runs the pipeline below, checking a `format` by what {@link registerFormat} registered under its
+ * name: one nobody registered refuses every value. A Standard Schema runs its own library's validator, so refinements
+ * and transforms behave exactly as the author wrote them.
  */
 export function validateSchema<S extends AnySchema>(
   schema: S,
@@ -46,6 +50,127 @@ export function validateSchema<S extends AnySchema>(
     return validateTypeBox(schema, input, options) as SchemaValidationResult<InferSchema<S>>
   }
   return validateStandard(schema as StandardSchemaV1, input) as SchemaValidationResult<InferSchema<S>>
+}
+
+/**
+ * Validates one value against the schema a validator was compiled from. A TypeBox schema answers at once; a Standard
+ * Schema may answer with a promise, when its library validates asynchronously.
+ */
+export type SchemaValidator<T> = (input: unknown) => SchemaValidationResult<T> | Promise<SchemaValidationResult<T>>
+
+/**
+ * Builds a validator for one schema, to run on many values: whatever depends on the schema alone is done here, once.
+ *
+ * A TypeBox schema is compiled to code, and each value is then handled as Fastify's Ajv handles a request: its declared
+ * defaults are filled in; its types are converted (`'8080'` becomes `8080`, `'a'` becomes `['a']` where an array is
+ * declared, and, unlike Ajv, `'1.9'` becomes `1` where an integer is); and its keys are dropped where an object says
+ * `additionalProperties: false`, a nullable object included, but for a key a `patternProperties` pattern matches,
+ * which is converted and checked against that pattern's schema but, as under Ajv, never decoded. Inside another union
+ * or an intersection nothing is dropped, and a `$t.Object` is checked as TypeBox checks it alone: a key only one of its
+ * patterns allows counts as undeclared. The value is then checked, a `format` by what {@link registerFormat} registered
+ * under its name, and its codecs decoded. A Standard Schema runs its own library's validator. Either way a failure
+ * reports its first issue only, so the report on a large invalid value is no larger than on a small one.
+ *
+ * The value is worked on in place, not copied: hand it one nobody else holds, such as a request's parsed body.
+ *
+ * @throws TypeCompilerUnknownTypeError when the TypeBox schema holds a kind TypeBox cannot check, such as
+ * `$t.Unsafe(...)`.
+ */
+export function compileValidator<S extends TSchema>(
+  schema: S,
+): (input: unknown) => SchemaValidationResult<InferSchema<S>>
+export function compileValidator<S extends AnySchema>(schema: S): SchemaValidator<InferSchema<S>>
+export function compileValidator<S extends AnySchema>(schema: S): SchemaValidator<InferSchema<S>> {
+  if (isTypeBoxSchema(schema)) {
+    return compileTypeBox(schema, true) as SchemaValidator<InferSchema<S>>
+  }
+  return compileStandard(schema as StandardSchemaV1) as SchemaValidator<InferSchema<S>>
+}
+
+/**
+ * Teaches the TypeBox validators a string format, so a schema's `format: name` is checked with `check`.
+ *
+ * A format already registered under that name is left as it is: the first registration wins. Register one of your own
+ * before the application bootstraps, as `@caffeinejs/http` registers the formats Fastify's Ajv checks while it sets up
+ * its routes. TypeBox refuses every value of a format it does not know, so a schema naming one fails all input until it
+ * is registered.
+ */
+export function registerFormat(name: string, check: (value: string) => boolean): void {
+  if (!FormatRegistry.Has(name)) {
+    FormatRegistry.Set(name, check)
+  }
+}
+
+/**
+ * Whether a schema holds a codec, such as `$t.Duration()` or `$t.List()`: a TypeBox transform, which checking a value
+ * against the schema's JSON Schema leaves undecoded. A Standard Schema answers `false`; its own validator runs
+ * whatever it transforms.
+ */
+export function hasCodec(schema: AnySchema): boolean {
+  return isTypeBoxSchema(schema) && HasTransform(schema, [])
+}
+
+/**
+ * Builds the function that turns a decoded value back into what the schema reads, running its codecs the other way:
+ * the `Duration` `5000` becomes `'5s'`. The encoded value is not checked against the schema.
+ *
+ * `undefined` when there is nothing to encode: a schema holding no codec, or a Standard Schema, whose interface has no
+ * encoding.
+ */
+export function compileEncoder(schema: AnySchema): ((value: unknown) => unknown) | undefined {
+  if (!hasCodec(schema)) {
+    return undefined
+  }
+  return value => TransformEncode(schema as TSchema, [], value)
+}
+
+function compileTypeBox(authored: TSchema, decode: boolean): (input: unknown) => SchemaValidationResult<unknown> {
+  // The keys an object does not declare, which TypeBox cannot check as Ajv does, are handled apart; TypeBox gets the
+  // rest. Nothing under a key `decode` leaves undecoded is decoded either.
+  const additional = compileAdditional(authored, (child, decodeChild) => compileTypeBox(child, decode && decodeChild))
+  const schema = additional.schema
+  const checker = TypeCompiler.Compile(schema)
+  const decodes = decode && HasTransform(schema, [])
+
+  return input => {
+    let value = Value.Default(schema, input)
+    value = Value.Convert(schema, value)
+
+    const issue = additional.apply(value)
+    if (issue !== undefined) {
+      return { ok: false, issues: [issue] }
+    }
+
+    if (!checker.Check(value)) {
+      // A value `Check` refuses has at least one error; only the first is read.
+      const [error] = checker.Errors(value)
+      return { ok: false, issues: [errorIssue(error)] }
+    }
+
+    if (!decodes) {
+      return { ok: true, value }
+    }
+
+    try {
+      // Checked just above, so `TransformDecode` skips the check `Value.Decode` would run again.
+      return { ok: true, value: TransformDecode(schema, [], value) }
+    } catch (error) {
+      return { ok: false, issues: [decodeIssue(error)] }
+    }
+  }
+}
+
+function compileStandard(schema: StandardSchemaV1): SchemaValidator<unknown> {
+  return input => {
+    const result = schema['~standard'].validate(input)
+    return result instanceof Promise ? result.then(firstStandardIssue) : firstStandardIssue(result)
+  }
+}
+
+/** As TypeBox's, a library's failure is reported by its first issue, however many it collected. */
+function firstStandardIssue(result: StandardSchemaV1.Result<unknown>): SchemaValidationResult<unknown> {
+  const validated = standardResult(result)
+  return validated.ok ? validated : { ok: false, issues: validated.issues.slice(0, 1) }
 }
 
 /**
@@ -73,13 +198,7 @@ function validateTypeBox(
     return options.decode === true ? decodeCodecs(schema, value) : { ok: true, value }
   }
 
-  const issues = [...Value.Errors(schema, value)].map<SchemaIssue>(error => ({
-    path: pointerToDotted(error.path),
-    message: error.message,
-    code: String(error.type),
-  }))
-
-  return { ok: false, issues }
+  return { ok: false, issues: [...Value.Errors(schema, value)].map(errorIssue) }
 }
 
 /**
@@ -131,6 +250,10 @@ function validateStandard(schema: StandardSchemaV1, input: unknown): SchemaValid
     }
   }
 
+  return standardResult(result)
+}
+
+function standardResult(result: StandardSchemaV1.Result<unknown>): SchemaValidationResult<unknown> {
   if (result.issues) {
     return { ok: false, issues: result.issues.map(toSchemaIssue) }
   }
@@ -142,6 +265,10 @@ function toSchemaIssue(issue: StandardSchemaV1.Issue): SchemaIssue {
   const path = (issue.path ?? []).map(segment => String(typeof segment === 'object' ? segment.key : segment)).join('.')
 
   return { path, message: issue.message }
+}
+
+function errorIssue(error: ValueError): SchemaIssue {
+  return { path: pointerToDotted(error.path), message: error.message, code: String(error.type) }
 }
 
 /** TypeBox reports a JSON Pointer (`/server/port`); the rest of Caffeine speaks dotted paths (`server.port`). */

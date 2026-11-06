@@ -1,5 +1,7 @@
-import { Kind, type StaticDecode, type TSchema } from '@sinclair/typebox'
+import { Kind, type Static, type StaticDecode, type TSchema } from '@sinclair/typebox'
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec'
+
+import type { SchemaIO } from './json_schema.js'
 
 /**
  * Any schema Caffeine accepts: a TypeBox schema (the curated `$t` dialect, see `./t.js`) or any
@@ -8,8 +10,9 @@ import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/sp
  *
  * TypeBox is the first-class dialect because a TypeBox schema *is* a JSON Schema: one declaration validates,
  * types, and (later) documents. Standard Schema libraries are fully supported wherever Caffeine runs the
- * validator itself — configuration — and supported to the extent they convert to JSON Schema where validation is
- * delegated to Fastify's Ajv, which cannot execute a foreign validator.
+ * validator itself — configuration, and the request of an HTTP route — and supported to the extent they convert to
+ * JSON Schema where a JSON Schema is all that is read: a route's response, which Fastify serializes, and the
+ * OpenAPI document.
  */
 export type AnySchema = TSchema | StandardSchemaV1
 
@@ -24,6 +27,20 @@ export type InferSchema<S extends AnySchema> = S extends TSchema
   ? StaticDecode<S>
   : S extends StandardSchemaV1
     ? StandardSchemaV1.InferOutput<S>
+    : never
+
+/**
+ * Infers what crosses the wire for an {@link AnySchema}, on the side `io` names: a TypeBox schema's encoded form,
+ * where a codec such as `$t.Duration()` is still text, or a Standard Schema's input or output.
+ *
+ * A client sends and receives this. A handler, handed the values validation produced, sees {@link InferSchema}.
+ */
+export type InferWire<S extends AnySchema, IO extends SchemaIO> = S extends TSchema
+  ? Static<S>
+  : S extends StandardSchemaV1
+    ? IO extends 'input'
+      ? StandardSchemaV1.InferInput<S>
+      : StandardSchemaV1.InferOutput<S>
     : never
 
 /** A normalized validation failure. Paths are dotted (`server.port`) whatever the source library. */
