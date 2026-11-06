@@ -8,9 +8,13 @@ import {
   type ResourceMetrics,
 } from '@opentelemetry/sdk-metrics'
 
-import { circuitBreaker, type CircuitBreaker } from '../circuit_breaker/circuit_breaker.js'
-import { runWith } from '../compose.js'
+import { bulkhead, type Bulkhead } from '../bulkhead/bulkhead.js'
+import { circuitBreaker, type CircuitBreaker } from '../circuitbreaker/circuitbreaker.js'
+import { run } from '../compose.js'
+import { fallback, type Fallback } from '../fallback/fallback.js'
+import { rateLimiter, type RateLimiter } from '../ratelimiter/ratelimiter.js'
 import { retry, type Retry } from '../retry/retry.js'
+import { timeLimiter, type TimeLimiter } from '../timelimiter/timelimiter.js'
 
 export interface Point {
   attributes: Attributes
@@ -64,30 +68,74 @@ export function newStrategies(): { breaker: CircuitBreaker; retries: Retry } {
 export async function driveBreaker(breaker: CircuitBreaker): Promise<void> {
   const slow = (): Promise<string> => new Promise(resolve => setTimeout(() => resolve('ok'), 5))
 
-  await runWith(slow, breaker)
-  await runWith(() => 'ok', breaker)
+  await run(breaker.wrap(slow))
+  await run(breaker.wrap(async () => 'ok'))
   for (let i = 0; i < 2; i++) {
-    await runWith(() => {
-      throw new Error('down')
-    }, breaker).catch(() => undefined)
+    await run(
+      breaker.wrap(async () => {
+        throw new Error('down')
+      }),
+    ).catch(() => undefined)
   }
-  await runWith(() => 'ok', breaker).catch(() => undefined)
+  await run(breaker.wrap(async () => 'ok')).catch(() => undefined)
 }
 
 export async function driveRetry(retries: Retry): Promise<void> {
   let attempts = 0
-  await runWith(() => 'ok', retries)
-  await runWith(() => {
-    attempts++
-    if (attempts === 1) {
-      throw new Error('once')
-    }
-    return 'ok'
-  }, retries)
-  await runWith(() => {
-    throw new TypeError('bad input')
-  }, retries).catch(() => undefined)
-  await runWith(() => {
-    throw new Error('down')
-  }, retries).catch(() => undefined)
+  await run(retries.wrap(async () => 'ok'))
+  await run(
+    retries.wrap(async () => {
+      attempts++
+      if (attempts === 1) {
+        throw new Error('once')
+      }
+      return 'ok'
+    }),
+  )
+  await run(
+    retries.wrap(async () => {
+      throw new TypeError('bad input')
+    }),
+  ).catch(() => undefined)
+  await run(
+    retries.wrap(async () => {
+      throw new Error('down')
+    }),
+  ).catch(() => undefined)
+}
+
+// One of each newer strategy, sized so `driveOthers` reaches every series each one reports.
+export function newOtherStrategies(): { limiter: TimeLimiter; pool: Bulkhead; quota: RateLimiter; stale: Fallback } {
+  return {
+    limiter: timeLimiter({ name: 'inventory', timeoutDuration: 5 }),
+    pool: bulkhead({ name: 'inventory', maxConcurrentCalls: 1 }),
+    quota: rateLimiter({ name: 'inventory', limitForPeriod: 1, limitRefreshPeriod: 3_600_000 }),
+    stale: fallback(() => 'cached', { name: 'inventory' }),
+  }
+}
+
+export async function driveOthers({
+  limiter,
+  pool,
+  quota,
+  stale,
+}: ReturnType<typeof newOtherStrategies>): Promise<void> {
+  await run(limiter.wrap(async () => 'ok'))
+  await run(limiter.wrap(async () => new Promise(resolve => setTimeout(resolve, 50)))).catch(() => undefined)
+
+  let release!: () => void
+  const held = run(pool.wrap(async () => new Promise<void>(resolve => (release = resolve))))
+  await run(pool.wrap(async () => 'ok')).catch(() => undefined)
+  release()
+  await held
+
+  await run(quota.wrap(async () => 'ok'))
+  await run(quota.wrap(async () => 'ok')).catch(() => undefined)
+
+  await run(stale.wrap(async () => 'ok'))
+  await run(
+    stale.wrap(async () => {
+      throw new Error('down')
+    }),
+  )
 }

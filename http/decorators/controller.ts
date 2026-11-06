@@ -13,7 +13,7 @@ export function Controller<A extends unknown[] = []>(
     } else {
       Injectable(dependencies)(target, context)
     }
-    Label(Keys.CONTROLLER)(target, context)
+    Label(Keys.CONTROLLER, Keys.ENTRYPOINT)(target, context)
 
     configureRouteGroupAndRegisterRoutes(context, target, spec => spec.path(path))
   }
