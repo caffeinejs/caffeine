@@ -634,7 +634,8 @@ r.defaults(p =>
   their policies twice, a preset defines no policy, a method names a preset nothing defines or a policy its preset
   lacks, a `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a policy's
   options are out of range, a request entrypoint such as a controller is retried with no transport integration
-  installed, the order does not list each kind once, or a bulkhead or rate limiter inside a method's time limiter may
+  installed, `r.health(...)` is called twice or its `critical` names a breaker it cannot watch, the order does not
+  list each kind once, or a bulkhead or rate limiter inside a method's time limiter may
   wait as long as its limit.
 
 ```text
@@ -698,6 +699,34 @@ class InventoryHTTP {
   storage of its own.
 - Without `r.context(...)`, `ResilienceContext` is still bound, and reading it throws `ErrInvalidOption`. The
   method's own signal argument works either way.
+
+### Health
+
+`r.health(...)` reports every circuit breaker to the readiness probe, as one health indicator named `resilience`.
+Without it, no indicator is bound.
+
+```ts
+Resilience(r =>
+  r
+    .preset('payments', p => p.retry().circuitBreaker({ automaticTransitionFromOpenToHalfOpen: true }))
+    .preset('recommendations', p => p.circuitBreaker())
+    .health({ critical: ['payments'] }),
+)
+```
+
+| Breakers               | Indicator                                                | Readiness |
+| ---------------------- | -------------------------------------------------------- | --------- |
+| all closed             | `up`                                                     | passes    |
+| `recommendations` open | `degraded`, data `{ open: { recommendations: 'open' } }` | passes    |
+| `payments` half open   | `degraded`, data `{ open: { payments: 'half_open' } }`   | passes    |
+| `payments` open        | `down`, data `{ open: { payments: 'open' } }`            | fails     |
+
+- **Nothing is critical by default.** A breaker usually guards a dependency every replica shares: failing readiness
+  on it takes the whole service out of the load balancer at once.
+- **Half open passes.** Its trial calls are what close the breaker, and a failing probe would keep them away.
+- **A critical breaker moves on by itself.** It must set `automaticTransitionFromOpenToHalfOpen: true`, or start-up
+  fails: while readiness fails, no call comes to move it out of the open state.
+- A name in `critical` that no preset's circuit breaker has fails start-up.
 
 ### Configuration
 

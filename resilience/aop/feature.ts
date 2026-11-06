@@ -6,6 +6,7 @@ import {
   type FeatureConfigureKit,
   kFeatureName,
 } from '@caffeinejs/application'
+import { HealthIndicator } from '@caffeinejs/application/health'
 import type { AnyClass } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
@@ -20,6 +21,7 @@ import type { TimeLimiterOptions } from '../timelimiter/timelimiter.js'
 import { ANNOTATIONS } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
 import { checkedStorage, ResilienceContext, type ResilienceContextStorage } from './context.js'
+import { criticalBreakers, ResilienceHealthIndicator, type ResilienceHealthOptions } from './health.js'
 import {
   labelOf,
   type PresetDefinition,
@@ -224,8 +226,8 @@ export class PresetBuilder {
  * leave open. `bootstrap()` fails when code defines a preset, the defaults or one of their policies twice, a preset
  * defines no policy, a method names a preset nothing defines or a policy its preset lacks, a `@Fallback` names a
  * method its class lacks, an annotation is on a static or a private method, a request entrypoint is retried with no
- * transport integration installed, such as `ResilienceHTTP()` for a controller, the order does not list each kind
- * once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+ * transport integration installed, such as `ResilienceHTTP()` for a controller, `r.health(...)` is called twice or
+ * its `critical` names a breaker it cannot watch, the order does not list each kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
  *
  * ```ts
  * .install(Resilience((r, { config }) => r.config(config.resilience).preset('inventory', p => p.retry().circuitBreaker())))
@@ -239,6 +241,7 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly #presets = new Map<string, Policies>()
   #defaults: Policies | undefined
   #storage: ResilienceContextStorage | undefined
+  #health: ResilienceHealthOptions | undefined
 
   /** The presets the configuration tree defines. What code sets for a preset's policy wins, option by option. */
   config(config: Partial<ResilienceConfig>): this {
@@ -314,14 +317,42 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
+  /**
+   * Reports every circuit breaker to the readiness probe, as the health indicator `resilience`: an open breaker
+   * reports `degraded`, and fails readiness only when its preset is in `critical`. Without it, no indicator is bound.
+   *
+   * A critical breaker must set `automaticTransitionFromOpenToHalfOpen: true`: while readiness fails, no call comes to
+   * move it on.
+   *
+   * @throws {@link ErrInvalidOption} when called twice; at start-up, when `critical` names a preset with no circuit
+   * breaker, or one without `automaticTransitionFromOpenToHalfOpen`.
+   */
+  health(options: ResilienceHealthOptions = {}): this {
+    if (this.#health !== undefined) {
+      throw new ErrInvalidOption(
+        errMessage('Cannot report the resilience health twice')
+          .solutions('Pass every option in one r.health({ ... }) call')
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
+    }
+    this.#health = options
+    return this
+  }
+
   protected override configure(kit: FeatureConfigureKit<C>): void {
     const config = this.#config ?? {}
-    const registry = new ResilienceRegistry(mergedPresets(config, this.#presets, this.#defaults))
+    const definitions = mergedPresets(config, this.#presets, this.#defaults)
+    const registry = new ResilienceRegistry(definitions)
     const aspect = new ResilienceAspect(registry, this.#order ?? config.order, this.#storage)
 
     // Disposed at shutdown, so no backoff or queued call holds it.
     kit.container.bind(ResilienceRegistry, t => t.toValue(registry).preDestroy(instances => instances.dispose()))
     kit.container.bind(ResilienceContext, t => t.toValue(new ResilienceContext(this.#storage)))
+    if (this.#health !== undefined) {
+      const indicator = new ResilienceHealthIndicator(registry, criticalBreakers(this.#health, definitions))
+      kit.container.bind(ResilienceHealthIndicator, t => t.toValue(indicator).extends(HealthIndicator))
+    }
     kit.container.aspect(ResilienceAspect, s =>
       s.toValue(aspect).pointcuts(resiliencePointcut).order(RESILIENCE_ASPECT_ORDER),
     )

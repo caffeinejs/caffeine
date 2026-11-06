@@ -27,6 +27,7 @@ export {
   type RetryConfig,
   type TimeLimiterConfig,
 } from './feature.js'
+export { type ResilienceHealthOptions } from './health.js'
 export {
   type PresetDefinition,
   type ResilienceDefinitions,
