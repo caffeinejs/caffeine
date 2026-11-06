@@ -48,7 +48,7 @@ class PaymentGateway {
 
   // Only a refusal is deferred: the request never left, so "try later" is the truth. A timeout is not deferred: the
   // charge may have gone through, and only the provider knows.
-  @Fallback('defer', { fallbackOn: error => error instanceof ErrCallRefused })
+  @Fallback('defer', { on: error => error instanceof ErrCallRefused })
   @Retry('payments')
   @CircuitBreaker('payments')
   @RateLimiter('payments')

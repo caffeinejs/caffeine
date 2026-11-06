@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrBulkheadFull } from '../bulkhead/bulkhead.js'
 import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
-import { runWith } from '../compose.js'
+import { compose, run } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
+import type { Operation, Policy } from '../policy.js'
 import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
-import type { ExecutionContext, Next, Strategy } from '../strategy.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
 import { ErrMaxRetriesExceeded, retry, type RetryEvents, type RetryOptions } from './retry.js'
 
@@ -23,11 +23,11 @@ function retryOf(options: Partial<RetryOptions> = {}) {
   return retry({ name: 'inventory', backoff: 0, ...options })
 }
 
-// An operation that fails `failures` times, then returns `value`, recording the attempt number it saw each time.
+// An operation that fails `failures` times, then returns `value`, numbering each attempt it ran.
 function flaky(failures: number, value = 'ok') {
   const attempts: number[] = []
-  const operation = vi.fn(({ attempt }: { attempt: number }) => {
-    attempts.push(attempt)
+  const operation = vi.fn(async () => {
+    attempts.push(attempts.length + 1)
     if (attempts.length <= failures) {
       throw new Error(`failure ${attempts.length}`)
     }
@@ -73,7 +73,7 @@ describe('retry', () => {
     const retries = retryOf({ maxAttempts: 3 })
     const { operation, attempts } = flaky(5)
 
-    await expect(runWith(operation, retries)).rejects.toThrow('failure 3')
+    await expect(run(retries.wrap(operation))).rejects.toThrow('failure 3')
 
     expect(attempts).toEqual([1, 2, 3])
   })
@@ -82,7 +82,7 @@ describe('retry', () => {
     const retries = retryOf({ maxAttempts: 5 })
     const { operation, attempts } = flaky(2, 'stock')
 
-    await expect(runWith(operation, retries)).resolves.toBe('stock')
+    await expect(run(retries.wrap(operation))).resolves.toBe('stock')
     expect(attempts).toEqual([1, 2, 3])
   })
 
@@ -90,7 +90,7 @@ describe('retry', () => {
     const retries = retryOf({ backoff: 100 })
     const { operation, attempts } = flaky(1)
 
-    const call = runWith(operation, retries)
+    const call = run(retries.wrap(operation))
     await vi.advanceTimersByTimeAsync(99)
     expect(attempts).toEqual([1])
 
@@ -111,13 +111,15 @@ describe('retry', () => {
     })
     const error = new Error('down')
     let attempt = 0
-    const call = runWith(() => {
-      attempt++
-      if (attempt === 1) {
-        throw error
-      }
-      return attempt === 2 ? 'busy' : 'ok'
-    }, retries)
+    const call = run(
+      retries.wrap(async () => {
+        attempt++
+        if (attempt === 1) {
+          throw error
+        }
+        return attempt === 2 ? 'busy' : 'ok'
+      }),
+    )
 
     await vi.advanceTimersByTimeAsync(20)
 
@@ -136,7 +138,7 @@ describe('retry', () => {
       throw refusal
     })
 
-    await expect(runWith(operation, retries)).rejects.toBe(refusal)
+    await expect(run(retries.wrap(operation))).rejects.toBe(refusal)
     expect(operation).toHaveBeenCalledTimes(1)
   })
 
@@ -154,7 +156,7 @@ describe('retry', () => {
       throw refusal
     })
 
-    await expect(runWith(operation, retries)).rejects.toBe(refusal)
+    await expect(run(retries.wrap(operation))).rejects.toBe(refusal)
     expect(operation).toHaveBeenCalledTimes(1)
     expect(retryOn).not.toHaveBeenCalled()
     expect(retries.metrics().failedCallsWithoutRetry).toBe(1)
@@ -169,7 +171,7 @@ describe('retry', () => {
     const refusal = new ErrCallNotPermitted('inventory', 'open', 1_000)
     const operation = vi.fn().mockRejectedValueOnce(timeout).mockRejectedValueOnce(refusal)
 
-    await expect(runWith(operation, retries)).rejects.toBe(timeout)
+    await expect(run(retries.wrap(operation))).rejects.toBe(timeout)
     expect(operation).toHaveBeenCalledTimes(2)
     expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 2, error: refusal }]])
     expect(retries.metrics().failedCallsWithRetry).toBe(1)
@@ -182,7 +184,7 @@ describe('retry', () => {
       .mockResolvedValueOnce('busy')
       .mockRejectedValueOnce(new ErrBulkheadFull('inventory', 2, 0))
 
-    await expect(runWith(operation, retries)).resolves.toBe('busy')
+    await expect(run(retries.wrap(operation))).resolves.toBe('busy')
     expect(operation).toHaveBeenCalledTimes(2)
   })
 
@@ -193,7 +195,7 @@ describe('retry', () => {
       .mockResolvedValueOnce('busy')
       .mockRejectedValueOnce(new ErrBulkheadFull('inventory', 2, 0))
 
-    const error = await runWith(operation, retries).catch((thrown: unknown) => thrown)
+    const error = await run(retries.wrap(operation)).catch((thrown: unknown) => thrown)
 
     expect(error).toBeInstanceOf(ErrMaxRetriesExceeded)
     expect(error).toMatchObject({ attempts: 1, result: 'busy' })
@@ -208,7 +210,7 @@ describe('retry', () => {
       throw new Error('cancelled')
     })
 
-    await expect(runWith(operation, retries, controller.signal)).rejects.toThrow('cancelled')
+    await expect(run(retries.wrap(operation), controller.signal)).rejects.toThrow('cancelled')
     expect(operation).toHaveBeenCalledTimes(1)
     expect(retryOn).not.toHaveBeenCalled()
   })
@@ -217,7 +219,7 @@ describe('retry', () => {
   it('retries a time limit by default', async () => {
     const retries = retryOf()
     let attempt = 0
-    const operation = vi.fn(() => {
+    const operation = vi.fn(async () => {
       attempt++
       if (attempt === 1) {
         throw new ErrTimeLimitExceeded('inventory', 100 * Millisecond)
@@ -225,7 +227,7 @@ describe('retry', () => {
       return 'ok'
     })
 
-    await expect(runWith(operation, retries)).resolves.toBe('ok')
+    await expect(run(retries.wrap(operation))).resolves.toBe('ok')
     expect(operation).toHaveBeenCalledTimes(2)
   })
 
@@ -242,7 +244,7 @@ describe('retry', () => {
       throw error
     })
 
-    await expect(runWith(operation, retries)).rejects.toBe(error)
+    await expect(run(retries.wrap(operation))).rejects.toBe(error)
 
     expect(operation).toHaveBeenCalledTimes(3)
     // Consulted on the last attempt too: it decides whether the call ends as exhausted or as not retryable.
@@ -263,7 +265,7 @@ describe('retry', () => {
     const seen = listen(retries, 'ignored')
     const { operation, attempts } = flaky(5)
 
-    const error = await runWith(operation, retries).catch((reason: unknown) => reason)
+    const error = await run(retries.wrap(operation)).catch((reason: unknown) => reason)
 
     expect(error).toBeInstanceOf(ErrInvalidOption)
     expect((error as Error).message).toContain(
@@ -280,9 +282,9 @@ describe('retry', () => {
     ['a number', 1],
   ])('rejects with ErrInvalidOption when retryOnResult returns %s', async (got, verdict) => {
     const retries = retryOf({ retryOnResult: (() => verdict) as never })
-    const operation = vi.fn(() => 'busy')
+    const operation = vi.fn(async () => 'busy')
 
-    const error = await runWith(operation, retries).catch((reason: unknown) => reason)
+    const error = await run(retries.wrap(operation)).catch((reason: unknown) => reason)
 
     expect(error).toBeInstanceOf(ErrInvalidOption)
     expect((error as Error).message).toContain(
@@ -302,7 +304,7 @@ describe('retry', () => {
     const retries = retry({ name: 'inventory' })
     const { operation, attempts } = flaky(2)
 
-    const call = runWith(operation, retries)
+    const call = run(retries.wrap(operation))
     await vi.advanceTimersByTimeAsync(first - 1)
     expect(attempts).toEqual([1])
     await vi.advanceTimersByTimeAsync(1)
@@ -321,7 +323,7 @@ describe('retry', () => {
       throw new TypeError('bad input')
     })
 
-    await expect(runWith(operation, retries)).rejects.toThrow('bad input')
+    await expect(run(retries.wrap(operation))).rejects.toThrow('bad input')
     expect(operation).toHaveBeenCalledTimes(1)
   })
 
@@ -329,7 +331,7 @@ describe('retry', () => {
     const retries = retryOf({ maxAttempts: 5, retryOnResult: result => result === 'busy' })
     const results = ['busy', 'busy', 'done']
 
-    await expect(runWith(() => results.shift(), retries)).resolves.toBe('done')
+    await expect(run(retries.wrap(async () => results.shift()))).resolves.toBe('done')
     expect(results).toEqual([])
   })
 
@@ -338,7 +340,7 @@ describe('retry', () => {
     const retries = retryOf({ retryOnResult: result => result === 'busy' })
     const seen = listen(retries, 'success', 'failure')
 
-    await expect(runWith(() => 'busy', retries)).resolves.toBe('busy')
+    await expect(run(retries.wrap(async () => 'busy'))).resolves.toBe('busy')
     expect(retries.metrics()).toMatchObject({ successfulCallsWithRetry: 0, failedCallsWithRetry: 1 })
     expect(seen).toEqual([['failure', { name: 'inventory', attempts: 3, result: 'busy' }]])
   })
@@ -347,7 +349,7 @@ describe('retry', () => {
     const retries = retryOf({ retryOnResult: result => result === 'busy', failAfterMaxAttempts: true })
     const seen = listen(retries, 'failure')
 
-    const error = await runWith(() => 'busy', retries).catch((reason: unknown) => reason)
+    const error = await run(retries.wrap(async () => 'busy')).catch((reason: unknown) => reason)
 
     expect(error).toBeInstanceOf(ErrMaxRetriesExceeded)
     expect(error).toMatchObject({
@@ -367,7 +369,7 @@ describe('retry', () => {
     const controller = new AbortController()
     const reason = new Error('caller gave up')
 
-    const call = runWith(operation, retries, controller.signal)
+    const call = run(retries.wrap(operation), controller.signal)
     await vi.advanceTimersByTimeAsync(0)
     controller.abort(reason)
 
@@ -385,14 +387,14 @@ describe('retry', () => {
       throw new Error('cancelled')
     })
 
-    await expect(runWith(operation, retries, controller.signal)).rejects.toThrow('cancelled')
+    await expect(run(retries.wrap(operation), controller.signal)).rejects.toThrow('cancelled')
     expect(operation).toHaveBeenCalledTimes(1)
   })
 
   it('rejects with ErrInvalidOption when the backoff returns no usable delay', async () => {
     const retries = retryOf({ backoff: () => Number.POSITIVE_INFINITY })
 
-    await expect(runWith(flaky(1).operation, retries)).rejects.toThrow(
+    await expect(run(retries.wrap(flaky(1).operation))).rejects.toThrow(
       'Cannot schedule retry "inventory": delay must be a finite number, got Infinity',
     )
     expect(retries.metrics().failedCallsWithoutRetry).toBe(1)
@@ -408,7 +410,7 @@ describe('retry', () => {
     })
     const seen = listen(retries, 'retry', 'ignored')
 
-    await expect(runWith(flaky(1).operation, retries)).rejects.toBe(thrown)
+    await expect(run(retries.wrap(flaky(1).operation))).rejects.toBe(thrown)
     expect(retries.metrics()).toEqual({
       successfulCallsWithoutRetry: 0,
       successfulCallsWithRetry: 0,
@@ -427,7 +429,7 @@ describe('retry', () => {
     })
     const seen = listen(retries, 'retry', 'ignored')
 
-    await expect(runWith(() => 'ok', retries)).rejects.toBe(thrown)
+    await expect(run(retries.wrap(async () => 'ok'))).rejects.toBe(thrown)
     expect(retries.metrics()).toEqual({
       successfulCallsWithoutRetry: 0,
       successfulCallsWithRetry: 0,
@@ -446,7 +448,7 @@ describe('retry', () => {
     })
     const seen = listen(retries, 'retry', 'ignored')
 
-    await expect(runWith(flaky(1).operation, retries)).rejects.toBe(thrown)
+    await expect(run(retries.wrap(flaky(1).operation))).rejects.toBe(thrown)
     expect(retries.metrics()).toEqual({
       successfulCallsWithoutRetry: 0,
       successfulCallsWithRetry: 0,
@@ -462,15 +464,14 @@ describe('retry', () => {
       const last = Promise.withResolvers<string>()
       let calls = 0
       let done = false
-      void runWith(
-        () => {
+      void run(
+        retryOf({ maxAttempts: attempts }).wrap(async () => {
           calls++
           if (calls === attempts) {
             return last.promise
           }
           throw new Error('down')
-        },
-        retryOf({ maxAttempts: attempts }),
+        }),
       ).then(() => {
         done = true
       })
@@ -496,7 +497,7 @@ describe('retry', () => {
     const retries = retryOf({ backoff: 10 * 2_147_483_647 })
     const seen = listen(retries, 'retry')
 
-    void runWith(flaky(1).operation, retries).catch(() => undefined)
+    void run(retries.wrap(flaky(1).operation)).catch(() => undefined)
     await vi.advanceTimersByTimeAsync(0)
 
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2_147_483_647)
@@ -508,7 +509,7 @@ describe('retry', () => {
     const seen = listen(retries, 'retry', 'success')
     const { operation } = flaky(1)
 
-    const call = runWith(operation, retries)
+    const call = run(retries.wrap(operation))
     await vi.advanceTimersByTimeAsync(25)
     await call
 
@@ -523,7 +524,7 @@ describe('retry', () => {
     const seen = listen(retries, 'retry', 'success')
     const results = ['busy', 'done']
 
-    const call = runWith(() => results.shift(), retries)
+    const call = run(retries.wrap(async () => results.shift()))
     await vi.advanceTimersByTimeAsync(25)
     await expect(call).resolves.toBe('done')
 
@@ -537,12 +538,14 @@ describe('retry', () => {
   it('counts each call once, by outcome and by whether it needed a retry', async () => {
     const retries = retryOf({ retryOn: error => !(error instanceof TypeError) })
 
-    await runWith(() => 'ok', retries)
-    await runWith(flaky(1).operation, retries)
-    await runWith(() => {
-      throw new TypeError('bad input')
-    }, retries).catch(() => undefined)
-    await runWith(flaky(9).operation, retries).catch(() => undefined)
+    await run(retries.wrap(async () => 'ok'))
+    await run(retries.wrap(flaky(1).operation))
+    await run(
+      retries.wrap(async () => {
+        throw new TypeError('bad input')
+      }),
+    ).catch(() => undefined)
+    await run(retries.wrap(flaky(9).operation)).catch(() => undefined)
 
     expect(retries.metrics()).toEqual({
       successfulCallsWithoutRetry: 1,
@@ -552,66 +555,63 @@ describe('retry', () => {
     })
   })
 
-  // A strategy inside the retry that throws before returning a promise is still a failed attempt, not a crash.
+  // A policy inside the retry that throws before returning a promise is still a failed attempt, not a crash.
   it('counts a synchronous throw from the inner chain as a failed attempt and retries it', async () => {
     const retries = retryOf()
     let calls = 0
-    const throwsOnce: Strategy = (ctx, next) => {
+    const throwsOnce: Policy = op => (ctx, input) => {
       calls++
       if (calls === 1) {
-        throw new Error('inner strategy bug')
+        throw new Error('inner policy bug')
       }
-      return next(ctx)
+      return op(ctx, input)
     }
 
-    await expect(runWith(() => 'ok', retries, throwsOnce)).resolves.toBe('ok')
+    await expect(run(compose(retries, throwsOnce)(async () => 'ok'))).resolves.toBe('ok')
     expect(calls).toBe(2)
     expect(retries.metrics().successfulCallsWithRetry).toBe(1)
   })
 
-  // `run` is public: a strategy that nests a retry by hand may hand it a `next` the chain never normalised. A
-  // synchronous throw from it is still a failed attempt, and a plain value is still a result.
-  it('retries a hand-made next that throws synchronously on its first attempt', async () => {
+  // `wrap` is public: an operation wrapped by hand may throw synchronously or return a plain value. A synchronous
+  // throw is still a failed attempt, and a plain value is still a result.
+  it('retries an operation wrapped by hand that throws synchronously on its first attempt', async () => {
     const retries = retryOf()
-    const ctx = { signal: undefined, attempt: 1 } as unknown as ExecutionContext
     let calls = 0
-    const throwsOnce: Next<string> = () => {
+    const throwsOnce = (() => {
       calls++
       if (calls === 1) {
-        throw new Error('hand-made next bug')
+        throw new Error('hand-made operation bug')
       }
       return Promise.resolve('ok')
-    }
+    }) as Operation<string>
     let result: Promise<string> | undefined
 
     expect(() => {
-      result = retries.run(ctx, throwsOnce)
+      result = retries.wrap(throwsOnce)({ signal: undefined }, undefined)
     }).not.toThrow()
     await expect(result).resolves.toBe('ok')
     expect(calls).toBe(2)
     expect(retries.metrics().successfulCallsWithRetry).toBe(1)
   })
 
-  it('counts every attempt of a hand-made next that always throws synchronously', async () => {
+  it('counts every attempt of an operation wrapped by hand that always throws synchronously', async () => {
     const retries = retryOf({ maxAttempts: 2 })
-    const ctx = { signal: undefined, attempt: 1 } as unknown as ExecutionContext
     let calls = 0
-    const alwaysThrows: Next<string> = () => {
+    const alwaysThrows = (() => {
       calls++
-      throw new Error('hand-made next bug')
-    }
+      throw new Error('hand-made operation bug')
+    }) as Operation<string>
 
-    await expect(retries.run(ctx, alwaysThrows)).rejects.toThrow('hand-made next bug')
+    await expect(run(retries.wrap(alwaysThrows))).rejects.toThrow('hand-made operation bug')
     expect(calls).toBe(2)
     expect(retries.metrics().failedCallsWithRetry).toBe(1)
   })
 
-  it('treats a plain value from a hand-made next as the result', async () => {
+  it('treats a plain value from an operation wrapped by hand as the result', async () => {
     const retries = retryOf()
-    const ctx = { signal: undefined, attempt: 1 } as unknown as ExecutionContext
-    const plainValue = (() => 'value') as unknown as Next<string>
+    const plainValue = (() => 'value') as unknown as Operation<string>
 
-    await expect(retries.run(ctx, plainValue)).resolves.toBe('value')
+    await expect(run(retries.wrap(plainValue))).resolves.toBe('value')
     expect(retries.metrics().successfulCallsWithoutRetry).toBe(1)
   })
 

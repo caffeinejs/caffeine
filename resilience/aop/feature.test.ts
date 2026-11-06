@@ -2,7 +2,7 @@ import { createApplication, ErrFeatureAlreadyInstalled, type Feature } from '@ca
 import { CaffeineIoC } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { runWith } from '../compose.js'
+import { run } from '../compose.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ErrMaxRetriesExceeded } from '../retry/retry.js'
 import { CircuitBreaker, Fallback, Retry } from './annotations.js'
@@ -74,10 +74,15 @@ describe('Resilience()', () => {
     )
     let attempts = 0
 
-    const error = await runWith(() => {
-      attempts++
-      return 'busy'
-    }, app.container.get(ResilienceRegistry).retry('polling')).catch((reason: unknown) => reason)
+    const error = await run(
+      app.container
+        .get(ResilienceRegistry)
+        .retry('polling')
+        .wrap(async () => {
+          attempts++
+          return 'busy'
+        }),
+    ).catch((reason: unknown) => reason)
 
     // maxAttempts from code, failAfterMaxAttempts from configuration.
     expect(attempts).toBe(3)
@@ -95,10 +100,15 @@ describe('Resilience()', () => {
     )
     let attempts = 0
 
-    await runWith(() => {
-      attempts++
-      throw new Error('down')
-    }, app.container.get(ResilienceRegistry).retry('polling')).catch(() => undefined)
+    await run(
+      app.container
+        .get(ResilienceRegistry)
+        .retry('polling')
+        .wrap(async () => {
+          attempts++
+          throw new Error('down')
+        }),
+    ).catch(() => undefined)
 
     expect(attempts).toBe(4)
   })

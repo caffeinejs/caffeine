@@ -30,17 +30,17 @@ const kController = Symbol.for('@caffeinejs/http:controller')
 /** The circuit breaker options a configuration tree can carry: data only. */
 export type CircuitBreakerConfig = Omit<
   CircuitBreakerOptions,
-  'name' | 'waitDurationInOpenState' | 'recordError' | 'ignoreError' | 'recordResult'
+  'name' | 'waitDurationInOpenState' | 'recordError' | 'ignoreError' | 'recordResult' | 'clock'
 > & { readonly waitDurationInOpenState?: Duration }
 
 /** The retry options a configuration tree can carry: data only. */
-export type RetryConfig = Omit<RetryOptions, 'name' | 'backoff' | 'retryOn' | 'retryOnResult'> & {
+export type RetryConfig = Omit<RetryOptions, 'name' | 'backoff' | 'retryOn' | 'retryOnResult' | 'clock'> & {
   readonly backoff?: Duration
 }
 
-export type TimeLimiterConfig = Partial<Omit<TimeLimiterOptions, 'name'>>
-export type BulkheadConfig = Omit<BulkheadOptions, 'name'>
-export type RateLimiterConfig = Partial<Omit<RateLimiterOptions, 'name'>>
+export type TimeLimiterConfig = Partial<Omit<TimeLimiterOptions, 'name' | 'clock'>>
+export type BulkheadConfig = Omit<BulkheadOptions, 'name' | 'clock'>
+export type RateLimiterConfig = Partial<Omit<RateLimiterOptions, 'name' | 'clock'>>
 
 /** What `Resilience(r => r.config(...))` takes: the data options of each named instance, by kind. */
 export interface ResilienceConfig {

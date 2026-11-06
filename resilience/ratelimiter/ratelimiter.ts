@@ -1,12 +1,12 @@
 import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { abortReason } from '../abort.js'
-import { settled, type RawNext } from '../compose.js'
+import { lift, mark } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { ErrCallRefused, ErrInvalidOption, restoreStacks, suppressStacks } from '../errors.js'
-import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
-import { clampDelay, clock, type TimerHandle } from '../timers.js'
+import { ErrCallRefused, refusal } from '../errors.js'
+import { Options } from '../options.js'
+import type { CallContext, Operation, Wrapper } from '../policy.js'
+import { clampDelay, type Clock } from '../timers.js'
 import { type Waiter, Waiters } from '../waiters.js'
 
 /**
@@ -14,22 +14,22 @@ import { type Waiter, Waiters } from '../waiters.js'
  * away than it was allowed to wait. The operation did not run; `retryAfter` is how long until that permit.
  */
 export class ErrRateLimitExceeded extends ErrCallRefused {
-  // Built once rather than per refusal: refusals come in bulk once a quota is spent.
-  static readonly #footer = errMessage('').reference('@caffeinejs/resilience', ErrRateLimitExceeded).build()
-
   /** The name of the rate limiter that refused the call. */
   readonly rateLimiter: string
   declare readonly retryAfter: Duration
 
   constructor(rateLimiter: string, limitForPeriod: number, limitRefreshPeriod: Duration, retryAfter: Duration) {
-    super(
-      `Cannot call "${rateLimiter}": rate limit of ${limitForPeriod} calls per ${formatDuration(limitRefreshPeriod)} reached${ErrRateLimitExceeded.#footer}`,
-      'ERR_RATE_LIMIT_EXCEEDED',
-      retryAfter,
-    )
+    super(exceededMessage(rateLimiter, limitForPeriod, limitRefreshPeriod), 'ERR_RATE_LIMIT_EXCEEDED', retryAfter)
     this.name = 'ErrRateLimitExceeded'
     this.rateLimiter = rateLimiter
   }
+}
+
+// Built once rather than per refusal: refusals come in bulk once a quota is spent.
+const footer = errMessage('').reference('@caffeinejs/resilience', ErrRateLimitExceeded).build()
+
+function exceededMessage(rateLimiter: string, limitForPeriod: number, limitRefreshPeriod: Duration): string {
+  return `Cannot call "${rateLimiter}": rate limit of ${limitForPeriod} calls per ${formatDuration(limitRefreshPeriod)} reached${footer}`
 }
 
 export interface RateLimiterOptions {
@@ -43,6 +43,8 @@ export interface RateLimiterOptions {
   maxWaitDuration?: Duration
   /** Whether a refused call's {@link ErrRateLimitExceeded} captures a stack trace. Off by default. */
   captureStackTrace?: boolean
+  /** Where the rate limiter reads the time and sets its timer. Defaults to the runtime's. */
+  clock?: Clock
 }
 
 export interface RateLimiterMetrics {
@@ -59,9 +61,10 @@ export interface RateLimiterEvents {
   rejected: { readonly name: string; readonly retryAfter: Duration }
 }
 
-interface WaitingCall<T> extends Waiter {
-  readonly ctx: ExecutionContext
-  readonly run: RawNext<T>
+interface WaitingCall<T, I> extends Waiter {
+  readonly ctx: CallContext
+  readonly inner: Operation<T, I>
+  readonly input: I
   readonly resolve: (value: T) => void
   readonly reject: (reason: unknown) => void
   readonly since: number
@@ -86,72 +89,42 @@ interface WaitingCall<T> extends Waiter {
  * The limit holds in this process only: replicas that each allow 100 calls a second allow 100 times as many between
  * them.
  */
-export class RateLimiter implements StrategyObject {
+export class RateLimiter implements Wrapper {
   readonly #name: string
   readonly #limitForPeriod: number
   readonly #limitRefreshPeriod: Duration
   readonly #maxWaitMs: number
   readonly #captureStackTrace: boolean
+  readonly #clock: Clock
   readonly #origin: number
-  readonly #queue = new Waiters<WaitingCall<any>>()
+  readonly #queue = new Waiters<WaitingCall<any, any>>()
   readonly #emitter = new Emitter<RateLimiterEvents>()
   #cycle = 0
   // Permits left in the current period; below zero, the permits of later periods that waiting calls reserved.
   #permits: number
   #rejected = 0
-  #timer: TimerHandle | undefined
+  #timer: unknown
 
   constructor(options: RateLimiterOptions) {
-    const name = (options as Partial<RateLimiterOptions> | undefined)?.name
-    if (typeof name !== 'string' || name.length === 0) {
-      throw new ErrInvalidOption(
-        errMessage('Cannot create rate limiter: name must be a non-empty string')
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
-    }
-
-    const invalid = (reason: string, ...solutions: string[]): ErrInvalidOption =>
-      new ErrInvalidOption(
-        errMessage(`Cannot create rate limiter "${name}": ${reason}`)
-          .solutions(...solutions)
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
-
-    const limitForPeriod = options.limitForPeriod
-    if (!Number.isInteger(limitForPeriod) || limitForPeriod < 1) {
-      throw invalid(
-        `limitForPeriod must be an integer of at least 1, got ${String(limitForPeriod)}`,
-        'Pass the calls the dependency allows per period, such as limitForPeriod: 100',
-      )
-    }
-
-    const limitRefreshPeriod = options.limitRefreshPeriod
-    if (typeof limitRefreshPeriod !== 'number' || !Number.isFinite(limitRefreshPeriod) || limitRefreshPeriod <= 0) {
-      throw invalid(
-        `limitRefreshPeriod must be a finite Duration greater than 0s, got ${formatDuration(limitRefreshPeriod)}`,
-        'Pass the length of the quota period, such as limitRefreshPeriod: 1 * Second',
-      )
-    }
-
-    const maxWaitDuration = options.maxWaitDuration ?? 0
-    if (typeof maxWaitDuration !== 'number' || !Number.isFinite(maxWaitDuration) || maxWaitDuration < 0) {
-      throw invalid(`maxWaitDuration must be a finite Duration of at least 0s, got ${formatDuration(maxWaitDuration)}`)
-    }
-
-    const captureStackTrace = options.captureStackTrace ?? false
-    if (typeof captureStackTrace !== 'boolean') {
-      throw invalid(`captureStackTrace must be a boolean, got ${typeof captureStackTrace}`)
-    }
-
-    this.#name = name
-    this.#limitForPeriod = limitForPeriod
-    this.#limitRefreshPeriod = limitRefreshPeriod
-    this.#maxWaitMs = clampDelay(maxWaitDuration, `the wait of rate limiter "${name}"`)
-    this.#captureStackTrace = captureStackTrace
-    this.#origin = clock.now()
-    this.#permits = limitForPeriod
+    const o = new Options('rate limiter', options)
+    this.#name = o.name
+    this.#limitForPeriod = o.integer(
+      'limitForPeriod',
+      options.limitForPeriod,
+      1,
+      'Pass the calls the dependency allows per period, such as limitForPeriod: 100',
+    )
+    this.#limitRefreshPeriod = o.positiveDuration(
+      'limitRefreshPeriod',
+      options.limitRefreshPeriod,
+      'Pass the length of the quota period, such as limitRefreshPeriod: 1 * Second',
+    )
+    const maxWaitDuration = o.duration('maxWaitDuration', options.maxWaitDuration ?? 0, 0)
+    this.#captureStackTrace = o.boolean('captureStackTrace', options.captureStackTrace, false)
+    this.#clock = o.clock(options.clock)
+    this.#maxWaitMs = clampDelay(maxWaitDuration, `the wait of rate limiter "${o.name}"`)
+    this.#origin = this.#clock.now()
+    this.#permits = this.#limitForPeriod
   }
 
   get name(): string {
@@ -167,7 +140,7 @@ export class RateLimiter implements StrategyObject {
   }
 
   metrics(): RateLimiterMetrics {
-    this.#refresh(clock.now())
+    this.#refresh(this.#clock.now())
     return {
       availablePermissions: this.#permits > 0 ? this.#permits : 0,
       waitingCalls: this.#queue.size,
@@ -175,89 +148,95 @@ export class RateLimiter implements StrategyObject {
     }
   }
 
-  run<T>(ctx: ExecutionContext, next: Next<T>): Promise<T> {
-    const now = clock.now()
-    this.#refresh(now)
-    // A timer that fired late, on a busy event loop, still owes the calls whose period has come their turn first.
-    const first = this.#queue.first
-    if (first !== undefined && first.cycle <= this.#cycle) {
-      this.#wake()
-    }
-
-    if (this.#permits > 0) {
-      this.#permits--
-      if (this.#emitter.has('permitted')) {
-        this.#emitter.emit('permitted', { name: this.#name, waited: 0 })
+  wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
+    const inner = lift(op)
+    return mark((ctx, input) => {
+      const now = this.#clock.now()
+      this.#refresh(now)
+      // A timer that fired late, on a busy event loop, still owes the calls whose period has come their turn first.
+      const first = this.#queue.first
+      if (first !== undefined && first.cycle <= this.#cycle) {
+        this.#wake()
       }
 
-      // `run` is public, so `next` may be one the chain never normalised. It is called inside this frame's own `try`:
-      // a helper that called it would add a frame to every stack trace.
-      try {
-        return settled((next as RawNext<T>)(ctx))
-      } catch (error) {
-        return Promise.reject(error)
-      }
-    }
-
-    // The permits of the coming periods go, in order, to the calls that reserved them; this call would get the next.
-    const cycle = this.#cycle + Math.ceil((1 - this.#permits) / this.#limitForPeriod)
-    const wait = this.#origin + cycle * this.#limitRefreshPeriod - now
-    if (wait > this.#maxWaitMs) {
-      this.#rejected++
-      if (this.#emitter.has('rejected')) {
-        this.#emitter.emit('rejected', { name: this.#name, retryAfter: wait })
-      }
-      // Built here, in the frame that refuses, so a captured stack starts at `run` and not in a helper. Returned, not
-      // thrown: throwing costs more than the rest of the refusal together.
-      return Promise.reject(
-        this.#captureStackTrace
-          ? new ErrRateLimitExceeded(this.#name, this.#limitForPeriod, this.#limitRefreshPeriod, wait)
-          : stackless(this.#name, this.#limitForPeriod, this.#limitRefreshPeriod, wait),
-      )
-    }
-
-    const signal = ctx.signal
-    if (signal !== undefined && signal.aborted) {
-      return Promise.reject(abortReason(signal))
-    }
-
-    this.#permits--
-    return new Promise<T>((resolve, reject) => {
-      const call: WaitingCall<T> = {
-        ctx,
-        run: next,
-        resolve,
-        reject,
-        since: now,
-        cycle,
-        onAbort: undefined,
-        prev: undefined,
-        next: undefined,
-        queued: false,
-      }
-      this.#queue.push(call)
-      if (this.#queue.first === call) {
-        this.#schedule()
-      }
-
-      if (signal !== undefined) {
-        call.onAbort = () => {
-          const head = this.#queue.first === call
-          const tail = this.#queue.last === call
-          if (this.#queue.remove(call)) {
-            // The last call in line gives its permit back: nobody reserved after it. Any other spends it, because the
-            // calls after it reserved by count, and handing it on would put two calls in a period with room for one.
-            if (tail) {
-              this.#permits++
-            }
-            if (head) {
-              this.#schedule()
-            }
-            reject(abortReason(signal))
-          }
+      if (this.#permits > 0) {
+        this.#permits--
+        if (this.#emitter.has('permitted')) {
+          this.#emitter.emit('permitted', { name: this.#name, waited: 0 })
         }
-        signal.addEventListener('abort', call.onAbort, { once: true })
+        return inner(ctx, input)
       }
+
+      // The permits of the coming periods go, in order, to the calls that reserved them; this call would get the next.
+      const cycle = this.#cycle + Math.ceil((1 - this.#permits) / this.#limitForPeriod)
+      const wait = this.#origin + cycle * this.#limitRefreshPeriod - now
+      if (wait > this.#maxWaitMs) {
+        this.#rejected++
+        if (this.#emitter.has('rejected')) {
+          this.#emitter.emit('rejected', { name: this.#name, retryAfter: wait })
+        }
+        // Returned, not thrown: throwing costs more than the rest of the refusal together.
+        return Promise.reject(this.#exceeded(wait))
+      }
+
+      const signal = ctx.signal
+      if (signal !== undefined && signal.aborted) {
+        return Promise.reject(signal.reason)
+      }
+
+      this.#permits--
+      return new Promise<T>((resolve, reject) => {
+        const call: WaitingCall<T, I> = {
+          ctx,
+          inner,
+          input,
+          resolve,
+          reject,
+          since: now,
+          cycle,
+          onAbort: undefined,
+          prev: undefined,
+          next: undefined,
+          queued: false,
+        }
+        this.#queue.push(call)
+        if (this.#queue.first === call) {
+          this.#schedule()
+        }
+
+        if (signal !== undefined) {
+          call.onAbort = () => {
+            const head = this.#queue.first === call
+            const tail = this.#queue.last === call
+            if (this.#queue.remove(call)) {
+              // The last call in line gives its permit back: nobody reserved after it. Any other spends it, because
+              // the calls after it reserved by count, and handing it on would put two calls in a period with room
+              // for one.
+              if (tail) {
+                this.#permits++
+              }
+              if (head) {
+                this.#schedule()
+              }
+              reject(signal.reason)
+            }
+          }
+          signal.addEventListener('abort', call.onAbort, { once: true })
+        }
+      })
+    })
+  }
+
+  // The refusal, with a stack trace only when asked for one.
+  #exceeded(retryAfter: Duration): ErrRateLimitExceeded {
+    if (this.#captureStackTrace) {
+      return new ErrRateLimitExceeded(this.#name, this.#limitForPeriod, this.#limitRefreshPeriod, retryAfter)
+    }
+    return refusal(ErrRateLimitExceeded, exceededMessage(this.#name, this.#limitForPeriod, this.#limitRefreshPeriod), {
+      code: 'ERR_RATE_LIMIT_EXCEEDED',
+      name: 'ErrRateLimitExceeded',
+      retryAfter,
+      rateLimiter: this.#name,
     })
   }
 
@@ -274,7 +253,7 @@ export class RateLimiter implements StrategyObject {
   // waiting for its permit is pending work.
   #schedule(): void {
     if (this.#timer !== undefined) {
-      clearTimeout(this.#timer)
+      this.#clock.clearTimeout(this.#timer)
       this.#timer = undefined
     }
 
@@ -284,10 +263,10 @@ export class RateLimiter implements StrategyObject {
     }
 
     const delay = clampDelay(
-      this.#origin + first.cycle * this.#limitRefreshPeriod - clock.now(),
+      this.#origin + first.cycle * this.#limitRefreshPeriod - this.#clock.now(),
       `rate limiter "${this.#name}"`,
     )
-    this.#timer = setTimeout(() => {
+    this.#timer = this.#clock.setTimeout(() => {
       this.#timer = undefined
       this.#wake()
     }, delay)
@@ -295,7 +274,7 @@ export class RateLimiter implements StrategyObject {
 
   // Starts every waiting call whose period has come, in the order they reserved.
   #wake(): void {
-    const now = clock.now()
+    const now = this.#clock.now()
     this.#refresh(now)
     const cycle = Math.floor((now - this.#origin) / this.#limitRefreshPeriod)
 
@@ -312,37 +291,14 @@ export class RateLimiter implements StrategyObject {
     this.#schedule()
   }
 
-  // Runs a call that waited for its permit, which it already holds. Guarded like the call in `run`, and called from
-  // this frame: a helper would add a frame to every stack trace.
-  #admit<T>(call: WaitingCall<T>, now: number): void {
+  // Runs a call that waited for its permit, which it already holds.
+  #admit<T, I>(call: WaitingCall<T, I>, now: number): void {
     if (this.#emitter.has('permitted')) {
       this.#emitter.emit('permitted', { name: this.#name, waited: now - call.since })
     }
 
-    let pending: Promise<T>
-    try {
-      pending = settled(call.run(call.ctx))
-    } catch (error) {
-      pending = Promise.reject(error)
-    }
-
     // Both handlers settle the caller's promise themselves and never throw.
-    void pending.then(call.resolve, call.reject)
-  }
-}
-
-// A refusal without a stack trace.
-function stackless(
-  rateLimiter: string,
-  limitForPeriod: number,
-  limitRefreshPeriod: Duration,
-  retryAfter: Duration,
-): ErrRateLimitExceeded {
-  const limit = suppressStacks()
-  try {
-    return new ErrRateLimitExceeded(rateLimiter, limitForPeriod, limitRefreshPeriod, retryAfter)
-  } finally {
-    restoreStacks(limit)
+    void call.inner(call.ctx, call.input).then(call.resolve, call.reject)
   }
 }
 

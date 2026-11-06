@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { bulkhead } from '../bulkhead/bulkhead.js'
 import { circuitBreaker, type CircuitBreaker, type CircuitBreakerOptions } from '../circuitbreaker/circuitbreaker.js'
-import { runWith } from '../compose.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
+import { fakeTimersClock } from '../clock.testkit.js'
+import { run } from '../compose.js'
 import { fallback } from '../fallback/fallback.js'
 import { rateLimiter } from '../ratelimiter/ratelimiter.js'
 import { retry } from '../retry/retry.js'
@@ -43,18 +43,21 @@ function breakerOf(options: Partial<CircuitBreakerOptions> = {}): CircuitBreaker
     slidingWindow: { type: 'count', size: 4 },
     minimumNumberOfCalls: 4,
     permittedNumberOfCallsInHalfOpenState: 1,
+    clock: fakeTimersClock,
     ...options,
   })
 }
 
 function succeed(breaker: CircuitBreaker): Promise<unknown> {
-  return runWith(() => 'ok', breaker).catch(() => undefined)
+  return run(breaker.wrap(async () => 'ok')).catch(() => undefined)
 }
 
 function fail(breaker: CircuitBreaker, error: unknown = new Error('down')): Promise<unknown> {
-  return runWith(() => {
-    throw error
-  }, breaker).catch(() => undefined)
+  return run(
+    breaker.wrap(async () => {
+      throw error
+    }),
+  ).catch(() => undefined)
 }
 
 const NAME = { 'resilience.circuit_breaker.name': 'inventory' }
@@ -105,15 +108,17 @@ describe('instrumentCircuitBreaker', () => {
 
   // Dashboards built on seconds read a millisecond value as a thousand times too slow.
   it('records call durations in seconds, bucketed by the advised boundaries', async () => {
-    useFakeClock({ toFake: ['performance'] })
+    vi.useFakeTimers({ toFake: ['performance'] })
     const h = harness()
     const breaker = breakerOf()
     instrumentCircuitBreaker(breaker, { meterProvider: h.meterProvider })
 
-    await runWith(() => {
-      vi.advanceTimersByTime(250)
-      return 'ok'
-    }, breaker)
+    await run(
+      breaker.wrap(async () => {
+        vi.advanceTimersByTime(250)
+        return 'ok'
+      }),
+    )
 
     const [point] = await h.points('resilience.circuit_breaker.call.duration')
     const histogram = point.value as Histogram
@@ -134,7 +139,7 @@ describe('instrumentCircuitBreaker', () => {
 
     await succeed(breaker)
     await fail(breaker, new TypeError('bad gateway'))
-    await runWith(() => 'unavailable', breaker)
+    await run(breaker.wrap(async () => 'unavailable'))
     await fail(breaker, new RangeError('caller bug'))
 
     const attributes = (await h.points('resilience.circuit_breaker.call.duration')).map(point => point.attributes)
@@ -198,7 +203,7 @@ describe('instrumentCircuitBreaker', () => {
 
   // Series exported while nothing calls the dependency must describe the window as it is now.
   it('reports an empty window once an idle gap outlasts a time window', async () => {
-    useFakeClock({ toFake: ['performance'] })
+    vi.useFakeTimers({ toFake: ['performance'] })
     const h = harness()
     const breaker = breakerOf({ slidingWindow: { type: 'time', duration: 2 * Second } })
     instrumentCircuitBreaker(breaker, { meterProvider: h.meterProvider })
@@ -282,7 +287,7 @@ describe('instrumentCircuitBreaker', () => {
     const breaker = breakerOf()
     instrumentCircuitBreaker(breaker, { meterProvider })
 
-    await expect(runWith(() => 'ok', breaker)).resolves.toBe('ok')
+    await expect(run(breaker.wrap(async () => 'ok'))).resolves.toBe('ok')
     expect(() => collect!({ observe: broken })).not.toThrow()
 
     expect(logged.map(([message]) => message)).toEqual([
@@ -321,20 +326,26 @@ describe('instrumentRetry', () => {
     instrumentRetry(retries, { meterProvider: h.meterProvider })
     let attempts = 0
 
-    await runWith(() => 'ok', retries)
-    await runWith(() => {
-      attempts++
-      if (attempts === 1) {
-        throw new Error('once')
-      }
-      return 'ok'
-    }, retries)
-    await runWith(() => {
-      throw new TypeError('bad input')
-    }, retries).catch(() => undefined)
-    await runWith(() => {
-      throw new Error('down')
-    }, retries).catch(() => undefined)
+    await run(retries.wrap(async () => 'ok'))
+    await run(
+      retries.wrap(async () => {
+        attempts++
+        if (attempts === 1) {
+          throw new Error('once')
+        }
+        return 'ok'
+      }),
+    )
+    await run(
+      retries.wrap(async () => {
+        throw new TypeError('bad input')
+      }),
+    ).catch(() => undefined)
+    await run(
+      retries.wrap(async () => {
+        throw new Error('down')
+      }),
+    ).catch(() => undefined)
 
     const metric = await h.metric('resilience.retry.calls')
     expect(metric?.descriptor.unit).toBe('{call}')
@@ -356,10 +367,10 @@ describe('instrumentRetry', () => {
     const h = harness()
     const retries = retry({ name: 'inventory' })
     const stop = instrumentRetry(retries, { meterProvider: h.meterProvider })
-    await runWith(() => 'ok', retries)
+    await run(retries.wrap(async () => 'ok'))
 
     stop()
-    await runWith(() => 'ok', retries)
+    await run(retries.wrap(async () => 'ok'))
 
     for (const point of await h.points('resilience.retry.calls')) {
       expect(point.value).toBeLessThanOrEqual(1)
@@ -374,16 +385,18 @@ async function valuesBy(h: MetricsHarness, metric: string, attribute: string): P
 
 describe('instrumentTimeLimiter', () => {
   it('counts each call once, by kind, as a monotonic counter', async () => {
-    useFakeClock()
+    vi.useFakeTimers()
     const h = harness()
     const limiter = timeLimiter({ name: 'inventory', timeoutDuration: 100 * Millisecond })
     instrumentTimeLimiter(limiter, { meterProvider: h.meterProvider })
 
-    await runWith(() => 'ok', limiter)
-    await runWith(() => {
-      throw new Error('down')
-    }, limiter).catch(() => undefined)
-    const hung = runWith(() => new Promise(() => undefined), limiter).catch(() => undefined)
+    await run(limiter.wrap(async () => 'ok'))
+    await run(
+      limiter.wrap(async () => {
+        throw new Error('down')
+      }),
+    ).catch(() => undefined)
+    const hung = run(limiter.wrap(async () => new Promise(() => undefined))).catch(() => undefined)
     await vi.advanceTimersByTimeAsync(100)
     await hung
     // The SDK collects on real timers, and the captured clock must stop pointing at the fake one first.
@@ -409,7 +422,7 @@ describe('instrumentTimeLimiter', () => {
     const stop = instrumentTimeLimiter(limiter, { meterProvider: h.meterProvider })
 
     stop()
-    await runWith(() => 'ok', limiter)
+    await run(limiter.wrap(async () => 'ok'))
 
     expect(await h.points('resilience.time_limiter.calls')).toEqual([])
   })
@@ -421,10 +434,10 @@ describe('instrumentBulkhead', () => {
     const pool = bulkhead({ name: 'payments', maxConcurrentCalls: 2, maxWaitDuration: 1 * Second, maxQueuedCalls: 1 })
     instrumentBulkhead(pool, { meterProvider: h.meterProvider })
     const holds: Array<() => void> = []
-    const hold = () => runWith(() => new Promise<void>(resolve => holds.push(resolve)), pool)
+    const hold = () => run(pool.wrap(async () => new Promise<void>(resolve => holds.push(resolve))))
 
     const running = [hold(), hold(), hold()]
-    await runWith(() => 'ok', pool).catch(() => undefined)
+    await run(pool.wrap(async () => 'ok')).catch(() => undefined)
 
     const name = { 'resilience.bulkhead.name': 'payments' }
     expect(await h.points('resilience.bulkhead.available_concurrent_calls')).toEqual([
@@ -464,20 +477,24 @@ describe('instrumentBulkhead', () => {
 describe('instrumentRateLimiter', () => {
   it('reports the permits left, the calls waiting and the refusals', async () => {
     // A frozen clock keeps the period from turning while the SDK collects on real timers.
-    useFakeClock({ toFake: ['performance'] })
+    vi.useFakeTimers({ toFake: ['performance'] })
     const h = harness()
     const quota = rateLimiter({
       name: 'partner-api',
       limitForPeriod: 1,
       limitRefreshPeriod: 1 * Second,
       maxWaitDuration: 1 * Second,
+      clock: fakeTimersClock,
     })
     instrumentRateLimiter(quota, { meterProvider: h.meterProvider })
     const caller = new AbortController()
 
-    await runWith(() => 'ok', quota)
-    const waiting = runWith(() => 'ok', quota, caller.signal).catch(() => undefined)
-    const refused = await runWith(() => 'ok', quota).catch((error: unknown) => error)
+    await run(quota.wrap(async () => 'ok'))
+    const waiting = run(
+      quota.wrap(async () => 'ok'),
+      caller.signal,
+    ).catch(() => undefined)
+    const refused = await run(quota.wrap(async () => 'ok')).catch((error: unknown) => error)
     const name = { 'resilience.rate_limiter.name': 'partner-api' }
 
     expect(refused).toBeInstanceOf(Error)
@@ -511,17 +528,26 @@ describe('instrumentRateLimiter', () => {
 describe('instrumentFallback', () => {
   it('counts each call once, by kind, as a monotonic counter', async () => {
     const h = harness()
-    const stale = fallback({ name: 'inventory', fallbackOn: error => (error as Error).message !== 'bug' })
+    let cacheDown = false
+    const stale = fallback(
+      () => {
+        if (cacheDown) {
+          throw new Error('cache down')
+        }
+        return 'cached'
+      },
+      { name: 'inventory', on: error => (error as Error).message !== 'bug' },
+    )
     instrumentFallback(stale, { meterProvider: h.meterProvider })
+    const failing = (message: string) => async () => {
+      throw new Error(message)
+    }
 
-    await stale.recover(Promise.resolve('ok'), () => 'cached')
-    await stale.recover(Promise.reject(new Error('down')), () => 'cached')
-    await stale
-      .recover(Promise.reject(new Error('down')), () => {
-        throw new Error('cache down')
-      })
-      .catch(() => undefined)
-    await stale.recover(Promise.reject(new Error('bug')), () => 'cached').catch(() => undefined)
+    await run(stale.wrap(async () => 'ok'))
+    await run(stale.wrap(failing('down')))
+    await run(stale.wrap(failing('bug'))).catch(() => undefined)
+    cacheDown = true
+    await run(stale.wrap(failing('down'))).catch(() => undefined)
 
     const metric = await h.metric('resilience.fallback.calls')
     expect(metric?.descriptor.unit).toBe('{call}')
@@ -550,7 +576,10 @@ describe('instrumentFallback', () => {
         }),
       }),
     } as unknown as MeterProvider
-    instrumentFallback(fallback({ name: 'inventory' }), { meterProvider })
+    instrumentFallback(
+      fallback(() => 'cached', { name: 'inventory' }),
+      { meterProvider },
+    )
 
     expect(() =>
       collect!({

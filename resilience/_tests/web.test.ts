@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from '../aop/annotations.js'
 import { Resilience } from '../aop/feature.js'
 import { ResilienceRegistry } from '../aop/registry.js'
+import { fakeTimersClock } from '../clock.testkit.js'
 import { ErrCallRefused } from '../errors.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
 import { ResilienceHTTP } from '../http/feature.js'
 import { ResilienceErrorHandler } from '../http/http.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
@@ -450,7 +450,7 @@ describe('resilience on a handler that streams its response', () => {
   it('sends a body streamed past the handler’s time limit whole, and the limit never fires', async () => {
     const app = await storefront()
     const registry = app.container.get(ResilienceRegistry)
-    useFakeClock({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
 
     const res = await app.request('/streams/slow')
     expect(res.status).toBe(200)

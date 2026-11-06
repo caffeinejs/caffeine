@@ -2,6 +2,7 @@ import { getEventListeners } from 'node:events'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { fakeTimersClock } from '../clock.testkit.js'
 import { sleep } from './_sleep.js'
 
 beforeEach(() => {
@@ -15,7 +16,7 @@ afterEach(() => {
 describe('sleep', () => {
   it('resolves after the delay', async () => {
     let done = false
-    const slept = sleep(100, undefined).then(() => (done = true))
+    const slept = sleep(100, undefined, fakeTimersClock).then(() => (done = true))
 
     await vi.advanceTimersByTimeAsync(99)
     expect(done).toBe(false)
@@ -26,7 +27,7 @@ describe('sleep', () => {
   })
 
   it('schedules no timer for a zero delay', async () => {
-    const slept = sleep(0, undefined)
+    const slept = sleep(0, undefined, fakeTimersClock)
 
     expect(vi.getTimerCount()).toBe(0)
     await slept
@@ -35,7 +36,7 @@ describe('sleep', () => {
   // Many calls sleeping on one long-lived signal would otherwise pile listeners onto it.
   it('removes its abort listener when it wakes', async () => {
     const controller = new AbortController()
-    const slept = sleep(100, controller.signal)
+    const slept = sleep(100, controller.signal, fakeTimersClock)
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(1)
 
     await vi.advanceTimersByTimeAsync(100)
@@ -47,7 +48,7 @@ describe('sleep', () => {
   it('rejects with the abort reason at once, leaving no timer and no listener', async () => {
     const controller = new AbortController()
     const reason = new Error('caller gave up')
-    const slept = sleep(60_000, controller.signal)
+    const slept = sleep(60_000, controller.signal, fakeTimersClock)
 
     controller.abort(reason)
 
@@ -59,7 +60,7 @@ describe('sleep', () => {
   it('rejects without scheduling anything when the signal is already aborted', async () => {
     const reason = new Error('caller gave up')
 
-    await expect(sleep(100, AbortSignal.abort(reason))).rejects.toBe(reason)
+    await expect(sleep(100, AbortSignal.abort(reason), fakeTimersClock)).rejects.toBe(reason)
     expect(vi.getTimerCount()).toBe(0)
   })
 })

@@ -13,8 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrBulkheadFull } from '../bulkhead/bulkhead.js'
 import { ErrCallNotPermitted } from '../circuitbreaker/circuitbreaker.js'
+import { fakeTimersClock } from '../clock.testkit.js'
 import { ErrInvalidOption } from '../errors.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
 import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
 import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from './annotations.js'
@@ -22,7 +22,7 @@ import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from '.
 import { type ResilienceDefinitions, ResilienceRegistry } from './registry.js'
 
 beforeEach(() => {
-  useFakeClock()
+  vi.useFakeTimers()
 })
 
 afterEach(() => {

@@ -1,4 +1,4 @@
-import { runWith } from '@caffeinejs/resilience'
+import { run } from '@caffeinejs/resilience'
 import { circuitBreaker, ErrCallNotPermitted } from '@caffeinejs/resilience/circuitbreaker'
 import { retry } from '@caffeinejs/resilience/retry'
 import { describe, expect, it } from 'vitest'
@@ -12,7 +12,12 @@ describe('join with resilience', () => {
 
     const screen = await join(new AbortController(), {
       user: required(async () => 'ada'),
-      recs: optional(signal => runWith(() => 'titles', breaker, signal)),
+      recs: optional(signal =>
+        run(
+          breaker.wrap(async () => 'titles'),
+          signal,
+        ),
+      ),
     })
 
     expect(screen).toEqual({
@@ -27,7 +32,12 @@ describe('join with resilience', () => {
 
     await expect(
       join(new AbortController(), {
-        user: required(signal => runWith(() => 'ada', breaker, signal)),
+        user: required(signal =>
+          run(
+            breaker.wrap(async () => 'ada'),
+            signal,
+          ),
+        ),
       }),
     ).rejects.toBeInstanceOf(ErrCallNotPermitted)
   })
@@ -37,16 +47,15 @@ describe('join with resilience', () => {
 
     const screen = await join(new AbortController(), {
       user: required(signal =>
-        runWith(
-          () => {
+        run(
+          retry({ name: 'user', maxAttempts: 2, backoff: 0 }).wrap(async () => {
             attempts += 1
             if (attempts === 1) {
               throw new Error('once')
             }
 
             return 'ada'
-          },
-          retry({ name: 'user', maxAttempts: 2, backoff: 0 }),
+          }),
           signal,
         ),
       ),

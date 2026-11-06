@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest'
 
+import type { Operation } from '../policy.js'
 import { fallback } from './fallback.js'
 
 interface Stock {
@@ -11,31 +12,28 @@ interface CachedStock extends Stock {
   readonly stale: true
 }
 
-describe('fallback types', () => {
-  it('resolves to the call’s type or the handler’s', () => {
-    const stale = fallback({ name: 'inventory' })
-    const call = Promise.resolve<Stock>({ id: '42', count: 1 })
+declare const getStock: Operation<Stock, string>
 
-    expectTypeOf(stale.recover(call, (): CachedStock => ({ id: '42', count: 0, stale: true }))).toEqualTypeOf<
-      Promise<Stock | CachedStock>
-    >()
-    expectTypeOf(stale.recover(call, async () => null)).toEqualTypeOf<Promise<Stock | null>>()
+describe('fallback types', () => {
+  it('widens the result by what the handler answers with, value or promise', () => {
+    const stale = fallback((): CachedStock => ({ id: '42', count: 0, stale: true }))
+
+    expectTypeOf(stale.wrap(getStock)).toEqualTypeOf<Operation<Stock | CachedStock, string>>()
+    expectTypeOf(fallback(async () => null).wrap(getStock)).toEqualTypeOf<Operation<Stock | null, string>>()
   })
 
-  it('hands the handler the error as unknown', () => {
-    const stale = fallback({ name: 'inventory' })
-
-    void stale.recover(Promise.resolve(1), error => {
+  it('hands the handler the error and the input as unknown', () => {
+    fallback((error, input) => {
       expectTypeOf(error).toBeUnknown()
+      expectTypeOf(input).toBeUnknown()
       return 0
     })
   })
 
-  it('takes a signal last, optionally', () => {
-    const stale = fallback({ name: 'inventory' })
-
-    void stale.recover(Promise.resolve(1), () => 0, new AbortController().signal)
-    // @ts-expect-error -- the signal is an AbortSignal, not a boolean
-    void stale.recover(Promise.resolve(1), () => 0, true)
+  it('takes a predicate or a list of error classes as on', () => {
+    fallback(() => 0, { on: error => error instanceof RangeError })
+    fallback(() => 0, { on: [RangeError, TypeError] })
+    // @ts-expect-error -- an entry of on is an error class, not an instance
+    fallback(() => 0, { on: [new RangeError()] })
   })
 })

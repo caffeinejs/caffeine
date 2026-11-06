@@ -1,7 +1,7 @@
 import { type Annotation, createAnnotation } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { described, ErrInvalidOption } from '../errors.js'
+import { described, type ErrorMatcher, ErrInvalidOption } from '../errors.js'
 
 // A strategy settles a call later, so only a method that returns a promise can carry one.
 type AsyncMethod<This, A extends unknown[], R> = (this: This, ...args: A) => Promise<R>
@@ -37,14 +37,14 @@ export interface RetryAnnotation {
 }
 
 export interface FallbackAnnotationOptions {
-  /** Whether an error is handed to the fallback method. Defaults to every error. */
-  readonly fallbackOn?: (error: unknown) => boolean
+  /** Which errors are handed to the fallback method: a predicate, or a list of error classes. Defaults to every error. */
+  readonly on?: ErrorMatcher
 }
 
 /** What `@Fallback` stores. */
 export interface FallbackAnnotation {
   readonly method: string | symbol
-  readonly fallbackOn: ((error: unknown) => boolean) | undefined
+  readonly on: ErrorMatcher | undefined
 }
 
 function nameOf(decorator: string, name: unknown): string {
@@ -115,7 +115,7 @@ export const Fallback = createAnnotation.on('method')(
       )
     }
 
-    return { method, fallbackOn: options?.fallbackOn }
+    return { method, on: options?.on }
   },
 ) as unknown as (<K extends string | symbol>(method: K, options?: FallbackAnnotationOptions) => FallbackDecorator<K>) &
   Annotation<FallbackAnnotation, 'method'>

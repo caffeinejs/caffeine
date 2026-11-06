@@ -1,4 +1,4 @@
-import { compose, runWith } from '@caffeinejs/resilience'
+import { compose, decorate } from '@caffeinejs/resilience'
 import { bulkhead } from '@caffeinejs/resilience/bulkhead'
 import { circuitBreaker } from '@caffeinejs/resilience/circuitbreaker'
 import { fallback } from '@caffeinejs/resilience/fallback'
@@ -17,9 +17,11 @@ import {
 import { bench, group, run, summary } from 'mitata'
 import CircuitBreaker from 'opossum'
 
-// The protected operation does no work, so every nanosecond measured is the strategy's own overhead.
+// The protected operation does no work, so every nanosecond measured is the policy's own overhead.
 const op = async (): Promise<number> => 1
 const ignore = (): void => undefined
+// What a wrapped operation is called with when nobody passes a signal.
+const ctx = { signal: undefined }
 
 // A fresh instance per benchmark, so an open breaker in one never leaks into another.
 const caffeineBreaker = () => circuitBreaker({ name: 'bench' })
@@ -38,19 +40,19 @@ const opossumBreaker = (): CircuitBreaker<[], number> => {
 
 group('breaker, success path', () => {
   summary(() => {
-    const runWithBreaker = caffeineBreaker()
-    const composed = compose(caffeineBreaker())
+    const decorated = decorate(caffeineBreaker(), op)
+    const wrapped = caffeineBreaker().wrap(op)
     const cockatiel = cockatielBreakerPolicy()
     const opossum = opossumBreaker()
 
     bench('success: raw call', async () => {
       await op()
     })
-    bench('success: runWith(op, breaker)', async () => {
-      await runWith(op, runWithBreaker)
+    bench('success: decorate(breaker, op)', async () => {
+      await decorated()
     })
-    bench('success: compose(breaker)', async () => {
-      await composed(op)
+    bench('success: breaker.wrap(op)', async () => {
+      await wrapped(ctx)
     })
     bench('success: cockatiel breaker', async () => {
       await cockatiel.execute(op)
@@ -63,16 +65,15 @@ group('breaker, success path', () => {
 
 group('retry + breaker, success path', () => {
   summary(() => {
-    const retries = caffeineRetry()
-    const breaker = caffeineBreaker()
-    const composed = compose(caffeineRetry(), caffeineBreaker())
+    const decorated = decorate(compose(caffeineRetry(), caffeineBreaker()), op)
+    const composed = compose(caffeineRetry(), caffeineBreaker())(op)
     const cockatiel = wrap(cockatielRetryPolicy(), cockatielBreakerPolicy())
 
-    bench('retry+breaker: runWith(op, retries, breaker)', async () => {
-      await runWith(op, retries, breaker)
+    bench('retry+breaker: decorate(compose(retries, breaker), op)', async () => {
+      await decorated()
     })
-    bench('retry+breaker: compose(retries, breaker)', async () => {
-      await composed(op)
+    bench('retry+breaker: compose(retries, breaker)(op)', async () => {
+      await composed(ctx)
     })
     bench('retry+breaker: cockatiel wrap(retry, breaker)', async () => {
       await cockatiel.execute(op)
@@ -84,20 +85,20 @@ group('breaker open, rejection path', () => {
   summary(() => {
     const caffeine = caffeineBreaker()
     caffeine.forceOpen()
-    const composed = compose(caffeine)
+    const decorated = decorate(caffeine, op)
     const stackCapturing = circuitBreaker({ name: 'bench', captureStackTrace: true })
     stackCapturing.forceOpen()
-    const withStack = compose(stackCapturing)
+    const withStack = decorate(stackCapturing, op)
     const cockatiel = cockatielBreakerPolicy()
     cockatiel.isolate()
     const opossum = opossumBreaker()
     opossum.open()
 
-    bench('open: compose(breaker)', async () => {
-      await composed(op).catch(ignore)
+    bench('open: decorate(breaker, op)', async () => {
+      await decorated().catch(ignore)
     })
-    bench('open: compose(breaker), captureStackTrace', async () => {
-      await withStack(op).catch(ignore)
+    bench('open: decorate(breaker, op), captureStackTrace', async () => {
+      await withStack().catch(ignore)
     })
     bench('open: cockatiel breaker', async () => {
       await cockatiel.execute(op).catch(ignore)
@@ -121,17 +122,17 @@ const flaky = async (): Promise<number> => {
 
 group('failure path, breaker closed', () => {
   summary(() => {
-    const runWithBreaker = circuitBreaker({ name: 'bench', failureRateThreshold: 100 })
-    const composed = compose(circuitBreaker({ name: 'bench', failureRateThreshold: 100 }))
+    const decorated = decorate(circuitBreaker({ name: 'bench', failureRateThreshold: 100 }), flaky)
+    const wrapped = circuitBreaker({ name: 'bench', failureRateThreshold: 100 }).wrap(flaky)
     const cockatiel = cockatielBreaker(handleAll, { halfOpenAfter: 60_000, breaker: new ConsecutiveBreaker(1e9) })
     const opossum = new CircuitBreaker(flaky, { timeout: false, errorThresholdPercentage: 100, resetTimeout: 60_000 })
     opossumBreakers.push(opossum)
 
-    bench('failure: runWith(op, breaker)', async () => {
-      await runWith(flaky, runWithBreaker).catch(ignore)
+    bench('failure: decorate(breaker, op)', async () => {
+      await decorated().catch(ignore)
     })
-    bench('failure: compose(breaker)', async () => {
-      await composed(flaky).catch(ignore)
+    bench('failure: breaker.wrap(op)', async () => {
+      await wrapped(ctx).catch(ignore)
     })
     bench('failure: cockatiel breaker', async () => {
       await cockatiel.execute(flaky).catch(ignore)
@@ -144,49 +145,71 @@ group('failure path, breaker closed', () => {
 
 group('breaker, with a success listener', () => {
   summary(() => {
-    const plain = compose(caffeineBreaker())
+    const plain = decorate(caffeineBreaker(), op)
     const observed = caffeineBreaker()
     observed.on('success', () => undefined)
-    const listened = compose(observed)
+    const listened = decorate(observed, op)
 
-    bench('listener: compose(breaker), no listener', async () => {
-      await plain(op)
+    bench('listener: decorate(breaker, op), no listener', async () => {
+      await plain()
     })
-    bench('listener: compose(breaker), one success listener', async () => {
-      await listened(op)
+    bench('listener: decorate(breaker, op), one success listener', async () => {
+      await listened()
     })
   })
 })
 
-// One strategy at a time, then the recommended chain, so a change to one strategy's `run` shows in its own line.
+// One policy at a time, then the recommended chain, so a change to one policy's `wrap` shows in its own line.
 group('time limiter, bulkhead, rate limiter and fallback, success path', () => {
   summary(() => {
-    const limited = compose(timeLimiter({ name: 'bench', timeoutDuration: 1 * Second }))
-    const pooled = compose(bulkhead({ name: 'bench', maxConcurrentCalls: 1_000 }))
-    const quota = compose(rateLimiter({ name: 'bench', limitForPeriod: 1e12, limitRefreshPeriod: 1 * Hour }))
-    const stale = fallback({ name: 'bench' })
-    const chain = compose(
-      caffeineRetry(),
-      caffeineBreaker(),
-      rateLimiter({ name: 'bench', limitForPeriod: 1e12, limitRefreshPeriod: 1 * Hour }),
-      bulkhead({ name: 'bench', maxConcurrentCalls: 1_000 }),
-      timeLimiter({ name: 'bench', timeoutDuration: 1 * Second }),
+    const limited = decorate(timeLimiter({ name: 'bench', timeoutDuration: 1 * Second }), op)
+    const pooled = decorate(bulkhead({ name: 'bench', maxConcurrentCalls: 1_000 }), op)
+    const quota = decorate(rateLimiter({ name: 'bench', limitForPeriod: 1e12, limitRefreshPeriod: 1 * Hour }), op)
+    const stale = decorate(fallback(ignore, { name: 'bench' }), op)
+    const chain = decorate(
+      compose(
+        caffeineRetry(),
+        caffeineBreaker(),
+        rateLimiter({ name: 'bench', limitForPeriod: 1e12, limitRefreshPeriod: 1 * Hour }),
+        bulkhead({ name: 'bench', maxConcurrentCalls: 1_000 }),
+        timeLimiter({ name: 'bench', timeoutDuration: 1 * Second }),
+      ),
+      op,
     )
 
-    bench('new: compose(timeLimiter)', async () => {
-      await limited(op)
+    bench('new: decorate(timeLimiter, op)', async () => {
+      await limited()
     })
-    bench('new: compose(bulkhead)', async () => {
-      await pooled(op)
+    bench('new: decorate(bulkhead, op)', async () => {
+      await pooled()
     })
-    bench('new: compose(rateLimiter)', async () => {
-      await quota(op)
+    bench('new: decorate(rateLimiter, op)', async () => {
+      await quota()
     })
-    bench('new: fallback.recover(op())', async () => {
-      await stale.recover(op(), ignore)
+    bench('new: decorate(fallback, op)', async () => {
+      await stale()
     })
-    bench('new: compose(retry, breaker, rateLimiter, bulkhead, timeLimiter)', async () => {
-      await chain(op)
+    bench('new: decorate(compose(retry, breaker, rateLimiter, bulkhead, timeLimiter), op)', async () => {
+      await chain()
+    })
+  })
+})
+
+// A caller's signal makes the time limiter combine it with its own on every call: once with a signal per call, as a
+// request handler passes, and once with one signal that outlives every call, as a worker's shutdown signal does.
+group('time limiter with a caller signal, success path', () => {
+  summary(() => {
+    const limited = decorate(
+      timeLimiter({ name: 'bench', timeoutDuration: 1 * Second }),
+      async (signal: AbortSignal): Promise<number> => (signal.aborted ? 0 : 1),
+    )
+    const shutdown = new AbortController().signal
+
+    bench('signal: decorate(timeLimiter, op), a signal per call', async () => {
+      await limited(new AbortController().signal)
+    })
+    bench('signal: decorate(timeLimiter, op), one long-lived signal', async () => {
+      await limited(shutdown)
     })
   })
 })

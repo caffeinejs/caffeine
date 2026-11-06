@@ -2,12 +2,12 @@ import { Millisecond } from '@caffeinejs/std/duration'
 import { fc, it } from '@fast-check/vitest'
 import { afterEach, beforeEach, describe, expect, vi } from 'vitest'
 
-import { runWith } from '../compose.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
+import { fakeTimersClock } from '../clock.testkit.js'
+import { compose, run } from '../compose.js'
 import { ErrRateLimitExceeded, rateLimiter } from './ratelimiter.js'
 
 beforeEach(() => {
-  useFakeClock()
+  vi.useFakeTimers()
 })
 
 afterEach(() => {
@@ -40,6 +40,7 @@ describe('rate limiter (property)', () => {
       limitForPeriod,
       limitRefreshPeriod: period * Millisecond,
       maxWaitDuration: maxWait * Millisecond,
+      clock: fakeTimersClock,
     })
     const startsPerPeriod = new Map<number, number>()
     const waits: number[] = []
@@ -55,15 +56,14 @@ describe('rate limiter (property)', () => {
         const arrived = performance.now()
         const before = quota.metrics()
         let started = false
-        runWith(
-          () => {
+        run(
+          quota.wrap(async () => {
             started = true
             const now = performance.now()
             const cycle = Math.floor((now - origin) / period)
             startsPerPeriod.set(cycle, (startsPerPeriod.get(cycle) ?? 0) + 1)
             waits.push(now - arrived)
-          },
-          quota,
+          }),
           controller.signal,
         ).catch((error: unknown) => {
           if (error instanceof ErrRateLimitExceeded) {

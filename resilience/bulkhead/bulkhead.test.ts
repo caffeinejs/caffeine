@@ -3,15 +3,15 @@ import { getEventListeners } from 'node:events'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { compose, runWith } from '../compose.js'
+import { fakeTimersClock } from '../clock.testkit.js'
+import { compose, run } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
-import type { ExecutionContext } from '../strategy.js'
+import type { CallContext, Operation } from '../policy.js'
 import { timeLimiter } from '../timelimiter/timelimiter.js'
 import { bulkhead, type BulkheadEvents, type BulkheadOptions, ErrBulkheadFull } from './bulkhead.js'
 
 beforeEach(() => {
-  useFakeClock()
+  vi.useFakeTimers()
 })
 
 afterEach(() => {
@@ -20,14 +20,14 @@ afterEach(() => {
 })
 
 function bulkheadOf(options: Partial<BulkheadOptions> = {}) {
-  return bulkhead({ name: 'payments', maxConcurrentCalls: 2, ...options })
+  return bulkhead({ name: 'payments', maxConcurrentCalls: 2, clock: fakeTimersClock, ...options })
 }
 
 // Operations that settle only when the test says so, in the order they started.
 function gate() {
   const started: string[] = []
   const settles = new Map<string, { resolve: (value: string) => void; reject: (reason: unknown) => void }>()
-  const operation = (id: string) => (_ctx: ExecutionContext) => {
+  const operation = (id: string) => (_ctx: CallContext) => {
     started.push(id)
     return new Promise<string>((resolve, reject) => settles.set(id, { resolve, reject }))
   }
@@ -82,10 +82,10 @@ describe('bulkhead options', () => {
     const pool = bulkhead({ name: 'payments' })
     const { operation } = gate()
 
-    const running = Array.from({ length: 25 }, (_, i) => runWith(operation(`#${i}`), pool))
+    const running = Array.from({ length: 25 }, (_, i) => run(pool.wrap(operation(`#${i}`))))
     void running
 
-    await expect(runWith(operation('#25'), pool)).rejects.toBeInstanceOf(ErrBulkheadFull)
+    await expect(run(pool.wrap(operation('#25')))).rejects.toBeInstanceOf(ErrBulkheadFull)
     expect(pool.metrics()).toEqual({
       availableConcurrentCalls: 0,
       maxAllowedConcurrentCalls: 25,
@@ -105,9 +105,9 @@ describe('bulkhead', () => {
     const pool = bulkheadOf()
     const { operation, started } = gate()
 
-    void runWith(operation('a'), pool)
-    void runWith(operation('b'), pool)
-    const refused = await runWith(operation('c'), pool).catch((error: unknown) => error)
+    void run(pool.wrap(operation('a')))
+    void run(pool.wrap(operation('b')))
+    const refused = await run(pool.wrap(operation('c'))).catch((error: unknown) => error)
 
     expect(started).toEqual(['a', 'b'])
     expect(refused).toBeInstanceOf(ErrBulkheadFull)
@@ -127,11 +127,11 @@ describe('bulkhead', () => {
     const quiet = bulkheadOf({ maxConcurrentCalls: 1 })
     const loud = bulkheadOf({ maxConcurrentCalls: 1, captureStackTrace: true })
     const { operation } = gate()
-    void runWith(operation('a'), quiet)
-    void runWith(operation('b'), loud)
+    void run(quiet.wrap(operation('a')))
+    void run(loud.wrap(operation('b')))
 
-    const silent = (await runWith(operation('c'), quiet).catch((error: unknown) => error)) as Error
-    const traced = (await runWith(operation('d'), loud).catch((error: unknown) => error)) as Error
+    const silent = (await run(quiet.wrap(operation('c'))).catch((error: unknown) => error)) as Error
+    const traced = (await run(loud.wrap(operation('d'))).catch((error: unknown) => error)) as Error
 
     const frames = (error: Error) => error.stack?.split('\n').filter(line => /^\s+at /.test(line)) ?? []
     expect(frames(silent)).toEqual([])
@@ -145,12 +145,12 @@ describe('bulkhead', () => {
     const pool = bulkheadOf({ maxConcurrentCalls: 1 })
     const g = gate()
 
-    const first = outcome(runWith(g.operation('a'), pool))
+    const first = outcome(run(pool.wrap(g.operation('a'))))
     settle(g)
     await first
 
     expect(pool.metrics().availableConcurrentCalls).toBe(1)
-    void runWith(g.operation('b'), pool)
+    void run(pool.wrap(g.operation('b')))
     expect(g.started).toEqual(['a', 'b'])
   })
 
@@ -158,11 +158,11 @@ describe('bulkhead', () => {
     const pool = bulkheadOf({ maxConcurrentCalls: 1 })
     const error = new Error('sync')
 
-    await expect(
-      pool.run({} as ExecutionContext, () => {
-        throw error
-      }),
-    ).rejects.toBe(error)
+    const throwing = (() => {
+      throw error
+    }) as Operation<never>
+
+    await expect(pool.wrap(throwing)({ signal: undefined }, undefined)).rejects.toBe(error)
     expect(pool.metrics().availableConcurrentCalls).toBe(1)
   })
 
@@ -170,10 +170,10 @@ describe('bulkhead', () => {
     const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 1 * Second, maxQueuedCalls: 3 })
     const g = gate()
 
-    void runWith(g.operation('a'), pool)
-    void runWith(g.operation('b'), pool)
-    void runWith(g.operation('c'), pool)
-    void runWith(g.operation('d'), pool)
+    void run(pool.wrap(g.operation('a')))
+    void run(pool.wrap(g.operation('b')))
+    void run(pool.wrap(g.operation('c')))
+    void run(pool.wrap(g.operation('d')))
     expect(pool.metrics().queuedCalls).toBe(3)
 
     g.resolve('a')
@@ -191,10 +191,10 @@ describe('bulkhead', () => {
   it('refuses a call at once when the line is full', async () => {
     const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 1 * Second, maxQueuedCalls: 1 })
     const g = gate()
-    void runWith(g.operation('a'), pool)
-    void runWith(g.operation('b'), pool)
+    void run(pool.wrap(g.operation('a')))
+    void run(pool.wrap(g.operation('b')))
 
-    const refused = await runWith(g.operation('c'), pool).catch((error: unknown) => error)
+    const refused = await run(pool.wrap(g.operation('c'))).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(ErrBulkheadFull)
     expect((refused as Error).message).toContain('bulkhead is full with 1 call running and 1 queued')
@@ -204,9 +204,9 @@ describe('bulkhead', () => {
   it('refuses a waiting call once its wait runs out, leaving nothing behind', async () => {
     const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 200 * Millisecond })
     const g = gate()
-    void runWith(g.operation('a'), pool)
+    void run(pool.wrap(g.operation('a')))
     let result: unknown = 'pending'
-    const waiting = runWith(g.operation('b'), pool).catch((error: unknown) => (result = error))
+    const waiting = run(pool.wrap(g.operation('b'))).catch((error: unknown) => (result = error))
 
     await vi.advanceTimersByTimeAsync(199)
     expect(result).toBe('pending')
@@ -231,9 +231,9 @@ describe('bulkhead', () => {
     const g = gate()
     const caller = new AbortController()
     const reason = new Error('client left')
-    void runWith(g.operation('a'), pool)
+    void run(pool.wrap(g.operation('a')))
 
-    const waiting = runWith(g.operation('b'), pool, caller.signal).catch((error: unknown) => error)
+    const waiting = run(pool.wrap(g.operation('b')), caller.signal).catch((error: unknown) => error)
     caller.abort(reason)
 
     expect(await waiting).toBe(reason)
@@ -252,11 +252,9 @@ describe('bulkhead', () => {
     const g = gate()
     const caller = new AbortController()
     caller.abort(new Error('gone'))
-    void runWith(g.operation('a'), pool)
+    void run(pool.wrap(g.operation('a')))
 
-    await expect(pool.run({ signal: caller.signal } as ExecutionContext, () => Promise.resolve('b'))).rejects.toThrow(
-      'gone',
-    )
+    await expect(pool.wrap(() => Promise.resolve('b'))({ signal: caller.signal }, undefined)).rejects.toThrow('gone')
     expect(pool.metrics().queuedCalls).toBe(0)
   })
 
@@ -267,12 +265,12 @@ describe('bulkhead', () => {
     const limiter = timeLimiter({ name: 'payments', timeoutDuration: 100 * Millisecond })
     const g = gate()
 
-    const call = runWith(g.operation('a'), limiter, pool).catch((error: unknown) => error)
+    const call = run(compose(limiter, pool)(g.operation('a'))).catch((error: unknown) => error)
     await vi.advanceTimersByTimeAsync(100)
     await call
 
     expect(pool.metrics().availableConcurrentCalls).toBe(0)
-    await expect(runWith(g.operation('b'), limiter, pool)).rejects.toBeInstanceOf(ErrBulkheadFull)
+    await expect(run(compose(limiter, pool)(g.operation('b')))).rejects.toBeInstanceOf(ErrBulkheadFull)
 
     g.resolve('a')
     await vi.advanceTimersByTimeAsync(0)
@@ -283,9 +281,9 @@ describe('bulkhead', () => {
     const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 10 * Second })
     const limiter = timeLimiter({ name: 'payments', timeoutDuration: 100 * Millisecond })
     const g = gate()
-    void runWith(g.operation('a'), pool)
+    void run(pool.wrap(g.operation('a')))
 
-    const waiting = runWith(g.operation('b'), limiter, pool).catch((error: unknown) => error)
+    const waiting = run(compose(limiter, pool)(g.operation('b'))).catch((error: unknown) => error)
     expect(pool.metrics().queuedCalls).toBe(1)
     await vi.advanceTimersByTimeAsync(100)
     await waiting
@@ -302,10 +300,10 @@ describe('bulkhead', () => {
     const g = gate()
     let reentrant: Promise<unknown> | undefined
     pool.on('finished', () => {
-      reentrant ??= outcome(runWith(g.operation('b'), pool))
+      reentrant ??= outcome(run(pool.wrap(g.operation('b'))))
     })
 
-    const first = runWith(g.operation('a'), pool)
+    const first = run(pool.wrap(g.operation('a')))
     g.resolve('a')
     await first
 
@@ -317,9 +315,9 @@ describe('bulkhead', () => {
   it('captures a stack trace for a call refused after waiting when told to', async () => {
     const pool = bulkheadOf({ maxConcurrentCalls: 1, maxWaitDuration: 100 * Millisecond, captureStackTrace: true })
     const g = gate()
-    void runWith(g.operation('a'), pool)
+    void run(pool.wrap(g.operation('a')))
 
-    const waiting = runWith(g.operation('b'), pool).catch((error: unknown) => error)
+    const waiting = run(pool.wrap(g.operation('b'))).catch((error: unknown) => error)
     await vi.advanceTimersByTimeAsync(100)
     const refused = (await waiting) as Error
 
@@ -333,9 +331,9 @@ describe('bulkhead', () => {
     const g = gate()
     const errorClass = Error as { stackTraceLimit?: number }
     const original = errorClass.stackTraceLimit
-    void runWith(g.operation('a'), pool)
+    void run(pool.wrap(g.operation('a')))
 
-    await runWith(g.operation('b'), pool).catch(() => undefined)
+    await run(pool.wrap(g.operation('b'))).catch(() => undefined)
 
     expect(errorClass.stackTraceLimit).toBe(original)
   })
@@ -345,9 +343,9 @@ describe('bulkhead', () => {
     const seen = listen(pool, 'permitted', 'rejected', 'finished')
     const g = gate()
 
-    void runWith(g.operation('a'), pool)
-    const b = runWith(g.operation('b'), pool)
-    await runWith(g.operation('c'), pool).catch(() => undefined)
+    void run(pool.wrap(g.operation('a')))
+    const b = run(pool.wrap(g.operation('b')))
+    await run(pool.wrap(g.operation('c'))).catch(() => undefined)
     await vi.advanceTimersByTimeAsync(300)
     g.resolve('a')
     await vi.advanceTimersByTimeAsync(0)
@@ -364,17 +362,17 @@ describe('bulkhead', () => {
   })
 
   // Node keeps 10 frames by default: every frame between the caller and the operation is one the caller's stack loses.
-  it('adds at most 2n + 1 frames between the caller and a synchronously throwing operation', async () => {
+  it('adds two frames, its own and the lift, between the caller and a synchronously throwing operation', async () => {
     const errorClass = Error as { stackTraceLimit?: number }
     const original = errorClass.stackTraceLimit
     errorClass.stackTraceLimit = 50
     try {
-      const operationThatThrows = (): never => {
+      function operationThatThrows(): never {
         throw new Error('sync')
       }
-      const pooled = compose(bulkheadOf())
+      const pooled = bulkheadOf().wrap(operationThatThrows as () => Promise<never>)
       function callsTheBulkhead(): Promise<unknown> {
-        return pooled(operationThatThrows)
+        return pooled({ signal: undefined }, undefined)
       }
 
       const error = (await callsTheBulkhead().catch((reason: unknown) => reason)) as Error
@@ -383,7 +381,7 @@ describe('bulkhead', () => {
       const entry = lines.findIndex(line => line.includes('callsTheBulkhead'))
 
       expect(operation).toBeGreaterThan(0)
-      expect(entry - operation - 1).toBeLessThanOrEqual(3)
+      expect(entry - operation - 1).toBe(2)
     } finally {
       errorClass.stackTraceLimit = original
     }

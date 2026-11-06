@@ -4,15 +4,15 @@ import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { circuitBreaker } from '../circuitbreaker/circuitbreaker.js'
-import { compose, runWith } from '../compose.js'
+import { fakeTimersClock } from '../clock.testkit.js'
+import { compose, decorate, run } from '../compose.js'
 import { ErrInvalidOption } from '../errors.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
+import type { CallContext } from '../policy.js'
 import { retry } from '../retry/retry.js'
-import type { ExecutionContext } from '../strategy.js'
 import { ErrTimeLimitExceeded, timeLimiter, type TimeLimiterEvents, type TimeLimiterOptions } from './timelimiter.js'
 
 beforeEach(() => {
-  useFakeClock()
+  vi.useFakeTimers()
 })
 
 afterEach(() => {
@@ -21,7 +21,7 @@ afterEach(() => {
 })
 
 function limiterOf(options: Partial<TimeLimiterOptions> = {}) {
-  return timeLimiter({ name: 'inventory', timeoutDuration: 100 * Millisecond, ...options })
+  return timeLimiter({ name: 'inventory', timeoutDuration: 100 * Millisecond, clock: fakeTimersClock, ...options })
 }
 
 // An operation that settles only when the test says so, keeping the signal it was handed.
@@ -29,7 +29,7 @@ function controllable<T = string>() {
   let resolve!: (value: T) => void
   let reject!: (reason: unknown) => void
   let signal: AbortSignal | undefined
-  const operation = vi.fn((ctx: ExecutionContext) => {
+  const operation = vi.fn((ctx: CallContext) => {
     signal = ctx.signal
     return new Promise<T>((res, rej) => {
       resolve = res
@@ -86,7 +86,7 @@ describe('time limiter', () => {
   it('passes the value through and leaves no timer behind when the operation settles in time', async () => {
     const limiter = limiterOf()
 
-    await expect(runWith(() => 'stock', limiter)).resolves.toBe('stock')
+    await expect(run(limiter.wrap(async () => 'stock'))).resolves.toBe('stock')
 
     expect(vi.getTimerCount()).toBe(0)
     expect(limiter.metrics()).toEqual({ successfulCalls: 1, failedCalls: 0, timedOutCalls: 0 })
@@ -97,9 +97,11 @@ describe('time limiter', () => {
     const error = new Error('down')
 
     await expect(
-      runWith(() => {
-        throw error
-      }, limiter),
+      run(
+        limiter.wrap(async () => {
+          throw error
+        }),
+      ),
     ).rejects.toBe(error)
 
     expect(vi.getTimerCount()).toBe(0)
@@ -111,7 +113,7 @@ describe('time limiter', () => {
     const limiter = limiterOf({ timeoutDuration: 2 * Second })
     const { operation } = controllable()
     let outcome: unknown = 'pending'
-    const call = runWith(operation, limiter).then(
+    const call = run(limiter.wrap(operation)).then(
       value => (outcome = value),
       (error: unknown) => (outcome = error),
     )
@@ -137,7 +139,7 @@ describe('time limiter', () => {
     const limiter = limiterOf()
     const { operation, signal } = controllable()
 
-    const call = runWith(operation, limiter).catch((reason: unknown) => reason)
+    const call = run(limiter.wrap(operation)).catch((reason: unknown) => reason)
     await vi.advanceTimersByTimeAsync(100)
     const error = await call
 
@@ -151,7 +153,7 @@ describe('time limiter', () => {
     const caller = new AbortController()
     const { operation, resolve, signal } = controllable()
 
-    const call = runWith(operation, limiter, caller.signal)
+    const call = run(limiter.wrap(operation), caller.signal)
     await vi.advanceTimersByTimeAsync(0)
     resolve('ok')
     await call
@@ -167,7 +169,7 @@ describe('time limiter', () => {
     const reason = new Error('caller gave up')
     const { operation, signal } = controllable()
 
-    const call = runWith(operation, limiter, caller.signal).catch((error: unknown) => error)
+    const call = run(limiter.wrap(operation), caller.signal).catch((error: unknown) => error)
     await vi.advanceTimersByTimeAsync(10)
     caller.abort(reason)
 
@@ -183,12 +185,11 @@ describe('time limiter', () => {
     const caller = new AbortController()
     const reason = new Error('aborted inside')
 
-    const call = runWith(
-      () => {
+    const call = run(
+      limiter.wrap(() => {
         caller.abort(reason)
         return new Promise(() => undefined)
-      },
-      limiter,
+      }),
       caller.signal,
     )
 
@@ -201,10 +202,10 @@ describe('time limiter', () => {
     const caller = new AbortController()
     const reason = new Error('gone')
     caller.abort(reason)
-    const next = vi.fn(() => Promise.resolve('ok'))
+    const operation = vi.fn(() => Promise.resolve('ok'))
 
-    await expect(limiter.run({ signal: caller.signal } as ExecutionContext, next)).rejects.toBe(reason)
-    expect(next).not.toHaveBeenCalled()
+    await expect(limiter.wrap(operation)({ signal: caller.signal }, undefined)).rejects.toBe(reason)
+    expect(operation).not.toHaveBeenCalled()
   })
 
   it('drops an outcome that arrives after the limit, raising no unhandled rejection', async () => {
@@ -212,8 +213,8 @@ describe('time limiter', () => {
     const late = controllable()
     const early = controllable()
 
-    const timedOut = runWith(late.operation, limiter).catch((error: unknown) => error)
-    const other = runWith(early.operation, limiter).catch((error: unknown) => error)
+    const timedOut = run(limiter.wrap(late.operation)).catch((error: unknown) => error)
+    const other = run(limiter.wrap(early.operation)).catch((error: unknown) => error)
     await vi.advanceTimersByTimeAsync(100)
     late.reject(new Error('too late'))
     early.resolve('also too late')
@@ -228,12 +229,12 @@ describe('time limiter', () => {
   it('leaves no abort listener on a long-lived caller signal after many calls', async () => {
     const limiter = limiterOf()
     const shutdown = new AbortController()
-    const run = compose(limiter)
+    const call = decorate(limiter, (_signal: AbortSignal, value: () => Promise<number>) => value())
 
     for (let i = 0; i < 1_000; i++) {
-      await run(() => i, shutdown.signal)
+      await call(shutdown.signal, async () => i)
     }
-    const hung = run(() => new Promise(() => undefined), shutdown.signal).catch(() => undefined)
+    const hung = call(shutdown.signal, () => new Promise(() => undefined)).catch(() => undefined)
     await vi.advanceTimersByTimeAsync(100)
     await hung
 
@@ -245,11 +246,13 @@ describe('time limiter', () => {
     const seen = listen(limiter, 'success', 'failure', 'timeout')
     const error = new Error('down')
 
-    await runWith(() => 'ok', limiter)
-    await runWith(() => {
-      throw error
-    }, limiter).catch(() => undefined)
-    const hung = runWith(() => new Promise(() => undefined), limiter).catch(() => undefined)
+    await run(limiter.wrap(async () => 'ok'))
+    await run(
+      limiter.wrap(async () => {
+        throw error
+      }),
+    ).catch(() => undefined)
+    const hung = run(limiter.wrap(() => new Promise(() => undefined))).catch(() => undefined)
     await vi.advanceTimersByTimeAsync(100)
     await hung
 
@@ -262,7 +265,7 @@ describe('time limiter', () => {
 
   it('holds a limit beyond what timers can hold to the longest delay they honour', async () => {
     const limiter = limiterOf({ timeoutDuration: Number.MAX_SAFE_INTEGER })
-    const call = runWith(() => new Promise(() => undefined), limiter).catch((error: unknown) => error)
+    const call = run(limiter.wrap(() => new Promise(() => undefined))).catch((error: unknown) => error)
 
     await vi.advanceTimersByTimeAsync(2_147_483_646)
     expect(vi.getTimerCount()).toBe(1)
@@ -280,14 +283,15 @@ describe('time limiter in a chain', () => {
     const signals: AbortSignal[] = []
     let attempt = 0
 
-    const call = runWith(
-      ctx => {
+    const call = run(
+      compose(
+        retries,
+        limiter,
+      )(ctx => {
         signals.push(ctx.signal!)
         attempt++
-        return attempt === 1 ? new Promise(() => undefined) : 'ok'
-      },
-      retries,
-      limiter,
+        return attempt === 1 ? new Promise<string>(() => undefined) : Promise.resolve('ok')
+      }),
     )
     await vi.advanceTimersByTimeAsync(100)
 
@@ -304,13 +308,14 @@ describe('time limiter in a chain', () => {
     const retries = retry({ name: 'inventory', maxAttempts: 5, backoff: 400 * Millisecond })
     let attempts = 0
 
-    const call = runWith(
-      () => {
+    const call = run(
+      compose(
+        limiter,
+        retries,
+      )(async () => {
         attempts++
         throw new Error('down')
-      },
-      limiter,
-      retries,
+      }),
     ).catch((error: unknown) => error)
     await vi.advanceTimersByTimeAsync(1 * Second)
 
@@ -327,7 +332,7 @@ describe('time limiter in a chain', () => {
     })
     const limiter = limiterOf()
 
-    const call = runWith(() => new Promise(() => undefined), breaker, limiter).catch(() => undefined)
+    const call = run(compose(breaker, limiter)(() => new Promise(() => undefined))).catch(() => undefined)
     await vi.advanceTimersByTimeAsync(100)
     await call
 
@@ -344,7 +349,10 @@ describe('time limiter in a chain', () => {
     const limiter = limiterOf({ timeoutDuration: 10 * Second })
     const caller = new AbortController()
 
-    const call = runWith(() => new Promise(() => undefined), breaker, limiter, caller.signal).catch(() => undefined)
+    const call = run(
+      compose(breaker, limiter)(() => new Promise(() => undefined)),
+      caller.signal,
+    ).catch(() => undefined)
     await vi.advanceTimersByTimeAsync(0)
     caller.abort()
     await call
@@ -354,17 +362,17 @@ describe('time limiter in a chain', () => {
   })
 
   // Node keeps 10 frames by default: every frame between the caller and the operation is one the caller's stack loses.
-  it('adds at most 2n + 1 frames between the caller and a synchronously throwing operation', async () => {
+  it('adds two frames, its own and the lift, between the caller and a synchronously throwing operation', async () => {
     const errorClass = Error as { stackTraceLimit?: number }
     const original = errorClass.stackTraceLimit
     errorClass.stackTraceLimit = 50
     try {
-      const operationThatThrows = (): never => {
+      function operationThatThrows(): never {
         throw new Error('sync')
       }
-      const limited = compose(limiterOf())
+      const limited = limiterOf().wrap(operationThatThrows as () => Promise<never>)
       function callsTheLimiter(): Promise<unknown> {
-        return limited(operationThatThrows)
+        return limited({ signal: undefined }, undefined)
       }
 
       const error = (await callsTheLimiter().catch((reason: unknown) => reason)) as Error
@@ -373,7 +381,7 @@ describe('time limiter in a chain', () => {
       const entry = lines.findIndex(line => line.includes('callsTheLimiter'))
 
       expect(operation).toBeGreaterThan(0)
-      expect(entry - operation - 1).toBeLessThanOrEqual(3)
+      expect(entry - operation - 1).toBe(2)
     } finally {
       errorClass.stackTraceLimit = original
     }

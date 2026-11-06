@@ -3,15 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { bulkhead } from '../bulkhead/bulkhead.js'
 import { circuitBreaker } from '../circuitbreaker/circuitbreaker.js'
-import { compose } from '../compose.js'
+import { fakeTimersClock } from '../clock.testkit.js'
+import { compose, run } from '../compose.js'
 import { ErrCallRefused } from '../errors.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
+import type { Operation } from '../policy.js'
 import { ErrRateLimitExceeded, rateLimiter } from '../ratelimiter/ratelimiter.js'
 import { retry } from '../retry/retry.js'
 import { timeLimiter } from '../timelimiter/timelimiter.js'
 
 beforeEach(() => {
-  useFakeClock()
+  vi.useFakeTimers()
 })
 
 afterEach(() => {
@@ -25,25 +26,28 @@ function chain(options: { limitForPeriod?: number } = {}) {
     name: 'inventory',
     minimumNumberOfCalls: 2,
     slidingWindow: { type: 'count', size: 2 },
+    clock: fakeTimersClock,
   })
-  const retries = retry({ name: 'inventory', maxAttempts: 3, backoff: 0 })
+  const retries = retry({ name: 'inventory', maxAttempts: 3, backoff: 0, clock: fakeTimersClock })
   const quota = rateLimiter({
     name: 'inventory',
     limitForPeriod: options.limitForPeriod ?? 100,
     limitRefreshPeriod: 1 * Hour,
+    clock: fakeTimersClock,
   })
-  const deadline = timeLimiter({ name: 'inventory', timeoutDuration: 1 * Second })
-  const pool = bulkhead({ name: 'inventory', maxConcurrentCalls: 10 })
-  return { breaker, retries, quota, run: compose(retries, breaker, quota, pool, deadline) }
+  const deadline = timeLimiter({ name: 'inventory', timeoutDuration: 1 * Second, clock: fakeTimersClock })
+  const pool = bulkhead({ name: 'inventory', maxConcurrentCalls: 10, clock: fakeTimersClock })
+  const guarded = compose(retries, breaker, quota, pool, deadline)
+  return { breaker, retries, quota, call: <T>(op: Operation<T>): Promise<T> => run(guarded(op)) }
 }
 
 describe('the recommended order', () => {
   it('runs the operation once per attempt, each attempt through every strategy', async () => {
-    const { breaker, quota, run } = chain()
+    const { breaker, quota, call } = chain()
     let attempts = 0
 
     await expect(
-      run(() => {
+      call(async () => {
         attempts++
         if (attempts === 1) {
           throw new Error('blip')
@@ -60,14 +64,14 @@ describe('the recommended order', () => {
   // An open breaker inside a retry fails the call at once: retrying a refusal would only add load. The caller gets the
   // last failure that reached the operation, not the refusal, which would claim no attempt ran.
   it('fails at once, without another attempt, once the breaker inside the retry opens', async () => {
-    const { breaker, retries, run } = chain()
+    const { breaker, retries, call } = chain()
     let attempts = 0
-    const failing = () => {
+    const failing = async () => {
       attempts++
       throw new Error('down')
     }
 
-    const error = await run(failing).catch((reason: unknown) => reason)
+    const error = await call(failing).catch((reason: unknown) => reason)
 
     expect(attempts).toBe(2)
     expect(breaker.state).toBe('open')
@@ -78,12 +82,13 @@ describe('the recommended order', () => {
 
   // A spent quota or a full bulkhead is this process turning calls away, not the dependency failing: counted as
   // failures, a burst would open the breaker and refuse every call to a healthy dependency for the whole open wait.
-  it('keeps the breaker closed when the strategies inside it refuse calls', async () => {
-    const { breaker, run } = chain({ limitForPeriod: 1 })
+  it('keeps the breaker closed when the policies inside it refuse calls', async () => {
+    const { breaker, call } = chain({ limitForPeriod: 1 })
+    const ok = async () => 'ok'
 
-    await expect(run(() => 'ok')).resolves.toBe('ok')
+    await expect(call(ok)).resolves.toBe('ok')
     const refusals = await Promise.all(
-      [run(() => 'ok'), run(() => 'ok'), run(() => 'ok')].map(call => call.catch((error: unknown) => error)),
+      [call(ok), call(ok), call(ok)].map(refused => refused.catch((error: unknown) => error)),
     )
 
     expect(refusals.every(error => error instanceof ErrRateLimitExceeded)).toBe(true)
@@ -93,23 +98,23 @@ describe('the recommended order', () => {
   })
 
   // Node keeps 10 frames by default: every frame between the caller and the operation is one the caller's stack loses.
-  it('adds at most 2n + 1 frames across all five strategies', async () => {
+  it('adds one frame per policy and one lift across all five policies', async () => {
     const errorClass = Error as { stackTraceLimit?: number }
     const original = errorClass.stackTraceLimit
     errorClass.stackTraceLimit = 50
     try {
-      const operationThatThrows = (): never => {
+      function operationThatThrows(): never {
         throw new Error('sync')
       }
-      const run = compose(
-        retry({ name: 'inventory', maxAttempts: 1 }),
-        circuitBreaker({ name: 'inventory' }),
-        rateLimiter({ name: 'inventory', limitForPeriod: 100, limitRefreshPeriod: 1 * Second }),
-        bulkhead({ name: 'inventory' }),
-        timeLimiter({ name: 'inventory', timeoutDuration: 100 * Millisecond }),
-      )
+      const guarded = compose(
+        retry({ name: 'inventory', maxAttempts: 1, clock: fakeTimersClock }),
+        circuitBreaker({ name: 'inventory', clock: fakeTimersClock }),
+        rateLimiter({ name: 'inventory', limitForPeriod: 100, limitRefreshPeriod: 1 * Second, clock: fakeTimersClock }),
+        bulkhead({ name: 'inventory', clock: fakeTimersClock }),
+        timeLimiter({ name: 'inventory', timeoutDuration: 100 * Millisecond, clock: fakeTimersClock }),
+      )(operationThatThrows as () => Promise<never>)
       function callsTheChain(): Promise<unknown> {
-        return run(operationThatThrows)
+        return guarded({ signal: undefined }, undefined)
       }
 
       const error = (await callsTheChain().catch((reason: unknown) => reason)) as Error
@@ -118,7 +123,7 @@ describe('the recommended order', () => {
       const entry = lines.findIndex(line => line.includes('callsTheChain'))
 
       expect(operation).toBeGreaterThan(0)
-      expect(entry - operation - 1).toBeLessThanOrEqual(11)
+      expect(entry - operation - 1).toBe(6)
     } finally {
       errorClass.stackTraceLimit = original
     }

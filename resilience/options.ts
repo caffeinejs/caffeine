@@ -1,0 +1,121 @@
+import { type Duration, formatDuration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/err'
+
+import { described, type ErrorClass, type ErrorMatcher, ErrInvalidOption } from './errors.js'
+import { type Clock, systemClock } from './timers.js'
+
+/**
+ * Checks one factory's options, value by value, so every factory words a bad one the same way:
+ * `Cannot create retry "inventory": maxAttempts must be an integer of at least 1, got 0`.
+ */
+export class Options {
+  readonly name: string
+  readonly #kind: string
+
+  /** @throws {@link ErrInvalidOption} when `options` carries no non-empty `name`. */
+  constructor(kind: string, options: { readonly name?: unknown } | undefined) {
+    const name = options?.name
+    if (typeof name !== 'string' || name.length === 0) {
+      throw new ErrInvalidOption(
+        errMessage(`Cannot create ${kind}: name must be a non-empty string`)
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
+    }
+
+    this.#kind = kind
+    this.name = name
+  }
+
+  invalid(reason: string, ...solutions: string[]): ErrInvalidOption {
+    return new ErrInvalidOption(
+      errMessage(`Cannot create ${this.#kind} "${this.name}": ${reason}`)
+        .solutions(...solutions)
+        .reference('@caffeinejs/resilience', ErrInvalidOption)
+        .build(),
+    )
+  }
+
+  integer(key: string, value: number, min: number, ...solutions: string[]): number {
+    if (!Number.isInteger(value) || value < min) {
+      throw this.invalid(`${key} must be an integer of at least ${min}, got ${String(value)}`, ...solutions)
+    }
+    return value
+  }
+
+  /** A finite span of at least `min`. */
+  duration(key: string, value: Duration, min: Duration): Duration {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < min) {
+      throw this.invalid(
+        `${key} must be a finite Duration of at least ${formatDuration(min)}, got ${formatDuration(value)}`,
+      )
+    }
+    return value
+  }
+
+  /** A finite span above zero, such as a limit nothing could meet at zero. */
+  positiveDuration(key: string, value: Duration, ...solutions: string[]): Duration {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      throw this.invalid(`${key} must be a finite Duration greater than 0s, got ${formatDuration(value)}`, ...solutions)
+    }
+    return value
+  }
+
+  percent(key: string, value: number): number {
+    if (typeof value !== 'number' || !(value > 0 && value <= 100)) {
+      throw this.invalid(`${key} must be greater than 0 and at most 100, got ${String(value)}`)
+    }
+    return value
+  }
+
+  boolean(key: string, value: boolean | undefined, fallback: boolean): boolean {
+    const resolved = value ?? fallback
+    if (typeof resolved !== 'boolean') {
+      throw this.invalid(`${key} must be a boolean, got ${typeof resolved}`)
+    }
+    return resolved
+  }
+
+  function<F>(key: string, value: F | undefined): F | undefined {
+    if (value !== undefined && typeof value !== 'function') {
+      throw this.invalid(`${key} must be a function, got ${typeof value}`)
+    }
+    return value
+  }
+
+  /** An {@link ErrorMatcher} as a predicate; a list of classes is checked here, once. */
+  matcher(key: string, value: ErrorMatcher | undefined): ((error: unknown) => boolean) | undefined {
+    if (value === undefined || typeof value === 'function') {
+      return value
+    }
+    if (!Array.isArray(value) || !value.every(entry => typeof entry === 'function')) {
+      throw this.invalid(`${key} must be a function or an array of error classes, got ${described(value)}`)
+    }
+
+    const classes: readonly ErrorClass[] = [...value]
+    return error => {
+      for (let i = 0; i < classes.length; i++) {
+        if (error instanceof classes[i]!) {
+          return true
+        }
+      }
+      return false
+    }
+  }
+
+  clock(value: Clock | undefined): Clock {
+    if (value === undefined) {
+      return systemClock
+    }
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      typeof value.now !== 'function' ||
+      typeof value.setTimeout !== 'function' ||
+      typeof value.clearTimeout !== 'function'
+    ) {
+      throw this.invalid('clock must be an object with now(), setTimeout() and clearTimeout() methods')
+    }
+    return value
+  }
+}

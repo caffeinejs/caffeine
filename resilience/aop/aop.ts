@@ -1,11 +1,10 @@
 import { $aop, type AnyClass, type JoinPoint, type MethodAspect, type Pointcut, reflect } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { linked } from '../abort.js'
-import { compose } from '../compose.js'
+import { compose, lift, signalIndex, withSignal } from '../compose.js'
 import { ErrInvalidOption } from '../errors.js'
-import { type Fallback as FallbackPolicy, fallback } from '../fallback/fallback.js'
-import type { Resilient, Strategy } from '../strategy.js'
+import { fallback } from '../fallback/fallback.js'
+import type { Operation, PolicyLike } from '../policy.js'
 import { ANNOTATIONS, Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from './annotations.js'
 import { kAddFallback, labelOf, type ResilienceKind, type ResilienceRegistry } from './registry.js'
 
@@ -39,19 +38,16 @@ export const resiliencePointcut: Pointcut = $aop.pointcut(
   (member, _descriptor, cls) => annotated(cls, member),
 )
 
-// What one method runs through, built once, the first time it is needed.
-interface Plan {
-  readonly run: Resilient
-  readonly fallback: { readonly method: Member; readonly policy: FallbackPolicy } | undefined
-}
+// What one method runs through, built once, the first time it is needed. The join point is the input.
+type Plan = Operation<unknown, JoinPoint>
 
 /**
- * Runs each annotated method through its strategies, in one fixed order whatever the order of the decorators:
+ * Runs each annotated method through its policies, in one fixed order whatever the order of the decorators:
  * fallback, retry, circuit breaker, rate limiter, bulkhead, time limiter.
  *
- * The first argument that is an `AbortSignal` is taken as the caller's signal. Where a strategy derives a signal for
- * the attempt, the method receives one that aborts with either, and stays linked to the caller after the method
- * returns, so a body it streams still learns that the caller left.
+ * The first argument that is an `AbortSignal` is taken as the caller's signal. Where a time limiter gives the attempt
+ * a signal of its own, the method receives that one in its place: it aborts with the caller's too, and stays linked
+ * to it after the method returns, so a body it streams still learns that the caller left.
  */
 export class ResilienceAspect implements MethodAspect {
   readonly #registry: ResilienceRegistry
@@ -111,34 +107,12 @@ export class ResilienceAspect implements MethodAspect {
       // The method returns a promise, so a plan that cannot be built rejects it rather than throwing.
       return Promise.reject(error)
     }
-    const args = jp.args
 
-    let at = -1
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] instanceof AbortSignal) {
-        at = i
-        break
-      }
+    const signal = jp.args[signalIndex(jp.args)] as AbortSignal | undefined
+    if (signal !== undefined && signal.aborted) {
+      return Promise.reject(signal.reason)
     }
-    const signal = at === -1 ? undefined : (args[at] as AbortSignal)
-
-    const call = plan.run(ctx => {
-      if (at === -1 || ctx.signal === signal) {
-        return jp.proceed(...args) as Promise<unknown>
-      }
-
-      const attempt = args.slice()
-      attempt[at] = ctx.signal === undefined ? undefined : linked(signal!, ctx.signal)
-      return jp.proceed(...attempt) as Promise<unknown>
-    }, signal)
-
-    if (plan.fallback === undefined) {
-      return call
-    }
-
-    const { method, policy } = plan.fallback
-    const target = jp.target as Record<Member, (...args: unknown[]) => unknown>
-    return policy.recover(call, error => target[method]!(error, ...args), signal)
+    return plan({ signal }, jp)
   }
 
   #plan(cls: AnyClass, member: Member): Plan {
@@ -158,7 +132,7 @@ export class ResilienceAspect implements MethodAspect {
 
   #build(cls: AnyClass, member: Member): Plan {
     const where = `${cls.name}.${String(member)}`
-    const named = (kind: ResilienceKind, decorator: string, name: string | undefined): Strategy | undefined => {
+    const named = (kind: ResilienceKind, decorator: string, name: string | undefined): PolicyLike | undefined => {
       if (name === undefined) {
         return undefined
       }
@@ -178,17 +152,20 @@ export class ResilienceAspect implements MethodAspect {
 
     // Outermost first: retry, circuit breaker, rate limiter, bulkhead, time limiter. The time limiter sits inside the
     // bulkhead so it times the running call, not the wait for a slot, which the bulkhead bounds and refuses itself.
-    const strategies = [
+    const policies = [
       named('retry', 'Retry', reflect.effective(cls, Retry, member)?.name),
       named('circuitBreaker', 'CircuitBreaker', reflect.effective(cls, CircuitBreaker, member)),
       named('rateLimiter', 'RateLimiter', reflect.effective(cls, RateLimiter, member)),
       named('bulkhead', 'Bulkhead', reflect.effective(cls, Bulkhead, member)),
       named('timeLimiter', 'TimeLimiter', reflect.effective(cls, TimeLimiter, member)),
-    ].filter((strategy): strategy is Strategy => strategy !== undefined)
+    ].filter((policy): policy is PolicyLike => policy !== undefined)
 
+    const method = lift<unknown, JoinPoint>(
+      (ctx, jp) => jp.proceed(...withSignal(jp.args as unknown[], ctx.signal, undefined)) as Promise<unknown>,
+    )
     const recovery = reflect.effective(cls, Fallback, member)
     if (recovery === undefined) {
-      return { run: compose(...strategies), fallback: undefined }
+      return compose(...policies)(method)
     }
 
     if (typeof (cls.prototype as Record<Member, unknown>)[recovery.method] !== 'function') {
@@ -202,8 +179,14 @@ export class ResilienceAspect implements MethodAspect {
       )
     }
 
-    const policy = fallback({ name: where, fallbackOn: recovery.fallbackOn })
-    this.#registry[kAddFallback](policy)
-    return { run: compose(...strategies), fallback: { method: recovery.method, policy } }
+    const answer = fallback(
+      (error, jp) => {
+        const { target, args } = jp as JoinPoint
+        return (target as Record<Member, (...args: unknown[]) => unknown>)[recovery.method]!(error, ...args)
+      },
+      { name: where, on: recovery.on },
+    )
+    this.#registry[kAddFallback](answer)
+    return compose(answer, ...policies)(method)
   }
 }

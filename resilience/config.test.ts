@@ -7,10 +7,10 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ResilienceConfigSchema } from './_spectypes/index.js'
-import { Resilience } from './aop/feature.js'
+import { Resilience, type ResilienceBuilder } from './aop/feature.js'
 import { ResilienceRegistry } from './aop/registry.js'
-import { runWith } from './compose.js'
-import { useFakeClock } from './fake_clock.testkit.js'
+import { fakeTimersClock } from './clock.testkit.js'
+import { run } from './compose.js'
 import { ErrRateLimitExceeded } from './ratelimiter/ratelimiter.js'
 
 const appConfigSchema = $t.Object(
@@ -31,11 +31,15 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-// Boots an application whose configuration comes from `source`, with the resilience block handed to the feature.
-async function registryFrom(source: ConfigSource): Promise<ResilienceRegistry> {
+// Boots an application whose configuration comes from `source`, with the resilience block handed to the feature and
+// whatever `define` adds in code over it.
+async function registryFrom(
+  source: ConfigSource,
+  define: (r: ResilienceBuilder<AppConfig>) => ResilienceBuilder<AppConfig> = r => r,
+): Promise<ResilienceRegistry> {
   const config = newConfiguration(appConfigSchema).source(source).build().config
   const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config }).install(
-    Resilience<AppConfig>((r, { config }) => r.config(config.resilience)),
+    Resilience<AppConfig>((r, { config }) => define(r.config(config.resilience))),
   )
   opened.push(() => app.close())
   await app.bootstrap()
@@ -45,16 +49,17 @@ async function registryFrom(source: ConfigSource): Promise<ResilienceRegistry> {
 describe('resilience configuration', () => {
   // Configuration writes durations as text: the instance must run on what the text says, in milliseconds.
   it('decodes a duration written as text into the instance it defines', async () => {
-    useFakeClock({ toFake: ['performance'] })
+    vi.useFakeTimers({ toFake: ['performance'] })
     const registry = await registryFrom(
       new InlineConfigSource({
         resilience: { rateLimiters: { partner: { limitForPeriod: 1, limitRefreshPeriod: '1500ms' } } },
       }),
+      r => r.rateLimiter('partner', { clock: fakeTimersClock }),
     )
     const quota = registry.rateLimiter('partner')
 
-    await runWith(() => 'ok', quota)
-    const refused = await runWith(() => 'ok', quota).catch((error: unknown) => error)
+    await run(quota.wrap(async () => 'ok'))
+    const refused = await run(quota.wrap(async () => 'ok')).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(ErrRateLimitExceeded)
     expect((refused as ErrRateLimitExceeded).retryAfter).toBe(1_500)
@@ -84,10 +89,12 @@ describe('resilience configuration', () => {
     const registry = await registryFrom(new EnvConfigSource({ prefix: 'APP_' }))
     let attempts = 0
 
-    await runWith(() => {
-      attempts++
-      throw new Error('down')
-    }, registry.retry('inventory')).catch(() => undefined)
+    await run(
+      registry.retry('inventory').wrap(async () => {
+        attempts++
+        throw new Error('down')
+      }),
+    ).catch(() => undefined)
 
     expect(attempts).toBe(5)
   })

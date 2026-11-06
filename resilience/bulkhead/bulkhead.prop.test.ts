@@ -2,12 +2,12 @@ import { Millisecond } from '@caffeinejs/std/duration'
 import { fc, it } from '@fast-check/vitest'
 import { afterEach, beforeEach, describe, expect, vi } from 'vitest'
 
-import { runWith } from '../compose.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
+import { fakeTimersClock } from '../clock.testkit.js'
+import { compose, run } from '../compose.js'
 import { bulkhead } from './bulkhead.js'
 
 beforeEach(() => {
-  useFakeClock()
+  vi.useFakeTimers()
 })
 
 afterEach(() => {
@@ -39,6 +39,7 @@ describe('bulkhead (property)', () => {
         maxConcurrentCalls,
         maxQueuedCalls,
         maxWaitDuration: maxWait * Millisecond,
+        clock: fakeTimersClock,
       })
       let running = 0
       let peak = 0
@@ -60,8 +61,8 @@ describe('bulkhead (property)', () => {
           const before = pool.metrics()
           const runningBefore = running
           let queued = false
-          runWith(
-            () => {
+          run(
+            pool.wrap(async () => {
               if (queued) {
                 startedFromLine.push(i)
               }
@@ -73,8 +74,7 @@ describe('bulkhead (property)', () => {
                   resolve()
                 }, duration),
               )
-            },
-            pool,
+            }),
             controller.signal,
           ).then(settle, settle)
 

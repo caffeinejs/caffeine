@@ -1,12 +1,12 @@
 import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { abortReason } from '../abort.js'
-import { settled, type RawNext } from '../compose.js'
+import { lift, mark } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { ErrCallRefused, ErrInvalidOption, restoreStacks, suppressStacks } from '../errors.js'
-import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
-import { clampDelay, clock, type TimerHandle } from '../timers.js'
+import { ErrCallRefused, refusal } from '../errors.js'
+import { Options } from '../options.js'
+import type { CallContext, Operation, Wrapper } from '../policy.js'
+import { clampDelay, type Clock } from '../timers.js'
 import { type Waiter, Waiters } from '../waiters.js'
 
 /**
@@ -14,23 +14,27 @@ import { type Waiter, Waiters } from '../waiters.js'
  * allowed to. The operation did not run.
  */
 export class ErrBulkheadFull extends ErrCallRefused {
-  // Built once rather than per refusal: refusals come in bulk while a dependency is slow.
-  static readonly #footer = errMessage('').reference('@caffeinejs/resilience', ErrBulkheadFull).build()
-
   /** The name of the bulkhead that refused the call. */
   readonly bulkhead: string
 
   /** `waited` is how long the call waited for a slot before it was refused; `undefined` when it could not wait. */
   constructor(bulkhead: string, maxConcurrentCalls: number, queuedCalls: number, waited?: Duration) {
-    const running = `${maxConcurrentCalls} ${maxConcurrentCalls === 1 ? 'call' : 'calls'} running`
-    const reason =
-      waited === undefined
-        ? `bulkhead is full with ${running} and ${queuedCalls} queued`
-        : `no slot freed within ${formatDuration(waited)} with ${running}`
-    super(`Cannot call "${bulkhead}": ${reason}${ErrBulkheadFull.#footer}`, 'ERR_BULKHEAD_FULL', undefined)
+    super(fullMessage(bulkhead, maxConcurrentCalls, queuedCalls, waited), 'ERR_BULKHEAD_FULL', undefined)
     this.name = 'ErrBulkheadFull'
     this.bulkhead = bulkhead
   }
+}
+
+// Built once rather than per refusal: refusals come in bulk while a dependency is slow.
+const footer = errMessage('').reference('@caffeinejs/resilience', ErrBulkheadFull).build()
+
+function fullMessage(bulkhead: string, maxConcurrentCalls: number, queuedCalls: number, waited?: Duration): string {
+  const running = `${maxConcurrentCalls} ${maxConcurrentCalls === 1 ? 'call' : 'calls'} running`
+  const reason =
+    waited === undefined
+      ? `bulkhead is full with ${running} and ${queuedCalls} queued`
+      : `no slot freed within ${formatDuration(waited)} with ${running}`
+  return `Cannot call "${bulkhead}": ${reason}${footer}`
 }
 
 export interface BulkheadOptions {
@@ -47,6 +51,8 @@ export interface BulkheadOptions {
   maxQueuedCalls?: number
   /** Whether a refused call's {@link ErrBulkheadFull} captures a stack trace. Off by default. */
   captureStackTrace?: boolean
+  /** Where the bulkhead reads the time and sets the timers of waiting calls. Defaults to the runtime's. */
+  clock?: Clock
 }
 
 export interface BulkheadMetrics {
@@ -65,13 +71,14 @@ export interface BulkheadEvents {
   finished: { readonly name: string; readonly duration: Duration }
 }
 
-interface QueuedCall<T> extends Waiter {
-  readonly ctx: ExecutionContext
-  readonly run: RawNext<T>
+interface QueuedCall<T, I> extends Waiter {
+  readonly ctx: CallContext
+  readonly inner: Operation<T, I>
+  readonly input: I
   readonly resolve: (value: T) => void
   readonly reject: (reason: unknown) => void
   readonly since: number
-  timer: TimerHandle | undefined
+  timer: unknown
   onAbort: (() => void) | undefined
 }
 
@@ -85,60 +92,28 @@ interface QueuedCall<T> extends Waiter {
  * A slot is given back when the rest of the chain settles, never earlier: a time limiter outside it that gave up on
  * a call does not free the slot while the operation is still running.
  */
-export class Bulkhead implements StrategyObject {
+export class Bulkhead implements Wrapper {
   readonly #name: string
   readonly #maxConcurrentCalls: number
   readonly #maxWaitMs: number
   readonly #maxQueuedCalls: number
   readonly #captureStackTrace: boolean
-  readonly #queue = new Waiters<QueuedCall<any>>()
+  readonly #clock: Clock
+  readonly #queue = new Waiters<QueuedCall<any, any>>()
   readonly #emitter = new Emitter<BulkheadEvents>()
   #available: number
   #rejected = 0
 
   constructor(options: BulkheadOptions) {
-    const name = (options as Partial<BulkheadOptions> | undefined)?.name
-    if (typeof name !== 'string' || name.length === 0) {
-      throw new ErrInvalidOption(
-        errMessage('Cannot create bulkhead: name must be a non-empty string')
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
-    }
-
-    const invalid = (reason: string): ErrInvalidOption =>
-      new ErrInvalidOption(
-        errMessage(`Cannot create bulkhead "${name}": ${reason}`)
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
-
-    const maxConcurrentCalls = options.maxConcurrentCalls ?? 25
-    if (!Number.isInteger(maxConcurrentCalls) || maxConcurrentCalls < 1) {
-      throw invalid(`maxConcurrentCalls must be an integer of at least 1, got ${String(maxConcurrentCalls)}`)
-    }
-
-    const maxWaitDuration = options.maxWaitDuration ?? 0
-    if (typeof maxWaitDuration !== 'number' || !Number.isFinite(maxWaitDuration) || maxWaitDuration < 0) {
-      throw invalid(`maxWaitDuration must be a finite Duration of at least 0s, got ${formatDuration(maxWaitDuration)}`)
-    }
-
-    const maxQueuedCalls = options.maxQueuedCalls ?? maxConcurrentCalls
-    if (!Number.isInteger(maxQueuedCalls) || maxQueuedCalls < 0) {
-      throw invalid(`maxQueuedCalls must be an integer of at least 0, got ${String(maxQueuedCalls)}`)
-    }
-
-    const captureStackTrace = options.captureStackTrace ?? false
-    if (typeof captureStackTrace !== 'boolean') {
-      throw invalid(`captureStackTrace must be a boolean, got ${typeof captureStackTrace}`)
-    }
-
-    this.#name = name
-    this.#maxConcurrentCalls = maxConcurrentCalls
-    this.#maxWaitMs = clampDelay(maxWaitDuration, `the wait of bulkhead "${name}"`)
-    this.#maxQueuedCalls = maxQueuedCalls
-    this.#captureStackTrace = captureStackTrace
-    this.#available = maxConcurrentCalls
+    const o = new Options('bulkhead', options)
+    this.#name = o.name
+    this.#maxConcurrentCalls = o.integer('maxConcurrentCalls', options.maxConcurrentCalls ?? 25, 1)
+    const maxWaitDuration = o.duration('maxWaitDuration', options.maxWaitDuration ?? 0, 0)
+    this.#maxQueuedCalls = o.integer('maxQueuedCalls', options.maxQueuedCalls ?? this.#maxConcurrentCalls, 0)
+    this.#captureStackTrace = o.boolean('captureStackTrace', options.captureStackTrace, false)
+    this.#clock = o.clock(options.clock)
+    this.#maxWaitMs = clampDelay(maxWaitDuration, `the wait of bulkhead "${o.name}"`)
+    this.#available = this.#maxConcurrentCalls
   }
 
   get name(): string {
@@ -162,98 +137,96 @@ export class Bulkhead implements StrategyObject {
     }
   }
 
-  run<T>(ctx: ExecutionContext, next: Next<T>): Promise<T> {
-    if (this.#available > 0) {
-      this.#available--
-      if (this.#emitter.has('permitted')) {
-        this.#emitter.emit('permitted', { name: this.#name, waited: 0 })
-      }
-
-      const start = clock.now()
-      // `run` is public, so `next` may be one the chain never normalised. It is called inside this frame's own `try`:
-      // a helper that called it would add a frame to every stack trace.
-      let pending: Promise<T>
-      try {
-        pending = settled((next as RawNext<T>)(ctx))
-      } catch (error) {
-        pending = Promise.reject(error)
-      }
-
-      return pending.then(
-        value => {
-          this.#release(start)
-          return value
-        },
-        error => {
-          this.#release(start)
-          throw error
-        },
-      )
-    }
-
-    if (this.#maxWaitMs === 0 || this.#queue.size >= this.#maxQueuedCalls) {
-      this.#refused()
-      // Built here, in the frame that refuses, so a captured stack starts at `run` and not in a helper. Returned, not
-      // thrown: throwing costs more than the rest of the refusal together.
-      const queued = this.#queue.size
-      return Promise.reject(
-        this.#captureStackTrace
-          ? new ErrBulkheadFull(this.#name, this.#maxConcurrentCalls, queued)
-          : stackless(this.#name, this.#maxConcurrentCalls, queued, undefined),
-      )
-    }
-
-    const signal = ctx.signal
-    if (signal !== undefined && signal.aborted) {
-      return Promise.reject(abortReason(signal))
-    }
-
-    return new Promise<T>((resolve, reject) => {
-      const call: QueuedCall<T> = {
-        ctx,
-        run: next,
-        resolve,
-        reject,
-        since: clock.now(),
-        timer: undefined,
-        onAbort: undefined,
-        prev: undefined,
-        next: undefined,
-        queued: false,
-      }
-      this.#queue.push(call)
-
-      // Not unref'd: a call waiting for a slot is pending work.
-      call.timer = setTimeout(() => {
-        if (this.#leave(call)) {
-          this.#refused()
-          const queued = this.#queue.size
-          reject(
-            this.#captureStackTrace
-              ? new ErrBulkheadFull(this.#name, this.#maxConcurrentCalls, queued, this.#maxWaitMs)
-              : stackless(this.#name, this.#maxConcurrentCalls, queued, this.#maxWaitMs),
-          )
+  wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
+    const inner = lift(op)
+    return mark((ctx, input) => {
+      if (this.#available > 0) {
+        this.#available--
+        if (this.#emitter.has('permitted')) {
+          this.#emitter.emit('permitted', { name: this.#name, waited: 0 })
         }
-      }, this.#maxWaitMs)
 
-      if (signal !== undefined) {
-        call.onAbort = () => {
+        const start = this.#clock.now()
+        return inner(ctx, input).then(
+          value => {
+            this.#release(start)
+            return value
+          },
+          error => {
+            this.#release(start)
+            throw error
+          },
+        )
+      }
+
+      if (this.#maxWaitMs === 0 || this.#queue.size >= this.#maxQueuedCalls) {
+        this.#refused()
+        // Returned, not thrown: throwing costs more than the rest of the refusal together.
+        return Promise.reject(this.#full(undefined))
+      }
+
+      const signal = ctx.signal
+      if (signal !== undefined && signal.aborted) {
+        return Promise.reject(signal.reason)
+      }
+
+      return new Promise<T>((resolve, reject) => {
+        const call: QueuedCall<T, I> = {
+          ctx,
+          inner,
+          input,
+          resolve,
+          reject,
+          since: this.#clock.now(),
+          timer: undefined,
+          onAbort: undefined,
+          prev: undefined,
+          next: undefined,
+          queued: false,
+        }
+        this.#queue.push(call)
+
+        // Not unref'd: a call waiting for a slot is pending work.
+        call.timer = this.#clock.setTimeout(() => {
           if (this.#leave(call)) {
-            reject(abortReason(signal))
+            this.#refused()
+            reject(this.#full(this.#maxWaitMs))
           }
+        }, this.#maxWaitMs)
+
+        if (signal !== undefined) {
+          call.onAbort = () => {
+            if (this.#leave(call)) {
+              reject(signal.reason)
+            }
+          }
+          signal.addEventListener('abort', call.onAbort, { once: true })
         }
-        signal.addEventListener('abort', call.onAbort, { once: true })
-      }
+      })
+    })
+  }
+
+  // The refusal, with a stack trace only when asked for one.
+  #full(waited: Duration | undefined): ErrBulkheadFull {
+    const queued = this.#queue.size
+    if (this.#captureStackTrace) {
+      return new ErrBulkheadFull(this.#name, this.#maxConcurrentCalls, queued, waited)
+    }
+    return refusal(ErrBulkheadFull, fullMessage(this.#name, this.#maxConcurrentCalls, queued, waited), {
+      code: 'ERR_BULKHEAD_FULL',
+      name: 'ErrBulkheadFull',
+      retryAfter: undefined,
+      bulkhead: this.#name,
     })
   }
 
   // Takes a waiting call out of line and clears what it left behind. `false` when it had already left.
-  #leave(call: QueuedCall<any>): boolean {
+  #leave(call: QueuedCall<any, any>): boolean {
     if (!this.#queue.remove(call)) {
       return false
     }
 
-    clearTimeout(call.timer)
+    this.#clock.clearTimeout(call.timer)
     if (call.onAbort !== undefined) {
       call.ctx.signal?.removeEventListener('abort', call.onAbort)
     }
@@ -263,7 +236,7 @@ export class Bulkhead implements StrategyObject {
   // A call that held a slot settled: the slot goes to the first in line, or back to the pool. The slot changes hands
   // before `finished` is emitted, so a listener that starts another call finds it where it is.
   #release(start: number): void {
-    const duration = clock.now() - start
+    const duration = this.#clock.now() - start
     const call = this.#queue.first
     if (call === undefined) {
       this.#available++
@@ -280,23 +253,15 @@ export class Bulkhead implements StrategyObject {
     }
   }
 
-  // Runs a call that waited for its slot. Guarded like the first attempt in `run`, and called from this frame: a
-  // helper would add a frame to every stack trace.
-  #admit<T>(call: QueuedCall<T>): void {
-    const start = clock.now()
+  // Runs a call that waited for its slot.
+  #admit<T, I>(call: QueuedCall<T, I>): void {
+    const start = this.#clock.now()
     if (this.#emitter.has('permitted')) {
       this.#emitter.emit('permitted', { name: this.#name, waited: start - call.since })
     }
 
-    let pending: Promise<T>
-    try {
-      pending = settled(call.run(call.ctx))
-    } catch (error) {
-      pending = Promise.reject(error)
-    }
-
     // Both handlers settle the caller's promise themselves and never throw.
-    void pending.then(
+    void call.inner(call.ctx, call.input).then(
       value => {
         this.#release(start)
         call.resolve(value)
@@ -313,21 +278,6 @@ export class Bulkhead implements StrategyObject {
     if (this.#emitter.has('rejected')) {
       this.#emitter.emit('rejected', { name: this.#name })
     }
-  }
-}
-
-// A refusal without a stack trace.
-function stackless(
-  bulkhead: string,
-  maxConcurrentCalls: number,
-  queuedCalls: number,
-  waited: Duration | undefined,
-): ErrBulkheadFull {
-  const limit = suppressStacks()
-  try {
-    return new ErrBulkheadFull(bulkhead, maxConcurrentCalls, queuedCalls, waited)
-  } finally {
-    restoreStacks(limit)
   }
 }
 

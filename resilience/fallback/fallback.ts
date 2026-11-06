@@ -1,16 +1,25 @@
 import { errMessage } from '@caffeinejs/std/err'
 
+import { lift, mark } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { described, ErrInvalidOption } from '../errors.js'
+import { described, type ErrorMatcher, ErrInvalidOption } from '../errors.js'
+import { Options } from '../options.js'
+import type { Operation, RecoveryWrapper } from '../policy.js'
+
+/**
+ * What answers a failed call: it receives the error and the call's input, such as the arguments of a decorated
+ * function, and returns the value the caller gets instead.
+ */
+export type FallbackHandler<R> = (error: unknown, input: unknown) => R | PromiseLike<R>
 
 export interface FallbackOptions {
-  /** Names the fallback in events and metrics. */
-  name: string
+  /** Names the fallback in events and metrics. Defaults to `fallback`. */
+  name?: string
   /**
-   * Whether an error is handed to the handler. Defaults to every error. It must return a boolean; anything else
-   * rejects the call with {@link ErrInvalidOption}.
+   * Which errors the handler answers: a predicate, or a list of error classes. Defaults to every error. A predicate
+   * must return a boolean; anything else rejects the call with {@link ErrInvalidOption}.
    */
-  fallbackOn?: (error: unknown) => boolean
+  on?: ErrorMatcher
 }
 
 /** Lifetime counts, one per call, by how it ended. */
@@ -19,7 +28,7 @@ export interface FallbackMetrics {
   readonly successfulCalls: number
   /** The call failed and the handler's value took its place. */
   readonly recoveredCalls: number
-  /** The handler threw, or `fallbackOn` did. */
+  /** The handler threw, or `on` did. */
   readonly failedCalls: number
   /** The call failed with an error the fallback does not handle, or after the caller aborted. */
   readonly ignoredCalls: number
@@ -27,46 +36,38 @@ export interface FallbackMetrics {
 
 export interface FallbackEvents {
   recovered: { readonly name: string; readonly error: unknown }
-  /** `thrown` is what the handler, or `fallbackOn`, threw; `error` is the call's error it was handling. */
+  /** `thrown` is what the handler, or `on`, threw; `error` is the call's error it was handling. */
   failure: { readonly name: string; readonly error: unknown; readonly thrown: unknown }
   ignored: { readonly name: string; readonly error: unknown; readonly reason: 'not_handled' | 'aborted' }
 }
 
 /**
- * What a call answers when it fails: which errors it handles, plus events and metrics, shared by every call that
- * uses it. Each call hands it the promise to watch and the handler for that call.
+ * Answers a failed call with what its handler returns, so the caller gets a value instead of the error. It widens
+ * the result type, so it sits outermost: `compose(fallback(() => CACHED), retries, breaker)`.
  *
- * It never runs after the caller's signal aborted.
+ * An error `on` declines passes through unchanged, and so does any error once the caller's signal has aborted:
+ * nobody is waiting for the answer. A handler that throws rejects the call with what it threw.
  */
-export class Fallback {
+export class Fallback<R = unknown> implements RecoveryWrapper<R> {
+  declare readonly recovers?: R
   readonly #name: string
-  readonly #fallbackOn: ((error: unknown) => boolean) | undefined
+  readonly #handler: FallbackHandler<R>
+  readonly #on: ((error: unknown) => boolean) | undefined
   readonly #emitter = new Emitter<FallbackEvents>()
   #successful = 0
   #recovered = 0
   #failed = 0
   #ignored = 0
 
-  constructor(options: FallbackOptions) {
-    const name = (options as Partial<FallbackOptions> | undefined)?.name
-    if (typeof name !== 'string' || name.length === 0) {
-      throw new ErrInvalidOption(
-        errMessage('Cannot create fallback: name must be a non-empty string')
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
+  constructor(handler: FallbackHandler<R>, options: FallbackOptions = {}) {
+    const o = new Options('fallback', { ...options, name: options.name ?? 'fallback' })
+    if (typeof handler !== 'function') {
+      throw o.invalid(`handler must be a function, got ${typeof handler}`)
     }
 
-    if (options.fallbackOn !== undefined && typeof options.fallbackOn !== 'function') {
-      throw new ErrInvalidOption(
-        errMessage(`Cannot create fallback "${name}": fallbackOn must be a function, got ${typeof options.fallbackOn}`)
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
-    }
-
-    this.#name = name
-    this.#fallbackOn = options.fallbackOn
+    this.#name = o.name
+    this.#handler = handler
+    this.#on = o.matcher('on', options.on)
   }
 
   get name(): string {
@@ -90,45 +91,20 @@ export class Fallback {
     }
   }
 
-  /**
-   * The call's value, or, when it fails with an error `fallbackOn` accepts, what `handler` returns for that error.
-   *
-   * An error the fallback does not handle passes through unchanged, and so does any error once `signal` has aborted.
-   * A handler that throws rejects the call with what it threw.
-   */
-  recover<T, R>(
-    call: PromiseLike<T>,
-    handler: (error: unknown) => R | PromiseLike<R>,
-    signal?: AbortSignal,
-  ): Promise<T | R> {
-    if (typeof handler !== 'function') {
-      // The call's own outcome is still observed: left alone, a failing call would surface as an unhandled rejection.
-      Promise.resolve(call).then(undefined, () => undefined)
-      return Promise.reject(
-        new ErrInvalidOption(
-          errMessage(
-            `Cannot recover with fallback "${this.#name}": the handler must be a function, got ${typeof handler}`,
-          )
-            .reference('@caffeinejs/resilience', ErrInvalidOption)
-            .build(),
-        ),
-      )
-    }
-
-    return Promise.resolve(call).then(
-      value => {
-        this.#successful++
-        return value
-      },
-      error => this.#onError(error, handler, signal),
+  wrap<T, I = void>(op: Operation<T, I>): Operation<T | R, I> {
+    const inner = lift(op)
+    return mark<T | R, I>((ctx, input) =>
+      inner(ctx, input).then(
+        value => {
+          this.#successful++
+          return value
+        },
+        error => this.#onError(error, ctx.signal, input),
+      ),
     )
   }
 
-  #onError<R>(
-    error: unknown,
-    handler: (error: unknown) => R | PromiseLike<R>,
-    signal: AbortSignal | undefined,
-  ): Promise<R> {
+  #onError(error: unknown, signal: AbortSignal | undefined, input: unknown): Promise<R> {
     if (signal !== undefined && signal.aborted) {
       this.#ignore(error, 'aborted')
       return Promise.reject(error)
@@ -136,11 +112,11 @@ export class Fallback {
 
     let handled: unknown
     try {
-      handled = this.#fallbackOn === undefined || this.#fallbackOn(error)
+      handled = this.#on === undefined || this.#on(error)
       if (typeof handled !== 'boolean') {
         throw new ErrInvalidOption(
-          errMessage(`Cannot run fallback "${this.#name}": fallbackOn must return a boolean, got ${described(handled)}`)
-            .solutions('Return true or false from fallbackOn: an async function returns a promise, which is not one')
+          errMessage(`Cannot run fallback "${this.#name}": on must return a boolean, got ${described(handled)}`)
+            .solutions('Return true or false from on: an async function returns a promise, which is not one')
             .reference('@caffeinejs/resilience', ErrInvalidOption)
             .build(),
         )
@@ -157,7 +133,7 @@ export class Fallback {
 
     let answer: R | PromiseLike<R>
     try {
-      answer = handler(error)
+      answer = this.#handler(error, input)
     } catch (thrown) {
       this.#fail(error, thrown)
       return Promise.reject(thrown)
@@ -194,10 +170,10 @@ export class Fallback {
 }
 
 /**
- * Creates a {@link Fallback}.
+ * Creates a {@link Fallback} that answers with what `handler` returns.
  *
- * @throws {@link ErrInvalidOption} when an option is invalid.
+ * @throws {@link ErrInvalidOption} when `handler` is not a function or an option is invalid.
  */
-export function fallback(options: FallbackOptions): Fallback {
-  return new Fallback(options)
+export function fallback<R>(handler: FallbackHandler<R>, options?: FallbackOptions): Fallback<R> {
+  return new Fallback(handler, options)
 }

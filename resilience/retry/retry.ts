@@ -2,11 +2,12 @@ import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { exponential } from '../backoff.js'
-import { settled } from '../compose.js'
+import { lift, mark } from '../compose.js'
 import { Emitter } from '../emitter.js'
 import { described, ErrCallRefused, ErrInvalidOption, ErrResilience } from '../errors.js'
-import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
-import { clampDelay } from '../timers.js'
+import { Options } from '../options.js'
+import type { CallContext, Operation, Wrapper } from '../policy.js'
+import { clampDelay, type Clock } from '../timers.js'
 import { sleep } from './_sleep.js'
 
 /**
@@ -65,6 +66,8 @@ export interface RetryOptions {
    * the caller; `true` rejects with {@link ErrMaxRetriesExceeded}. Either way the call counts as failed.
    */
   failAfterMaxAttempts?: boolean
+  /** Where the retry sets the timers it waits on. Defaults to the runtime's. */
+  clock?: Clock
 }
 
 /**
@@ -103,9 +106,10 @@ export interface RetryEvents {
 // One per call that needs a second attempt. It carries the resolvers of the promise the caller holds, so a later
 // attempt settles that promise directly instead of resolving the attempt before it: the memory and the settle time
 // of a call do not grow with the attempts it used.
-interface RetriedCall<T> {
-  readonly ctx: ExecutionContext
-  readonly next: Next<T>
+interface RetriedCall<T, I> {
+  readonly ctx: CallContext
+  readonly inner: Operation<T, I>
+  readonly input: I
   readonly resolve: (value: T) => void
   readonly reject: (reason: unknown) => void
   attempt: number
@@ -121,13 +125,14 @@ interface RetriedCall<T> {
  * Once every attempt is used, the caller gets the last error unchanged. The caller's signal stops it: an abort
  * during a wait rejects at once with the abort reason, and a failure after an abort is not retried.
  */
-export class Retry implements StrategyObject {
+export class Retry implements Wrapper {
   readonly #name: string
   readonly #maxAttempts: number
   readonly #backoff: Duration | RetryBackoff
   readonly #retryOn: ((error: unknown, attempt: number) => boolean) | undefined
   readonly #retryOnResult: ((result: unknown) => boolean) | undefined
   readonly #failAfterMaxAttempts: boolean
+  readonly #clock: Clock
   readonly #emitter = new Emitter<RetryEvents>()
   #successfulWithoutRetry = 0
   #successfulWithRetry = 0
@@ -135,49 +140,19 @@ export class Retry implements StrategyObject {
   #failedWithRetry = 0
 
   constructor(options: RetryOptions) {
-    const name = (options as Partial<RetryOptions> | undefined)?.name
-    if (typeof name !== 'string' || name.length === 0) {
-      throw new ErrInvalidOption(
-        errMessage('Cannot create retry: name must be a non-empty string')
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
-    }
-
-    const invalid = (reason: string): ErrInvalidOption =>
-      new ErrInvalidOption(
-        errMessage(`Cannot create retry "${name}": ${reason}`)
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
-
-    const maxAttempts = options.maxAttempts ?? 3
-    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
-      throw invalid(`maxAttempts must be an integer of at least 1, got ${String(maxAttempts)}`)
-    }
+    const o = new Options('retry', options)
+    this.#name = o.name
+    this.#maxAttempts = o.integer('maxAttempts', options.maxAttempts ?? 3, 1)
 
     const backoff = options.backoff ?? exponential()
     if (typeof backoff !== 'function' && (typeof backoff !== 'number' || !Number.isFinite(backoff) || backoff < 0)) {
-      throw invalid(`backoff must be a finite Duration of at least 0s or a function, got ${formatDuration(backoff)}`)
+      throw o.invalid(`backoff must be a finite Duration of at least 0s or a function, got ${formatDuration(backoff)}`)
     }
-
-    for (const key of ['retryOn', 'retryOnResult'] as const) {
-      if (options[key] !== undefined && typeof options[key] !== 'function') {
-        throw invalid(`${key} must be a function, got ${typeof options[key]}`)
-      }
-    }
-
-    const failAfterMaxAttempts = options.failAfterMaxAttempts ?? false
-    if (typeof failAfterMaxAttempts !== 'boolean') {
-      throw invalid(`failAfterMaxAttempts must be a boolean, got ${typeof failAfterMaxAttempts}`)
-    }
-
-    this.#name = name
-    this.#maxAttempts = maxAttempts
     this.#backoff = backoff
-    this.#retryOn = options.retryOn
-    this.#retryOnResult = options.retryOnResult
-    this.#failAfterMaxAttempts = failAfterMaxAttempts
+    this.#retryOn = o.function('retryOn', options.retryOn)
+    this.#retryOnResult = o.function('retryOnResult', options.retryOnResult)
+    this.#failAfterMaxAttempts = o.boolean('failAfterMaxAttempts', options.failAfterMaxAttempts, false)
+    this.#clock = o.clock(options.clock)
   }
 
   get name(): string {
@@ -201,27 +176,20 @@ export class Retry implements StrategyObject {
     }
   }
 
-  run<T>(ctx: ExecutionContext, next: Next<T>): Promise<T> {
-    // The context is per call, so the attempt number is written in place instead of copying the context.
-    ;(ctx as { attempt: number }).attempt = 1
-    // The first attempt calls `next` from here, inside this frame's own `try`: a helper that called it would add a
-    // frame to every stack trace, and `run` is public, so `next` may be one the chain never normalised. Only a call
-    // that has to wait for another attempt goes through the retry path below.
-    let pending: Promise<T>
-    try {
-      pending = settled(next(ctx))
-    } catch (error) {
-      pending = Promise.reject(error)
-    }
-
-    return pending.then(
-      result => (this.#retriesResult(1, result) ? this.#retrying(ctx, next, undefined, result, false) : result),
-      error => {
-        if (this.#retriesError(ctx, 1, error)) {
-          return this.#retrying(ctx, next, error, undefined, true)
-        }
-        throw error
-      },
+  wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
+    const inner = lift(op)
+    // Only a call that has to wait for another attempt goes through the retry path below.
+    return mark((ctx, input) =>
+      inner(ctx, input).then(
+        result =>
+          this.#retriesResult(1, result) ? this.#retrying(ctx, inner, input, undefined, result, false) : result,
+        error => {
+          if (this.#retriesError(ctx, 1, error)) {
+            return this.#retrying(ctx, inner, input, error, undefined, true)
+          }
+          throw error
+        },
+      ),
     )
   }
 
@@ -256,7 +224,7 @@ export class Retry implements StrategyObject {
 
   // Whether the error earns another attempt. `false` means the call is over, counted, and rejects with `error`; a
   // throw means `retryOn` threw, and the call rejects with that instead.
-  #retriesError(ctx: ExecutionContext, attempt: number, error: unknown): boolean {
+  #retriesError(ctx: CallContext, attempt: number, error: unknown): boolean {
     let retryable: boolean
     try {
       retryable =
@@ -298,13 +266,20 @@ export class Retry implements StrategyObject {
     return value
   }
 
-  #retrying<T>(ctx: ExecutionContext, next: Next<T>, error: unknown, result: unknown, failed: boolean): Promise<T> {
+  #retrying<T, I>(
+    ctx: CallContext,
+    inner: Operation<T, I>,
+    input: I,
+    error: unknown,
+    result: unknown,
+    failed: boolean,
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      this.#wait({ ctx, next, resolve, reject, attempt: 1, failed, error, result }, error, result, failed)
+      this.#wait({ ctx, inner, input, resolve, reject, attempt: 1, failed, error, result }, error, result, failed)
     })
   }
 
-  #wait<T>(call: RetriedCall<T>, error: unknown, result: unknown, failed: boolean): void {
+  #wait<T, I>(call: RetriedCall<T, I>, error: unknown, result: unknown, failed: boolean): void {
     const attempt = call.attempt
     call.failed = failed
     call.error = error
@@ -329,7 +304,7 @@ export class Retry implements StrategyObject {
     }
 
     // Both handlers settle the caller's promise themselves, so the promise `then` returns is not needed.
-    void sleep(delay, call.ctx.signal).then(
+    void sleep(delay, call.ctx.signal, this.#clock).then(
       () => this.#again(call),
       reason => {
         this.#ignored(attempt, reason)
@@ -338,19 +313,10 @@ export class Retry implements StrategyObject {
     )
   }
 
-  #again<T>(call: RetriedCall<T>): void {
+  #again<T, I>(call: RetriedCall<T, I>): void {
     const attempt = ++call.attempt
-    ;(call.ctx as { attempt: number }).attempt = attempt
-    // Guarded like the first attempt, and called from this frame: a helper would add a frame to every stack trace.
-    let pending: Promise<T>
-    try {
-      pending = settled(call.next(call.ctx))
-    } catch (error) {
-      pending = Promise.reject(error)
-    }
-
     // Both handlers settle the caller's promise themselves and never throw.
-    void pending.then(
+    void call.inner(call.ctx, call.input).then(
       result => {
         try {
           if (this.#retriesResult(attempt, result)) {
@@ -380,7 +346,7 @@ export class Retry implements StrategyObject {
 
   // A refusal promises the operation did not run, which an earlier attempt that reached it makes false for the call:
   // the caller gets that attempt's outcome, as if it had been the last one.
-  #endRefused<T>(call: RetriedCall<T>): void {
+  #endRefused<T, I>(call: RetriedCall<T, I>): void {
     if (call.failed) {
       call.reject(call.error)
     } else if (this.#failAfterMaxAttempts) {

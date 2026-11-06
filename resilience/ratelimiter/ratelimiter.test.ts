@@ -3,14 +3,14 @@ import { getEventListeners } from 'node:events'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { compose, runWith } from '../compose.js'
+import { fakeTimersClock } from '../clock.testkit.js'
+import { compose, run } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
-import type { ExecutionContext } from '../strategy.js'
+import type { CallContext } from '../policy.js'
 import { ErrRateLimitExceeded, rateLimiter, type RateLimiterEvents, type RateLimiterOptions } from './ratelimiter.js'
 
 beforeEach(() => {
-  useFakeClock()
+  vi.useFakeTimers()
 })
 
 afterEach(() => {
@@ -23,6 +23,7 @@ function limiterOf(options: Partial<RateLimiterOptions> = {}) {
     name: 'partner-api',
     limitForPeriod: 2,
     limitRefreshPeriod: 1 * Second,
+    clock: fakeTimersClock,
     ...options,
   })
 }
@@ -30,7 +31,7 @@ function limiterOf(options: Partial<RateLimiterOptions> = {}) {
 // Records the time each call starts at.
 function recorder() {
   const starts: Array<[string, number]> = []
-  const operation = (id: string) => () => {
+  const operation = (id: string) => async () => {
     starts.push([id, performance.now()])
     return id
   }
@@ -80,9 +81,9 @@ describe('rate limiter', () => {
     const { starts, operation } = recorder()
     await vi.advanceTimersByTimeAsync(300)
 
-    await runWith(operation('a'), quota)
-    await runWith(operation('b'), quota)
-    const refused = await runWith(operation('c'), quota).catch((error: unknown) => error)
+    await run(quota.wrap(operation('a')))
+    await run(quota.wrap(operation('b')))
+    const refused = await run(quota.wrap(operation('c'))).catch((error: unknown) => error)
 
     expect(starts.map(([id]) => id)).toEqual(['a', 'b'])
     expect(refused).toBeInstanceOf(ErrRateLimitExceeded)
@@ -103,14 +104,14 @@ describe('rate limiter', () => {
     const quota = limiterOf()
     const { operation } = recorder()
     await vi.advanceTimersByTimeAsync(900)
-    await runWith(operation('a'), quota)
-    await runWith(operation('b'), quota)
+    await run(quota.wrap(operation('a')))
+    await run(quota.wrap(operation('b')))
 
     await vi.advanceTimersByTimeAsync(99)
-    await expect(runWith(operation('c'), quota)).rejects.toMatchObject({ retryAfter: 1 })
+    await expect(run(quota.wrap(operation('c')))).rejects.toMatchObject({ retryAfter: 1 })
     await vi.advanceTimersByTimeAsync(1)
 
-    await expect(runWith(operation('d'), quota)).resolves.toBe('d')
+    await expect(run(quota.wrap(operation('d')))).resolves.toBe('d')
     expect(quota.metrics().availablePermissions).toBe(1)
   })
 
@@ -119,7 +120,7 @@ describe('rate limiter', () => {
     const { starts, operation } = recorder()
     await vi.advanceTimersByTimeAsync(400)
 
-    const calls = ['a', 'b', 'c', 'd'].map(id => runWith(operation(id), quota))
+    const calls = ['a', 'b', 'c', 'd'].map(id => run(quota.wrap(operation(id))))
     expect(quota.metrics().waitingCalls).toBe(2)
     await vi.advanceTimersByTimeAsync(599)
     expect(starts.map(([id]) => id)).toEqual(['a', 'b'])
@@ -138,7 +139,7 @@ describe('rate limiter', () => {
     const quota = limiterOf({ maxWaitDuration: 5 * Second })
     const { starts, operation } = recorder()
 
-    const calls = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(id => runWith(operation(id), quota))
+    const calls = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(id => run(quota.wrap(operation(id))))
     await vi.advanceTimersByTimeAsync(3 * Second)
     await Promise.all(calls)
 
@@ -157,8 +158,8 @@ describe('rate limiter', () => {
     const quota = limiterOf({ maxWaitDuration: 1_500 * Millisecond })
     const { operation } = recorder()
 
-    const waiting = ['a', 'b', 'c', 'd'].map(id => runWith(operation(id), quota))
-    const refused = await runWith(operation('e'), quota).catch((error: unknown) => error)
+    const waiting = ['a', 'b', 'c', 'd'].map(id => run(quota.wrap(operation(id))))
+    const refused = await run(quota.wrap(operation('e'))).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(ErrRateLimitExceeded)
     expect((refused as ErrRateLimitExceeded).retryAfter).toBe(2_000)
@@ -173,9 +174,9 @@ describe('rate limiter', () => {
     const caller = new AbortController()
     const reason = new Error('client left')
 
-    await runWith(operation('a'), quota)
-    const b = runWith(operation('b'), quota, caller.signal).catch((error: unknown) => error)
-    const c = runWith(operation('c'), quota)
+    await run(quota.wrap(operation('a')))
+    const b = run(quota.wrap(operation('b')), caller.signal).catch((error: unknown) => error)
+    const c = run(quota.wrap(operation('c')))
     caller.abort(reason)
 
     expect(await b).toBe(reason)
@@ -197,12 +198,12 @@ describe('rate limiter', () => {
     const { starts, operation } = recorder()
     const caller = new AbortController()
 
-    await runWith(operation('a'), quota)
-    const b = runWith(operation('b'), quota, caller.signal).catch(() => undefined)
-    const c = runWith(operation('c'), quota)
+    await run(quota.wrap(operation('a')))
+    const b = run(quota.wrap(operation('b')), caller.signal).catch(() => undefined)
+    const c = run(quota.wrap(operation('c')))
     caller.abort()
     await b
-    const d = runWith(operation('d'), quota)
+    const d = run(quota.wrap(operation('d')))
     await vi.advanceTimersByTimeAsync(4 * Second)
     await Promise.all([c, d])
 
@@ -220,11 +221,11 @@ describe('rate limiter', () => {
     const { starts, operation } = recorder()
     const caller = new AbortController()
 
-    await runWith(operation('a'), quota)
-    const b = runWith(operation('b'), quota, caller.signal).catch(() => undefined)
+    await run(quota.wrap(operation('a')))
+    const b = run(quota.wrap(operation('b')), caller.signal).catch(() => undefined)
     caller.abort()
     await b
-    const d = runWith(operation('d'), quota)
+    const d = run(quota.wrap(operation('d')))
     await vi.advanceTimersByTimeAsync(1 * Second)
     await d
 
@@ -238,8 +239,11 @@ describe('rate limiter', () => {
     const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 5 * Second })
     const caller = new AbortController()
 
-    await runWith(() => 'a', quota)
-    const b = runWith(() => 'b', quota, caller.signal).catch(() => undefined)
+    await run(quota.wrap(async () => 'a'))
+    const b = run(
+      quota.wrap(async () => 'b'),
+      caller.signal,
+    ).catch(() => undefined)
     expect(vi.getTimerCount()).toBe(1)
     caller.abort()
     await b
@@ -252,14 +256,12 @@ describe('rate limiter', () => {
     const { starts, operation } = recorder()
     const caller = new AbortController()
     caller.abort(new Error('gone'))
-    await runWith(operation('a'), quota)
+    await run(quota.wrap(operation('a')))
 
-    await expect(quota.run({ signal: caller.signal } as ExecutionContext, () => Promise.resolve('b'))).rejects.toThrow(
-      'gone',
-    )
+    await expect(quota.wrap(() => Promise.resolve('b'))({ signal: caller.signal }, undefined)).rejects.toThrow('gone')
     expect(quota.metrics().waitingCalls).toBe(0)
     // Had the aborted call reserved the next period's permit, this one would wait for the period after.
-    const c = runWith(operation('c'), quota)
+    const c = run(quota.wrap(operation('c')))
     await vi.advanceTimersByTimeAsync(1 * Second)
     await c
     expect(starts).toEqual([
@@ -271,9 +273,9 @@ describe('rate limiter', () => {
   it('runs no timer while nobody waits', async () => {
     const quota = limiterOf()
 
-    await runWith(() => 'a', quota)
-    await runWith(() => 'b', quota)
-    await runWith(() => 'c', quota).catch(() => undefined)
+    await run(quota.wrap(async () => 'a'))
+    await run(quota.wrap(async () => 'b'))
+    await run(quota.wrap(async () => 'c')).catch(() => undefined)
 
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -282,9 +284,9 @@ describe('rate limiter', () => {
     const quota = limiterOf({ limitForPeriod: 1, maxWaitDuration: 1 * Second })
     const seen = listen(quota, 'permitted', 'rejected')
 
-    await runWith(() => 'a', quota)
-    const b = runWith(() => 'b', quota)
-    await runWith(() => 'c', quota).catch(() => undefined)
+    await run(quota.wrap(async () => 'a'))
+    const b = run(quota.wrap(async () => 'b'))
+    await run(quota.wrap(async () => 'c')).catch(() => undefined)
     await vi.advanceTimersByTimeAsync(1 * Second)
     await b
 
@@ -300,9 +302,9 @@ describe('rate limiter', () => {
     const quota = limiterOf({ limitForPeriod: 1 })
     const errorClass = Error as { stackTraceLimit?: number }
     const original = errorClass.stackTraceLimit
-    await runWith(() => 'a', quota)
+    await run(quota.wrap(async () => 'a'))
 
-    await runWith(() => 'b', quota).catch(() => undefined)
+    await run(quota.wrap(async () => 'b')).catch(() => undefined)
 
     expect(errorClass.stackTraceLimit).toBe(original)
   })
@@ -310,11 +312,11 @@ describe('rate limiter', () => {
   it('refuses without a stack trace unless told to capture one', async () => {
     const quiet = limiterOf({ limitForPeriod: 1 })
     const loud = limiterOf({ limitForPeriod: 1, captureStackTrace: true })
-    await runWith(() => 'a', quiet)
-    await runWith(() => 'a', loud)
+    await run(quiet.wrap(async () => 'a'))
+    await run(loud.wrap(async () => 'a'))
 
-    const silent = (await runWith(() => 'b', quiet).catch((error: unknown) => error)) as Error
-    const traced = (await runWith(() => 'b', loud).catch((error: unknown) => error)) as Error
+    const silent = (await run(quiet.wrap(async () => 'b')).catch((error: unknown) => error)) as Error
+    const traced = (await run(loud.wrap(async () => 'b')).catch((error: unknown) => error)) as Error
 
     const frames = (error: Error) => error.stack?.split('\n').filter(line => /^\s+at /.test(line)) ?? []
     expect(frames(silent)).toEqual([])
@@ -322,17 +324,17 @@ describe('rate limiter', () => {
   })
 
   // Node keeps 10 frames by default: every frame between the caller and the operation is one the caller's stack loses.
-  it('adds at most 2n + 1 frames between the caller and a synchronously throwing operation', async () => {
+  it('adds two frames, its own and the lift, between the caller and a synchronously throwing operation', async () => {
     const errorClass = Error as { stackTraceLimit?: number }
     const original = errorClass.stackTraceLimit
     errorClass.stackTraceLimit = 50
     try {
-      const operationThatThrows = (): never => {
+      function operationThatThrows(): never {
         throw new Error('sync')
       }
-      const limited = compose(limiterOf())
+      const limited = limiterOf().wrap(operationThatThrows as () => Promise<never>)
       function callsTheRateLimiter(): Promise<unknown> {
-        return limited(operationThatThrows)
+        return limited({ signal: undefined }, undefined)
       }
 
       const error = (await callsTheRateLimiter().catch((reason: unknown) => reason)) as Error
@@ -341,7 +343,7 @@ describe('rate limiter', () => {
       const entry = lines.findIndex(line => line.includes('callsTheRateLimiter'))
 
       expect(operation).toBeGreaterThan(0)
-      expect(entry - operation - 1).toBeLessThanOrEqual(3)
+      expect(entry - operation - 1).toBe(2)
     } finally {
       errorClass.stackTraceLimit = original
     }
@@ -362,14 +364,14 @@ describe('rate limiter on a busy event loop', () => {
     })
     const order: string[] = []
 
-    await runWith(() => order.push('a'), quota)
-    const b = runWith(() => order.push('b'), quota)
+    await run(quota.wrap(async () => order.push('a')))
+    const b = run(quota.wrap(async () => order.push('b')))
     // Blocks the event loop past the period b reserved, so its timer cannot fire in time.
     const until = performance.now() + 120
     while (performance.now() < until) {
       // busy
     }
-    const c = runWith(() => order.push('c'), quota)
+    const c = run(quota.wrap(async () => order.push('c')))
     await Promise.all([b, c])
 
     expect(order).toEqual(['a', 'b', 'c'])

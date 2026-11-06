@@ -13,14 +13,13 @@ export class ErrResilience extends Error {
 /**
  * An option, an argument, a name or an annotation was invalid.
  *
- * It is thrown synchronously where the bad value is given: by the factories, `compose()`, `runWith()`, the
+ * It is thrown synchronously where the bad value is given: by the factories, `compose()`, `decorate()`, the
  * `Resilience()` builder, a resilience annotation and a `ResilienceRegistry` lookup of an undefined name.
  * `Resilience()` and `ResilienceHTTP()` throw it at `bootstrap()`.
  *
  * A call rejects with it when it cannot run as configured: a delay computed at call time is not a finite number, a
- * predicate such as `retryOn` or `fallbackOn` returns anything but a boolean, `recover()` is handed a handler that is
- * not a function, a strategy hands `next` a context that `runWith()`, `compose()` or `ctx.with()` did not make, or an
- * annotated method names an instance or a fallback method that does not exist.
+ * predicate such as `retryOn` or a fallback's `on` returns anything but a boolean, or an annotated method names an
+ * instance or a fallback method that does not exist.
  */
 export class ErrInvalidOption extends ErrResilience {
   constructor(message: string) {
@@ -47,20 +46,31 @@ export class ErrCallRefused extends ErrResilience {
   }
 }
 
-const errorClass = Error as { stackTraceLimit?: number }
-
-// Refusals come in bulk while a dependency is down, and capturing a stack costs several times the rest of a refusal.
-// The limit is process-wide, so it is restored in a `finally` before anything else can throw:
-// `const limit = suppressStacks(); try { return new ErrX(...) } finally { restoreStacks(limit) }`.
-export function suppressStacks(): number | undefined {
-  const limit = errorClass.stackTraceLimit
-  errorClass.stackTraceLimit = 0
-  return limit
+/**
+ * A refusal built without running its class's constructor, so no stack trace is captured: refusals come in bulk
+ * while a dependency is down, and a capture costs several times the rest of a refusal. `fields` are set in order after
+ * `message`, as the constructors set them, and `stack` is the first line alone, as an error without frames prints.
+ */
+export function refusal<E extends ErrCallRefused>(
+  cls: abstract new (...args: never) => E,
+  message: string,
+  fields: { readonly [K in Exclude<keyof E, keyof Error>]: E[K] } & { readonly name: string },
+): E {
+  const error = Object.create(cls.prototype) as E
+  Object.defineProperty(error, 'message', { value: message, writable: true, configurable: true })
+  Object.assign(error, fields)
+  Object.defineProperty(error, 'stack', { value: `${fields.name}: ${message}`, writable: true, configurable: true })
+  return error
 }
 
-export function restoreStacks(limit: number | undefined): void {
-  errorClass.stackTraceLimit = limit
-}
+/** A class of errors, such as `TypeError` or `ErrHTTP`, matched with `instanceof`. */
+export type ErrorClass = abstract new (...args: never) => Error
+
+/**
+ * Which errors an option applies to: a predicate, which must return a boolean, or a list of error classes, which
+ * matches an error that is an instance of any of them.
+ */
+export type ErrorMatcher = ((error: unknown) => boolean) | readonly ErrorClass[]
 
 // What a predicate returned instead of a boolean, for the error that says so.
 export function described(value: unknown): string {

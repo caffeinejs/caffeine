@@ -2,11 +2,12 @@ import { type Duration, formatDuration, Minute, Second } from '@caffeinejs/std/d
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { Backoff } from '../backoff.js'
-import { settled, type RawNext } from '../compose.js'
+import { lift, mark } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { ErrCallRefused, ErrInvalidOption, restoreStacks, suppressStacks } from '../errors.js'
-import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
-import { clampDelay, clock, scheduleUnref, type TimerHandle } from '../timers.js'
+import { ErrCallRefused, refusal } from '../errors.js'
+import { Options } from '../options.js'
+import type { Operation, Wrapper } from '../policy.js'
+import { clampDelay, type Clock, scheduleUnref } from '../timers.js'
 import { CountWindow, type Window } from './_count_window.js'
 import { TimeWindow } from './_time_window.js'
 
@@ -27,24 +28,24 @@ const refusals: Record<NotPermittedState, string> = {
  * a trial call settles.
  */
 export class ErrCallNotPermitted extends ErrCallRefused {
-  // Built once rather than per refusal: refusals come in bulk while a dependency is down, and the footer is the same
-  // for every one of them.
-  static readonly #footer = errMessage('').reference('@caffeinejs/resilience', ErrCallNotPermitted).build()
-
   /** The name of the circuit breaker that refused the call. */
   readonly breaker: string
   readonly state: NotPermittedState
 
   constructor(breaker: string, state: NotPermittedState, retryAfter: Duration | undefined) {
-    super(
-      `Cannot call "${breaker}": ${refusals[state]}${ErrCallNotPermitted.#footer}`,
-      'ERR_CALL_NOT_PERMITTED',
-      retryAfter,
-    )
+    super(notPermittedMessage(breaker, state), 'ERR_CALL_NOT_PERMITTED', retryAfter)
     this.name = 'ErrCallNotPermitted'
     this.breaker = breaker
     this.state = state
   }
+}
+
+// Built once rather than per refusal: refusals come in bulk while a dependency is down, and the footer is the same
+// for every one of them.
+const footer = errMessage('').reference('@caffeinejs/resilience', ErrCallNotPermitted).build()
+
+function notPermittedMessage(breaker: string, state: NotPermittedState): string {
+  return `Cannot call "${breaker}": ${refusals[state]}${footer}`
 }
 
 export type CircuitBreakerState = 'closed' | 'open' | 'half_open' | 'forced_open' | 'disabled' | 'metrics_only'
@@ -103,6 +104,8 @@ export interface CircuitBreakerOptions {
    * error's `breaker` and `state` already say why the call failed.
    */
   captureStackTrace?: boolean
+  /** Where the breaker reads the time and sets its timer. Defaults to the runtime's. */
+  clock?: Clock
 }
 
 /** Rates are in percent, and `undefined` while the window holds fewer calls than the minimum. */
@@ -175,20 +178,6 @@ interface Refusal {
 const FORCED_OPEN_REFUSAL: Refusal = { state: 'forced_open', retryAfter: undefined }
 const HALF_OPEN_REFUSAL: Refusal = { state: 'half_open', retryAfter: undefined }
 
-// A refusal without a stack trace.
-function stacklessRefusal(
-  breaker: string,
-  state: NotPermittedState,
-  retryAfter: Duration | undefined,
-): ErrCallNotPermitted {
-  const limit = suppressStacks()
-  try {
-    return new ErrCallNotPermitted(breaker, state, retryAfter)
-  } finally {
-    restoreStacks(limit)
-  }
-}
-
 /**
  * Stops calling a dependency that keeps failing or slowing down, and lets a few trial calls through after a wait
  * to find out whether it recovered.
@@ -196,7 +185,7 @@ function stacklessRefusal(
  * One instance protects one dependency and is shared by every call to it: the state is what the calls taught it.
  * Refused calls reject with {@link ErrCallNotPermitted}.
  */
-export class CircuitBreaker implements StrategyObject {
+export class CircuitBreaker implements Wrapper {
   readonly #name: string
   readonly #failureRateThreshold: number
   readonly #slowCallRateThreshold: number
@@ -210,6 +199,7 @@ export class CircuitBreaker implements StrategyObject {
   readonly #ignoreError: ((error: unknown) => boolean) | undefined
   readonly #recordResult: ((result: unknown) => boolean) | undefined
   readonly #captureStackTrace: boolean
+  readonly #clock: Clock
   readonly #window: Window
   readonly #halfOpenWindow: CountWindow
   readonly #emitter = new Emitter<CircuitBreakerEvents>()
@@ -222,58 +212,14 @@ export class CircuitBreaker implements StrategyObject {
   #openCount = 0
   #lastTrialAt = 0
   #permits = 0
-  #timer: TimerHandle | undefined
+  #timer: unknown
   #notPermittedCalls = 0
   // In metrics_only, a rate event is published when the rate crosses its threshold, not on every call above it.
   #failureRateAbove = false
   #slowCallRateAbove = false
 
   constructor(options: CircuitBreakerOptions) {
-    const name = (options as Partial<CircuitBreakerOptions> | undefined)?.name
-    if (typeof name !== 'string' || name.length === 0) {
-      throw new ErrInvalidOption(
-        errMessage('Cannot create circuit breaker: name must be a non-empty string')
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
-    }
-
-    const invalid = (reason: string): ErrInvalidOption =>
-      new ErrInvalidOption(
-        errMessage(`Cannot create circuit breaker "${name}": ${reason}`)
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
-
-    const percent = (key: string, value: number): number => {
-      if (typeof value !== 'number' || !(value > 0 && value <= 100)) {
-        throw invalid(`${key} must be greater than 0 and at most 100, got ${String(value)}`)
-      }
-      return value
-    }
-
-    const count = (key: string, value: number): number => {
-      if (!Number.isInteger(value) || value < 1) {
-        throw invalid(`${key} must be an integer of at least 1, got ${String(value)}`)
-      }
-      return value
-    }
-
-    const span = (key: string, value: Duration, min: Duration): Duration => {
-      if (typeof value !== 'number' || !Number.isFinite(value) || value < min) {
-        throw invalid(
-          `${key} must be a finite Duration of at least ${formatDuration(min)}, got ${formatDuration(value)}`,
-        )
-      }
-      return value
-    }
-
-    const predicate = <F>(key: string, value: F | undefined): F | undefined => {
-      if (value !== undefined && typeof value !== 'function') {
-        throw invalid(`${key} must be a function, got ${typeof value}`)
-      }
-      return value
-    }
+    const o = new Options('circuit breaker', options)
 
     // A length the runtime cannot allocate is an option out of range, not a crash inside a typed array.
     const allocate = <W>(key: string, create: () => W): W => {
@@ -281,68 +227,67 @@ export class CircuitBreaker implements StrategyObject {
         return create()
       } catch (error) {
         if (error instanceof RangeError) {
-          throw invalid(`${key} is too large to allocate`)
+          throw o.invalid(`${key} is too large to allocate`)
         }
         throw error
       }
     }
 
-    this.#name = name
-    this.#failureRateThreshold = percent('failureRateThreshold', options.failureRateThreshold ?? 50)
-    this.#slowCallRateThreshold = percent('slowCallRateThreshold', options.slowCallRateThreshold ?? 100)
-    this.#slowCallDurationThresholdMs = span(
+    this.#name = o.name
+    this.#failureRateThreshold = o.percent('failureRateThreshold', options.failureRateThreshold ?? 50)
+    this.#slowCallRateThreshold = o.percent('slowCallRateThreshold', options.slowCallRateThreshold ?? 100)
+    this.#slowCallDurationThresholdMs = o.duration(
       'slowCallDurationThreshold',
       options.slowCallDurationThreshold ?? 1 * Minute,
       1,
     )
 
     const window = options.slidingWindow ?? { type: 'count', size: 100 }
-    let minimum = count('minimumNumberOfCalls', options.minimumNumberOfCalls ?? 100)
+    let minimum = o.integer('minimumNumberOfCalls', options.minimumNumberOfCalls ?? 100, 1)
     if (window.type === 'count') {
-      const size = count('slidingWindow.size', window.size)
+      const size = o.integer('slidingWindow.size', window.size, 1)
       this.#window = allocate('slidingWindow.size', () => new CountWindow(size))
       minimum = Math.min(minimum, size)
     } else if (window.type === 'time') {
       // One bucket per second.
       const seconds = window.duration / Second
       if (!Number.isInteger(seconds) || seconds < 1) {
-        throw invalid(
+        throw o.invalid(
           `slidingWindow.duration must be a whole number of seconds and at least 1s, got ${formatDuration(window.duration)}`,
         )
       }
       this.#window = allocate('slidingWindow.duration', () => new TimeWindow(seconds))
     } else {
-      throw invalid(`slidingWindow must be { type: 'count', size } or { type: 'time', duration }`)
+      throw o.invalid(`slidingWindow must be { type: 'count', size } or { type: 'time', duration }`)
     }
     this.#minimumNumberOfCalls = minimum
 
     const wait = options.waitDurationInOpenState ?? 1 * Minute
-    this.#waitDurationInOpenState = typeof wait === 'function' ? wait : span('waitDurationInOpenState', wait, 0)
-    this.#permittedCalls = count(
+    this.#waitDurationInOpenState = typeof wait === 'function' ? wait : o.duration('waitDurationInOpenState', wait, 0)
+    this.#permittedCalls = o.integer(
       'permittedNumberOfCallsInHalfOpenState',
       options.permittedNumberOfCallsInHalfOpenState ?? 10,
+      1,
     )
     this.#halfOpenWindow = allocate(
       'permittedNumberOfCallsInHalfOpenState',
       () => new CountWindow(this.#permittedCalls),
     )
-    this.#maxWaitInHalfOpenMs = span('maxWaitDurationInHalfOpenState', options.maxWaitDurationInHalfOpenState ?? 0, 0)
-
-    const automatic = options.automaticTransitionFromOpenToHalfOpen ?? false
-    if (typeof automatic !== 'boolean') {
-      throw invalid(`automaticTransitionFromOpenToHalfOpen must be a boolean, got ${typeof automatic}`)
-    }
-    this.#automaticTransition = automatic
-
-    const captureStackTrace = options.captureStackTrace ?? false
-    if (typeof captureStackTrace !== 'boolean') {
-      throw invalid(`captureStackTrace must be a boolean, got ${typeof captureStackTrace}`)
-    }
-    this.#captureStackTrace = captureStackTrace
-
-    this.#recordError = predicate('recordError', options.recordError)
-    this.#ignoreError = predicate('ignoreError', options.ignoreError)
-    this.#recordResult = predicate('recordResult', options.recordResult)
+    this.#maxWaitInHalfOpenMs = o.duration(
+      'maxWaitDurationInHalfOpenState',
+      options.maxWaitDurationInHalfOpenState ?? 0,
+      0,
+    )
+    this.#automaticTransition = o.boolean(
+      'automaticTransitionFromOpenToHalfOpen',
+      options.automaticTransitionFromOpenToHalfOpen,
+      false,
+    )
+    this.#captureStackTrace = o.boolean('captureStackTrace', options.captureStackTrace, false)
+    this.#recordError = o.function('recordError', options.recordError)
+    this.#ignoreError = o.function('ignoreError', options.ignoreError)
+    this.#recordResult = o.function('recordResult', options.recordResult)
+    this.#clock = o.clock(options.clock)
   }
 
   get name(): string {
@@ -361,60 +306,59 @@ export class CircuitBreaker implements StrategyObject {
     return this.#emitter.on(type, listener)
   }
 
-  run<T>(ctx: ExecutionContext, next: Next<T>): Promise<T> {
-    const state = this.#state
-    if (state === DISABLED) {
-      try {
-        return settled((next as RawNext<T>)(ctx))
-      } catch (error) {
-        return Promise.reject(error)
+  wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
+    const inner = lift(op)
+    return mark((ctx, input) => {
+      const state = this.#state
+      if (state === DISABLED) {
+        return inner(ctx, input)
       }
-    }
 
-    let generation: number
-    if (state === CLOSED || state === METRICS_ONLY) {
-      generation = this.#generation
-    } else {
-      let admitted: number | Refusal
-      try {
-        admitted = this.#admit()
-      } catch (error) {
-        // Re-opening asks the wait function for a delay, and that function may throw. It rejects, like a refusal.
-        return Promise.reject(error)
+      let generation: number
+      if (state === CLOSED || state === METRICS_ONLY) {
+        generation = this.#generation
+      } else {
+        let admitted: number | Refusal
+        try {
+          admitted = this.#admit()
+        } catch (error) {
+          // Re-opening asks the wait function for a delay, and that function may throw. It rejects, like a refusal.
+          return Promise.reject(error)
+        }
+        if (typeof admitted !== 'number') {
+          this.#refused(admitted.state)
+          // Returned, not thrown: throwing costs more than the rest of the refusal together.
+          return Promise.reject(this.#notPermitted(admitted))
+        }
+        generation = admitted
       }
-      if (typeof admitted !== 'number') {
-        this.#refused(admitted.state)
-        // Built here, in the frame that refuses, so a captured stack starts at `run` and not in a helper. Returned,
-        // not thrown: throwing costs more than the rest of the refusal together.
-        return Promise.reject(
-          this.#captureStackTrace
-            ? new ErrCallNotPermitted(this.#name, admitted.state, admitted.retryAfter)
-            : stacklessRefusal(this.#name, admitted.state, admitted.retryAfter),
-        )
-      }
-      generation = admitted
-    }
 
-    const start = clock.now()
-    // `run` is public, so `next` may be one the chain never normalised. It is called inside this frame's own `try`: a
-    // helper that called it would add a frame to every stack trace.
-    let pending: Promise<T>
-    try {
-      pending = settled((next as RawNext<T>)(ctx))
-    } catch (error) {
-      pending = Promise.reject(error)
-    }
+      const start = this.#clock.now()
+      return inner(ctx, input).then(
+        result => {
+          this.#onResult(generation, start, result)
+          return result
+        },
+        error => {
+          this.#onError(generation, start, error, ctx.signal)
+          throw error
+        },
+      )
+    })
+  }
 
-    return pending.then(
-      result => {
-        this.#onResult(generation, start, result)
-        return result
-      },
-      error => {
-        this.#onError(generation, start, error, ctx)
-        throw error
-      },
-    )
+  // The refusal, with a stack trace only when asked for one.
+  #notPermitted({ state, retryAfter }: Refusal): ErrCallNotPermitted {
+    if (this.#captureStackTrace) {
+      return new ErrCallNotPermitted(this.#name, state, retryAfter)
+    }
+    return refusal(ErrCallNotPermitted, notPermittedMessage(this.#name, state), {
+      code: 'ERR_CALL_NOT_PERMITTED',
+      name: 'ErrCallNotPermitted',
+      retryAfter,
+      breaker: this.#name,
+      state,
+    })
   }
 
   /** Refuses every call until {@link CircuitBreaker.reset}. */
@@ -454,7 +398,7 @@ export class CircuitBreaker implements StrategyObject {
     const state = this.#state
     // Only a window that still records ages; an open breaker keeps showing the window that opened it.
     if ((state === CLOSED || state === METRICS_ONLY) && this.#window instanceof TimeWindow) {
-      this.#window.advance(clock.now())
+      this.#window.advance(this.#clock.now())
     }
 
     const halfOpen = state === HALF_OPEN
@@ -476,8 +420,7 @@ export class CircuitBreaker implements StrategyObject {
     }
   }
 
-  // The generation the call runs in, or why it is refused. It only decides: `run` builds the error, so no frame of
-  // this method is in a captured stack.
+  // The generation the call runs in, or why it is refused. It only decides: the caller builds the error.
   #admit(): number | Refusal {
     switch (this.#state) {
       case CLOSED:
@@ -487,7 +430,7 @@ export class CircuitBreaker implements StrategyObject {
       case FORCED_OPEN:
         return FORCED_OPEN_REFUSAL
       case OPEN: {
-        const remaining = this.#openedAt + this.#openWaitMs - clock.now()
+        const remaining = this.#openedAt + this.#openWaitMs - this.#clock.now()
         if (remaining > 0) {
           return { state: 'open', retryAfter: remaining }
         }
@@ -505,7 +448,7 @@ export class CircuitBreaker implements StrategyObject {
     if (this.#permits > 0) {
       this.#permits--
       if (this.#maxWaitInHalfOpenMs > 0) {
-        this.#lastTrialAt = clock.now()
+        this.#lastTrialAt = this.#clock.now()
       }
       return this.#generation
     }
@@ -513,7 +456,7 @@ export class CircuitBreaker implements StrategyObject {
     // Every trial slot is taken, and each unsettled trial was admitted at or before the last one. Once the last has
     // run for the maximum wait, all of them have: they hung, and this is the only way out. Time spent half open with
     // a free slot says nothing about the dependency and is not counted.
-    if (this.#maxWaitInHalfOpenMs > 0 && clock.now() - this.#lastTrialAt >= this.#maxWaitInHalfOpenMs) {
+    if (this.#maxWaitInHalfOpenMs > 0 && this.#clock.now() - this.#lastTrialAt >= this.#maxWaitInHalfOpenMs) {
       this.#transitionTo(OPEN)
       // A stateChange listener may have moved the breaker again; decide from where it is now.
       return this.#admit()
@@ -529,14 +472,14 @@ export class CircuitBreaker implements StrategyObject {
     }
   }
 
-  #onError(generation: number, start: number, error: unknown, ctx: ExecutionContext): void {
-    const now = clock.now()
+  #onError(generation: number, start: number, error: unknown, signal: AbortSignal | undefined): void {
+    const now = this.#clock.now()
     const duration = now - start
 
     let reason: 'ignored' | 'aborted' | 'refused' | undefined
     let failed: boolean
     try {
-      if (ctx.signal !== undefined && ctx.signal.aborted) {
+      if (signal !== undefined && signal.aborted) {
         reason = 'aborted'
       } else if (error instanceof ErrCallRefused) {
         // This process turned the call away; the dependency never saw it.
@@ -571,7 +514,7 @@ export class CircuitBreaker implements StrategyObject {
   }
 
   #onResult(generation: number, start: number, result: unknown): void {
-    const now = clock.now()
+    const now = this.#clock.now()
     const duration = now - start
 
     let failed: boolean
@@ -678,10 +621,10 @@ export class CircuitBreaker implements StrategyObject {
     // Computed first: a wait function that throws or returns a non-finite delay leaves the breaker as it was.
     const waitMs = target === OPEN ? this.#openWait() : 0
     const from = this.#state
-    const now = clock.now()
+    const now = this.#clock.now()
 
     if (this.#timer !== undefined) {
-      clearTimeout(this.#timer)
+      this.#clock.clearTimeout(this.#timer)
       this.#timer = undefined
     }
 
@@ -730,12 +673,16 @@ export class CircuitBreaker implements StrategyObject {
 
   #scheduleHalfOpen(waitMs: number): void {
     const generation = this.#generation
-    this.#timer = scheduleUnref(() => {
-      this.#timer = undefined
-      if (this.#state === OPEN && this.#generation === generation) {
-        this.#transitionTo(HALF_OPEN)
-      }
-    }, waitMs)
+    this.#timer = scheduleUnref(
+      this.#clock,
+      () => {
+        this.#timer = undefined
+        if (this.#state === OPEN && this.#generation === generation) {
+          this.#transitionTo(HALF_OPEN)
+        }
+      },
+      waitMs,
+    )
   }
 }
 
