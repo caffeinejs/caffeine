@@ -18,6 +18,7 @@ import type { ContextPlatform, AdapterTypes } from './adapter.js'
 import { reopenCookieFlush, serverCookies } from './cookie/cookie.js'
 import { protocolOf } from './protocol.js'
 import { payloadOf } from './response.js'
+import { isHandlerTimeout } from './timeout.js'
 
 /** The {@link IContext} the Fastify adapter builds for every request, over Fastify's own request and reply. */
 export class Context<
@@ -44,6 +45,8 @@ export class Context<
   #fastifyRequest: FastifyRequest
   #reply: REPLY
   #store: ConfigStore<unknown>
+
+  #signal?: AbortController
 
   // Set once one of this context's own answers has called `send`, which is earlier than Fastify's `reply.sent`:
   // that one is `raw.writableEnded`, and an `onSend` hook that awaits — a compressor, a cache storing the entry
@@ -105,8 +108,51 @@ export class Context<
     return this.#reply.statusCode
   }
 
+  /**
+   * See {@link IContext.signal}. A handler timeout aborts it with Fastify's `FST_ERR_HANDLER_TIMEOUT` error.
+   *
+   * Not Fastify's `request.signal`, which follows the request's `close`: Node closes a request as soon as its body has
+   * been read, usually while its handler runs, so that signal aborts on every request with a body.
+   */
   get signal(): AbortSignal {
-    return this.#fastifyRequest.signal
+    return (this.#signal ??= this.#listen()).signal
+  }
+
+  // Created on the first read only: a route that never reads the signal pays for no controller.
+  #listen(): AbortController {
+    const controller = new AbortController()
+
+    // The response closing before its end was written is the client leaving; closing after is the answer done. Not
+    // `writableFinished`: an in-process response closes before it reports itself finished.
+    const res = this.#reply.raw
+    const onClose = (): void => {
+      if (!res.writableEnded) {
+        controller.abort()
+      }
+    }
+    if (res.closed) {
+      onClose()
+    } else {
+      res.once('close', onClose)
+    }
+
+    // Fastify built its own controller on a timed route already, so reading its signal there creates nothing. Only
+    // its timeout is taken from it: its other aborts are the request's close, which is not the client leaving.
+    if (this.#fastifyRequest.routeOptions.handlerTimeout > 0) {
+      const timed = this.#fastifyRequest.signal
+      const onTimeout = (): void => {
+        if (isHandlerTimeout(timed.reason)) {
+          controller.abort(timed.reason)
+        }
+      }
+      if (timed.aborted) {
+        onTimeout()
+      } else {
+        timed.addEventListener('abort', onTimeout, { once: true })
+      }
+    }
+
+    return controller
   }
 
   status(code: number): this {
