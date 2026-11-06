@@ -16,6 +16,7 @@ import type { Context } from '../context.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../error/error.js'
 import { attachGuardHook } from '../guards/guards.js'
 import { answer } from '../response.js'
+import { isHandlerTimeout } from '../timeout.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
 import { type AdapterRouteOptions } from './route_options.js'
 import { compileRouteSchema } from './schema/schema.js'
@@ -262,12 +263,9 @@ function answeredThroughContext(ctx: Context): boolean {
 
 /** As {@link answeredThroughContext}, or by Fastify's 503 for a handler that outlived its timeout. */
 function answeredOrTimedOut(ctx: Context): boolean {
-  return ctx.sent || (ctx.signal.aborted && isHandlerTimeout(ctx.signal.reason))
-}
-
-/** Whether a request signal was aborted by Fastify's handler timeout, rather than by the client leaving. */
-function isHandlerTimeout(reason: unknown): boolean {
-  return (reason as { code?: unknown } | null)?.code === 'FST_ERR_HANDLER_TIMEOUT'
+  // Fastify's signal, which a timed route has already: the context's would build a second controller to ask the same.
+  const signal = ctx.platform.request.signal
+  return ctx.sent || (signal.aborted && isHandlerTimeout(signal.reason))
 }
 
 /** Joins a router base path and a route path, trimming a trailing slash (but never to empty). */
