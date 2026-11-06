@@ -30,6 +30,7 @@ export {
 export {
   type PresetDefinition,
   type ResilienceDefinitions,
+  type ResilienceEvent,
   type ResilienceKind,
   ResilienceRegistry,
 } from './registry.js'
