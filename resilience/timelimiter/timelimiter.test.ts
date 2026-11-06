@@ -19,6 +19,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 function limiterOf(options: Partial<TimeLimiterOptions> = {}) {
@@ -43,6 +44,31 @@ function controllable<T = string>() {
     reject: (reason: unknown) => reject(reason),
     signal: () => signal,
   }
+}
+
+// A response as fetch hands it over: its headers have arrived, and its body errors once the signal the request was
+// made with aborts.
+function responseUnder(signal: AbortSignal): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
+    },
+  })
+  return new Response(body)
+}
+
+// An operation whose response arrives while the call runs, and which returns it only when the test says so: work
+// after the headers, such as an audit write, outlasts the limit.
+function lateResponse() {
+  let release!: () => void
+  let response: Response | undefined
+  const operation = (ctx: CallContext) => {
+    response = responseUnder(ctx.signal!)
+    return new Promise<Response>(resolve => {
+      release = () => resolve(response!)
+    })
+  }
+  return { operation, release: () => release(), response: () => response }
 }
 
 function listen<K extends keyof TimeLimiterEvents>(
@@ -265,6 +291,59 @@ describe('time limiter', () => {
     expect(discard.mock.calls).toEqual([['stale']])
   })
 
+  // The value is late only once the limit has aborted its signal, so a body tied to that signal is already errored and
+  // cancel() rejects. The README's discard must release it without stopping the process.
+  it('releases a late response whose body the limit errored, and nothing goes uncaught', async () => {
+    const queued: Array<() => void> = []
+    vi.stubGlobal('queueMicrotask', (callback: () => void) => queued.push(callback))
+    const discard = vi.fn((res: Response) => res.body?.cancel())
+    const late = lateResponse()
+    let timedOut: unknown
+
+    const reasons = await unhandledRejections(async () => {
+      const call = run(limiterOf({ discard: discard as (value: unknown) => unknown }).wrap(late.operation)).catch(
+        (error: unknown) => error,
+      )
+      await vi.advanceTimersByTimeAsync(100)
+      late.release()
+      await vi.advanceTimersByTimeAsync(0)
+      timedOut = await call
+    })
+
+    expect(timedOut).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(discard.mock.calls).toEqual([[late.response()]])
+    await expect(discard.mock.results[0]!.value).rejects.toBe(timedOut)
+    expect(reasons).toEqual([])
+    expect(queued).toEqual([])
+  })
+
+  it('releases a late response whose body errored when the caller aborted, and nothing goes uncaught', async () => {
+    const queued: Array<() => void> = []
+    vi.stubGlobal('queueMicrotask', (callback: () => void) => queued.push(callback))
+    const discard = vi.fn((res: Response) => res.body?.cancel())
+    const late = lateResponse()
+    const caller = new AbortController()
+    const gaveUp = new Error('caller gave up')
+    let aborted: unknown
+
+    const reasons = await unhandledRejections(async () => {
+      const call = run(
+        limiterOf({ discard: discard as (value: unknown) => unknown }).wrap(late.operation),
+        caller.signal,
+      ).catch((error: unknown) => error)
+      caller.abort(gaveUp)
+      late.release()
+      await vi.advanceTimersByTimeAsync(0)
+      aborted = await call
+    })
+
+    expect(aborted).toBe(gaveUp)
+    expect(discard.mock.calls).toEqual([[late.response()]])
+    await expect(discard.mock.results[0]!.value).rejects.toBe(gaveUp)
+    expect(reasons).toEqual([])
+    expect(queued).toEqual([])
+  })
+
   // The caller has its answer; a late failure must not surface later as an unhandled rejection that kills the process.
   it('leaves no rejection unhandled when an outcome arrives after the call ended', async () => {
     const reasons = await unhandledRejections(async () => {
@@ -303,6 +382,21 @@ describe('time limiter', () => {
 
     expect(handed.map(signal => getEventListeners(signal, 'abort').length)).toEqual([0, 0])
     expect(getEventListeners(shutdown.signal, 'abort')).toHaveLength(0)
+  })
+
+  // Policies inside the limit, and the operation, still need the transport's classification of client errors.
+  it('hands the rest of the chain every field of the context, with a signal of its own in place of the one it got', async () => {
+    const isClientError = (): boolean => true
+    const seen: CallContext[] = []
+
+    await limiterOf().wrap(async (ctx: CallContext) => {
+      seen.push(ctx)
+      return 'ok'
+    })({ signal: undefined, isClientError }, undefined)
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]!.isClientError).toBe(isClientError)
+    expect(seen[0]!.signal).toBeInstanceOf(AbortSignal)
   })
 
   it('reports each outcome to its listeners', async () => {

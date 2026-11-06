@@ -19,6 +19,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 function retryOf(options: Partial<RetryOptions> = {}) {
@@ -674,6 +675,40 @@ describe('retry, unhandled rejections', () => {
   })
 })
 
+describe('retry, client errors', () => {
+  class ErrNotFound extends Error {}
+  const isClientError = (error: unknown): boolean => error instanceof ErrNotFound
+
+  // A request for a record that does not exist gets the same answer every time: running it again only multiplies the
+  // work one client can cause.
+  it('never retries an error the context calls a client error, whatever retryOn says', async () => {
+    const retries = retryOf({ maxAttempts: 3, retryOn: () => true })
+    const seen = listen(retries, 'ignored', 'retry', 'failure')
+    const missing = new ErrNotFound('no such record')
+    const operation = vi.fn(async () => {
+      throw missing
+    })
+
+    const error = await retries
+      .wrap(operation)({ signal: undefined, isClientError }, undefined)
+      .catch((thrown: unknown) => thrown)
+
+    expect(error).toBe(missing)
+    expect(operation).toHaveBeenCalledTimes(1)
+    expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, error: missing }]])
+  })
+
+  it('still retries an error the context does not call a client error', async () => {
+    const retries = retryOf({ maxAttempts: 3 })
+    const { operation, attempts } = flaky(2)
+
+    const answer = await retries.wrap(operation)({ signal: undefined, isClientError }, undefined)
+
+    expect(answer).toBe('ok')
+    expect(attempts).toEqual([1, 2, 3])
+  })
+})
+
 describe('retry, retryOn as error classes', () => {
   // A class list says what a predicate of instanceof checks would, without the chance to get one wrong.
   it('retries an error of a listed class, a subclass included, and stops at any other', async () => {
@@ -757,27 +792,37 @@ describe('retry, discard', () => {
     expect(error).toMatchObject({ attempts: 1, result: 'busy' })
   })
 
-  it('keeps the call going when discard throws, and rethrows its error on a microtask', async () => {
+  // A discard releases a result nobody will read. Its failure has no caller to reach: rethrown as uncaught, it would
+  // stop the process over a cleanup.
+  it.each([
+    [
+      'throws',
+      () => {
+        throw new Error('discard bug')
+      },
+    ],
+    ['rejects', () => Promise.reject(new TypeError('stream errored'))],
+  ])('keeps the call going when discard %s, and drops its error', async (_how, discard) => {
     const queued: Array<() => void> = []
     vi.stubGlobal('queueMicrotask', (callback: () => void) => queued.push(callback))
-    const thrown = new Error('discard bug')
     const retries = retryOf({
       backoff: 100 * Millisecond,
       retryOnResult: result => result === 'busy',
-      discard: () => {
-        throw thrown
-      },
+      discard,
     })
     const operation = vi.fn().mockResolvedValueOnce('busy').mockResolvedValueOnce('ok')
+    let answered: unknown
 
-    const call = run(retries.wrap(operation))
-    await vi.advanceTimersByTimeAsync(0)
-    vi.unstubAllGlobals()
-    await vi.advanceTimersByTimeAsync(100)
+    const reasons = await unhandledRejections(async () => {
+      const call = run(retries.wrap(operation))
+      await vi.advanceTimersByTimeAsync(100)
+      answered = await call
+    })
 
-    await expect(call).resolves.toBe('ok')
-    expect(queued).toHaveLength(1)
-    expect(queued[0]).toThrow(thrown)
+    expect(answered).toBe('ok')
+    expect(operation).toHaveBeenCalledTimes(2)
+    expect(reasons).toEqual([])
+    expect(queued).toEqual([])
   })
 })
 
@@ -871,5 +916,21 @@ describe('retry, dispose', () => {
 
     expect(((await call) as Error).message).toBe('failure 1')
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('ErrMaxRetriesExceeded', () => {
+  // A logger copies an error's enumerable fields into the log line: the last result, such as a polled body holding a
+  // token, would land there with every 5xx an HTTP handler logs.
+  it('keeps the last result readable on the error and out of what a logger serializes', () => {
+    const result = { status: 'pending', sessionToken: 'tok_123' }
+
+    const error = new ErrMaxRetriesExceeded('inventory', 3, result)
+
+    expect(error.result).toBe(result)
+    expect(Object.keys(error)).toEqual(['code', 'name', 'attempts'])
+    expect(JSON.stringify(error)).toBe(
+      '{"code":"ERR_MAX_RETRIES_EXCEEDED","name":"ErrMaxRetriesExceeded","attempts":3}',
+    )
   })
 })

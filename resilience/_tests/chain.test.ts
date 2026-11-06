@@ -6,6 +6,7 @@ import { circuitBreaker } from '../circuitbreaker/circuitbreaker.js'
 import { fakeTimersClock } from '../clock.testkit.js'
 import { compose, run } from '../compose.js'
 import { ErrCallRefused } from '../errors.js'
+import { fallback } from '../fallback/fallback.js'
 import type { Operation } from '../policy.js'
 import { ErrRateLimitExceeded, rateLimiter } from '../ratelimiter/ratelimiter.js'
 import { retry } from '../retry/retry.js'
@@ -127,5 +128,35 @@ describe('the recommended order', () => {
     } finally {
       errorClass.stackTraceLimit = original
     }
+  })
+})
+
+describe('a client error through every policy', () => {
+  class ErrNotFound extends Error {}
+
+  // An entrypoint's transport marks the client's own errors on the context; every policy on the way out must let
+  // them through untouched, so the client's answer is the one the handler gave.
+  it('runs the operation once, records the error nowhere and hands it to the caller unchanged', async () => {
+    const { breaker, retries, quota } = chain()
+    const handler = vi.fn(() => 'cached')
+    const recovery = fallback(handler, { name: 'inventory' })
+    const missing = new ErrNotFound('no such record')
+    const operation = vi.fn(async () => {
+      throw missing
+    })
+    const pool = bulkhead({ name: 'inventory', maxConcurrentCalls: 10, clock: fakeTimersClock })
+    const deadline = timeLimiter({ name: 'inventory', timeoutDuration: 1 * Second, clock: fakeTimersClock })
+    const guarded = compose(recovery, retries, breaker, quota, pool, deadline)(operation)
+
+    const error = await guarded(
+      { signal: undefined, isClientError: thrown => thrown instanceof ErrNotFound },
+      undefined,
+    ).catch((thrown: unknown) => thrown)
+
+    expect(error).toBe(missing)
+    expect(operation).toHaveBeenCalledTimes(1)
+    expect(handler).not.toHaveBeenCalled()
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 0, failedCalls: 0 })
+    expect(recovery.metrics()).toMatchObject({ recoveredCalls: 0 })
   })
 })

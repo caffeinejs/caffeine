@@ -183,8 +183,8 @@ the id to look up.
   be wrong too, since `fetch` rejects with one when the network fails. Narrow `on` to what the fallback is for.
 - An error `on` declines passes through unchanged, and the `recovered` event carries the error it replaced, so a log
   listener still sees it.
-- On an HTTP handler, `{ on: error => !isClientError(error) }` answers anything but the client's own mistake; see
-  [Client errors](#client-errors).
+- On a controller, a client error, such as the 403 a handler throws to refuse a caller, never reaches the fallback;
+  see [Client errors](#client-errors).
 - Once the caller's signal has aborted, the handler never runs: nobody is waiting for the value.
 - A handler that throws, or rejects, rejects the call with what it threw.
 - An `on` predicate that returns anything but a boolean rejects the call with `ErrInvalidOption`.
@@ -330,7 +330,8 @@ A 503 response holds its connection until its body is read or cancelled. `discar
 again, after the `retry` event and before the wait, so the body is released while the retry waits. It never runs on the
 result the caller receives, nor on an error. A result it released never reaches the caller: when a later attempt is
 refused, or the retry is disposed while the call waits, the call rejects with `ErrMaxRetriesExceeded`, which carries
-the result. A throw or a rejection from `discard` resurfaces as uncaught, as a listener's does.
+the result. What `discard` throws or rejects with is dropped: it releases a value nobody holds, so no caller is left to
+hear of it.
 
 The default backoff waits 500 ms, doubling per attempt up to 30 s, each wait spread by half of it either way, so
 callers that failed together do not come back together. Pass `backoff: exponential({ jitter: 0 })`, or a fixed
@@ -376,7 +377,8 @@ the caller left.
 A timeout cannot undo work: an operation that ignores its signal keeps running after the call rejected, and a
 retried write can overlap the one still in flight. Pass the signal to every I/O call, and make writes idempotent. A
 value that arrives after the call ended is dropped; `discard` releases it, such as a response whose body nobody will
-read.
+read. That value was made under a signal that has already aborted: a body tied to it has already failed, and
+`cancel()` on it rejects, which `discard` drops along with anything else it throws or rejects with.
 
 Where it sits decides what it bounds: inside a retry, each attempt; outside it, every attempt and every wait between
 them (see [Composing policies](#composing-policies)).
@@ -635,9 +637,10 @@ r.defaults(p =>
 - **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a preset, the defaults or one of
   their policies twice, a preset defines no policy, a method names a preset nothing defines or a policy its preset
   lacks, a `@Fallback` names a method its class lacks, an annotation is on a static or a private method, a policy's
-  options are out of range, a request entrypoint such as a controller is retried with no transport integration
-  installed, `r.health(...)` is called twice or its `critical` names a breaker it cannot watch, the order does not
-  list each kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+  options are out of range, a request entrypoint such as a controller carries a retry, a circuit breaker or a
+  fallback with no transport integration installed, `r.health(...)` is called twice or its `critical` names a breaker
+  it cannot watch, the order does not list each kind once, or a bulkhead or rate limiter inside a method's time
+  limiter may wait as long as its limit.
 
 ```text
 ErrInvalidOption: Cannot weave "LedgerClient.post": preset "ledger" defines no time limiter
@@ -809,10 +812,22 @@ left to the application's handlers.
 
 ### Client errors
 
-A policy treats every error alike, on a controller as anywhere else: a 404 a handler throws is retried, counts as a
-breaker failure, and is handed to a fallback, so a burst of requests for missing records can open the breaker for
-every client. Nothing is excluded by default. `isClientError` tells a client's mistake from a failing dependency; pass
-it to each policy that should not blame the dependency for one:
+A 4xx answer a handler throws is the client's own, not a failing dependency. On every call of a controller method,
+`ResilienceHTTP()` tells the policies which errors those are, with `isClientError`: such an error is never retried, a
+circuit breaker records it as ignored, and a fallback never answers it. A burst of requests for missing records cannot
+open the breaker for every client, and a fallback that serves cached orders cannot answer a 403 with the order it
+refused. No option turns this off: a handler that wants to answer a client error itself, such as a 404 turned into an
+empty list, catches it in the handler. `Resilience()` refuses to start when a controller carries a retry, a circuit
+breaker or a fallback and `ResilienceHTTP()` is not installed, since nothing would tell those policies which errors
+are the client's.
+
+An `ErrHTTP` with a 4xx status, such as `ErrHTTPNotFound`, is a client error. Any other error is one when it carries a
+numeric `status` or `statusCode` from 400 to 499, except 408 and 429: a dependency that timed out or throttled is
+failing for now. The breaker counts an ignored error neither as a failure nor as a success.
+
+Only the controller's own calls are classified. A service or an outbound client the handler calls keeps retrying and
+counting every error, even under the same preset, since a 404 from a dependency may be its failure. Where one should
+not blame the dependency for a client's mistake either, pass `isClientError` to its policies:
 
 ```ts
 import { isClientError } from '@caffeinejs/resilience/http'
@@ -825,10 +840,6 @@ Resilience(r =>
 
 @Fallback('cachedItem', { on: error => !isClientError(error) })
 ```
-
-An `ErrHTTP` with a 4xx status, such as `ErrHTTPNotFound`, is a client error. Any other error is one when it carries a
-numeric `status` or `statusCode` from 400 to 499, except 408 and 429: a dependency that timed out or throttled is
-failing for now. The breaker counts an ignored error neither as a failure nor as a success.
 
 Resilience annotations work on controller methods as on any other: a controller is a class the container builds.
 A retry on a handler, from `@Retry` or from the preset `@Resilient` names, runs the whole handler again, every service
@@ -870,10 +881,10 @@ async place(key: string, order: NewOrder): Promise<Order> { … }
 The better answer is usually none of them: put `@Retry` on the outbound client method the handler calls, where the
 repeated unit is one dependency call. A service's `@Retry` is never checked, and neither is one on a controller method
 that is not a route handler: a helper the handler calls through `this` is woven, so its writes replay unchecked; keep
-`@Retry` on the outbound client method. `Resilience()` refuses to start when a controller is retried and
-`ResilienceHTTP()` is not installed; see [Writing a transport integration](#writing-a-transport-integration). Nothing
-checks that a response was already sent before a retry or a fallback
-(hazard 4): keep handler retries for handlers that answer only by returning.
+`@Retry` on the outbound client method. `Resilience()` refuses to start when a controller carries a retry, a circuit
+breaker or a fallback and `ResilienceHTTP()` is not installed; see [Client errors](#client-errors) and
+[Writing a transport integration](#writing-a-transport-integration). Nothing checks that a response was already sent
+before a retry or a fallback (hazard 4): keep handler retries for handlers that answer only by returning.
 
 ### Writing a transport integration
 
@@ -882,19 +893,27 @@ on the same seam. It has four duties:
 
 1. **Claim its entrypoints.** The transport labels every class whose methods it calls on a request with
    `kEntrypoint`, as `@Controller` does, beside a label of its own. The integration binds a `ResilienceTransport` that
-   names that label. `Resilience()` refuses a retried entrypoint whose labels no installed transport claims.
+   names that label. `Resilience()` refuses an entrypoint with a retry, a circuit breaker or a fallback whose labels
+   no installed transport claims.
 2. **Check replays.** At `bootstrap()`, it resolves each entrypoint method with `stagesOf(cls, method, registry)`,
    which sees a retry from `@Retry`, `@Resilient` and the class alike, and refuses the ones it cannot replay, unless
    `repeatable` says otherwise.
 3. **Map failures.** `failureOf(error)` from the root entry classifies a refusal as `unavailable`, with its
    `retryAfter`, and a time limit as `timeout`; anything else is `undefined`, left to the transport's own handlers.
    HTTP answers 503 and 504; gRPC would answer `UNAVAILABLE` and `DEADLINE_EXCEEDED`.
-4. **Tell client mistakes apart,** if it can: `isClientError` is HTTP's.
+4. **Tell client errors apart.** `isClientError(error)` on the transport says which errors an entrypoint method
+   throws as its client's own answer. On every call of a class the transport claims, those pass the policies untouched:
+   not retried, ignored by the breaker, never answered by a fallback. HTTP's is `isClientError`; gRPC's would pick
+   status codes such as `NOT_FOUND` and `INVALID_ARGUMENT`.
 
 ```ts
-// kGRPCService and isIdempotent are the gRPC package's own
+// kGRPCService, isIdempotent and isGRPCClientError are the gRPC package's own
 class GRPCTransport extends ResilienceTransport {
   readonly label = kGRPCService
+
+  isClientError(error: unknown): boolean {
+    return isGRPCClientError(error)
+  }
 }
 
 class ResilienceGRPCBuilder<C = unknown> extends FeatureBuilder<C> {
@@ -1070,8 +1089,8 @@ synchronously, whatever the layers inside it do, so chaining `.then()` or `.fina
 returns is guarded the same way: a synchronous throw from it rejects the call, so the layers outside it always settle
 what they started.
 
-To hand the rest of the chain a different signal, call it with a new context. This one also aborts the work when the
-process starts shutting down:
+To hand the rest of the chain a different signal, call it with a new context that keeps the other fields of the one
+it got, such as `isClientError`. This one also aborts the work when the process starts shutting down:
 
 ```ts
 const untilShutdown: Policy = op => (ctx, input) =>

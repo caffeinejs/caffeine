@@ -7,7 +7,7 @@ import { disposable } from '../dispose.js'
 import { Emitter } from '../emitter.js'
 import { ErrCallRefused, type ErrorMatcher, refusal } from '../errors.js'
 import { Options } from '../options.js'
-import type { Operation, Wrapper } from '../policy.js'
+import type { CallContext, Operation, Wrapper } from '../policy.js'
 import { clampDelay, type Clock, scheduleUnref } from '../timers.js'
 import { CountWindow, type Window } from './_count_window.js'
 import { TimeWindow } from './_time_window.js'
@@ -100,8 +100,9 @@ export interface CircuitBreakerOptions {
   recordError?: ErrorMatcher
   /**
    * Errors the breaker neither counts nor lets affect its state: a predicate, or error classes. Checked before
-   * `recordError`. A failure after the caller's signal aborted is always ignored, and so is a refusal
-   * ({@link ErrCallRefused}) from a policy inside the breaker, such as a spent rate limit or a full bulkhead.
+   * `recordError`. A failure after the caller's signal aborted is always ignored, and so are a refusal
+   * ({@link ErrCallRefused}) from a policy inside the breaker, such as a spent rate limit or a full bulkhead, and a
+   * client error (`CallContext.isClientError`).
    */
   ignoreError?: ErrorMatcher
   /** Whether a returned value counts as a failure, such as a response with status 503. */
@@ -376,7 +377,7 @@ export class CircuitBreaker implements Wrapper {
           return result
         },
         error => {
-          this.#onError(generation, start, error, ctx.signal)
+          this.#onError(generation, start, error, ctx)
           throw error
         },
       )
@@ -603,19 +604,23 @@ export class CircuitBreaker implements Wrapper {
     }
   }
 
-  #onError(generation: number, start: number, error: unknown, signal: AbortSignal | undefined): void {
+  // `ctx` is the wrapped call's; a permit's work has none.
+  #onError(generation: number, start: number, error: unknown, ctx: CallContext | undefined): void {
     const now = this.#clock.now()
     const duration = now - start
 
     let reason: 'ignored' | 'aborted' | 'refused' | undefined
     let failed: boolean
     try {
-      if (signal !== undefined && signal.aborted) {
+      if (ctx !== undefined && ctx.signal !== undefined && ctx.signal.aborted) {
         reason = 'aborted'
       } else if (error instanceof ErrCallRefused) {
         // This process turned the call away; the dependency never saw it.
         reason = 'refused'
-      } else if (this.#ignoreError !== undefined && this.#ignoreError(error)) {
+      } else if (
+        (ctx !== undefined && ctx.isClientError !== undefined && ctx.isClientError(error)) ||
+        (this.#ignoreError !== undefined && this.#ignoreError(error))
+      ) {
         reason = 'ignored'
       }
       failed = reason === undefined && (this.#recordError === undefined || this.#recordError(error))

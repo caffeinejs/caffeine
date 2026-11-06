@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { run } from '../compose.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ErrMaxRetriesExceeded } from '../retry/retry.js'
-import { CircuitBreaker, Fallback, Retry } from './annotations.js'
+import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Resilient, Retry, TimeLimiter } from './annotations.js'
 import { Resilience, type ResilienceBuilder } from './feature.js'
 import { ResilienceRegistry } from './registry.js'
 import { kEntrypoint, ResilienceTransport } from './transport.js'
@@ -429,12 +429,67 @@ describe('Resilience() and transports', () => {
 
   class GRPCTransport extends ResilienceTransport {
     readonly label = kService
+
+    isClientError(): boolean {
+      return false
+    }
   }
 
-  // An entrypoint of a transport this package has never heard of: a request, replayed by a retry.
-  async function serve(transport: boolean) {
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(Resilience(inventory))
-    app.container.bind(StockService, t => t.toSelf().labels(kService, kEntrypoint))
+  // A breaker on an entrypoint: unless its transport tells them apart, a client's own errors count as failures.
+  class Shelf {
+    @CircuitBreaker('shelf')
+    async count(): Promise<number> {
+      return 3
+    }
+  }
+
+  // A fallback on an entrypoint: unless its transport tells them apart, it answers a client's own errors too.
+  class Orders {
+    @Fallback('cached')
+    async find(): Promise<string> {
+      return 'order'
+    }
+
+    async cached(_error: unknown): Promise<string> {
+      return 'cached order'
+    }
+  }
+
+  // A breaker that no stage annotation names: the class's @Resilient reaches it through its preset.
+  @Resilient('shelf')
+  class Pantry {
+    async count(): Promise<number> {
+      return 3
+    }
+  }
+
+  // Policies that never look at an error, so a client's own error means nothing to them.
+  class Ledger {
+    @TimeLimiter('local')
+    @Bulkhead('local')
+    @RateLimiter('local')
+    async total(): Promise<number> {
+      return 7
+    }
+  }
+
+  // Entrypoints of a transport this package has never heard of: each method runs on a request.
+  async function serve(transport: boolean, ...entrypoints: (new () => object)[]) {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
+      Resilience(r =>
+        inventory(r)
+          .preset('shelf', p => p.circuitBreaker())
+          .preset('local', p =>
+            p
+              .timeLimiter({ timeoutDuration: 1 * Second })
+              .bulkhead()
+              .rateLimiter({ limitForPeriod: 100, limitRefreshPeriod: 1 * Second }),
+          ),
+      ),
+    )
+    for (const entrypoint of entrypoints) {
+      app.container.bind(entrypoint, t => t.toSelf().labels(kService, kEntrypoint))
+    }
     if (transport) {
       app.container.bind(GRPCTransport, t => t.toSelf().extends(ResilienceTransport))
     }
@@ -444,7 +499,7 @@ describe('Resilience() and transports', () => {
   }
 
   it('refuses a retried entrypoint that no installed transport integration claims', async () => {
-    const error = await serve(false).catch((reason: unknown) => reason)
+    const error = await serve(false, StockService).catch((reason: unknown) => reason)
 
     expect(error).toBeInstanceOf(ErrInvalidOption)
     expect((error as Error).message.split('\n')[0]).toBe(
@@ -453,8 +508,153 @@ describe('Resilience() and transports', () => {
   })
 
   it('leaves a retried entrypoint to the transport that claims its label', async () => {
-    const app = await serve(true)
+    const app = await serve(true, StockService)
 
     await expect(app.container.get(StockService).get()).resolves.toBe('stock')
+  })
+
+  // Unclassified, a burst of requests for missing records would open the breaker for every client.
+  it('refuses a circuit breaker on an entrypoint that no installed transport integration claims', async () => {
+    const error = await serve(false, Shelf).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    const message = (error as Error).message
+    expect(message.split('\n')[0]).toBe(
+      "Cannot weave \"Shelf.count\": no installed transport integration claims this request entrypoint, so @CircuitBreaker('shelf') would count a client's own error, such as a 404 it throws, as a failure",
+    )
+    expect(message).toContain(
+      'Install ResilienceHTTP() from @caffeinejs/resilience/http with .install(ResilienceHTTP()) if "Shelf" is an HTTP controller',
+    )
+    expect(message).toContain(
+      'Install the resilience integration of the transport that serves "Shelf" if it is not an HTTP controller',
+    )
+    expect(message).toContain('Move @CircuitBreaker(\'shelf\') to the outbound client method that "Shelf.count" calls')
+  })
+
+  // Unclassified, a fallback would answer the 403 a method throws to refuse a caller, with what it refused.
+  it('refuses a fallback on an entrypoint that no installed transport integration claims', async () => {
+    const error = await serve(false, Orders).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    const message = (error as Error).message
+    expect(message.split('\n')[0]).toBe(
+      "Cannot weave \"Orders.find\": no installed transport integration claims this request entrypoint, so @Fallback('cached') would answer a client's own error, such as a 403 it throws",
+    )
+    expect(message).toContain(
+      'Install ResilienceHTTP() from @caffeinejs/resilience/http with .install(ResilienceHTTP()) if "Orders" is an HTTP controller',
+    )
+    expect(message).toContain(
+      'Install the resilience integration of the transport that serves "Orders" if it is not an HTTP controller',
+    )
+  })
+
+  it('refuses a breaker that the class-level @Resilient names through its preset', async () => {
+    const error = await serve(false, Pantry).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      "Cannot weave \"Pantry.count\": no installed transport integration claims this request entrypoint, so @Resilient('shelf') would count a client's own error, such as a 404 it throws, as a failure",
+    )
+  })
+
+  it('leaves a breaker and a fallback on an entrypoint to the transport that claims its label', async () => {
+    const app = await serve(true, Shelf, Orders)
+
+    await expect(app.container.get(Shelf).count()).resolves.toBe(3)
+    await expect(app.container.get(Orders).find()).resolves.toBe('order')
+  })
+
+  // A time limiter, a bulkhead and a rate limiter treat every error alike, so they need no transport to classify one.
+  it('starts an entrypoint no transport claims when none of its policies judges an error', async () => {
+    const app = await serve(false, Ledger)
+
+    await expect(app.container.get(Ledger).total()).resolves.toBe(7)
+  })
+})
+
+describe('Resilience() and the client errors of a transport', () => {
+  const kService = Symbol('grpc service')
+
+  class ErrNotFound extends Error {}
+
+  class GRPCTransport extends ResilienceTransport {
+    readonly label = kService
+
+    isClientError(error: unknown): boolean {
+      return error instanceof ErrNotFound
+    }
+  }
+
+  // Outbound: the dependency's own 404 is its failure, which this class's policies must still see.
+  class Catalog {
+    attempts = 0
+
+    @Retry('inventory')
+    @CircuitBreaker('inventory')
+    async lookup(): Promise<string> {
+      this.attempts++
+      throw new ErrNotFound('the dependency lost the record')
+    }
+  }
+
+  // Inbound: an entrypoint of the transport, naming the same preset as the client it calls.
+  class Storefront {
+    attempts = 0
+
+    @Retry('inventory')
+    @CircuitBreaker('inventory')
+    async item(catalog: Catalog, id: string): Promise<string> {
+      this.attempts++
+      if (id === 'missing') {
+        throw new ErrNotFound('no such item')
+      }
+      return catalog.lookup()
+    }
+  }
+
+  async function serve() {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
+      Resilience(r =>
+        r.preset('inventory', p =>
+          p
+            .retry({ maxAttempts: 3, backoff: 0 })
+            .circuitBreaker({ minimumNumberOfCalls: 10, slidingWindow: { type: 'count', size: 10 } }),
+        ),
+      ),
+    )
+    app.container.bind(Storefront, t => t.toSelf().labels(kService, kEntrypoint))
+    app.container.bind(Catalog, t => t.toSelf())
+    app.container.bind(GRPCTransport, t => t.toSelf().extends(ResilienceTransport))
+    opened.push(() => app.close())
+    await app.bootstrap()
+    return app
+  }
+
+  // One client asking for what does not exist must neither multiply the work nor count against the dependency.
+  it('runs an entrypoint once on an error its transport calls a client error, and leaves the breaker untouched', async () => {
+    const app = await serve()
+    const storefront = app.container.get(Storefront)
+    const breaker = app.container.get(ResilienceRegistry).circuitBreaker('inventory')
+
+    const error = await storefront.item(app.container.get(Catalog), 'missing').catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrNotFound)
+    expect(storefront.attempts).toBe(1)
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+  })
+
+  // The classification belongs to the entrypoint's own calls: a client class it calls keeps its policies whole.
+  it('still retries and counts the same error in a class the entrypoint calls', async () => {
+    const app = await serve()
+    const storefront = app.container.get(Storefront)
+    const catalog = app.container.get(Catalog)
+    const breaker = app.container.get(ResilienceRegistry).circuitBreaker('inventory')
+
+    const error = await storefront.item(catalog, 'tea').catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrNotFound)
+    expect(catalog.attempts).toBe(3)
+    expect(storefront.attempts).toBe(1)
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 3, failedCalls: 3 })
   })
 })

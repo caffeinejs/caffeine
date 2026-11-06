@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { Emitter } from './emitter.js'
+import { detached, Emitter } from './emitter.js'
+import { unhandledRejections } from './unhandled.testkit.js'
 
 interface Events {
   tick: { n: number }
@@ -116,5 +117,37 @@ describe('Emitter', () => {
 
     expect(queued).toHaveLength(1)
     expect(() => queued[0]()).toThrow(boom)
+  })
+})
+
+describe('detached', () => {
+  // A discard releases a value nobody holds, such as a late response whose body the time limit already errored: a
+  // failure there has no caller to reach, and rethrown as uncaught it would stop the process.
+  it('drops what the callback throws, after calling it with the value', () => {
+    const queued: Array<() => void> = []
+    vi.stubGlobal('queueMicrotask', (callback: () => void) => queued.push(callback))
+    const seen: string[] = []
+
+    expect(() =>
+      detached((value: string) => {
+        seen.push(value)
+        throw new Error('discard bug')
+      }, 'stale'),
+    ).not.toThrow()
+
+    expect(seen).toEqual(['stale'])
+    expect(queued).toEqual([])
+  })
+
+  it('drops a rejection the callback returns, leaving nothing unhandled', async () => {
+    const queued: Array<() => void> = []
+    vi.stubGlobal('queueMicrotask', (callback: () => void) => queued.push(callback))
+
+    const reasons = await unhandledRejections(async () => {
+      detached(() => Promise.reject(new TypeError('stream errored')), 'stale')
+    })
+
+    expect(reasons).toEqual([])
+    expect(queued).toEqual([])
   })
 })

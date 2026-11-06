@@ -18,7 +18,11 @@ import { sleep } from './_sleep.js'
  */
 export class ErrMaxRetriesExceeded extends ErrResilience {
   readonly attempts: number
-  readonly result: unknown
+  /**
+   * The last retryable result. It is not enumerable, so a logger that copies an error's fields leaves out what the
+   * dependency answered.
+   */
+  declare readonly result: unknown
 
   /** `ending` says why the call ended: every attempt was used, the next one was refused, or the retry was disposed. */
   constructor(
@@ -35,7 +39,7 @@ export class ErrMaxRetriesExceeded extends ErrResilience {
     )
     this.name = 'ErrMaxRetriesExceeded'
     this.attempts = attempts
-    this.result = result
+    Object.defineProperty(this, 'result', { value: result, enumerable: false })
   }
 }
 
@@ -70,10 +74,10 @@ export interface RetryOptions {
    * Which errors are worth another attempt: a predicate of the error and the attempt that failed, or a list of error
    * classes. Defaults to every error.
    *
-   * A refusal ({@link ErrCallRefused}: an open circuit breaker, a full bulkhead, a spent rate limit) and a failure
-   * after the caller aborted are never retried, whatever this says. A refusal after an attempt that reached the
-   * operation ends the call with that attempt's outcome, as if it had been the last. A predicate must return a
-   * boolean; anything else rejects the call with {@link ErrInvalidOption}.
+   * A refusal ({@link ErrCallRefused}: an open circuit breaker, a full bulkhead, a spent rate limit), a failure
+   * after the caller aborted and a client error (`CallContext.isClientError`) are never retried, whatever this says.
+   * A refusal after an attempt that reached the operation ends the call with that attempt's outcome, as if it had been
+   * the last. A predicate must return a boolean; anything else rejects the call with {@link ErrInvalidOption}.
    */
   retryOn?: ((error: unknown, attempt: number) => boolean) | readonly ErrorClass[]
   /**
@@ -89,8 +93,7 @@ export interface RetryOptions {
   /**
    * Releases a result the retry tries again, such as a 503 response whose body would otherwise hold its connection
    * while the retry waits: `discard: response => response.body?.cancel()`. It runs before the wait, after the `retry`
-   * event. The call never waits for it, and a throw or a rejection from it resurfaces as uncaught, as a listener's
-   * does.
+   * event. The call never waits for it, and what it throws or rejects with is dropped.
    *
    * A result it released never reaches the caller. When a later attempt is refused, or the retry is disposed while the
    * call waits, the call rejects with {@link ErrMaxRetriesExceeded}, which carries the result, instead of resolving
@@ -286,6 +289,7 @@ export class Retry implements Wrapper {
       retryable =
         !(ctx.signal !== undefined && ctx.signal.aborted) &&
         !(error instanceof ErrCallRefused) &&
+        !(ctx.isClientError !== undefined && ctx.isClientError(error)) &&
         (this.#retryOn === undefined || this.#verdict('retryOn', this.#retryOn(error, attempt)))
     } catch (thrown) {
       this.#ignored(attempt, thrown)

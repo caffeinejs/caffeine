@@ -7,7 +7,7 @@ import {
   kFeatureName,
 } from '@caffeinejs/application'
 import { HealthIndicator } from '@caffeinejs/application/health'
-import type { AnyClass } from '@caffeinejs/di'
+import { type AnyClass, reflect } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -18,7 +18,7 @@ import { described, ErrInvalidOption } from '../errors.js'
 import type { RateLimiterOptions } from '../ratelimiter/ratelimiter.js'
 import type { RetryOptions } from '../retry/retry.js'
 import type { TimeLimiterOptions } from '../timelimiter/timelimiter.js'
-import { ANNOTATIONS } from './annotations.js'
+import { ANNOTATIONS, Fallback } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
 import { checkedStorage, ResilienceContext, type ResilienceContextStorage } from './context.js'
 import { criticalBreakers, ResilienceHealthIndicator, type ResilienceHealthOptions } from './health.js'
@@ -89,6 +89,21 @@ function mergedOptions(...layers: (object | undefined)[]): object {
     }
   }
   return options
+}
+
+// A request entrypoint no installed transport claims. Installing that transport's integration is the likely fix, and
+// HTTP's comes first, since a controller is the entrypoint most applications have.
+function unclaimed(cls: AnyClass, problem: string, ...solutions: string[]): ErrInvalidOption {
+  return new ErrInvalidOption(
+    errMessage(problem)
+      .solutions(
+        `Install ResilienceHTTP() from @caffeinejs/resilience/http with .install(ResilienceHTTP()) if "${cls.name}" is an HTTP controller`,
+        `Install the resilience integration of the transport that serves "${cls.name}" if it is not an HTTP controller`,
+        ...solutions,
+      )
+      .reference('@caffeinejs/resilience', ErrInvalidOption)
+      .build(),
+  )
 }
 
 // The backoff a retry takes for the one configuration describes.
@@ -225,10 +240,10 @@ export class PresetBuilder {
  * `undefined` keeps the configured one; configuration may add a policy code left out, and the defaults fill what both
  * leave open. `bootstrap()` fails when code defines a preset, the defaults or one of their policies twice, a preset
  * defines no policy, a method names a preset nothing defines or a policy its preset lacks, a `@Fallback` names a
- * method its class lacks, an annotation is on a static or a private method, a request entrypoint is retried with no
- * transport integration installed, such as `ResilienceHTTP()` for a controller, `r.health(...)` is called twice or
- * its `critical` names a breaker it cannot watch, the order does not list each kind once, or a bulkhead or rate
- * limiter inside a method's time limiter may wait as long as its limit.
+ * method its class lacks, an annotation is on a static or a private method, a request entrypoint carries a retry, a
+ * circuit breaker or a fallback with no transport integration installed, such as `ResilienceHTTP()` for a controller,
+ * `r.health(...)` is called twice or its `critical` names a breaker it cannot watch, the order does not list each kind
+ * once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
  *
  * ```ts
  * .install(Resilience((r, { config }) => r.config(config.resilience).preset('inventory', p => p.retry().circuitBreaker())))
@@ -360,30 +375,49 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override bootstrap(kit: BootstrapKit<C>): void {
-    // A retried entrypoint replays a request: only the transport that serves it can tell whether that is safe. The
-    // bootstrap kit has no getManyOptional, and getMany refuses a key nothing binds.
+    // A retried entrypoint replays a request, and a breaker or a fallback on one judges its client's errors: only the
+    // transport that serves it can tell whether a replay is safe and which errors are the client's. The bootstrap kit
+    // has no getManyOptional, and getMany refuses a key nothing binds.
     const transports =
       kit.container.getBindings(ResilienceTransport).length === 0 ? [] : kit.container.getMany(ResilienceTransport)
-    const claimed = new Set(transports.map(transport => transport.label))
+    const claimed = new Map(transports.map(transport => [transport.label, transport]))
     const registry = kit.container.get(ResilienceRegistry)
+    // The transport that claims each entrypoint class, which tells its client errors apart.
+    const served = new Map<AnyClass, ResilienceTransport>()
     for (const { binding } of kit.container.getBindingsByLabel(kEntrypoint)) {
       const cls = binding.type as AnyClass | undefined
-      if (cls === undefined || binding.labels.some(label => claimed.has(label))) {
+      if (cls === undefined) {
+        continue
+      }
+      const label = binding.labels.find(other => claimed.has(other))
+      if (label !== undefined) {
+        served.set(cls, claimed.get(label)!)
         continue
       }
       for (const member of wovenMembers(cls)) {
-        const retry = stagesOf(cls, member, registry).stages.retry
+        const where = `${cls.name}.${String(member)}`
+        const { retry, circuitBreaker } = stagesOf(cls, member, registry).stages
         if (retry !== undefined) {
-          throw new ErrInvalidOption(
-            errMessage(
-              `Cannot retry "${cls.name}.${String(member)}": ${written(retry)} retries a request entrypoint that no installed transport integration checks`,
-            )
-              .solutions(
-                'Install the resilience integration of the transport that serves it, such as ResilienceHTTP() from @caffeinejs/resilience/http for a controller',
-                `Move ${written(retry)} to the outbound client method the entrypoint calls`,
-              )
-              .reference('@caffeinejs/resilience', ErrInvalidOption)
-              .build(),
+          throw unclaimed(
+            cls,
+            `Cannot retry "${where}": ${written(retry)} retries a request entrypoint that no installed transport integration checks`,
+            `Move ${written(retry)} to the outbound client method that "${where}" calls`,
+          )
+        }
+        // A breaker and a fallback judge errors: with no transport to tell them apart, a client's own errors would open
+        // the one and reach the other. The other policies treat every error alike.
+        if (circuitBreaker !== undefined) {
+          throw unclaimed(
+            cls,
+            `Cannot weave "${where}": no installed transport integration claims this request entrypoint, so ${written(circuitBreaker)} would count a client's own error, such as a 404 it throws, as a failure`,
+            `Move ${written(circuitBreaker)} to the outbound client method that "${where}" calls`,
+          )
+        }
+        const recovery = reflect.effective(cls, Fallback, member)
+        if (recovery !== undefined) {
+          throw unclaimed(
+            cls,
+            `Cannot weave "${where}": no installed transport integration claims this request entrypoint, so @Fallback('${String(recovery.method)}') would answer a client's own error, such as a 403 it throws`,
           )
         }
       }
@@ -400,7 +434,7 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
     }
 
     for (const cls of classes) {
-      aspect.prepare(cls)
+      aspect.prepare(cls, served.get(cls))
     }
   }
 }

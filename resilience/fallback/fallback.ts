@@ -4,7 +4,7 @@ import { lift, mark } from '../compose.js'
 import { Emitter } from '../emitter.js'
 import { described, type ErrorMatcher, ErrInvalidOption } from '../errors.js'
 import { Options } from '../options.js'
-import type { Operation, RecoveryWrapper } from '../policy.js'
+import type { CallContext, Operation, RecoveryWrapper } from '../policy.js'
 
 /**
  * What answers a failed call: it receives the error and the call's input, such as the arguments of a decorated
@@ -17,8 +17,8 @@ export interface FallbackOptions {
   name?: string
   /**
    * Which errors the handler answers: a predicate, or a list of error classes. Defaults to every error, a programming
-   * error such as a `TypeError` included. A predicate must return a boolean; anything else rejects the call with
-   * {@link ErrInvalidOption}.
+   * error such as a `TypeError` included. A client error (`CallContext.isClientError`) is never answered, whatever
+   * this says. A predicate must return a boolean; anything else rejects the call with {@link ErrInvalidOption}.
    */
   on?: ErrorMatcher
 }
@@ -100,20 +100,22 @@ export class Fallback<R = unknown> implements RecoveryWrapper<R> {
           this.#successful++
           return value
         },
-        error => this.#onError(error, ctx.signal, input),
+        error => this.#onError(error, ctx, input),
       ),
     )
   }
 
-  #onError(error: unknown, signal: AbortSignal | undefined, input: unknown): Promise<R> {
-    if (signal !== undefined && signal.aborted) {
+  #onError(error: unknown, ctx: CallContext, input: unknown): Promise<R> {
+    if (ctx.signal !== undefined && ctx.signal.aborted) {
       this.#ignore(error, 'aborted')
       return Promise.reject(error)
     }
 
     let handled: unknown
     try {
-      handled = this.#on === undefined || this.#on(error)
+      // A client error is the caller's own answer, never the fallback's to replace.
+      handled =
+        !(ctx.isClientError !== undefined && ctx.isClientError(error)) && (this.#on === undefined || this.#on(error))
       if (typeof handled !== 'boolean') {
         throw new ErrInvalidOption(
           errMessage(`Cannot run fallback "${this.#name}": on must return a boolean, got ${described(handled)}`)
