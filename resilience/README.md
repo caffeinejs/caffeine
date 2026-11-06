@@ -9,7 +9,7 @@ npm install @caffeinejs/resilience
 
 | Import from                             | What                                                                                                      |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `@caffeinejs/resilience`                | `compose`, `runWith`, `exponential`, the strategy types, shared errors                                    |
+| `@caffeinejs/resilience`                | `compose`, `decorate`, `run`, `exponential`, the policy types, shared errors                              |
 | `@caffeinejs/resilience/circuitbreaker` | `circuitBreaker`, `ErrCallNotPermitted`                                                                   |
 | `@caffeinejs/resilience/retry`          | `retry`, `ErrMaxRetriesExceeded`                                                                          |
 | `@caffeinejs/resilience/timelimiter`    | `timeLimiter`, `ErrTimeLimitExceeded`                                                                     |
@@ -22,11 +22,12 @@ npm install @caffeinejs/resilience
 
 ## Quick start
 
-Strategies hold state (a circuit breaker remembers recent calls), so create each one **once** per protected
-dependency and share it. A breaker created per call never sees a second call and never opens.
+A policy guards an operation: it takes one and returns one that does the same work, guarded. The built-in policies
+hold state (a circuit breaker remembers recent calls), so create each one **once** per protected dependency and share
+it. A breaker created per call never sees a second call and never opens.
 
 ```ts
-import { exponential, runWith } from '@caffeinejs/resilience'
+import { compose, decorate, exponential } from '@caffeinejs/resilience'
 import { circuitBreaker } from '@caffeinejs/resilience/circuitbreaker'
 import { retry } from '@caffeinejs/resilience/retry'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
@@ -43,66 +44,105 @@ const retries = retry({
   backoff: exponential({ initialDelay: 100 * Millisecond, maxDelay: 2 * Second, jitter: 0.5 }),
 })
 
-const fetchStock = (id: string, signal?: AbortSignal) =>
-  fetch(`https://inventory/stock/${id}`, { signal }).then(r => r.json() as Promise<Stock>)
+async function fetchStock(id: string, signal?: AbortSignal): Promise<Stock> {
+  const res = await fetch(`https://inventory/stock/${id}`, { signal })
+  return (await res.json()) as Stock
+}
+
+export const getStock = decorate(compose(retries, breaker), fetchStock)
 
 // per call
-const stock = await runWith(() => fetchStock(id), retries, breaker) // Promise<Stock>
+const stock = await getStock('42', request.signal) // Promise<Stock>
 ```
 
-The result is always a promise. A synchronous operation is fine: its value or its throw settles the promise.
+`decorate` keeps the function's signature and builds the chain once. The result is always a promise: a synchronous
+throw rejects it.
 
 Every delay, wait and threshold is a `Duration` from `@caffeinejs/std/duration`, a number of milliseconds written
 with its constants: `2 * Second`, `500 * Millisecond`.
 
-## Order of strategies
+## Composing policies
 
-Strategies are listed from the outermost to the innermost: `runWith(op, a, b, c)` runs `a(b(c(op)))`.
+`compose(a, b, c)` is one policy made of three, listed from the outermost to the innermost: applied to an operation,
+it runs `a(b(c(op)))`. A layer is a built-in instance, which composes through its `wrap()` method, or a function of
+your own (see [Writing a policy](#writing-a-policy)); the two mix freely, and a composed policy is a layer too.
 
 ```ts
 // retry around the breaker: each attempt is one breaker call; an open breaker fails the call at once
-await runWith(op, retries, breaker)
+compose(retries, breaker)
 
 // breaker around the retry: one breaker call per whole retry sequence
-await runWith(op, breaker, retries)
+compose(breaker, retries)
 ```
 
-The first is the usual choice. With every strategy, the recommended order is:
+The first is the usual choice. With every policy, the recommended order, which the annotations use, is:
 
 ```ts
-import { compose } from '@caffeinejs/resilience'
-
-const inventory = compose(retries, breaker, quota, pool, deadline)
-// retry( circuitBreaker( rateLimiter( bulkhead( timeLimiter( operation )))))
+const inventory = compose(staleStock, retries, breaker, quota, deadline, pool)
+// fallback( retry( circuitBreaker( rateLimiter( timeLimiter( bulkhead( operation ))))))
 ```
 
+- The fallback answers for the whole call, after every attempt.
 - The retry repeats the whole inner chain; an open breaker, a full bulkhead or a spent quota fails the call at once.
 - The breaker records each attempt, a timeout included, and never a refusal from inside it.
 - The rate limiter counts attempts against the quota.
-- The bulkhead holds a slot while the attempt runs, and bounds the wait for one with its own `maxWaitDuration`.
-- The time limiter bounds the attempt once it runs. Inside the bulkhead, it does not count the wait for a slot: timed
-  out there, a call that only waited would count as a dependency failure and open the breaker on a healthy dependency.
+- The time limiter bounds each attempt, the wait for a bulkhead slot included.
+- The bulkhead gives a slot back when the attempt really ends. A call the time limiter gave up on may still be
+  running, and keeps its slot until it stops, so the bulkhead counts the work really in flight.
 
-For a budget that covers the wait too, put a second time limiter outside the chain.
+Keep the bulkhead's `maxWaitDuration` below the time limiter's `timeoutDuration`. A call still waiting for a slot when
+the limit passes times out, and the breaker counts that timeout against a dependency that may be healthy; refused by
+the bulkhead first, the call is ignored by the breaker. The annotations refuse to start otherwise. The other way out
+is the bulkhead outside the time limiter, `compose(retries, breaker, quota, pool, deadline)`: the limit then bounds
+only the running call, and a call that timed out gives its slot back while its operation may still run.
 
-A fallback answers for the whole call, outside the chain: see [Fallback](#fallback).
-
-## Cancellation
-
-The operation receives a context with the caller's signal and the attempt number. Pass the signal, bare, after
-the strategies; `undefined` means no signal, so an optional signal passes straight through.
+A preset has one time limiter. For a limit per attempt and a total across every attempt and every wait, compose two:
 
 ```ts
-const stock = await runWith(({ signal }) => fetchStock(id, signal), retries, breaker, request.signal)
-
-const getStock = (id: string, signal?: AbortSignal) =>
-  runWith(ctx => fetchStock(id, ctx.signal), retries, breaker, signal)
+const total = timeLimiter({ name: 'inventory-total', timeoutDuration: 5 * Second })
+const inventory = compose(total, retries, breaker, deadline, pool)
 ```
+
+`compose` asks each instance to wrap the operation when the policy is applied, so apply it once and keep the guarded
+operation, or `decorate` a function. One guarded operation is safe to call concurrently: each call has its own
+context, and only the policies' state is shared.
+
+## Operations and signals
+
+An operation is `(ctx, input) => Promise<T>`. `ctx.signal` is the caller's signal, or the one a policy such as a time
+limiter gave the attempt in its place. `input` is what the caller passed, handed through every policy untouched, so
+one chain serves every call:
+
+```ts
+import { run } from '@caffeinejs/resilience'
+
+const stockOf = compose(retries, breaker)((ctx, id: string) => fetchStock(id, ctx.signal))
+await stockOf({ signal: request.signal }, '42')
+
+// once, with the chain built for this call alone
+await run(
+  compose(retries, breaker)(ctx => fetchStock('42', ctx.signal)),
+  request.signal,
+)
+```
+
+`decorate(policy, fn)` does that for a function. Its input is the argument list, and the caller's signal is the first
+argument that is an `AbortSignal`; the function receives the attempt's signal in its place. A call that passes none
+hands the function none, so a time limit cannot tell it to stop. `signalAt` names the parameter instead, and the
+function then always receives the attempt's signal there:
+
+```ts
+const getStock = decorate(compose(retries, deadline), fetchStock, { signalAt: 1 })
+
+await getStock('42') // fetchStock('42', <the attempt's signal>)
+```
+
+`this` is not kept: decorate a bound method, `decorate(policy, client.get.bind(client))`.
 
 - An already-aborted signal rejects with its reason without running anything.
 - An abort during a retry's wait rejects at once with the abort reason; no further attempt runs.
-- A failure that settles after the caller aborted is not counted against the dependency.
-- `ctx.attempt` starts at 1; a retry increments it.
+- A failure that settles after the caller aborted is not counted against the dependency, not retried, and not
+  answered by a fallback.
 
 Each retry that is waiting holds one `abort` listener on the signal until it wakes. Many calls waiting on one
 long-lived signal, such as a server's shutdown signal, trigger Node's `MaxListenersExceededWarning` at 11
@@ -111,40 +151,35 @@ listeners. Prefer a signal per request.
 ## Fallback
 
 The promise settles after the whole chain, with the final error: the last attempt's error after retries, or a
-refusal such as `ErrCallNotPermitted`. A fallback answers it with something else, such as a cached value.
+refusal such as `ErrCallNotPermitted`. A fallback answers it with something else, such as a cached value. It widens
+the result type, so it sits outermost.
 
 ```ts
-import { compose, ErrCallRefused } from '@caffeinejs/resilience'
+import { ErrCallRefused } from '@caffeinejs/resilience'
 import { fallback } from '@caffeinejs/resilience/fallback'
 
-// module scope
-const inventory = compose(retries, breaker, deadline)
-const staleStock = fallback({
+// module scope; the input of a decorated function is its argument list
+const staleStock = fallback((error, input) => cachedStock((input as [string])[0]), {
   name: 'inventory',
-  fallbackOn: error => error instanceof ErrCallRefused, // only calls that certainly never ran
+  on: [ErrCallRefused], // only calls that certainly never ran
 })
 
-// per call: Promise<Stock | CachedStock>
-export const getStock = (id: string, signal?: AbortSignal) =>
-  staleStock.recover(
-    inventory(ctx => fetchStock(id, ctx.signal), signal),
-    error => cachedStock(id),
-    signal,
-  )
+export const getStock = decorate(compose(staleStock, retries, breaker, deadline), fetchStock)
+// (id: string, signal?: AbortSignal) => Promise<Stock | CachedStock>
 ```
 
-| Option       | Default     | Meaning                                   |
-| ------------ | ----------- | ----------------------------------------- |
-| `name`       | required    | Names the fallback in events and metrics  |
-| `fallbackOn` | every error | Whether an error is handed to the handler |
+| Option | Default     | Meaning                                                                   |
+| ------ | ----------- | ------------------------------------------------------------------------- |
+| `name` | `fallback`  | Names the fallback in events and metrics                                  |
+| `on`   | every error | Which errors the handler answers: a predicate, or a list of error classes |
 
-`recover(call, handler, signal?)` returns the call's value, or the handler's for an error `fallbackOn` accepts. The
-handler is given per call because a useful fallback needs the call's own data, such as the id to look up.
+The handler receives the error and the call's input, because a useful fallback needs the call's own data, such as
+the id to look up.
 
-- An error `fallbackOn` declines passes through unchanged, so a bug is not hidden as an outage.
-- Once `signal` has aborted, the handler never runs: nobody is waiting for the value.
-- A handler that throws rejects the call with what it threw.
-- A `fallbackOn` that returns anything but a boolean rejects the call with `ErrInvalidOption`.
+- An error `on` declines passes through unchanged, so a bug is not hidden as an outage.
+- Once the caller's signal has aborted, the handler never runs: nobody is waiting for the value.
+- A handler that throws, or rejects, rejects the call with what it threw.
+- An `on` predicate that returns anything but a boolean rejects the call with `ErrInvalidOption`.
 
 A timeout leaves the outcome unknown: the call may have gone through. Limiting a fallback to `ErrCallRefused`
 answers only the calls that never ran, which matters for writes such as payments.
@@ -152,26 +187,6 @@ answers only the calls that never ran, which matters for writes such as payments
 `.catch()` still works for a one-off; `fallback()` adds a shared filter, abort awareness, events and metrics.
 
 `ErrCallRefused.retryAfter` is what an HTTP layer puts in `Retry-After`; see [HTTP](#http).
-
-## Reusing a chain with `compose()`
-
-`runWith()` builds its chain on every call. `compose()` builds it once and returns a function with the same
-contract minus the strategy list; use it wherever the same strategies protect many calls.
-
-```ts
-import { compose } from '@caffeinejs/resilience'
-
-export const inventory = compose(retries, breaker)
-
-const stock = await inventory(() => fetchStock(id))
-const fresh = await inventory(({ signal }) => fetchStock(id, signal), request.signal)
-
-export const getStock = (id: string, signal?: AbortSignal) =>
-  inventory(ctx => fetchStock(id, ctx.signal), signal).catch(() => cachedStock(id))
-```
-
-One runner is safe to call concurrently: each call has its own context, and only the strategies' state is
-shared.
 
 ## Circuit breaker
 
@@ -183,26 +198,29 @@ const breaker = circuitBreaker({
   slowCallDurationThreshold: 2 * Second,
   slowCallRateThreshold: 80,
   recordResult: res => res instanceof Response && res.status >= 500,
-  ignoreError: err => err instanceof ValidationError,
+  ignoreError: [ValidationError],
 })
 ```
 
-| Option                                  | Default                        | Meaning                                                                                                          |
-| --------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `name`                                  | required                       | Names the breaker in errors, events and metrics                                                                  |
-| `failureRateThreshold`                  | `50`                           | Failure rate, in percent, at or above which the breaker opens                                                    |
-| `slowCallRateThreshold`                 | `100`                          | Slow-call rate, in percent, at or above which the breaker opens                                                  |
-| `slowCallDurationThreshold`             | `1 * Minute`                   | A call longer than this is slow                                                                                  |
-| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', duration }` for the calls of the last `duration`, in whole seconds    |
-| `minimumNumberOfCalls`                  | `100`                          | Calls needed before a rate is computed; capped at a count window's size                                          |
-| `waitDurationInOpenState`               | `1 * Minute`                   | Time spent open; a function of how many times in a row it opened, such as `exponential()`                        |
-| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open                                                                          |
-| `maxWaitDurationInHalfOpenState`        | `0` (forever)                  | Re-opens a half-open breaker whose trial calls never settle                                                      |
-| `automaticTransitionFromOpenToHalfOpen` | `false`                        | Moves to half open when the wait elapses, not on the next call                                                   |
-| `recordError`                           | every error                    | Whether an error is a failure; `false` counts it as a success                                                    |
-| `ignoreError`                           | none                           | Errors that neither count nor affect the state; checked first. Refusals from inside and aborted calls always are |
-| `recordResult`                          | none                           | Whether a returned value is a failure                                                                            |
-| `captureStackTrace`                     | `false`                        | Whether a refusal's `ErrCallNotPermitted` captures a stack trace                                                 |
+| Option                                  | Default                        | Meaning                                                                                                                            |
+| --------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                                  | required                       | Names the breaker in errors, events and metrics                                                                                    |
+| `failureRateThreshold`                  | `50`                           | Failure rate, in percent, at or above which the breaker opens                                                                      |
+| `slowCallRateThreshold`                 | `100`                          | Slow-call rate, in percent, at or above which the breaker opens                                                                    |
+| `slowCallDurationThreshold`             | `1 * Minute`                   | A call longer than this is slow                                                                                                    |
+| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', duration }` for the calls of the last `duration`, in whole seconds                      |
+| `minimumNumberOfCalls`                  | `100`                          | Calls needed before a rate is computed; capped at a count window's size                                                            |
+| `waitDurationInOpenState`               | `1 * Minute`                   | Time spent open; a function of how many times in a row it opened, such as `exponential()`                                          |
+| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open                                                                                            |
+| `maxWaitDurationInHalfOpenState`        | `0` (forever)                  | Re-opens a half-open breaker whose trial calls never settle                                                                        |
+| `automaticTransitionFromOpenToHalfOpen` | `false`                        | Moves to half open when the wait elapses, not on the next call                                                                     |
+| `recordError`                           | every error                    | Which errors are failures: a predicate, or a list of error classes; any other error counts as a success                            |
+| `ignoreError`                           | none                           | Errors that neither count nor affect the state, as `recordError`; checked first. Refusals from inside and aborted calls always are |
+| `recordResult`                          | none                           | Whether a returned value is a failure                                                                                              |
+| `captureStackTrace`                     | `false`                        | Whether a refusal's `ErrCallNotPermitted` captures a stack trace                                                                   |
+| `clock`                                 | the runtime's                  | Where it reads the time and sets its timer; see [Time in tests](#time-in-tests)                                                    |
+
+A list of error classes matches an instance of any of them, subclasses included.
 
 How it moves:
 
@@ -215,15 +233,54 @@ How it moves:
   `maxWaitDurationInHalfOpenState`, once every trial slot has been held that long, the next call re-opens the
   breaker. Time with a free slot does not count.
 - **forced_open**, **disabled**, **metrics_only**: manual states entered with `forceOpen()`, `disable()` and
-  `metricsOnly()`, left with `reset()`. Disabled lets everything through and records nothing; metrics-only
-  records and reports but never opens.
+  `metricsOnly()`, left with `reset()` or a transition below. Disabled lets everything through and records nothing;
+  metrics-only records and reports but never opens.
+
+An operator who knows more than the window, such as that a deploy of the dependency is under way, moves it by hand:
+
+| Method                       | Moves to                                                                                                  |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `transitionToOpen({ for? })` | open, for `for` instead of `waitDurationInOpenState`; it counts as an opening for the next wait's backoff |
+| `transitionToHalfOpen()`     | half open, with fresh trial slots                                                                         |
+| `transitionToClosed()`       | closed, with an empty window                                                                              |
+| `reset()`                    | closed, with an empty window, and emits `reset`                                                           |
 
 A call's outcome counts only for the state it started in: a call that settles after the breaker changed state,
-or after `reset()`, is reported in events but not recorded.
+by itself or by hand, is reported in events but not recorded.
 
 `breaker.metrics()` returns a snapshot: `failureRate` and `slowCallRate` in percent (`undefined` below the
 minimum number of calls), `bufferedCalls`, `failedCalls`, `successfulCalls`, `slowCalls`, `slowFailedCalls`,
 `slowSuccessfulCalls`, and `notPermittedCalls`, which counts every refusal since creation and survives `reset()`.
+
+### Work that is not one operation
+
+A body streamed after the response started fails outside any operation a policy could watch. `acquire()` lets one
+call through by hand, or returns the refusal, and the caller settles the permit when the work ends:
+
+```ts
+const permit = breaker.acquire()
+if (permit instanceof ErrCallNotPermitted) {
+  throw permit
+}
+
+try {
+  const res = await fetch(exportURL, { signal })
+  await res.body!.pipeTo(destination, { signal })
+  permit.onSuccess()
+} catch (error) {
+  // a caller who left says nothing about the dependency
+  if (signal.aborted) {
+    permit.release()
+  } else {
+    permit.onError(error)
+  }
+  throw error
+}
+```
+
+`onSuccess()`, `onResult(result)`, `onError(error)` and `release()` settle it; the first one counts and the rest do
+nothing. The call's duration runs from `acquire()`. `onResult` and `onError` classify as a wrapped call's outcome is
+classified, and `release()` records nothing and gives a half-open trial slot back.
 
 ## Retry
 
@@ -231,7 +288,9 @@ minimum number of calls), `bufferedCalls`, `failedCalls`, `successfulCalls`, `sl
 const retries = retry({
   name: 'payments',
   maxAttempts: 4,
+  retryOn: [ProviderUnavailable],
   retryOnResult: res => res instanceof Response && res.status === 503,
+  discard: res => (res as Response).body?.cancel(),
   backoff: (attempt, error, result) =>
     result instanceof Response && result.headers.has('retry-after')
       ? Number(result.headers.get('retry-after')) * Second
@@ -240,14 +299,16 @@ const retries = retry({
 })
 ```
 
-| Option                 | Default         | Meaning                                                                           |
-| ---------------------- | --------------- | --------------------------------------------------------------------------------- |
-| `name`                 | required        | Names the retry in errors, events and metrics                                     |
-| `maxAttempts`          | `3`             | Attempts in total, the first call included                                        |
-| `backoff`              | `exponential()` | The wait between attempts, or `(attempt, error, result) => Duration`              |
-| `retryOn`              | every error     | Whether an error is worth another attempt; refusals and aborted calls never are   |
-| `retryOnResult`        | none            | Whether a returned value is worth another attempt                                 |
-| `failAfterMaxAttempts` | `false`         | Reject with `ErrMaxRetriesExceeded` instead of returning the last retryable value |
+| Option                 | Default         | Meaning                                                                                           |
+| ---------------------- | --------------- | ------------------------------------------------------------------------------------------------- |
+| `name`                 | required        | Names the retry in errors, events and metrics                                                     |
+| `maxAttempts`          | `3`             | Attempts in total, the first call included                                                        |
+| `backoff`              | `exponential()` | The wait between attempts, or `(attempt, error, result) => Duration`                              |
+| `retryOn`              | every error     | Which errors are worth another attempt: `(error, attempt) => boolean`, or a list of error classes |
+| `retryOnResult`        | none            | Whether a returned value is worth another attempt                                                 |
+| `discard`              | none            | Releases a result it tries again, such as a 503 response's body                                   |
+| `failAfterMaxAttempts` | `false`         | Reject with `ErrMaxRetriesExceeded` instead of returning the last retryable value                 |
+| `clock`                | the runtime's   | Where it sets the timers it waits on                                                              |
 
 A refusal, any `ErrCallRefused` such as an open breaker's `ErrCallNotPermitted`, is never retried, and neither is a
 failure after the caller aborted, whatever `retryOn` returns: a refusal means the operation never ran, and retrying
@@ -256,6 +317,12 @@ it at once only adds load to what is already refusing. `retryOn` narrows what is
 A refusal after an attempt that reached the operation, such as a breaker that opened on the timeout before it, ends
 the call with that earlier attempt's outcome instead: its error, or its retryable value as when attempts run out. A
 refusal out of a retry therefore still means that no attempt ran.
+
+A 503 response holds its connection until its body is read or cancelled. `discard` runs on each result the retry tries
+again, after the `retry` event and before the wait, so the body is released while the retry waits. It never runs on the
+result the caller receives, nor on an error. A result it released never reaches the caller: when a later attempt is
+refused, or the retry is disposed while the call waits, the call rejects with `ErrMaxRetriesExceeded`, which carries
+the result. A throw or a rejection from `discard` resurfaces as uncaught, as a listener's does.
 
 The default backoff waits 500 ms, doubling per attempt up to 30 s, each wait spread by half of it either way, so
 callers that failed together do not come back together. Pass `backoff: exponential({ jitter: 0 })`, or a fixed
@@ -276,33 +343,39 @@ is not a finite number rejects the call with `ErrInvalidOption`.
 ```ts
 import { timeLimiter } from '@caffeinejs/resilience/timelimiter'
 
-const deadline = timeLimiter({ name: 'inventory', timeoutDuration: 2 * Second })
+const deadline = timeLimiter({
+  name: 'inventory',
+  timeoutDuration: 2 * Second,
+  discard: res => (res as Response).body?.cancel(),
+})
 
-await runWith(({ signal }) => fetchStock(id, signal), retries, breaker, deadline)
+export const getStock = decorate(compose(retries, breaker, deadline), fetchStock)
 ```
 
-| Option            | Default  | Meaning                                                             |
-| ----------------- | -------- | ------------------------------------------------------------------- |
-| `name`            | required | Names the time limiter in errors, events and metrics                |
-| `timeoutDuration` | required | How long the rest of the chain may run; finite and greater than `0` |
+| Option            | Default       | Meaning                                                                        |
+| ----------------- | ------------- | ------------------------------------------------------------------------------ |
+| `name`            | required      | Names the time limiter in errors, events and metrics                           |
+| `timeoutDuration` | required      | How long the rest of the chain may run; finite and greater than `0`            |
+| `discard`         | none          | Releases a value that arrives after the call ended, by the limit or the caller |
+| `clock`           | the runtime's | Where it reads the time and sets its timer                                     |
 
 The rest of the chain gets a signal of its own, linked to the caller's. When the limit passes, that signal aborts
 with an `ErrTimeLimitExceeded` and the call rejects with it at once, even when the operation ignores its signal and
 never settles. When the caller aborts first, the call rejects with the caller's reason and no timeout is counted.
+The signal stays linked to the caller's after the call settles, so a body the operation streams still learns that
+the caller left.
 
 A timeout cannot undo work: an operation that ignores its signal keeps running after the call rejected, and a
-retried write can overlap the one still in flight. Pass the signal to every I/O call, and make writes idempotent.
+retried write can overlap the one still in flight. Pass the signal to every I/O call, and make writes idempotent. A
+value that arrives after the call ended is dropped; `discard` releases it, such as a response whose body nobody will
+read.
 
-Where it sits decides what it bounds:
+Where it sits decides what it bounds: inside a retry, each attempt; outside it, every attempt and every wait between
+them (see [Composing policies](#composing-policies)).
 
-```ts
-// per attempt: each of the 3 attempts gets 2 s; the breaker records each timeout
-await runWith(op, retries, breaker, deadline)
-
-// total: 5 s for every attempt and every wait between them
-const total = timeLimiter({ name: 'inventory-total', timeoutDuration: 5 * Second })
-await runWith(op, total, retries, breaker, deadline)
-```
+The time limiter links its signal to the caller's with `AbortSignal.any`. On Node 22 that keeps about 176 bytes per
+call on a caller signal that lives long, such as a server's shutdown signal; Node 24 and later keep nothing. On Node
+22, pass a signal per request. A call without a caller signal links nothing.
 
 `deadline.metrics()` counts `successfulCalls`, `failedCalls` and `timedOutCalls`. The timer keeps the process
 alive: it is what settles a call whose operation ignores its signal.
@@ -327,14 +400,15 @@ const pool = bulkhead({
 | `maxWaitDuration`    | `0`                  | How long a call may wait for a slot; `0` refuses at once             |
 | `maxQueuedCalls`     | `maxConcurrentCalls` | How many calls may wait at once, when `maxWaitDuration` is above `0` |
 | `captureStackTrace`  | `false`              | Whether a refusal's `ErrBulkheadFull` captures a stack trace         |
+| `clock`              | the runtime's        | Where it reads the time and sets the timers of waiting calls         |
 
 A slow dependency can use up every request a process serves before enough calls settle for a breaker to open. A
 bulkhead caps the calls in flight: past the cap, a call waits in line, first come first served, for at most
 `maxWaitDuration` with at most `maxQueuedCalls` waiting, or is refused with `ErrBulkheadFull`. A waiting call whose
 signal aborts leaves the line.
 
-A slot is given back when the rest of the chain settles, never earlier. A time limiter outside the bulkhead that gave
-up on a call does not free its slot while the operation is still running: the bulkhead counts work really in flight.
+A slot is given back when the rest of the chain settles, never earlier. Inside a time limiter that gave up on a call,
+the slot stays taken while the operation is still running: the bulkhead counts work really in flight.
 
 `pool.metrics()` reports `availableConcurrentCalls`, `maxAllowedConcurrentCalls`, `queuedCalls` and
 `rejectedCalls`.
@@ -352,13 +426,14 @@ const quota = rateLimiter({
 })
 ```
 
-| Option               | Default  | Meaning                                                              |
-| -------------------- | -------- | -------------------------------------------------------------------- |
-| `name`               | required | Names the rate limiter in errors, events and metrics                 |
-| `limitForPeriod`     | required | Calls that may start in each period                                  |
-| `limitRefreshPeriod` | required | The length of a period                                               |
-| `maxWaitDuration`    | `0`      | How long a call may wait for a permit of a later period; `0` refuses |
-| `captureStackTrace`  | `false`  | Whether a refusal's `ErrRateLimitExceeded` captures a stack trace    |
+| Option               | Default       | Meaning                                                              |
+| -------------------- | ------------- | -------------------------------------------------------------------- |
+| `name`               | required      | Names the rate limiter in errors, events and metrics                 |
+| `limitForPeriod`     | required      | Calls that may start in each period                                  |
+| `limitRefreshPeriod` | required      | The length of a period                                               |
+| `maxWaitDuration`    | `0`           | How long a call may wait for a permit of a later period; `0` refuses |
+| `captureStackTrace`  | `false`       | Whether a refusal's `ErrRateLimitExceeded` captures a stack trace    |
+| `clock`              | the runtime's | Where it reads the time and sets its refresh timer                   |
 
 At most `limitForPeriod` calls start in each period, periods counted from when the rate limiter was created. A call
 that finds no permit left reserves one of a later period when it would get it within `maxWaitDuration`, and starts
@@ -368,6 +443,12 @@ spent, unless it was the last in line, which gives its permit back. No timer run
 
 Permits are counted per period reserved: on an event loop too busy to start a waiting call in its period, the call
 starts later on the permit it reserved, ahead of any call that arrived after it.
+
+A partner that changes its quota at run time is followed without a restart:
+
+- `changeLimitForPeriod(n)` applies from the next period. The calls already waiting are lined up again under the new
+  limit, in their order, and one that would now wait past `maxWaitDuration` is refused.
+- `changeMaxWaitDuration(d)` applies to the calls that arrive afterwards.
 
 The limit holds in this process only. Ten replicas that each allow 100 calls a second allow 1,000 between them:
 divide a partner's quota by the replica count, or enforce it where the calls leave your network.
@@ -382,13 +463,48 @@ divide a partner's quota by the replica count, or enforce it where the calls lea
 `[maxDelay·(1−jitter), maxDelay]`, so clients that back off for long still wait different times. It fits both
 `retry({ backoff })` and `circuitBreaker({ waitDurationInOpenState })`.
 
+## Shutdown
+
+A retry sleeping out a 30-second backoff, or a call queued for a slot, would hold a shutdown until it woke.
+`dispose()` ends the waits of one instance:
+
+| Instance        | `dispose()`                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------- |
+| retry           | Ends every sleeping call at once with its last attempt's outcome, and from then on never waits          |
+| bulkhead        | Refuses every queued call with `ErrBulkheadFull`, and from then on refuses a call that would wait       |
+| rate limiter    | Refuses every waiting call with `ErrRateLimitExceeded`, and from then on refuses a call that would wait |
+| circuit breaker | Cancels the timer of `automaticTransitionFromOpenToHalfOpen` and sets none again                        |
+
+Calls already running keep running, and a call that needs no wait still starts. `[Symbol.dispose]` is an alias, so a
+`using` declaration disposes at the end of its block. A time limiter's timer lasts no longer than its limit, and a
+fallback holds nothing between calls: neither has `dispose()`. The `Resilience()` feature disposes the instances it
+defines when the application shuts down.
+
+## Time in tests
+
+The `clock` option takes `{ now(), setTimeout(callback, delay), clearTimeout(handle) }`. The default reads the
+runtime's `performance`, captured when the package loads, so fake timers installed later never move its time. A clock
+that reads the globals on every call runs on whatever fake timers are installed:
+
+```ts
+import type { Clock } from '@caffeinejs/resilience'
+
+export const fakeTimersClock: Clock = {
+  now: () => performance.now(),
+  setTimeout: (callback, delay) => setTimeout(callback, delay),
+  clearTimeout: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+}
+
+const breaker = circuitBreaker({ name: 'inventory', clock: fakeTimersClock })
+```
+
 ## Annotations
 
 ```sh
 npm install @caffeinejs/di @caffeinejs/application
 ```
 
-`@caffeinejs/resilience/aop` applies the strategies to methods of the classes the container builds, by name. The
+`@caffeinejs/resilience/aop` applies the policies to methods of the classes the container builds, by name. The
 `Resilience()` feature defines the named instances and weaves them in.
 
 ```ts
@@ -408,7 +524,7 @@ import {
 export class InventoryClient {
   constructor(private readonly cache: StockCache) {}
 
-  @Fallback('cachedStock', { fallbackOn: error => error instanceof ErrCallRefused })
+  @Fallback('cachedStock', { on: [ErrCallRefused] })
   @Retry('inventory')
   @CircuitBreaker('inventory')
   @RateLimiter('inventory')
@@ -444,17 +560,21 @@ createApplication({ container, config }).install(
 - **Names, not options.** `@Retry('inventory')` uses the retry named `inventory`. Every method naming it shares one
   instance, and so one state, in that container; two applications never share one.
 - **One order.** Whatever order the decorators are written in, a method runs
-  `fallback(retry(circuitBreaker(rateLimiter(bulkhead(timeLimiter(method))))))`, any subset keeping that order.
+  `fallback(retry(circuitBreaker(rateLimiter(timeLimiter(bulkhead(method))))))`, any subset keeping that order, as
+  [Composing policies](#composing-policies) explains. `r.order([...])` sets another order for the whole application,
+  outermost first, each of `retry`, `circuitBreaker`, `rateLimiter`, `timeLimiter` and `bulkhead` once; the
+  fallback stays outermost. The usual reason is one breaker call per whole retry sequence:
+  `r.order(['circuitBreaker', 'retry', 'rateLimiter', 'timeLimiter', 'bulkhead'])`.
 - **Methods returning a promise only.** On a synchronous method, a class or a field, the decorators are a type error.
 - **`@Fallback(method)`** names a method of the same class that takes the error, then the original arguments, and
-  resolves to what the decorated method does; anything else is a type error. It never runs once the caller's
-  signal has aborted.
+  resolves to what the decorated method does; anything else is a type error. `on` takes a predicate or a list of
+  error classes. It never runs once the caller's signal has aborted.
 - **The signal argument.** The first argument that is an `AbortSignal` is the caller's signal; each attempt receives
   its own in its place, which a time limiter aborts at its limit. A caller that passes none still gets the limit,
   but the method is never told.
 - **What is woven.** Every class the container builds: decorated with `@Injectable`, bound by hand, in any scope,
   and subclasses, which inherit the annotations of the methods they do not redeclare. A call through `this` goes
-  through the strategies too. An instance built with `new`, and a value or a factory bound without a class, is not
+  through the policies too. An instance built with `new`, and a value or a factory bound without a class, is not
   woven.
 - **Other aspects.** Aspects run outermost first by ascending order, and the resilience aspect's order is `0`. It
   wraps every aspect with a positive order or none, so a retry runs a transaction aspect once per attempt. An aspect
@@ -462,20 +582,25 @@ createApplication({ container, config }).install(
   registered in decides which runs outside: give such an aspect a non-zero order rather than rely on it.
 - **Start-up checks.** `bootstrap()` fails with `ErrInvalidOption` when code defines a name twice, a method names an
   instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static method, an
-  instance's options are out of range, or a controller carries `@Retry` without `ResilienceHTTP()`.
+  instance's options are out of range, a controller carries `@Retry` without `ResilienceHTTP()`, the order does not
+  list each kind once, or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
+- **Shutdown.** The instances are disposed when the application shuts down; see [Shutdown](#shutdown).
 
 `Resilience()` binds a `ResilienceRegistry`: inject it to use the same instances by hand, or to instrument them,
-fallbacks included (`registry.fallbacks()`, one per method, named `Class.method`).
+fallbacks included (`registry.fallbacks()`, one per method, named `Class.method`). Its `dispose()` disposes every
+instance it holds.
 
 ### Configuration
 
-An instance is defined in code, in the configuration tree, or both; code wins, option by option. The application
-declares the block in its own schema, with records of named instances holding the data options only:
+An instance is defined in code, in the configuration tree, or both; code wins, option by option, and `r.order(...)`
+wins over `order`. The application declares the block in its own schema, with records of named instances holding the
+data options only:
 
 ```ts
 export const ConfigSchema = $t.Object({
   resilience: $t.Object(
     {
+      order: $t.Optional($t.List($t.UnionEnum(['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']))),
       retries: $t.Record(
         $t.String(),
         $t.Object({ maxAttempts: $t.Optional($t.Integer()), backoff: $t.Optional($t.Duration()) }),
@@ -493,6 +618,7 @@ export const ConfigSchema = $t.Object({
 ```sh
 APP_RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS=5
 APP_RESILIENCE__TIME_LIMITERS__INVENTORY__TIMEOUT_DURATION=1500ms
+APP_RESILIENCE__ORDER=circuitBreaker,retry,rateLimiter,timeLimiter,bulkhead
 ```
 
 Durations are text with a unit: a bare `1500` fails validation at `bootstrap()`.
@@ -531,7 +657,7 @@ left to the application's handlers.
 
 ### Client errors
 
-A strategy treats every error alike, on a controller as anywhere else: a 404 a handler throws is retried, counts as a
+A policy treats every error alike, on a controller as anywhere else: a 404 a handler throws is retried, counts as a
 breaker failure, and is handed to a fallback, so a burst of requests for missing records can open the breaker for
 every client. Nothing is excluded by default. `isClientError` tells a client's mistake from a failing dependency; pass
 it to each instance that should not blame the dependency for one:
@@ -545,7 +671,7 @@ Resilience(r =>
     .circuitBreaker('catalog', { ignoreError: isClientError }),
 )
 
-@Fallback('cachedItem', { fallbackOn: error => !isClientError(error) })
+@Fallback('cachedItem', { on: error => !isClientError(error) })
 ```
 
 An `ErrHTTP` with a 4xx status, such as `ErrHTTPNotFound`, is a client error. Any other error is one when it carries a
@@ -607,14 +733,16 @@ that is not a route handler: a helper the handler calls through `this` is woven,
 | `ErrMaxRetriesExceeded` | `/retry`          | `ERR_MAX_RETRIES_EXCEEDED` | `failAfterMaxAttempts` and the last value was still retryable. `attempts`, `result`                                                              |
 | `ErrInvalidOption`      | root              | `ERR_INVALID_OPTION`       | A bad option, argument, name or annotation, when created, at `bootstrap()` or on a call; or a computed delay or a predicate's answer is unusable |
 
-All extend `ErrResilience`. A refusal, a call a strategy turned away without running it, extends `ErrCallRefused`,
-which carries `retryAfter` when the strategy knows how long to wait: catch `ErrCallRefused` to handle every kind of
+All extend `ErrResilience`. A refusal, a call a policy turned away without running it, extends `ErrCallRefused`,
+which carries `retryAfter` when the policy knows how long to wait: catch `ErrCallRefused` to handle every kind of
 refusal at once. `ErrCallNotPermitted`, `ErrBulkheadFull` and `ErrRateLimitExceeded` are refusals;
 `ErrTimeLimitExceeded` is not, because the operation ran.
 
 Refusals carry no stack trace by default: they arrive in bulk while a dependency is down, capturing a stack costs
-several times the rest of the refusal, and their fields already say why the call failed. Pass
-`captureStackTrace: true` to the strategy to get one.
+several times the rest of the refusal, and their fields already say why the call failed. Such a refusal is built
+without running its constructor: `instanceof`, `message`, `code` and every field work, and `stack` is its first line,
+but `Error.isError()` and Node's `util.types.isNativeError()` answer `false`. Pass `captureStackTrace: true` to the
+policy for a stack trace, or where a logger or a serializer relies on those checks.
 
 ## Events
 
@@ -624,16 +752,16 @@ retries.on('retry', e => log.info({ retry: e.name, attempt: e.attempt, delayMs: 
 off()
 ```
 
-| Strategy        | Events                                                                                                                                     |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| circuit breaker | `success`, `failure`, `ignored`, `notPermitted`, `stateChange`, `reset`, `failureRateExceeded`, `slowCallRateExceeded`                     |
-| retry           | `retry` (before each wait), `success`, `failure` (every attempt used), `ignored` (not retryable, aborted, or a predicate or backoff threw) |
-| time limiter    | `success`, `failure`, `timeout`                                                                                                            |
-| bulkhead        | `permitted` (with how long it waited), `rejected`, `finished` (a call gave its slot back)                                                  |
-| rate limiter    | `permitted` (with how long it waited), `rejected` (with `retryAfter`)                                                                      |
-| fallback        | `recovered`, `failure` (the handler or `fallbackOn` threw), `ignored` (not handled, or the caller aborted)                                 |
+| Policy          | Events                                                                                                                                               |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| circuit breaker | `success`, `failure`, `ignored`, `notPermitted`, `stateChange`, `reset`, `failureRateExceeded`, `slowCallRateExceeded`                               |
+| retry           | `retry` (before each wait), `success`, `failure` (every attempt used), `ignored` (not retryable, aborted, disposed, or a predicate or backoff threw) |
+| time limiter    | `success`, `failure`, `timeout`                                                                                                                      |
+| bulkhead        | `permitted` (with how long it waited), `rejected`, `finished` (a call gave its slot back)                                                            |
+| rate limiter    | `permitted` (with how long it waited), `rejected` (with `retryAfter`)                                                                                |
+| fallback        | `recovered`, `failure` (the handler or `on` threw), `ignored` (not handled, or the caller aborted)                                                   |
 
-Every payload carries the strategy's `name`. Listeners run synchronously. A listener that throws, or returns a
+Every payload carries the policy's `name`. Listeners run synchronously. A listener that throws, or returns a
 promise that rejects, never changes the outcome of the call; its error is rethrown on the next microtask, where
 the runtime reports it as uncaught (in Node, that ends the process by default). Listeners must not throw.
 
@@ -667,9 +795,9 @@ stopRetry()
 stop.forEach(off => off())
 ```
 
-Instruments are created under the scope `@caffeinejs/resilience`. Give every instrumented strategy its own `name`.
+Instruments are created under the scope `@caffeinejs/resilience`. Give every instrumented policy its own `name`.
 Two that share one write to the same series: the duration histogram adds them up, and for every observable
-instrument the strategy instrumented last replaces the other.
+instrument the policy instrumented last replaces the other.
 
 | Metric                                             | Instrument                 | Unit           | Attributes                                                                                                                                          |
 | -------------------------------------------------- | -------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -699,52 +827,58 @@ Through the OpenTelemetry Prometheus exporter for JavaScript, dots become unders
 `resilience_circuit_breaker_not_permitted_calls_total`, `resilience_retry_calls_total`, and so on. Other
 pipelines, such as the OpenTelemetry Collector's Prometheus exporter, may also append the unit (`_seconds`).
 
-## Writing a strategy
+## Writing a policy
 
-A strategy is a function of the call's context and the rest of the chain:
+A policy is a function from an operation to an operation. One of your own composes with the built-ins:
 
 ```ts
-import type { Strategy } from '@caffeinejs/resilience'
+import type { Policy } from '@caffeinejs/resilience'
 
-const timing: Strategy = async (ctx, next) => {
+const timing: Policy = op => async (ctx, input) => {
   const start = performance.now()
   try {
-    return await next(ctx)
+    return await op(ctx, input)
   } finally {
-    histogram.record(performance.now() - start, { attempt: ctx.attempt })
+    histogram.record(performance.now() - start)
   }
 }
 
-await runWith(op, retries, timing, breaker) // times each attempt, inside the retry
+compose(retries, timing, breaker) // times each attempt, inside the retry
 ```
 
-`next` always returns a promise and never throws synchronously, whatever the strategies inside it do, so chaining
-`.then()` or `.finally()` on it is safe.
+Through `compose` and `decorate`, the operation a policy receives always returns a promise and never throws
+synchronously, whatever the layers inside it do, so chaining `.then()` or `.finally()` on it is safe. What a policy
+returns is guarded the same way: a synchronous throw from it rejects the call, so the layers outside it always settle
+what they started.
 
-To hand the rest of the chain a different signal, derive the context with `ctx.with()`; a context built any other
-way cannot reach the operation. This one also aborts the work when the process starts shutting down:
+To hand the rest of the chain a different signal, call it with a new context. This one also aborts the work when the
+process starts shutting down:
 
 ```ts
-const untilShutdown: Strategy = (ctx, next) =>
-  next(
-    ctx.with({ signal: ctx.signal === undefined ? shutdown.signal : AbortSignal.any([ctx.signal, shutdown.signal]) }),
+const untilShutdown: Policy = op => (ctx, input) =>
+  op(
+    { ...ctx, signal: ctx.signal === undefined ? shutdown.signal : AbortSignal.any([ctx.signal, shutdown.signal]) },
+    input,
   )
 ```
 
 For a deadline, use `timeLimiter()`: it also rejects when the operation ignores its signal, links the caller's
 signal and leaves no timer or listener behind.
 
-A strategy with state is an object with a `run` method, called with the object as `this`:
+A policy with state is a class with a `wrap()` method, which `compose` and `decorate` call once, when the chain is
+built:
 
 ```ts
-import type { ExecutionContext, Next, StrategyObject } from '@caffeinejs/resilience'
+import type { Operation, Wrapper } from '@caffeinejs/resilience'
 
-class Counting implements StrategyObject {
+class Counting implements Wrapper {
   calls = 0
 
-  run<T>(ctx: ExecutionContext, next: Next<T>): Promise<T> {
-    this.calls++
-    return next(ctx)
+  wrap<T, I = void>(op: Operation<T, I>): Operation<T, I> {
+    return (ctx, input) => {
+      this.calls++
+      return op(ctx, input)
+    }
   }
 }
 ```

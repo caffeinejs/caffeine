@@ -29,12 +29,15 @@ export class ErrInvalidOption extends ErrResilience {
 }
 
 /**
- * A strategy refused the call; the operation did not run. `retryAfter` is how long until the strategy would let a
- * call through again, when it knows.
+ * A policy refused the call; the operation did not run. `retryAfter` is how long until the policy would let a call
+ * through again, when it knows.
  *
  * Retry never retries a refusal, whatever its `retryOn` says, and a circuit breaker never records one. A retry whose
  * earlier attempt reached the operation never rejects with one: a refusal that ends it hands back that attempt's
  * outcome, so a caller that receives a refusal knows no attempt ran.
+ *
+ * A built-in refusal carries no stack trace unless its policy was created with `captureStackTrace: true`: it is built
+ * without running its constructor, so `instanceof` and its fields work, but `Error.isError()` answers `false`.
  */
 export class ErrCallRefused extends ErrResilience {
   readonly retryAfter: Duration | undefined

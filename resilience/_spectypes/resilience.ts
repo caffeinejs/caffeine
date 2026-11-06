@@ -50,7 +50,7 @@ const RateLimiter = $t.Object({
  * `Resilience((r, { config }) => r.config(...))`.
  *
  * Each kind is a record of named instances: `RESILIENCE__RETRIES__INVENTORY__MAX_ATTEMPTS=5` defines the retry
- * `inventory`. Every member is optional and nothing is defaulted here: the strategies own their defaults. The
+ * `inventory`. Every member is optional and nothing is defaulted here: the policies own their defaults. The
  * durations are `$t.Duration()`, so `…__TIMEOUT_DURATION=2s` is two seconds and a bare `2000` fails validation at
  * `bootstrap()`.
  */

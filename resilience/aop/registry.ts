@@ -34,7 +34,7 @@ const LABELS: Record<ResilienceKind, string> = {
 export const kAddFallback = Symbol('@caffeinejs/resilience:add-fallback')
 
 /**
- * The named strategies one container shares: every method that names an instance gets the same one, and so the
+ * The named policies one container shares: every method that names an instance gets the same one, and so the
  * same state. Every instance is built when the registry is, so a bad option fails at start-up.
  *
  * The `Resilience()` feature builds and binds it; inject it to use the same instances by hand, or to instrument them.

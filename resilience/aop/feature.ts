@@ -75,13 +75,13 @@ function merged<O>(
 }
 
 /**
- * Configures the named strategies the resilience annotations use, and weaves them into every method that carries
+ * Configures the named policies the resilience annotations use, and weaves them into every method that carries
  * one, in the classes the container builds.
  *
  * An instance is defined by code, by configuration, or both; code wins, option by option, and an option code passes as
  * `undefined` keeps the configured one. `bootstrap()` fails when code defines a name twice, a method names an instance
  * nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static method, a controller
- * carries `@Retry` without `ResilienceHTTP()`, the order lists a kind other than once, or a bulkhead or rate limiter
+ * carries `@Retry` without `ResilienceHTTP()`, the order does not list each kind once, or a bulkhead or rate limiter
  * inside a method's time limiter may wait as long as its limit.
  *
  * ```ts
@@ -238,7 +238,7 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
  *
  * @throws {@link ErrInvalidOption} at `bootstrap()` when an instance's options are out of range, code defines a name
  * twice, a method names an instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on
- * a static method, a controller carries `@Retry` without `ResilienceHTTP()`, the order lists a kind other than once,
+ * a static method, a controller carries `@Retry` without `ResilienceHTTP()`, the order does not list each kind once,
  * or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
  */
 export function Resilience<C = unknown>(configure?: FeatureConfigurer<ResilienceBuilder<C>, C>): Feature<C> {

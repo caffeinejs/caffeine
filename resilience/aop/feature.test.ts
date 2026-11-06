@@ -216,7 +216,7 @@ describe('Resilience() at bootstrap', () => {
     )
   })
 
-  it('fails on an order that lists a kind other than once, whether code or configuration set it', async () => {
+  it('fails on an order that does not list each kind once, whether code or configuration set it', async () => {
     const fromCode = await boot(Resilience(r => inventory(r).order(['retry', 'circuitBreaker']))).catch(
       (reason: unknown) => reason,
     )

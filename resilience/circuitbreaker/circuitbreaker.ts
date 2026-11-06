@@ -140,7 +140,7 @@ export interface CircuitBreakerEvents {
     readonly name: string
     readonly duration: Duration
     readonly error: unknown
-    /** `refused` when a strategy inside the breaker refused the call. */
+    /** `refused` when a policy inside the breaker refused the call. */
     readonly reason: 'ignored' | 'aborted' | 'refused'
   }
   notPermitted: { readonly name: string; readonly state: NotPermittedState }
