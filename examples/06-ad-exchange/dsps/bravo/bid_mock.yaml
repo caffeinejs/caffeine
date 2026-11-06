@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://vlatte.dev/schemas/http.schema.json
+# dsp-bravo. Steady: bids 7 auctions of 10.
+id: bid
+request:
+  method: POST
+  path: /bid
+delay:
+  type: lognormal
+  median: 20ms
+  sigma: 0.35
+  maxValue: 70ms
+response_random:
+  responses:
+    - &bid
+      status: 200
+      header:
+        content-type: application/json
+      body: >-
+        {"id": {{ (fromJSON .Request.Body.String).id | toJSON }},
+        "price": {{ printf "%.2f" (randomFloat 0.7 2.6) }},
+        "adm": "<img src=\"https://bravo.ads.test/creative.png\">"}
+      template:
+        enabled: true
+    - *bid
+    - *bid
+    - *bid
+    - *bid
+    - *bid
+    - *bid
+    - &pass
+      status: 204
+    - *pass
+    - *pass
+---
+# The win notice: the exchange tells the winner what it pays.
+id: win
+request:
+  method: POST
+  path: /win
+response:
+  status: 200
