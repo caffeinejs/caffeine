@@ -1,18 +1,46 @@
-import { STATUS_CODES } from 'node:http'
-
 import { ErrCaffeineWebApplication } from './common.js'
+import { newProblem, type Problem, type ProblemIssue } from './problem.js'
 
 export interface ErrHTTPOptions {
   cause?: unknown
+  /**
+   * The body to send in place of the error's {@link Problem}, unchanged and under the media type the reply
+   * already has. The other problem options here are then not sent.
+   */
   body?: unknown
   headers?: Record<string, string>
   code?: string
+  /** URI reference naming the kind of problem, sent as {@link Problem.type}. `about:blank` when absent. */
+  type?: string
+  /** A short summary of the kind of problem, sent as {@link Problem.title}. The status phrase when absent. */
+  title?: string
+  /** URI reference naming this occurrence, sent as {@link Problem.instance}. */
+  instance?: string
+  /** The class of error a client branches on, sent as {@link Problem.category}. */
+  category?: string
+  /** What the reader, a person or an agent, should do next, sent as {@link Problem.what_you_should_do}. */
+  whatYouShouldDo?: string
+  /** RFC 9457 extension members, sent beside the members a {@link Problem} defines, which they cannot replace. */
+  extensions?: Record<string, unknown>
+  /** Each rule the request broke, sent as {@link Problem.errors}. Left out when empty. */
+  errors?: ProblemIssue[]
 }
 
+/**
+ * An error that answers with an HTTP status. Thrown from a handler, it is rendered as a {@link Problem}, its
+ * `message` the problem's `detail`, unless it carries a `body`.
+ */
 export class ErrHTTP extends ErrCaffeineWebApplication {
   override readonly cause?: unknown
   readonly body?: unknown
   readonly headers?: Record<string, string>
+  readonly type?: string
+  readonly title?: string
+  readonly instance?: string
+  readonly category?: string
+  readonly whatYouShouldDo?: string
+  readonly extensions?: Record<string, unknown>
+  readonly errors?: ProblemIssue[]
 
   constructor(
     readonly statusCode: number,
@@ -24,6 +52,33 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
     this.cause = options?.cause
     this.body = options?.body
     this.headers = options?.headers
+    this.type = options?.type
+    this.title = options?.title
+    this.instance = options?.instance
+    this.category = options?.category
+    this.whatYouShouldDo = options?.whatYouShouldDo
+    this.extensions = options?.extensions
+    this.errors = options?.errors
+  }
+
+  /**
+   * The {@link Problem} the error handler sends for this error, for a `@Catch` handler that keeps the contract.
+   *
+   * Ignores {@link ErrHTTPOptions.body}, and never carries a stack trace.
+   */
+  toProblem(): Problem {
+    return newProblem({
+      status: this.statusCode,
+      code: this.code,
+      detail: this.message,
+      type: this.type,
+      title: this.title,
+      instance: this.instance,
+      category: this.category,
+      whatYouShouldDo: this.whatYouShouldDo,
+      extensions: this.extensions,
+      errors: this.errors,
+    })
   }
 
   static builder() {
@@ -31,6 +86,23 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
   }
 }
 
+/**
+ * Builds an {@link ErrHTTP} member by member, its {@link Problem} fields included.
+ *
+ * ```ts
+ * throw ErrHTTP.builder()
+ *   .statusCode(409)
+ *   .message('Order 42 is already paid')
+ *   .code('ERR_ORDER_PAID')
+ *   .type('https://example.com/problems/order-paid')
+ *   .title('Order already paid')
+ *   .instance('/orders/42')
+ *   .category('billing')
+ *   .whatYouShouldDo('Fetch the order to read its receipt instead of paying again')
+ *   .extension('orderID', '42')
+ *   .build()
+ * ```
+ */
 export class ErrHTTPBuilder {
   #statusCode: number = 500
   #message: string = ''
@@ -41,6 +113,7 @@ export class ErrHTTPBuilder {
     return this
   }
 
+  /** The problem's `detail`: what went wrong this time, written for the client. */
   message(message: string) {
     this.#message = message
     return this
@@ -66,6 +139,67 @@ export class ErrHTTPBuilder {
     return this
   }
 
+  type(type: string) {
+    this.#options.type = type
+    return this
+  }
+
+  /** The problem's `title`: a short summary of the kind of problem, the same on every occurrence. */
+  title(title: string) {
+    this.#options.title = title
+    return this
+  }
+
+  instance(instance: string) {
+    this.#options.instance = instance
+    return this
+  }
+
+  /** The class of error a client branches on, such as `rate_limit`. Absent unless set. */
+  category(category: string) {
+    this.#options.category = category
+    return this
+  }
+
+  /** What the reader, a person or an agent, should do next, such as when to retry. Absent unless set. */
+  whatYouShouldDo(text: string) {
+    this.#options.whatYouShouldDo = text
+    return this
+  }
+
+  /** Adds one extension member. A name {@link Problem} defines itself is not sent. */
+  extension(name: string, value: unknown) {
+    this.#options.extensions = { ...this.#options.extensions, [name]: value }
+    return this
+  }
+
+  /** Adds extension members, over those added before. A name {@link Problem} defines itself is not sent. */
+  extensions(extensions: Record<string, unknown>) {
+    this.#options.extensions = { ...this.#options.extensions, ...extensions }
+    return this
+  }
+
+  /**
+   * Adds entries to the problem's `errors`, after those added before, such as each rule a business check broke:
+   *
+   * ```ts
+   * throw ErrHTTP.builder()
+   *   .statusCode(422)
+   *   .message('2 items cannot be bought')
+   *   .errors(
+   *     { code: 'ERR_ITEM_UNAVAILABLE', detail: 'Item 7 is sold out', source: { in: 'body', pointer: '/items/0' } },
+   *     { code: 'ERR_QUANTITY_LIMIT', detail: 'At most 3 of item 9', params: { maximum: 3 } },
+   *   )
+   *   .build()
+   * ```
+   *
+   * Every entry is sent, with no cap. `.options({ errors })` replaces what earlier calls added.
+   */
+  errors(...issues: ProblemIssue[]) {
+    this.#options.errors = [...(this.#options.errors ?? []), ...issues]
+    return this
+  }
+
   options(options: ErrHTTPOptions) {
     this.#options = { ...this.#options, ...options }
     return this
@@ -78,50 +212,6 @@ export class ErrHTTPBuilder {
 
 export function newHTTPError(): ErrHTTPBuilder {
   return new ErrHTTPBuilder()
-}
-
-/**
- * The response body an {@link ErrHTTP} renders to when it does not carry its own {@link ErrHTTPOptions.body}.
- *
- * One shape for every 404 the application can produce — one thrown by a handler, one from a URL that matched
- * no route, and `ctx.notFound()` — so a client parses a single envelope rather than three.
- */
-export interface HTTPErrorBody {
-  statusCode: number
-  /** The HTTP status phrase, e.g. `"Not Found"`. The detail belongs in {@link message}. */
-  error: string
-  code: string
-  message: string
-  /**
-   * The stack, and the chain of causes behind it, present only where the application asked for it with
-   * `.errorHandling(e => e.exposeStacktrace())`.
-   */
-  stacktrace?: string
-}
-
-/**
- * Renders the default body for an {@link ErrHTTP}.
- *
- * `error` is the status phrase and `message` the detail, as Fastify's own errors are shaped — the two are not
- * interchangeable, and a client that switches on `error` needs it stable across every error of a given status.
- */
-export function httpErrorBody(err: ErrHTTP): HTTPErrorBody {
-  return {
-    statusCode: err.statusCode,
-    error: STATUS_CODES[err.statusCode] ?? 'Error',
-    code: err.code,
-    message: err.message,
-  }
-}
-
-/**
- * Renders the default body for a bare status code, for the response shorthands on `IContext` that never build
- * an error object.
- */
-export function statusErrorBody(statusCode: number, code: string, message?: string): HTTPErrorBody {
-  const phrase = STATUS_CODES[statusCode] ?? 'Error'
-
-  return { statusCode, error: phrase, code, message: message ?? phrase }
 }
 
 // 4xx Client Errors
@@ -211,10 +301,10 @@ export class ErrHTTPPreconditionFailed extends ErrHTTP {
   }
 }
 
-export class ErrHTTPPayloadTooLarge extends ErrHTTP {
-  constructor(message: string = 'Payload Too Large', options?: ErrHTTPOptions) {
-    super(413, message, { code: 'ERR_HTTP_PAYLOAD_TOO_LARGE', ...options })
-    this.name = 'ErrHTTPPayloadTooLarge'
+export class ErrHTTPContentTooLarge extends ErrHTTP {
+  constructor(message: string = 'Content Too Large', options?: ErrHTTPOptions) {
+    super(413, message, { code: 'ERR_HTTP_CONTENT_TOO_LARGE', ...options })
+    this.name = 'ErrHTTPContentTooLarge'
   }
 }
 
@@ -239,10 +329,10 @@ export class ErrHTTPMisdirectedRequest extends ErrHTTP {
   }
 }
 
-export class ErrHTTPUnprocessableEntity extends ErrHTTP {
-  constructor(message: string = 'Unprocessable Entity', options?: ErrHTTPOptions) {
-    super(422, message, { code: 'ERR_HTTP_UNPROCESSABLE_ENTITY', ...options })
-    this.name = 'ErrHTTPUnprocessableEntity'
+export class ErrHTTPUnprocessableContent extends ErrHTTP {
+  constructor(message: string = 'Unprocessable Content', options?: ErrHTTPOptions) {
+    super(422, message, { code: 'ERR_HTTP_UNPROCESSABLE_CONTENT', ...options })
+    this.name = 'ErrHTTPUnprocessableContent'
   }
 }
 

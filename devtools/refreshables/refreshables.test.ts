@@ -169,8 +169,8 @@ describe('refreshablesRouter', () => {
         body,
       })
 
-    expect((await post('[]')).status).toBe(400)
-    expect((await post('"flags"')).status).toBe(400)
+    expect((await post('[]')).status).toBe(422)
+    expect((await post('"flags"')).status).toBe(422)
     expect(container.get(Rates).id).toBe(rates.id)
   })
 

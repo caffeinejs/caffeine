@@ -860,7 +860,7 @@ async function expectPreconditionFailed(res: Response, method: string): Promise<
   expect(res.headers.get('accept-ranges')).toBeNull()
   expect(res.headers.get('content-range')).toBeNull()
   if (method === 'GET') {
-    expect(await res.json()).toMatchObject({ statusCode: 412, code: 'ERR_HTTP_PRECONDITION_FAILED' })
+    expect(await res.json()).toMatchObject({ status: 412, code: 'ERR_HTTP_PRECONDITION_FAILED' })
   } else {
     expect(await res.text()).toBe('')
   }

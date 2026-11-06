@@ -351,7 +351,7 @@ describe('Attachment() over any combination of preconditions (property)', () => 
 
       expect(res.status).toBe(expected.status)
       if (expected.status === 412 && request.method === 'GET') {
-        expect(await res.json()).toMatchObject({ statusCode: 412, code: 'ERR_HTTP_PRECONDITION_FAILED' })
+        expect(await res.json()).toMatchObject({ status: 412, code: 'ERR_HTTP_PRECONDITION_FAILED' })
       } else if (expected.status === 412 || expected.status === 304 || request.method === 'HEAD') {
         expect(await res.text()).toBe('')
       } else {
