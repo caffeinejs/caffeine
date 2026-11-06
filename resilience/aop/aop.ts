@@ -10,6 +10,7 @@ import { ANNOTATIONS, Fallback } from './annotations.js'
 import { Attempt, type ResilienceContextStorage } from './context.js'
 import { kAddFallback, labelOf, type ResilienceKind, type ResilienceRegistry } from './registry.js'
 import { checkClassPresets, stagesOf, woven, wovenMembers } from './stages.js'
+import type { ResilienceTransport } from './transport.js'
 
 type Member = string | symbol
 
@@ -72,6 +73,12 @@ export const resiliencePointcut: Pointcut = $aop.pointcut(
 // What one method runs through, built once, the first time it is needed. The join point is the input.
 type Plan = Operation<unknown, JoinPoint>
 
+// The plans of one class's methods and, for an entrypoint, how the transport that claims it tells client errors apart.
+interface Plans {
+  readonly methods: Map<Member, Plan>
+  isClientError: ((error: unknown) => boolean) | undefined
+}
+
 /**
  * Runs each annotated method through its policies, in one order whatever the order of the decorators: the fallback
  * outermost, then, unless `order` says otherwise, retry, circuit breaker, rate limiter, time limiter and bulkhead.
@@ -86,7 +93,7 @@ export class ResilienceAspect implements MethodAspect {
   readonly #storage: ResilienceContextStorage | undefined
   // How many attempts each call has started, kept only with a storage.
   readonly #attempts = new WeakMap<JoinPoint, number>()
-  readonly #plans = new WeakMap<AnyClass, Map<Member, Plan>>()
+  readonly #plans = new WeakMap<AnyClass, Plans>()
 
   /**
    * `order` lists the policy kinds outermost first, each once. With `storage`, each attempt runs inside
@@ -105,13 +112,20 @@ export class ResilienceAspect implements MethodAspect {
   }
 
   /**
-   * Builds the plan of every annotated method of `cls`.
+   * Builds the plan of every annotated method of `cls`. With the `transport` that claims `cls` as an entrypoint, every
+   * call of its methods tells the policies which errors are the client's own answer, with
+   * {@link ResilienceTransport.isClientError}.
    *
    * @throws {@link ErrInvalidOption} when a method names a preset nothing defines or a policy its preset lacks, a
    * `@Fallback` names a method `cls` lacks, an annotation is on a static or a private method, or a bulkhead or rate
    * limiter inside a method's time limiter may wait as long as its limit.
    */
-  prepare(cls: AnyClass): void {
+  prepare(cls: AnyClass, transport?: ResilienceTransport): void {
+    const plans = this.#plansOf(cls)
+    if (transport !== undefined) {
+      plans.isClientError = error => transport.isClientError(error)
+    }
+
     for (const [annotation, decorator] of ANNOTATIONS) {
       const member = reflect.members(cls, annotation, { static: true }).keys().next().value
       if (member !== undefined) {
@@ -144,14 +158,16 @@ export class ResilienceAspect implements MethodAspect {
 
     checkClassPresets(cls, this.#registry)
     for (const member of wovenMembers(cls)) {
-      this.#plan(cls, member)
+      this.#plan(cls, plans, member)
     }
   }
 
   around(jp: JoinPoint): unknown {
+    const cls = jp.ctor as AnyClass
+    const plans = this.#plansOf(cls)
     let plan: Plan
     try {
-      plan = this.#plan(jp.ctor as AnyClass, jp.methodName)
+      plan = this.#plan(cls, plans, jp.methodName)
     } catch (error) {
       // The method returns a promise, so a plan that cannot be built rejects it rather than throwing.
       return Promise.reject(error)
@@ -164,7 +180,7 @@ export class ResilienceAspect implements MethodAspect {
     if (signal !== undefined && signal.aborted) {
       return Promise.reject(signal.reason)
     }
-    return plan({ signal }, jp)
+    return plan({ signal, isClientError: plans.isClientError }, jp)
   }
 
   // The signal of the attempt the current code runs in, when the aspect stores attempts.
@@ -173,17 +189,20 @@ export class ResilienceAspect implements MethodAspect {
     return store instanceof Attempt ? store.signal : undefined
   }
 
-  #plan(cls: AnyClass, member: Member): Plan {
+  #plansOf(cls: AnyClass): Plans {
     let plans = this.#plans.get(cls)
     if (plans === undefined) {
-      plans = new Map()
+      plans = { methods: new Map(), isClientError: undefined }
       this.#plans.set(cls, plans)
     }
+    return plans
+  }
 
-    let plan = plans.get(member)
+  #plan(cls: AnyClass, plans: Plans, member: Member): Plan {
+    let plan = plans.methods.get(member)
     if (plan === undefined) {
       plan = this.#build(cls, member)
-      plans.set(member, plan)
+      plans.methods.set(member, plan)
     }
     return plan
   }

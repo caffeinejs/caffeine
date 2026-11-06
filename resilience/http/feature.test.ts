@@ -1,15 +1,30 @@
 import { ErrFeatureNotInstalled, type Feature } from '@caffeinejs/application'
 import { CaffeineIoC, Injectable, Profile } from '@caffeinejs/di'
-import { BodyAsStream, Controller, Delete, Get, Keys, Method, Patch, Post, Prefix, Put } from '@caffeinejs/http'
+import {
+  BodyAsStream,
+  Controller,
+  Delete,
+  ErrHTTPForbidden,
+  ErrHTTPNotFound,
+  Get,
+  Keys,
+  Method,
+  Patch,
+  Post,
+  Prefix,
+  Put,
+} from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Resilient, Retry, TimeLimiter } from '../aop/annotations.js'
 import { Resilience, type ResilienceBuilder } from '../aop/feature.js'
+import { ResilienceRegistry } from '../aop/registry.js'
 import { kEntrypoint } from '../aop/transport.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ResilienceHTTP } from './feature.js'
+import { ResilienceErrorHandler } from './http.js'
 
 const opened: Array<() => Promise<unknown>> = []
 
@@ -512,5 +527,138 @@ describe('the two halves', () => {
   // renamed its label, controllers would silently escape the check.
   it('reads the entrypoint label the HTTP package writes', () => {
     expect(Keys.ENTRYPOINT).toBe(kEntrypoint)
+  })
+})
+
+describe('ResilienceHTTP() and client errors', () => {
+  @Controller('/items')
+  @Profile('rh-client-errors')
+  class ItemsController {
+    runs = 0
+
+    @Retry('items')
+    @CircuitBreaker('items')
+    @Get('/:id', p => [p.param('id')])
+    async item(id: string): Promise<{ id: string }> {
+      this.runs++
+      switch (id) {
+        case 'tea':
+          return { id }
+        case 'down':
+          throw new Error('database down')
+        case 'throttled':
+          throw Object.assign(new Error('the dependency throttled'), { statusCode: 429 })
+        case 'slow':
+          throw Object.assign(new Error('the dependency timed out'), { statusCode: 408 })
+        default:
+          throw new ErrHTTPNotFound()
+      }
+    }
+  }
+  void ItemsController
+
+  const orders = new Map([['o-1', { id: 'o-1', owner: 'alice', total: 42 }]])
+
+  @Controller('/orders')
+  @Profile('rh-client-errors')
+  class OrdersController {
+    answered = 0
+
+    @Fallback('cached')
+    @Get('/:id', p => [p.param('id'), p.header('x-user')])
+    async order(id: string, user: string): Promise<unknown> {
+      if (id === 'broken') {
+        throw new Error('database down')
+      }
+      const order = orders.get(id)
+      if (order?.owner !== user) {
+        throw new ErrHTTPForbidden()
+      }
+      return order
+    }
+
+    async cached(_error: unknown, id: string): Promise<unknown> {
+      this.answered++
+      return orders.get(id) ?? { id, cached: true }
+    }
+  }
+  void OrdersController
+
+  // The defaults a preset gets when nobody thought of client errors: retry every error, count every error.
+  async function serve() {
+    const app = createWebApplication({ container: new CaffeineIoC({ profiles: ['rh-client-errors'] }) })
+      .errorHandling(e => e.globalHandlers(ResilienceErrorHandler))
+      .install(Resilience(r => r.preset('items', p => p.retry({ backoff: 0 }).circuitBreaker())))
+      .install(ResilienceHTTP())
+    opened.push(() => app.close())
+    await app.bootstrap()
+    return app
+  }
+
+  // One unauthenticated client asking for records that do not exist must not open the breaker for every client, nor
+  // run the handler once per attempt.
+  it('keeps a burst of 404s out of the retry and the breaker of a handler', async () => {
+    const app = await serve()
+    const controller = app.container.get(ItemsController)
+    const breaker = app.container.get(ResilienceRegistry).circuitBreaker('items')
+
+    const statuses = new Set<number>()
+    for (let i = 0; i < 100; i++) {
+      statuses.add((await app.request(`/items/missing-${i}`)).status)
+    }
+
+    expect([...statuses]).toEqual([404])
+    expect(controller.runs).toBe(100)
+    expect(breaker.state).toBe('closed')
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+    expect((await app.request('/items/tea')).status).toBe(200)
+  })
+
+  it('still retries and counts a server error on the same handler', async () => {
+    const app = await serve()
+    const controller = app.container.get(ItemsController)
+    const breaker = app.container.get(ResilienceRegistry).circuitBreaker('items')
+
+    expect((await app.request('/items/down')).status).toBe(500)
+    expect(controller.runs).toBe(3)
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 3, failedCalls: 3 })
+  })
+
+  // A dependency that throttled or timed out is failing for now, even when its error carries a 4xx status.
+  it.each([
+    ['429', 'throttled'],
+    ['408', 'slow'],
+  ])('still retries and counts a dependency error carrying %s', async (_status, id) => {
+    const app = await serve()
+    const controller = app.container.get(ItemsController)
+    const breaker = app.container.get(ResilienceRegistry).circuitBreaker('items')
+
+    await app.request(`/items/${id}`)
+
+    expect(controller.runs).toBe(3)
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 3, failedCalls: 3 })
+  })
+
+  // A fallback serving cached orders would hand the refused caller the order it was refused.
+  it('answers a 403 the handler throws with 403, never with the fallback', async () => {
+    const app = await serve()
+    const controller = app.container.get(OrdersController)
+
+    const refused = await app.request('/orders/o-1', { headers: { 'x-user': 'mallory' } })
+
+    expect(refused.status).toBe(403)
+    expect(await refused.text()).not.toContain('alice')
+    expect(controller.answered).toBe(0)
+  })
+
+  it('still answers a server error with the fallback', async () => {
+    const app = await serve()
+    const controller = app.container.get(OrdersController)
+
+    const answered = await app.request('/orders/broken', { headers: { 'x-user': 'alice' } })
+
+    expect(answered.status).toBe(200)
+    expect(await answered.json()).toEqual({ id: 'broken', cached: true })
+    expect(controller.answered).toBe(1)
   })
 })

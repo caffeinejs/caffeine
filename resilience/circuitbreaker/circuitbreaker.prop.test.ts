@@ -3,7 +3,6 @@ import { fc, it } from '@fast-check/vitest'
 import { afterEach, beforeEach, describe, expect, vi } from 'vitest'
 
 import { fakeTimersClock } from '../clock.testkit.js'
-import { run } from '../compose.js'
 import {
   circuitBreaker,
   type CircuitBreakerState,
@@ -21,9 +20,12 @@ afterEach(() => {
 
 class Failed extends Error {}
 class Ignored extends Error {}
+// recordError lists it, so only the call's own classification keeps it out of the counts.
+class ErrClient extends Failed {}
 
-// How a call ends: `harmless` throws an error recordError does not list, which counts as a success.
-type Outcome = 'success' | 'failure' | 'ignored' | 'harmless'
+// How a call ends: `harmless` throws an error recordError does not list, which counts as a success; `client` throws
+// one the call's context calls the client's, which counts as nothing, as an ignored one does.
+type Outcome = 'success' | 'failure' | 'ignored' | 'harmless' | 'client'
 
 type Command =
   | { readonly kind: 'start'; readonly outcome: Outcome }
@@ -134,7 +136,7 @@ class Reference {
     if (epoch !== this.epoch) {
       return
     }
-    if (outcome === 'ignored') {
+    if (outcome === 'ignored' || outcome === 'client') {
       if (this.state === 'half_open') {
         this.permits++
       }
@@ -213,7 +215,7 @@ const command: fc.Arbitrary<Command> = fc.oneof(
   {
     arbitrary: fc.record({
       kind: fc.constant('start' as const),
-      outcome: fc.constantFrom<Outcome>('success', 'failure', 'ignored', 'harmless'),
+      outcome: fc.constantFrom<Outcome>('success', 'failure', 'ignored', 'harmless', 'client'),
     }),
     weight: 8,
   },
@@ -281,12 +283,13 @@ describe('circuit breaker (property)', () => {
             const admission = model.admit()
             const gate = Promise.withResolvers<string>()
             let started = false
-            const done = run(
-              breaker.wrap(() => {
+            // Every call comes as an entrypoint's does, with its transport's classification of client errors.
+            const done = breaker
+              .wrap(() => {
                 started = true
                 return gate.promise
-              }),
-            ).catch((error: unknown) => error)
+              })({ signal: undefined, isClientError: error => error instanceof ErrClient }, undefined)
+              .catch((error: unknown) => error)
 
             if ('refused' in admission) {
               expect(started).toBe(false)
@@ -296,7 +299,7 @@ describe('circuit breaker (property)', () => {
             } else {
               expect(started).toBe(true)
               const settle = (): void => {
-                const errors = { failure: Failed, ignored: Ignored, harmless: Error } as const
+                const errors = { failure: Failed, ignored: Ignored, harmless: Error, client: ErrClient } as const
                 if (step.outcome === 'success') {
                   gate.resolve('ok')
                 } else {

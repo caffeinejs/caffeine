@@ -364,11 +364,18 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
     // bootstrap kit has no getManyOptional, and getMany refuses a key nothing binds.
     const transports =
       kit.container.getBindings(ResilienceTransport).length === 0 ? [] : kit.container.getMany(ResilienceTransport)
-    const claimed = new Set(transports.map(transport => transport.label))
+    const claimed = new Map(transports.map(transport => [transport.label, transport]))
     const registry = kit.container.get(ResilienceRegistry)
+    // The transport that claims each entrypoint class, which tells its client errors apart.
+    const served = new Map<AnyClass, ResilienceTransport>()
     for (const { binding } of kit.container.getBindingsByLabel(kEntrypoint)) {
       const cls = binding.type as AnyClass | undefined
-      if (cls === undefined || binding.labels.some(label => claimed.has(label))) {
+      if (cls === undefined) {
+        continue
+      }
+      const label = binding.labels.find(other => claimed.has(other))
+      if (label !== undefined) {
+        served.set(cls, claimed.get(label)!)
         continue
       }
       for (const member of wovenMembers(cls)) {
@@ -400,7 +407,7 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
     }
 
     for (const cls of classes) {
-      aspect.prepare(cls)
+      aspect.prepare(cls, served.get(cls))
     }
   }
 }

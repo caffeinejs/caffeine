@@ -675,6 +675,40 @@ describe('retry, unhandled rejections', () => {
   })
 })
 
+describe('retry, client errors', () => {
+  class ErrNotFound extends Error {}
+  const isClientError = (error: unknown): boolean => error instanceof ErrNotFound
+
+  // A request for a record that does not exist gets the same answer every time: running it again only multiplies the
+  // work one client can cause.
+  it('never retries an error the context calls a client error, whatever retryOn says', async () => {
+    const retries = retryOf({ maxAttempts: 3, retryOn: () => true })
+    const seen = listen(retries, 'ignored', 'retry', 'failure')
+    const missing = new ErrNotFound('no such record')
+    const operation = vi.fn(async () => {
+      throw missing
+    })
+
+    const error = await retries
+      .wrap(operation)({ signal: undefined, isClientError }, undefined)
+      .catch((thrown: unknown) => thrown)
+
+    expect(error).toBe(missing)
+    expect(operation).toHaveBeenCalledTimes(1)
+    expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, error: missing }]])
+  })
+
+  it('still retries an error the context does not call a client error', async () => {
+    const retries = retryOf({ maxAttempts: 3 })
+    const { operation, attempts } = flaky(2)
+
+    const answer = await retries.wrap(operation)({ signal: undefined, isClientError }, undefined)
+
+    expect(answer).toBe('ok')
+    expect(attempts).toEqual([1, 2, 3])
+  })
+})
+
 describe('retry, retryOn as error classes', () => {
   // A class list says what a predicate of instanceof checks would, without the chance to get one wrong.
   it('retries an error of a listed class, a subclass included, and stops at any other', async () => {

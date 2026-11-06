@@ -16,10 +16,15 @@ import { ResilienceRegistry } from '../aop/registry.js'
 import { stagesOf, written } from '../aop/stages.js'
 import { ResilienceTransport } from '../aop/transport.js'
 import { ErrInvalidOption } from '../errors.js'
+import { isClientError } from './http.js'
 
-// Claims every controller for the replay check below.
+// Claims every controller for the replay check below, and tells its client errors apart with isClientError.
 class HTTPTransport extends ResilienceTransport {
   readonly label = Keys.CONTROLLER
+
+  isClientError(error: unknown): boolean {
+    return isClientError(error)
+  }
 }
 
 /** What `ResilienceHTTP(h => h.config(...))` takes. */
@@ -135,6 +140,9 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
  * Installs the HTTP replay check for the resilience annotations: a retry on a controller handler for a method that
  * is not safe (`SAFE_METHODS`: `GET`, `HEAD`, `OPTIONS`, `TRACE` and `QUERY`) fails `bootstrap()`, unless the handler
  * declares itself repeatable or the method is allowed with `retryableMethods(...)`.
+ *
+ * It also keeps the client's own errors, as {@link isClientError} tells them, out of the policies of every controller
+ * method: such an error is never retried, a circuit breaker records it as ignored, and a fallback never answers it.
  *
  * It needs `Resilience()`, and `Resilience()` needs it once any controller is retried.
  *

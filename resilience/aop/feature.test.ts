@@ -429,6 +429,10 @@ describe('Resilience() and transports', () => {
 
   class GRPCTransport extends ResilienceTransport {
     readonly label = kService
+
+    isClientError(): boolean {
+      return false
+    }
   }
 
   // An entrypoint of a transport this package has never heard of: a request, replayed by a retry.
@@ -456,5 +460,92 @@ describe('Resilience() and transports', () => {
     const app = await serve(true)
 
     await expect(app.container.get(StockService).get()).resolves.toBe('stock')
+  })
+})
+
+describe('Resilience() and the client errors of a transport', () => {
+  const kService = Symbol('grpc service')
+
+  class ErrNotFound extends Error {}
+
+  class GRPCTransport extends ResilienceTransport {
+    readonly label = kService
+
+    isClientError(error: unknown): boolean {
+      return error instanceof ErrNotFound
+    }
+  }
+
+  // Outbound: the dependency's own 404 is its failure, which this class's policies must still see.
+  class Catalog {
+    attempts = 0
+
+    @Retry('inventory')
+    @CircuitBreaker('inventory')
+    async lookup(): Promise<string> {
+      this.attempts++
+      throw new ErrNotFound('the dependency lost the record')
+    }
+  }
+
+  // Inbound: an entrypoint of the transport, naming the same preset as the client it calls.
+  class Storefront {
+    attempts = 0
+
+    @Retry('inventory')
+    @CircuitBreaker('inventory')
+    async item(catalog: Catalog, id: string): Promise<string> {
+      this.attempts++
+      if (id === 'missing') {
+        throw new ErrNotFound('no such item')
+      }
+      return catalog.lookup()
+    }
+  }
+
+  async function serve() {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
+      Resilience(r =>
+        r.preset('inventory', p =>
+          p
+            .retry({ maxAttempts: 3, backoff: 0 })
+            .circuitBreaker({ minimumNumberOfCalls: 10, slidingWindow: { type: 'count', size: 10 } }),
+        ),
+      ),
+    )
+    app.container.bind(Storefront, t => t.toSelf().labels(kService, kEntrypoint))
+    app.container.bind(Catalog, t => t.toSelf())
+    app.container.bind(GRPCTransport, t => t.toSelf().extends(ResilienceTransport))
+    opened.push(() => app.close())
+    await app.bootstrap()
+    return app
+  }
+
+  // One client asking for what does not exist must neither multiply the work nor count against the dependency.
+  it('runs an entrypoint once on an error its transport calls a client error, and leaves the breaker untouched', async () => {
+    const app = await serve()
+    const storefront = app.container.get(Storefront)
+    const breaker = app.container.get(ResilienceRegistry).circuitBreaker('inventory')
+
+    const error = await storefront.item(app.container.get(Catalog), 'missing').catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrNotFound)
+    expect(storefront.attempts).toBe(1)
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+  })
+
+  // The classification belongs to the entrypoint's own calls: a client class it calls keeps its policies whole.
+  it('still retries and counts the same error in a class the entrypoint calls', async () => {
+    const app = await serve()
+    const storefront = app.container.get(Storefront)
+    const catalog = app.container.get(Catalog)
+    const breaker = app.container.get(ResilienceRegistry).circuitBreaker('inventory')
+
+    const error = await storefront.item(catalog, 'tea').catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ErrNotFound)
+    expect(catalog.attempts).toBe(3)
+    expect(storefront.attempts).toBe(1)
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 3, failedCalls: 3 })
   })
 })

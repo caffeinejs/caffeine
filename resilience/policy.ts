@@ -7,6 +7,14 @@
 export interface CallContext {
   /** The caller's signal, or one a policy derived from it; `undefined` when there is neither. */
   readonly signal: AbortSignal | undefined
+  /**
+   * Whether an error is the caller's own answer rather than a failing dependency, such as the 404 a request handler
+   * throws for a record that does not exist. Such an error passes every policy untouched: a retry does not try again,
+   * a circuit breaker records it as ignored, and a fallback does not answer it.
+   *
+   * A transport integration sets it on the calls of the entrypoints it claims. Nothing sets it on any other call.
+   */
+  readonly isClientError?: (error: unknown) => boolean
 }
 
 /**

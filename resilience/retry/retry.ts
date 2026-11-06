@@ -70,10 +70,10 @@ export interface RetryOptions {
    * Which errors are worth another attempt: a predicate of the error and the attempt that failed, or a list of error
    * classes. Defaults to every error.
    *
-   * A refusal ({@link ErrCallRefused}: an open circuit breaker, a full bulkhead, a spent rate limit) and a failure
-   * after the caller aborted are never retried, whatever this says. A refusal after an attempt that reached the
-   * operation ends the call with that attempt's outcome, as if it had been the last. A predicate must return a
-   * boolean; anything else rejects the call with {@link ErrInvalidOption}.
+   * A refusal ({@link ErrCallRefused}: an open circuit breaker, a full bulkhead, a spent rate limit), a failure
+   * after the caller aborted and a client error (`CallContext.isClientError`) are never retried, whatever this says.
+   * A refusal after an attempt that reached the operation ends the call with that attempt's outcome, as if it had been
+   * the last. A predicate must return a boolean; anything else rejects the call with {@link ErrInvalidOption}.
    */
   retryOn?: ((error: unknown, attempt: number) => boolean) | readonly ErrorClass[]
   /**
@@ -285,6 +285,7 @@ export class Retry implements Wrapper {
       retryable =
         !(ctx.signal !== undefined && ctx.signal.aborted) &&
         !(error instanceof ErrCallRefused) &&
+        !(ctx.isClientError !== undefined && ctx.isClientError(error)) &&
         (this.#retryOn === undefined || this.#verdict('retryOn', this.#retryOn(error, attempt)))
     } catch (thrown) {
       this.#ignored(attempt, thrown)

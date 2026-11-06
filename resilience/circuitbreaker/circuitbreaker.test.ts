@@ -594,6 +594,76 @@ describe('circuitBreaker, half open', () => {
   })
 })
 
+describe('circuitBreaker, client errors', () => {
+  class ErrNotFound extends Error {}
+  const isClientError = (error: unknown): boolean => error instanceof ErrNotFound
+
+  // Calls the breaker as an entrypoint's transport does: the context says which errors are the client's own answer.
+  function failForClient(breaker: CircuitBreaker, error: unknown, classify = isClientError): Promise<unknown> {
+    const op = breaker.wrap(async () => {
+      throw error
+    })
+    return op({ signal: undefined, isClientError: classify }, undefined).catch((reason: unknown) => reason)
+  }
+
+  // A burst of requests for records that do not exist says nothing about the dependency: counted, it would open the
+  // breaker for every client.
+  it('records an error the context calls a client error as ignored, so a burst of them never opens it', async () => {
+    const breaker = breakerOf()
+    const seen = listen(breaker, 'ignored', 'failure', 'success')
+    const missing = new ErrNotFound('no such record')
+
+    for (let i = 0; i < 100; i++) {
+      expect(await failForClient(breaker, missing)).toBe(missing)
+    }
+
+    expect(breaker.state).toBe('closed')
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 0, failedCalls: 0, successfulCalls: 0 })
+    expect(seen).toHaveLength(100)
+    expect(seen[0]).toEqual(['ignored', { name: 'inventory', duration: 0, error: missing, reason: 'ignored' }])
+  })
+
+  it('still counts an error the context does not call a client error', async () => {
+    const breaker = breakerOf()
+
+    for (let i = 0; i < 4; i++) {
+      await failForClient(breaker, new Error('down'))
+    }
+
+    expect(breaker.state).toBe('open')
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 4, failedCalls: 4 })
+  })
+
+  it('gives the trial slot back in half open, and neither closes nor reopens the breaker', async () => {
+    const breaker = breakerOf({ permittedNumberOfCallsInHalfOpenState: 1 })
+    await trip(breaker)
+    vi.advanceTimersByTime(1_000)
+
+    await failForClient(breaker, new ErrNotFound('no such record'))
+    expect(breaker.state).toBe('half_open')
+
+    await succeed(breaker)
+    expect(breaker.state).toBe('closed')
+  })
+
+  it('rejects the call with the error the classification threw, and records nothing', async () => {
+    const breaker = breakerOf({ permittedNumberOfCallsInHalfOpenState: 1 })
+    const broken = new Error('classification bug')
+    await trip(breaker)
+    vi.advanceTimersByTime(1_000)
+
+    const error = await failForClient(breaker, new Error('down'), () => {
+      throw broken
+    })
+
+    expect(error).toBe(broken)
+    expect(breaker.state).toBe('half_open')
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+    await succeed(breaker)
+    expect(breaker.state).toBe('closed')
+  })
+})
+
 describe('circuitBreaker, late results', () => {
   // The outcome of a call belongs to the state it started in; counting it later would judge the wrong period.
   it('does not record a call that settles after the breaker opened, but still reports it', async () => {

@@ -30,9 +30,10 @@ export class ResilienceErrorHandler implements ErrorHandler<ErrCallRefused | Err
 }
 
 /**
- * Whether an error is a 4xx answer to the client rather than a failing dependency. Pass it where a client's mistake
- * must not count against a dependency: `retryOn: error => !isClientError(error)`, `ignoreError: isClientError` on a
- * circuit breaker, `on: error => !isClientError(error)` on a fallback. Nothing applies it by default.
+ * Whether an error is a 4xx answer to the client rather than a failing dependency. `ResilienceHTTP()` applies it to
+ * every call of a controller method. Elsewhere, pass it where a client's mistake must not count against a dependency:
+ * `retryOn: error => !isClientError(error)`, `ignoreError: isClientError` on a circuit breaker,
+ * `on: error => !isClientError(error)` on a fallback.
  *
  * An {@link ErrHTTP} with a 4xx status is the application's own answer, so it is a client error, 408 and 429 included.
  * Any other error is one when it carries a numeric `status` or `statusCode` from 400 to 499, except 408 and 429: a

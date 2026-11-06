@@ -208,6 +208,36 @@ describe('fallback', () => {
   })
 })
 
+describe('fallback, client errors', () => {
+  class ErrForbidden extends Error {}
+  const isClientError = (error: unknown): boolean => error instanceof ErrForbidden
+
+  // A handler that refuses a caller throws that refusal. Answered by a fallback, such as one serving a cached record,
+  // the refusal would turn into the very data it protects.
+  it('never hands an error the context calls a client error to the fallback, even one without on', async () => {
+    const handler = vi.fn(() => 'cached')
+    const recovery = fallbackOf(handler)
+    const seen = listen(recovery, 'ignored', 'recovered')
+    const refused = new ErrForbidden('not your order')
+
+    const error = await recovery
+      .wrap(failing(refused))({ signal: undefined, isClientError }, undefined)
+      .catch((thrown: unknown) => thrown)
+
+    expect(error).toBe(refused)
+    expect(handler).not.toHaveBeenCalled()
+    expect(seen).toEqual([['ignored', { name: 'inventory', error: refused, reason: 'not_handled' }]])
+  })
+
+  it('still answers an error the context does not call a client error', async () => {
+    const recovery = fallbackOf(() => 'cached')
+
+    const answer = await recovery.wrap(failing(new Error('down')))({ signal: undefined, isClientError }, undefined)
+
+    expect(answer).toBe('cached')
+  })
+})
+
 describe('fallback, unhandled rejections', () => {
   // Every way a call can end must settle the caller's promise and leave no other one rejected behind it.
   it('leaves no rejection unhandled, whichever way a call ends', async () => {

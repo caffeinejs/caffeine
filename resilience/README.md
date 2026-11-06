@@ -183,8 +183,8 @@ the id to look up.
   be wrong too, since `fetch` rejects with one when the network fails. Narrow `on` to what the fallback is for.
 - An error `on` declines passes through unchanged, and the `recovered` event carries the error it replaced, so a log
   listener still sees it.
-- On an HTTP handler, `{ on: error => !isClientError(error) }` answers anything but the client's own mistake; see
-  [Client errors](#client-errors).
+- On a controller, with `ResilienceHTTP()` installed, a client error, such as the 403 a handler throws to refuse a
+  caller, never reaches the fallback; see [Client errors](#client-errors).
 - Once the caller's signal has aborted, the handler never runs: nobody is waiting for the value.
 - A handler that throws, or rejects, rejects the call with what it threw.
 - An `on` predicate that returns anything but a boolean rejects the call with `ErrInvalidOption`.
@@ -811,10 +811,21 @@ left to the application's handlers.
 
 ### Client errors
 
-A policy treats every error alike, on a controller as anywhere else: a 404 a handler throws is retried, counts as a
-breaker failure, and is handed to a fallback, so a burst of requests for missing records can open the breaker for
-every client. Nothing is excluded by default. `isClientError` tells a client's mistake from a failing dependency; pass
-it to each policy that should not blame the dependency for one:
+A 4xx answer a handler throws is the client's own, not a failing dependency. On every call of a controller method,
+`ResilienceHTTP()` tells the policies which errors those are, with `isClientError`: such an error is never retried, a
+circuit breaker records it as ignored, and a fallback never answers it. A burst of requests for missing records cannot
+open the breaker for every client, and a fallback that serves cached orders cannot answer a 403 with the order it
+refused. No option turns this off: a handler that wants to answer a client error itself, such as a 404 turned into an
+empty list, catches it in the handler. Without `ResilienceHTTP()`, nothing tells a controller's policies which errors
+are the client's: install it wherever a controller carries a resilience annotation.
+
+An `ErrHTTP` with a 4xx status, such as `ErrHTTPNotFound`, is a client error. Any other error is one when it carries a
+numeric `status` or `statusCode` from 400 to 499, except 408 and 429: a dependency that timed out or throttled is
+failing for now. The breaker counts an ignored error neither as a failure nor as a success.
+
+Only the controller's own calls are classified. A service or an outbound client the handler calls keeps retrying and
+counting every error, even under the same preset, since a 404 from a dependency may be its failure. Where one should
+not blame the dependency for a client's mistake either, pass `isClientError` to its policies:
 
 ```ts
 import { isClientError } from '@caffeinejs/resilience/http'
@@ -827,10 +838,6 @@ Resilience(r =>
 
 @Fallback('cachedItem', { on: error => !isClientError(error) })
 ```
-
-An `ErrHTTP` with a 4xx status, such as `ErrHTTPNotFound`, is a client error. Any other error is one when it carries a
-numeric `status` or `statusCode` from 400 to 499, except 408 and 429: a dependency that timed out or throttled is
-failing for now. The breaker counts an ignored error neither as a failure nor as a success.
 
 Resilience annotations work on controller methods as on any other: a controller is a class the container builds.
 A retry on a handler, from `@Retry` or from the preset `@Resilient` names, runs the whole handler again, every service
@@ -891,12 +898,19 @@ on the same seam. It has four duties:
 3. **Map failures.** `failureOf(error)` from the root entry classifies a refusal as `unavailable`, with its
    `retryAfter`, and a time limit as `timeout`; anything else is `undefined`, left to the transport's own handlers.
    HTTP answers 503 and 504; gRPC would answer `UNAVAILABLE` and `DEADLINE_EXCEEDED`.
-4. **Tell client mistakes apart,** if it can: `isClientError` is HTTP's.
+4. **Tell client errors apart.** `isClientError(error)` on the transport says which errors an entrypoint method
+   throws as its client's own answer. On every call of a class the transport claims, those pass the policies untouched:
+   not retried, ignored by the breaker, never answered by a fallback. HTTP's is `isClientError`; gRPC's would pick
+   status codes such as `NOT_FOUND` and `INVALID_ARGUMENT`.
 
 ```ts
-// kGRPCService and isIdempotent are the gRPC package's own
+// kGRPCService, isIdempotent and isGRPCClientError are the gRPC package's own
 class GRPCTransport extends ResilienceTransport {
   readonly label = kGRPCService
+
+  isClientError(error: unknown): boolean {
+    return isGRPCClientError(error)
+  }
 }
 
 class ResilienceGRPCBuilder<C = unknown> extends FeatureBuilder<C> {
@@ -1072,8 +1086,8 @@ synchronously, whatever the layers inside it do, so chaining `.then()` or `.fina
 returns is guarded the same way: a synchronous throw from it rejects the call, so the layers outside it always settle
 what they started.
 
-To hand the rest of the chain a different signal, call it with a new context. This one also aborts the work when the
-process starts shutting down:
+To hand the rest of the chain a different signal, call it with a new context that keeps the other fields of the one
+it got, such as `isClientError`. This one also aborts the work when the process starts shutting down:
 
 ```ts
 const untilShutdown: Policy = op => (ctx, input) =>

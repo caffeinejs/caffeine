@@ -384,6 +384,21 @@ describe('time limiter', () => {
     expect(getEventListeners(shutdown.signal, 'abort')).toHaveLength(0)
   })
 
+  // Policies inside the limit, and the operation, still need the transport's classification of client errors.
+  it('hands the rest of the chain every field of the context, with a signal of its own in place of the one it got', async () => {
+    const isClientError = (): boolean => true
+    const seen: CallContext[] = []
+
+    await limiterOf().wrap(async (ctx: CallContext) => {
+      seen.push(ctx)
+      return 'ok'
+    })({ signal: undefined, isClientError }, undefined)
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]!.isClientError).toBe(isClientError)
+    expect(seen[0]!.signal).toBeInstanceOf(AbortSignal)
+  })
+
   it('reports each outcome to its listeners', async () => {
     const limiter = limiterOf()
     const seen = listen(limiter, 'success', 'failure', 'timeout')
