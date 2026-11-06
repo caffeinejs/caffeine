@@ -1,14 +1,59 @@
 import { $aop, type AnyClass, type JoinPoint, type MethodAspect, type Pointcut, reflect } from '@caffeinejs/di'
+import { formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { compose, lift, signalIndex, withSignal } from '../compose.js'
-import { ErrInvalidOption } from '../errors.js'
+import { described, ErrInvalidOption } from '../errors.js'
 import { fallback } from '../fallback/fallback.js'
 import type { Operation, PolicyLike } from '../policy.js'
 import { ANNOTATIONS, Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from './annotations.js'
 import { kAddFallback, labelOf, type ResilienceKind, type ResilienceRegistry } from './registry.js'
 
 type Member = string | symbol
+
+// The instance of each kind a method names.
+type Stage<K extends ResilienceKind> = ReturnType<ResilienceRegistry[K]>
+type Stages = { readonly [K in ResilienceKind]: Stage<K> | undefined }
+
+// Outermost first. The bulkhead sits inside the time limiter, so a call that timed out keeps its slot until it ends.
+const ORDER: readonly ResilienceKind[] = ['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']
+
+function orderError(reason: string): ErrInvalidOption {
+  return new ErrInvalidOption(
+    errMessage(`Cannot order the resilience policies: ${reason}`)
+      .solutions(`List each of ${ORDER.map(kind => `"${kind}"`).join(', ')} once, outermost first`)
+      .reference('@caffeinejs/resilience', ErrInvalidOption)
+      .build(),
+  )
+}
+
+function checkedOrder(order: readonly ResilienceKind[]): readonly ResilienceKind[] {
+  if (!Array.isArray(order)) {
+    throw orderError(`order must be an array, got ${described(order)}`)
+  }
+
+  const seen = new Set<unknown>()
+  for (const kind of order as readonly unknown[]) {
+    if (kind === 'fallback') {
+      throw orderError('order names "fallback", which is always outermost')
+    }
+    if (!ORDER.includes(kind as ResilienceKind)) {
+      throw orderError(
+        `order names ${typeof kind === 'string' ? `"${kind}"` : described(kind)}, which is not a policy kind`,
+      )
+    }
+    if (seen.has(kind)) {
+      throw orderError(`order names "${String(kind)}" twice`)
+    }
+    seen.add(kind)
+  }
+
+  const missing = ORDER.find(kind => !seen.has(kind))
+  if (missing !== undefined) {
+    throw orderError(`order leaves out "${missing}"`)
+  }
+  return [...order]
+}
 
 /** Where the resilience aspect sits among aspects: outside every aspect with a positive order or none. */
 export const RESILIENCE_ASPECT_ORDER = 0
@@ -42,8 +87,8 @@ export const resiliencePointcut: Pointcut = $aop.pointcut(
 type Plan = Operation<unknown, JoinPoint>
 
 /**
- * Runs each annotated method through its policies, in one fixed order whatever the order of the decorators:
- * fallback, retry, circuit breaker, rate limiter, bulkhead, time limiter.
+ * Runs each annotated method through its policies, in one order whatever the order of the decorators: the fallback
+ * outermost, then, unless `order` says otherwise, retry, circuit breaker, rate limiter, time limiter and bulkhead.
  *
  * The first argument that is an `AbortSignal` is taken as the caller's signal. Where a time limiter gives the attempt
  * a signal of its own, the method receives that one in its place: it aborts with the caller's too, and stays linked
@@ -51,17 +96,25 @@ type Plan = Operation<unknown, JoinPoint>
  */
 export class ResilienceAspect implements MethodAspect {
   readonly #registry: ResilienceRegistry
+  readonly #order: readonly ResilienceKind[]
   readonly #plans = new WeakMap<AnyClass, Map<Member, Plan>>()
 
-  constructor(registry: ResilienceRegistry) {
+  /**
+   * `order` lists the policy kinds outermost first, each once.
+   *
+   * @throws {@link ErrInvalidOption} when `order` leaves a kind out, names one twice or names anything else.
+   */
+  constructor(registry: ResilienceRegistry, order: readonly ResilienceKind[] = ORDER) {
     this.#registry = registry
+    this.#order = checkedOrder(order)
   }
 
   /**
    * Builds the plan of every annotated method of `cls`.
    *
    * @throws {@link ErrInvalidOption} when a method names an instance nothing defines, a `@Fallback` names a method
-   * `cls` lacks, or an annotation is on a static or a private method.
+   * `cls` lacks, an annotation is on a static or a private method, or a bulkhead or rate limiter inside a method's
+   * time limiter may wait as long as its limit.
    */
   prepare(cls: AnyClass): void {
     for (const [annotation, decorator] of ANNOTATIONS) {
@@ -132,7 +185,11 @@ export class ResilienceAspect implements MethodAspect {
 
   #build(cls: AnyClass, member: Member): Plan {
     const where = `${cls.name}.${String(member)}`
-    const named = (kind: ResilienceKind, decorator: string, name: string | undefined): PolicyLike | undefined => {
+    const named = <K extends ResilienceKind>(
+      kind: K,
+      decorator: string,
+      name: string | undefined,
+    ): Stage<K> | undefined => {
       if (name === undefined) {
         return undefined
       }
@@ -147,18 +204,20 @@ export class ResilienceAspect implements MethodAspect {
             .build(),
         )
       }
-      return this.#registry[kind](name)
+      return this.#registry[kind](name) as Stage<K>
     }
 
-    // Outermost first: retry, circuit breaker, rate limiter, bulkhead, time limiter. The time limiter sits inside the
-    // bulkhead so it times the running call, not the wait for a slot, which the bulkhead bounds and refuses itself.
-    const policies = [
-      named('retry', 'Retry', reflect.effective(cls, Retry, member)?.name),
-      named('circuitBreaker', 'CircuitBreaker', reflect.effective(cls, CircuitBreaker, member)),
-      named('rateLimiter', 'RateLimiter', reflect.effective(cls, RateLimiter, member)),
-      named('bulkhead', 'Bulkhead', reflect.effective(cls, Bulkhead, member)),
-      named('timeLimiter', 'TimeLimiter', reflect.effective(cls, TimeLimiter, member)),
-    ].filter((policy): policy is PolicyLike => policy !== undefined)
+    const stages: Stages = {
+      retry: named('retry', 'Retry', reflect.effective(cls, Retry, member)?.name),
+      circuitBreaker: named('circuitBreaker', 'CircuitBreaker', reflect.effective(cls, CircuitBreaker, member)),
+      rateLimiter: named('rateLimiter', 'RateLimiter', reflect.effective(cls, RateLimiter, member)),
+      timeLimiter: named('timeLimiter', 'TimeLimiter', reflect.effective(cls, TimeLimiter, member)),
+      bulkhead: named('bulkhead', 'Bulkhead', reflect.effective(cls, Bulkhead, member)),
+    }
+    this.#checkWaits(where, stages)
+    const policies = this.#order
+      .map((kind): PolicyLike | undefined => stages[kind])
+      .filter((policy): policy is PolicyLike => policy !== undefined)
 
     const method = lift<unknown, JoinPoint>(
       (ctx, jp) => jp.proceed(...withSignal(jp.args as unknown[], ctx.signal, undefined)) as Promise<unknown>,
@@ -188,5 +247,41 @@ export class ResilienceAspect implements MethodAspect {
     )
     this.#registry[kAddFallback](answer)
     return compose(answer, ...policies)(method)
+  }
+
+  // A wait inside the time limiter counts against its limit. One that can last as long as the limit lets a waiting
+  // call time out, which a circuit breaker counts as a failure, where it would have been refused, which it ignores.
+  #checkWaits(where: string, stages: Stages): void {
+    const limiter = stages.timeLimiter
+    if (limiter === undefined) {
+      return
+    }
+
+    for (const kind of ['bulkhead', 'rateLimiter'] as const) {
+      const waiting = stages[kind]
+      if (
+        waiting === undefined ||
+        this.#order.indexOf(kind) < this.#order.indexOf('timeLimiter') ||
+        waiting.maxWaitDuration < limiter.timeoutDuration
+      ) {
+        continue
+      }
+
+      const outside = this.#order.filter(other => other !== kind)
+      outside.splice(outside.indexOf('timeLimiter'), 0, kind)
+      throw new ErrInvalidOption(
+        errMessage(
+          `Cannot weave "${where}": ${labelOf(kind)} "${waiting.name}" may wait ${formatDuration(waiting.maxWaitDuration)}, ` +
+            `not less than the ${formatDuration(limiter.timeoutDuration)} limit of time limiter "${limiter.name}" ` +
+            'around it, so a waiting call would time out instead of being refused',
+        )
+          .solutions(
+            `Set maxWaitDuration of ${labelOf(kind)} "${waiting.name}" below ${formatDuration(limiter.timeoutDuration)}`,
+            `Order the ${labelOf(kind)} outside the time limiter with r.order([${outside.map(other => `'${other}'`).join(', ')}])`,
+          )
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
+    }
   }
 }

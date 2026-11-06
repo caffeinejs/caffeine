@@ -283,7 +283,8 @@ async function checkout(providerOptions: { quota?: number; processing?: number }
                 maxWaitDuration: 1 * Second,
               })
               .timeLimiter('payments', { timeoutDuration: 250 * Millisecond })
-              .bulkhead('payments', { maxConcurrentCalls: 10, maxQueuedCalls: 20, maxWaitDuration: 2 * Second })
+              // Inside the time limiter, so a queued charge is refused before its limit passes, and deferred.
+              .bulkhead('payments', { maxConcurrentCalls: 10, maxQueuedCalls: 20, maxWaitDuration: 200 * Millisecond })
               .bulkhead('checkout', { maxConcurrentCalls: 200, maxQueuedCalls: 200, maxWaitDuration: 10 * Second })
               .retry('ledger', { maxAttempts: 3, backoff: 0 }),
           ),

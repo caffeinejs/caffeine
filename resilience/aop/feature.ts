@@ -18,7 +18,7 @@ import type { RetryOptions } from '../retry/retry.js'
 import type { TimeLimiterOptions } from '../timelimiter/timelimiter.js'
 import { ANNOTATIONS, Retry } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
-import { type ResilienceDefinitions, ResilienceRegistry } from './registry.js'
+import { type ResilienceDefinitions, type ResilienceKind, ResilienceRegistry } from './registry.js'
 
 // Bound to `true` by `ResilienceHTTP()`. A controller's `@Retry` needs it: without the check, a handler for any method
 // would replay.
@@ -42,8 +42,10 @@ export type TimeLimiterConfig = Partial<Omit<TimeLimiterOptions, 'name' | 'disca
 export type BulkheadConfig = Omit<BulkheadOptions, 'name' | 'clock'>
 export type RateLimiterConfig = Partial<Omit<RateLimiterOptions, 'name' | 'clock'>>
 
-/** What `Resilience(r => r.config(...))` takes: the data options of each named instance, by kind. */
+/** What `Resilience(r => r.config(...))` takes: the data options of each named instance, by kind, and the order. */
 export interface ResilienceConfig {
+  /** The order of the policies around an annotated method, as `r.order(...)` sets it. */
+  readonly order?: readonly ResilienceKind[]
   readonly circuitBreakers?: Readonly<Record<string, CircuitBreakerConfig>>
   readonly retries?: Readonly<Record<string, RetryConfig>>
   readonly timeLimiters?: Readonly<Record<string, TimeLimiterConfig>>
@@ -51,7 +53,7 @@ export interface ResilienceConfig {
   readonly rateLimiters?: Readonly<Record<string, RateLimiterConfig>>
 }
 
-type Kinds = keyof ResilienceConfig
+type Kinds = Exclude<keyof ResilienceConfig, 'order'>
 
 // Each kind's instances: what configuration set, then what code set, merged per option with code winning.
 function merged<O>(
@@ -78,8 +80,9 @@ function merged<O>(
  *
  * An instance is defined by code, by configuration, or both; code wins, option by option, and an option code passes as
  * `undefined` keeps the configured one. `bootstrap()` fails when code defines a name twice, a method names an instance
- * nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static method, or a controller
- * carries `@Retry` without `ResilienceHTTP()`.
+ * nothing defines, a `@Fallback` names a method its class lacks, an annotation is on a static method, a controller
+ * carries `@Retry` without `ResilienceHTTP()`, the order lists a kind other than once, or a bulkhead or rate limiter
+ * inside a method's time limiter may wait as long as its limit.
  *
  * ```ts
  * .install(Resilience((r, { config }) => r.config(config.resilience).retry('inventory', { maxAttempts: 3 })))
@@ -89,6 +92,7 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'resilience'
 
   #config: Partial<ResilienceConfig> | undefined
+  #order: readonly ResilienceKind[] | undefined
   readonly #code: Record<Kinds, Map<string, object>> = {
     circuitBreakers: new Map(),
     retries: new Map(),
@@ -100,6 +104,16 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   /** The instances the configuration tree defines. What code sets for an instance wins, option by option. */
   config(config: Partial<ResilienceConfig>): this {
     this.#config = config
+    return this
+  }
+
+  /**
+   * Sets the order of the policies around every annotated method, outermost first, each kind once; a fallback is
+   * always outermost. Defaults to `['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']`, where a
+   * bulkhead inside the time limiter keeps the slot of a call that timed out until the call ends.
+   */
+  order(order: readonly ResilienceKind[]): this {
+    this.#order = order
     return this
   }
 
@@ -172,10 +186,12 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
       rateLimiters: merged(config.rateLimiters, this.#code.rateLimiters),
     }
     const registry = new ResilienceRegistry(definitions)
+    const aspect = new ResilienceAspect(registry, this.#order ?? config.order)
 
-    kit.container.bind(ResilienceRegistry, t => t.toValue(registry))
+    // Disposed at shutdown, so no backoff or queued call holds it.
+    kit.container.bind(ResilienceRegistry, t => t.toValue(registry).preDestroy(instances => instances.dispose()))
     kit.container.aspect(ResilienceAspect, s =>
-      s.toSelf([ResilienceRegistry]).pointcuts(resiliencePointcut).order(RESILIENCE_ASPECT_ORDER),
+      s.toValue(aspect).pointcuts(resiliencePointcut).order(RESILIENCE_ASPECT_ORDER),
     )
   }
 
@@ -222,7 +238,8 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
  *
  * @throws {@link ErrInvalidOption} at `bootstrap()` when an instance's options are out of range, code defines a name
  * twice, a method names an instance nothing defines, a `@Fallback` names a method its class lacks, an annotation is on
- * a static method, or a controller carries `@Retry` without `ResilienceHTTP()`.
+ * a static method, a controller carries `@Retry` without `ResilienceHTTP()`, the order lists a kind other than once,
+ * or a bulkhead or rate limiter inside a method's time limiter may wait as long as its limit.
  */
 export function Resilience<C = unknown>(configure?: FeatureConfigurer<ResilienceBuilder<C>, C>): Feature<C> {
   return new ResilienceBuilder<C>(configure as never)

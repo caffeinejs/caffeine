@@ -1,10 +1,18 @@
 import { Second } from '@caffeinejs/std/duration'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ErrBulkheadFull } from '../bulkhead/bulkhead.js'
 import { CircuitBreaker } from '../circuitbreaker/circuitbreaker.js'
+import { fakeTimersClock } from '../clock.testkit.js'
+import { run } from '../compose.js'
 import { ErrInvalidOption } from '../errors.js'
+import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import { Retry } from '../retry/retry.js'
 import { ResilienceRegistry } from './registry.js'
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 describe('ResilienceRegistry', () => {
   it('builds one instance per name and kind, named after its key', () => {
@@ -67,5 +75,34 @@ describe('ResilienceRegistry', () => {
     expect(registry.bulkheads()).toEqual([])
     expect(registry.rateLimiters()).toEqual([])
     expect(registry.fallbacks()).toEqual([])
+  })
+
+  // At shutdown nothing may keep waiting: every queued call ends with its refusal, and no breaker timer stays set.
+  it('disposes every instance it holds', async () => {
+    vi.useFakeTimers()
+    const registry = new ResilienceRegistry({
+      circuitBreakers: { inventory: { automaticTransitionFromOpenToHalfOpen: true, clock: fakeTimersClock } },
+      bulkheads: { payments: { maxConcurrentCalls: 1, maxWaitDuration: 10 * Second, clock: fakeTimersClock } },
+      rateLimiters: {
+        partner: {
+          limitForPeriod: 1,
+          limitRefreshPeriod: 10 * Second,
+          maxWaitDuration: 10 * Second,
+          clock: fakeTimersClock,
+        },
+      },
+    })
+    const held = Promise.withResolvers<string>()
+    void run(registry.bulkhead('payments').wrap(() => held.promise))
+    const queued = run(registry.bulkhead('payments').wrap(async () => 'ok')).catch((error: unknown) => error)
+    await run(registry.rateLimiter('partner').wrap(async () => 'ok'))
+    const throttled = run(registry.rateLimiter('partner').wrap(async () => 'ok')).catch((error: unknown) => error)
+    registry.circuitBreaker('inventory').transitionToOpen()
+
+    registry.dispose()
+
+    expect(await queued).toBeInstanceOf(ErrBulkheadFull)
+    expect(await throttled).toBeInstanceOf(ErrRateLimitExceeded)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

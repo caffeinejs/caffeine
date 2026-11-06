@@ -448,6 +448,7 @@ describe('rate limiter, changing its limits', () => {
     quota.changeMaxWaitDuration(0)
     expect(await run(quota.wrap(operation('c'))).catch((error: unknown) => error)).toBeInstanceOf(ErrRateLimitExceeded)
     quota.changeMaxWaitDuration(5 * Second)
+    expect(quota.maxWaitDuration).toBe(5 * Second)
     calls.push(run(quota.wrap(operation('d'))))
     await vi.advanceTimersByTimeAsync(2 * Second)
 

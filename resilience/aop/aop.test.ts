@@ -19,7 +19,7 @@ import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
 import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Retry, TimeLimiter } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
-import { type ResilienceDefinitions, ResilienceRegistry } from './registry.js'
+import { type ResilienceDefinitions, type ResilienceKind, ResilienceRegistry } from './registry.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -45,13 +45,16 @@ const DEFINITIONS: ResilienceDefinitions = {
 async function containerWith(
   bind: (di: CaffeineIoC) => void,
   definitions: ResilienceDefinitions = DEFINITIONS,
-  options: { profiles?: string[] } = {},
+  options: { profiles?: string[]; order?: readonly ResilienceKind[] } = {},
 ) {
   const di = new CaffeineIoC(options.profiles === undefined ? { decorators: false } : { profiles: options.profiles })
   const registry = new ResilienceRegistry(definitions)
   di.bind(ResilienceRegistry, t => t.toValue(registry))
   di.aspect(ResilienceAspect, s =>
-    s.toSelf([ResilienceRegistry]).pointcuts(resiliencePointcut).order(RESILIENCE_ASPECT_ORDER),
+    s
+      .toValue(new ResilienceAspect(registry, options.order))
+      .pointcuts(resiliencePointcut)
+      .order(RESILIENCE_ASPECT_ORDER),
   )
   bind(di)
   await di.init()
@@ -229,35 +232,135 @@ describe('the order of the strategies', () => {
     expect(target.attempts).toBe(2)
     expect((error as Error).message).toBe('down')
   })
+
+  // With the breaker outside, one call counts once however many attempts it took.
+  it('records a call once in the breaker when the order puts the breaker outside the retry', async () => {
+    const { di, registry } = await containerWith(di => di.bind(RetryWrittenFirst, t => t.toSelf()), DEFINITIONS, {
+      order: ['circuitBreaker', 'retry', 'rateLimiter', 'timeLimiter', 'bulkhead'],
+    })
+    const target = di.get(RetryWrittenFirst)
+
+    await target.call().catch(() => undefined)
+
+    expect(target.attempts).toBe(3)
+    expect(registry.circuitBreaker('inventory').metrics().failedCalls).toBe(1)
+  })
+
+  it.each([
+    [['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter'], 'order leaves out "bulkhead"'],
+    [['retry', 'retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead'], 'order names "retry" twice'],
+    [
+      ['fallback', 'retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead'],
+      'order names "fallback", which is always outermost',
+    ],
+    [['retry', 'cache', 'circuitBreaker'], 'order names "cache", which is not a policy kind'],
+    ['retry', 'order must be an array, got a string'],
+  ])('refuses the order %j', (order, reason) => {
+    expect(() => new ResilienceAspect(new ResilienceRegistry(), order as never)).toThrow(ErrInvalidOption)
+    expect(() => new ResilienceAspect(new ResilienceRegistry(), order as never)).toThrow(
+      `Cannot order the resilience policies: ${reason}`,
+    )
+  })
 })
 
-// The time limiter bounds the call while it runs, not while it waits for a bulkhead slot: a wait is the process's own
-// queue, and timed as a failure it would open the breaker on a dependency that answers every call in time.
-describe('waiting for a bulkhead slot', () => {
+// Inside the time limiter, the bulkhead gives a slot back when the call really ends: a call the time limiter gave up on
+// may still be running, and a new call in its slot would put one more on a dependency that is already slow.
+describe('the bulkhead inside the time limiter', () => {
+  class Pooled {
+    calls = 0
+
+    @TimeLimiter('pooled')
+    @Bulkhead('pooled')
+    async call(): Promise<string> {
+      this.calls++
+      // Ignores its signal, as a driver without cancellation does.
+      await new Promise(resolve => setTimeout(resolve, 300))
+      return 'ok'
+    }
+  }
+
   class Queued {
     @CircuitBreaker('queued')
     @TimeLimiter('queued')
     @Bulkhead('queued')
+    @RateLimiter('queued')
     async call(): Promise<string> {
       await new Promise(resolve => setTimeout(resolve, 80))
       return 'ok'
     }
   }
 
-  it('does not count against the time limit, so the breaker stays closed on a healthy dependency', async () => {
-    const { di, registry } = await containerWith(di => di.bind(Queued, t => t.toSelf()), {
-      circuitBreakers: { queued: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } } },
-      timeLimiters: { queued: { timeoutDuration: 100 * Millisecond } },
-      bulkheads: { queued: { maxConcurrentCalls: 1, maxQueuedCalls: 5, maxWaitDuration: 1 * Second } },
-    })
-    const queued = di.get(Queued)
+  const queued = (bulkheadWait: number, rateLimiterWait = 0): ResilienceDefinitions => ({
+    circuitBreakers: { queued: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } } },
+    timeLimiters: { queued: { timeoutDuration: 100 * Millisecond } },
+    bulkheads: { queued: { maxConcurrentCalls: 1, maxQueuedCalls: 5, maxWaitDuration: bulkheadWait } },
+    rateLimiters: {
+      queued: { limitForPeriod: 100, limitRefreshPeriod: 1 * Second, maxWaitDuration: rateLimiterWait },
+    },
+  })
 
-    const calls = Promise.all([queued.call(), queued.call(), queued.call()].map(call => call.catch((e: unknown) => e)))
+  it('keeps the slot of a call that timed out until the call ends', async () => {
+    const { di } = await containerWith(di => di.bind(Pooled, t => t.toSelf()), {
+      timeLimiters: { pooled: { timeoutDuration: 100 * Millisecond } },
+      bulkheads: { pooled: { maxConcurrentCalls: 1 } },
+    })
+    const pooled = di.get(Pooled)
+
+    const first = pooled.call().catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(await first).toBeInstanceOf(ErrTimeLimitExceeded)
+    expect(await pooled.call().catch((error: unknown) => error)).toBeInstanceOf(ErrBulkheadFull)
+
+    await vi.advanceTimersByTimeAsync(200)
+    void pooled.call().catch(() => undefined)
+    expect(pooled.calls).toBe(2)
+  })
+
+  // A call still waiting for a slot when the limit passes would time out, and open the breaker on a dependency that
+  // answers every call in time; refused by the bulkhead, it is ignored by the breaker.
+  it('refuses a bulkhead that may wait as long as the time limit around it', async () => {
+    const { di } = await containerWith(di => di.bind(Queued, t => t.toSelf()), queued(100 * Millisecond))
+
+    expect(() => di.get(ResilienceAspect).prepare(Queued)).toThrow(ErrInvalidOption)
+    expect(() => di.get(ResilienceAspect).prepare(Queued)).toThrow(
+      'Cannot weave "Queued.call": bulkhead "queued" may wait 100ms, not less than the 100ms limit of time limiter ' +
+        '"queued" around it, so a waiting call would time out instead of being refused',
+    )
+    expect(() => di.get(ResilienceAspect).prepare(Queued)).toThrow(
+      "Order the bulkhead outside the time limiter with r.order(['retry', 'circuitBreaker', 'rateLimiter', 'bulkhead', 'timeLimiter'])",
+    )
+  })
+
+  it('accepts a bulkhead whose wait ends before the time limit around it', async () => {
+    const { di } = await containerWith(di => di.bind(Queued, t => t.toSelf()), queued(99 * Millisecond))
+
+    expect(() => di.get(ResilienceAspect).prepare(Queued)).not.toThrow()
+  })
+
+  it('refuses a rate limiter that may wait as long as the time limit, when the order puts it inside', async () => {
+    const order: ResilienceKind[] = ['retry', 'circuitBreaker', 'timeLimiter', 'rateLimiter', 'bulkhead']
+    const definitions = queued(0, 1 * Second)
+    const inside = await containerWith(di => di.bind(Queued, t => t.toSelf()), definitions, { order })
+    const outside = await containerWith(di => di.bind(Queued, t => t.toSelf()), definitions)
+
+    expect(() => inside.di.get(ResilienceAspect).prepare(Queued)).toThrow(
+      'Cannot weave "Queued.call": rate limiter "queued" may wait 1s, not less than the 100ms limit of time limiter',
+    )
+    expect(() => outside.di.get(ResilienceAspect).prepare(Queued)).not.toThrow()
+  })
+
+  // Outside the time limiter, the wait for a slot is the process's own queue and the limit times the running call.
+  it('times only the running call when the order puts the bulkhead outside the time limiter', async () => {
+    const { di, registry } = await containerWith(di => di.bind(Queued, t => t.toSelf()), queued(1 * Second), {
+      order: ['retry', 'circuitBreaker', 'rateLimiter', 'bulkhead', 'timeLimiter'],
+    })
+    const target = di.get(Queued)
+
+    const calls = Promise.all([target.call(), target.call(), target.call()].map(call => call.catch((e: unknown) => e)))
     await vi.advanceTimersByTimeAsync(240)
 
     expect(await calls).toEqual(['ok', 'ok', 'ok'])
     expect(registry.circuitBreaker('queued').metrics().failedCalls).toBe(0)
-    expect(registry.circuitBreaker('queued').state).toBe('closed')
   })
 })
 

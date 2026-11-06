@@ -2,6 +2,7 @@ import { errMessage } from '@caffeinejs/std/err'
 
 import { type Bulkhead, bulkhead, type BulkheadOptions } from '../bulkhead/bulkhead.js'
 import { type CircuitBreaker, circuitBreaker, type CircuitBreakerOptions } from '../circuitbreaker/circuitbreaker.js'
+import { disposable } from '../dispose.js'
 import { ErrInvalidOption } from '../errors.js'
 import type { Fallback } from '../fallback/fallback.js'
 import { type RateLimiter, rateLimiter, type RateLimiterOptions } from '../ratelimiter/ratelimiter.js'
@@ -39,6 +40,7 @@ export const kAddFallback = Symbol('@caffeinejs/resilience:add-fallback')
  * The `Resilience()` feature builds and binds it; inject it to use the same instances by hand, or to instrument them.
  */
 export class ResilienceRegistry {
+  declare [Symbol.dispose]: () => void
   readonly #circuitBreakers = new Map<string, CircuitBreaker>()
   readonly #retries = new Map<string, Retry>()
   readonly #timeLimiters = new Map<string, TimeLimiter>()
@@ -124,6 +126,26 @@ export class ResilienceRegistry {
     this.#fallbacks.push(fallback)
   }
 
+  /**
+   * Disposes every instance it holds, so no wait outlives a shutdown: a sleeping retry and a call waiting for a slot or
+   * a permit end at once. `Resilience()` calls it when the application shuts down. The `[Symbol.dispose]` alias does
+   * the same.
+   */
+  dispose(): void {
+    for (const breaker of this.#circuitBreakers.values()) {
+      breaker.dispose()
+    }
+    for (const retry of this.#retries.values()) {
+      retry.dispose()
+    }
+    for (const pool of this.#bulkheads.values()) {
+      pool.dispose()
+    }
+    for (const limiter of this.#rateLimiters.values()) {
+      limiter.dispose()
+    }
+  }
+
   #of(kind: ResilienceKind): Map<string, unknown> {
     switch (kind) {
       case 'circuitBreaker':
@@ -153,6 +175,8 @@ export class ResilienceRegistry {
     return instance
   }
 }
+
+disposable(ResilienceRegistry)
 
 /** How the registry names a kind in messages, such as `circuit breaker`. */
 export function labelOf(kind: ResilienceKind): string {

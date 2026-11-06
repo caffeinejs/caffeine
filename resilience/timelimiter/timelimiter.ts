@@ -98,6 +98,10 @@ export class TimeLimiter implements Wrapper {
     return this.#name
   }
 
+  get timeoutDuration(): Duration {
+    return this.#timeoutDuration
+  }
+
   /**
    * Listens to one kind of event. Listeners run synchronously; one that throws, or returns a promise that
    * rejects, never changes the call's outcome, and its error resurfaces as uncaught on the next microtask.

@@ -3,6 +3,40 @@
   "title": "ResilienceConfigSchema",
   "type": "object",
   "properties": {
+    "order": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "const": "retry",
+                "type": "string"
+              },
+              {
+                "const": "circuitBreaker",
+                "type": "string"
+              },
+              {
+                "const": "rateLimiter",
+                "type": "string"
+              },
+              {
+                "const": "timeLimiter",
+                "type": "string"
+              },
+              {
+                "const": "bulkhead",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      ]
+    },
     "circuitBreakers": {
       "type": "object",
       "patternProperties": {

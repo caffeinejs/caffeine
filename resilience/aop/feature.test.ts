@@ -1,5 +1,6 @@
 import { createApplication, ErrFeatureAlreadyInstalled, type Feature } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { run } from '../compose.js'
@@ -143,6 +144,36 @@ describe('Resilience()', () => {
     expect(second.container.get(ResilienceRegistry).circuitBreaker('inventory').state).toBe('closed')
   })
 
+  // The usual reason to reorder: one logical call, with every retry it took, counts once in the breaker.
+  it('orders the policies as code says, over configuration', async () => {
+    const breakerFirst = ['circuitBreaker', 'retry', 'rateLimiter', 'timeLimiter', 'bulkhead'] as const
+    const retryFirst = ['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead'] as const
+    const fromConfig = await boot(Resilience(r => inventory(r).config({ order: breakerFirst })))
+    const fromCode = await boot(Resilience(r => inventory(r).config({ order: retryFirst }).order(breakerFirst)))
+
+    for (const app of [fromConfig, fromCode]) {
+      const target = app.container.get(Inventory)
+      await target.stock().catch(() => undefined)
+
+      expect(target.attempts).toBe(3)
+      expect(app.container.get(ResilienceRegistry).circuitBreaker('inventory').metrics().failedCalls).toBe(1)
+    }
+  })
+
+  // A retry sleeping out a long backoff would otherwise hold a deploy's shutdown until it woke.
+  it('disposes its instances when the application closes, so a sleeping retry ends at once', async () => {
+    const app = await boot(
+      Resilience(r => r.retry('inventory', { maxAttempts: 3, backoff: 30 * Second }).circuitBreaker('inventory')),
+    )
+    const target = app.container.get(Inventory)
+    const call = target.stock().catch((reason: unknown) => reason)
+
+    await app.close()
+
+    expect(await call).toMatchObject({ message: 'down' })
+    expect(target.attempts).toBe(1)
+  })
+
   it('refuses to be installed twice', () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(Resilience())
 
@@ -183,6 +214,21 @@ describe('Resilience() at bootstrap', () => {
     expect((error as Error).message).toContain(
       'Cannot weave "MissingFallback.call": @Fallback names "cachedStok", which is not a method of "MissingFallback"',
     )
+  })
+
+  it('fails on an order that lists a kind other than once, whether code or configuration set it', async () => {
+    const fromCode = await boot(Resilience(r => inventory(r).order(['retry', 'circuitBreaker']))).catch(
+      (reason: unknown) => reason,
+    )
+    const fromConfig = await boot(Resilience(r => inventory(r).config({ order: ['retry', 'retry'] }))).catch(
+      (reason: unknown) => reason,
+    )
+
+    expect(fromCode).toBeInstanceOf(ErrInvalidOption)
+    expect((fromCode as Error).message).toContain(
+      'Cannot order the resilience policies: order leaves out "rateLimiter"',
+    )
+    expect((fromConfig as Error).message).toContain('Cannot order the resilience policies: order names "retry" twice')
   })
 
   it('fails on an option out of range, whether code or configuration set it', async () => {

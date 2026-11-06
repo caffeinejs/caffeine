@@ -55,6 +55,8 @@ const RateLimiter = $t.Object({
  * `bootstrap()`.
  */
 export const ResilienceConfigSchema = $t.Object({
+  // `$t.List`, so `RESILIENCE__ORDER=circuitBreaker,retry,rateLimiter,timeLimiter,bulkhead` is five kinds.
+  order: $t.Optional($t.List($t.UnionEnum(['retry', 'circuitBreaker', 'rateLimiter', 'timeLimiter', 'bulkhead']))),
   circuitBreakers: $t.Optional($t.Record($t.String(), CircuitBreaker)),
   retries: $t.Optional($t.Record($t.String(), Retry)),
   timeLimiters: $t.Optional($t.Record($t.String(), TimeLimiter)),
