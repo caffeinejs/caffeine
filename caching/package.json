@@ -3,7 +3,16 @@
   "version": "0.0.0",
   "description": "Caffeine HTTP response caching",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/caching#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "caching"
+  },
   "type": "module",
   "types": "dist/index.d.ts",
   "exports": {
@@ -31,8 +40,16 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
@@ -42,10 +59,10 @@
     "fastify-plugin": "^6.0.0"
   },
   "peerDependencies": {
-    "@caffeinejs/application": "*",
-    "@caffeinejs/di": "*",
-    "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*",
+    "@caffeinejs/application": "0.0.0",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/std": "0.0.0",
     "@redis/client": "^6.2.1",
     "cache-manager": "^7.2.9",
     "fastify": "^5.0.0",

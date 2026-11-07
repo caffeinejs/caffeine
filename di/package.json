@@ -3,6 +3,16 @@
   "version": "0.0.0",
   "description": "CaffeineJS IoC Container",
   "license": "MIT",
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/di#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "di"
+  },
   "type": "module",
   "types": "dist/index.d.ts",
   "exports": {
@@ -26,8 +36,16 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": [
     "./dist/_polyfill.js",
     "./dist/container.js",

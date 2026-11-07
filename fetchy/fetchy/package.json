@@ -3,7 +3,16 @@
   "version": "0.0.0",
   "description": "CaffeineJS declarative, TC39-decorator-based HTTP client",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/fetchy/fetchy#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "fetchy/fetchy"
+  },
   "type": "module",
   "types": "dist/index.d.ts",
   "exports": {
@@ -31,14 +40,22 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@caffeinejs/std": "*"
+    "@caffeinejs/std": "0.0.0"
   }
 }

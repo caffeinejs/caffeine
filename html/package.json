@@ -3,7 +3,16 @@
   "version": "0.0.0",
   "description": "Caffeine html plugin",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/html#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "html"
+  },
   "type": "module",
   "types": "dist/index.d.ts",
   "exports": {
@@ -15,8 +24,16 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
@@ -26,7 +43,7 @@
     "fastify-plugin": "^6.0.0"
   },
   "peerDependencies": {
-    "@caffeinejs/http": "*",
+    "@caffeinejs/http": "0.0.0",
     "@kitajs/html": "^4.2.13",
     "@kitajs/ts-html-plugin": "^4.1.4",
     "fastify": "^5.0.0"
@@ -37,7 +54,7 @@
     }
   },
   "devDependencies": {
-    "@caffeinejs/application": "*",
+    "@caffeinejs/application": "0.0.0",
     "fastify": "^5.12.8"
   }
 }

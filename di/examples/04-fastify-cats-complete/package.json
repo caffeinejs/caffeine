@@ -10,8 +10,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@caffeinejs/di": "*",
-    "@caffeinejs/testing": "*",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/testing": "0.0.0",
     "@google-cloud/storage": "^8.1.0",
     "fastify": "^5.12.8",
     "ioredis": "^6.0.0",

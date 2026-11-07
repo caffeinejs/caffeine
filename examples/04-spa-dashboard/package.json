@@ -11,12 +11,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeinejs/application": "*",
-    "@caffeinejs/di": "*",
-    "@caffeinejs/http": "*",
-    "@caffeinejs/openapi": "*",
-    "@caffeinejs/static": "*",
-    "@caffeinejs/std": "*",
+    "@caffeinejs/application": "0.0.0",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/openapi": "0.0.0",
+    "@caffeinejs/static": "0.0.0",
+    "@caffeinejs/std": "0.0.0",
     "@fastify/helmet": "^13.1.1",
     "@fastify/static": "^10.1.9",
     "dotenv": "^17.0.0",
@@ -25,8 +25,8 @@
     "pino": "^10.3.1"
   },
   "devDependencies": {
-    "@caffeinejs/cli": "*",
-    "@caffeinejs/testing": "*",
+    "@caffeinejs/cli": "0.0.0",
+    "@caffeinejs/testing": "0.0.0",
     "@types/node": "^26.6.5",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15"

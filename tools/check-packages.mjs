@@ -15,6 +15,13 @@
 // A source file is shipped when the build project (`tsconfig.build.json`) compiles it, and a test when only the check
 // project (`tsconfig.json`) does. `_spectypes/` is compiled but left out of the published package, so it counts as a
 // test.
+//
+// Publishing: a workspace is published unless it is `private`. Every workspace's version and every `@caffeinejs/*`
+// specifier is the root version. A published package carries the root's `license`, `author`, `bugs` and `engines`, a
+// `repository` naming its own directory, a `homepage`, public access, the standard `files`, and a copy of the root
+// LICENSE. With `--tarballs <dir>`, each `npm pack` tarball there is checked too: one per published package, and
+// nothing in it that the build left behind for the repository alone.
+import { execFileSync } from 'node:child_process'
 import { existsSync, globSync, readdirSync, readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
 import { dirname, join, matchesGlob, relative, resolve } from 'node:path'
@@ -32,6 +39,8 @@ const LOADED_BY_THE_APPLICATION = {
 }
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage'])
+const DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependencies', 'devDependencies']
+const FILES = ['dist', '!dist/**/*.tsbuildinfo', '!dist/**/*.d.ts.map', '!dist/**/_spectypes']
 
 const readJSON = file => JSON.parse(readFileSync(file, 'utf8'))
 const posix = path => path.replaceAll('\\', '/')
@@ -180,10 +189,17 @@ function installedManifest(name, fromDir) {
   }
 }
 
-function check({ dir, manifest }, rootDevDependencies) {
+function check({ dir, manifest }, rootManifest) {
   const where = `${posix(relative(root, dir))}/package.json`
   const errors = []
   const fail = message => errors.push(`Cannot accept ${where}: ${message}`)
+  const rootDevDependencies = rootManifest.devDependencies ?? {}
+
+  checkPublishing(dir, manifest, rootManifest, fail)
+  if (!existsSync(join(dir, 'tsconfig.build.json'))) {
+    fail('it is published but has no tsconfig.build.json to build it: add one, or mark the package "private": true')
+    return errors
+  }
 
   const dependencies = manifest.dependencies ?? {}
   const peers = manifest.peerDependencies ?? {}
@@ -383,18 +399,178 @@ function check({ dir, manifest }, rootDevDependencies) {
   return errors
 }
 
+const isEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+
+/** The metadata npm shows and provenance verifies, and the license text every tarball carries. */
+function checkPublishing(dir, manifest, rootManifest, fail) {
+  const directory = posix(relative(root, dir))
+
+  for (const field of ['license', 'author', 'bugs']) {
+    if (!isEqual(manifest[field], rootManifest[field])) {
+      fail(`its "${field}" is not the root package.json's: copy ${JSON.stringify(rootManifest[field])}`)
+    }
+  }
+  if (manifest.engines?.node !== rootManifest.engines.node) {
+    fail(`its "engines.node" is not the root package.json's: copy "${rootManifest.engines.node}"`)
+  }
+  const repository = { ...rootManifest.repository, directory }
+  if (!isEqual(manifest.repository, repository)) {
+    fail(`its "repository" is not ${JSON.stringify(repository)}: provenance checks it against the repository`)
+  }
+  if (typeof manifest.homepage !== 'string') {
+    fail('it has no "homepage": add the URL of its directory on GitHub')
+  }
+  if (manifest.publishConfig?.access !== 'public') {
+    fail('its "publishConfig" has no "access": "public": a scoped package is restricted by default')
+  }
+  if (!isEqual(manifest.files?.slice(0, FILES.length), FILES)) {
+    fail(`its "files" does not start with ${JSON.stringify(FILES)}`)
+  }
+  const license = join(dir, 'LICENSE')
+  if (!existsSync(license) || !readFileSync(license).equals(readFileSync(join(root, 'LICENSE')))) {
+    fail(`its LICENSE is missing or differs from the root LICENSE: copy the root one to ${directory}/LICENSE`)
+  }
+}
+
+/**
+ * Every workspace, private ones included, at the root version, and every `@caffeinejs/*` specifier pinned to it, the
+ * CLI's scaffold templates included. A template's own version is the scaffolded application's.
+ */
+function checkLockstep(workspaces, rootManifest) {
+  const errors = []
+  const { version } = rootManifest
+  const templates = globSync('cli/command/scaffold/templates/**/package.json', { cwd: root }).map(file => ({
+    dir: join(root, dirname(file)),
+    manifest: readJSON(join(root, file)),
+    template: true,
+  }))
+
+  for (const { dir, manifest, template } of [...workspaces, ...templates]) {
+    const where = `${posix(relative(root, dir))}/package.json`
+    if (!template && manifest.version !== undefined && manifest.version !== version) {
+      errors.push(
+        `Cannot accept ${where}: its version "${manifest.version}" is not the root's "${version}": run npm run release:version -- ${version}`,
+      )
+    }
+    for (const field of DEPENDENCY_FIELDS) {
+      for (const [name, specifier] of Object.entries(manifest[field] ?? {})) {
+        if (name.startsWith('@caffeinejs/') && specifier !== version) {
+          errors.push(
+            `Cannot accept ${where}: ${field} pins "${name}" to "${specifier}", not "${version}": every @caffeinejs package moves together, so run npm run release:version -- ${version}`,
+          )
+        }
+      }
+    }
+  }
+
+  return errors
+}
+
+/** Entries an `npm pack` tarball must not hold, unless the build project lists the file on purpose. */
+function strayReason(entry) {
+  if (entry.endsWith('.d.ts.map')) {
+    return 'a declaration map, whose sources are not published'
+  }
+  if (entry.endsWith('.tsbuildinfo')) {
+    return 'a TypeScript build cache'
+  }
+  if (/\.tsx?$/.test(entry) && !entry.endsWith('.d.ts')) {
+    return 'a TypeScript source'
+  }
+  if (/(^|\/)(_tests|_testdata|_spectypes)\//.test(entry) || /\.(test|test-d|spec|e2e|testkit)\.[a-z.]+$/.test(entry)) {
+    return 'test or spec material'
+  }
+
+  return undefined
+}
+
+function checkTarballs(tarballDir, published, version) {
+  const errors = []
+  const tarballs = globSync('*.tgz', { cwd: tarballDir }).toSorted()
+  const seen = new Set()
+
+  for (const tarball of tarballs) {
+    const file = join(tarballDir, tarball)
+    const manifest = JSON.parse(execFileSync('tar', ['-xzOf', file, 'package/package.json'], { encoding: 'utf8' }))
+    const pkg = published.find(candidate => candidate.manifest.name === manifest.name)
+    if (pkg === undefined) {
+      errors.push(
+        `Cannot accept ${tarball}: "${manifest.name}" is not a published workspace: remove it from ${tarballDir}`,
+      )
+      continue
+    }
+    if (manifest.version !== version) {
+      errors.push(
+        `Cannot accept ${tarball}: it is version "${manifest.version}", not the root's "${version}": pack the packages again into an empty directory`,
+      )
+    }
+    if (seen.has(manifest.name)) {
+      errors.push(
+        `Cannot accept ${tarball}: ${tarballDir} holds a second tarball of "${manifest.name}": pack into an empty directory`,
+      )
+    }
+    seen.add(manifest.name)
+
+    // A file the build project lists by name, such as a fixture the package exports, ships on purpose.
+    const listed = new Set(
+      (readJSON(join(pkg.dir, 'tsconfig.build.json')).files ?? []).map(path => `package/dist/${posix(path)}`),
+    )
+    const entries = execFileSync('tar', ['-tzf', file], { encoding: 'utf8' }).split('\n').filter(Boolean)
+    for (const entry of entries) {
+      const reason = listed.has(entry) ? undefined : strayReason(entry)
+      if (reason) {
+        errors.push(`Cannot accept ${tarball}: it holds ${entry}, ${reason}: exclude it in "files"`)
+      }
+    }
+    if (!entries.includes('package/LICENSE')) {
+      errors.push(
+        `Cannot accept ${tarball}: it holds no LICENSE: copy the root LICENSE into the package and pack it again`,
+      )
+    }
+    const bins = typeof manifest.bin === 'string' ? [manifest.bin] : Object.values(manifest.bin ?? {})
+    for (const target of bins) {
+      if (!entries.includes(`package/${posix(target).replace(/^\.\//, '')}`)) {
+        errors.push(
+          `Cannot accept ${tarball}: its bin "${target}" is not in it: build what the bin runs before packing, and list it in "files"`,
+        )
+      }
+    }
+  }
+
+  for (const { manifest } of published) {
+    if (!seen.has(manifest.name)) {
+      errors.push(
+        `Cannot accept ${tarballDir}: it holds no tarball of "${manifest.name}": pack every published package`,
+      )
+    }
+  }
+
+  return errors
+}
+
 function main() {
+  const tarballFlag = process.argv.indexOf('--tarballs')
+  const tarballDir = tarballFlag === -1 ? undefined : process.argv[tarballFlag + 1]
+  if (tarballFlag !== -1 && (tarballDir === undefined || !existsSync(tarballDir))) {
+    console.error(`Cannot read the tarballs: "${tarballDir ?? ''}" is not a directory`)
+    process.exitCode = 1
+    return
+  }
+
   const rootManifest = readJSON(join(root, 'package.json'))
-  const packages = globSync(
+  const workspaces = globSync(
     rootManifest.workspaces.map(pattern => `${pattern}/package.json`),
     { cwd: root },
   )
     .toSorted()
     .map(file => ({ dir: join(root, dirname(file)), manifest: readJSON(join(root, file)) }))
-    // A package is checked when it ships something: an `exports` map or a `bin`.
-    .filter(({ manifest }) => manifest.exports || manifest.bin)
+  const packages = workspaces.filter(({ manifest }) => manifest.private !== true)
 
-  const errors = packages.flatMap(pkg => check(pkg, rootManifest.devDependencies ?? {}))
+  const errors = [
+    ...checkLockstep(workspaces, rootManifest),
+    ...packages.flatMap(pkg => check(pkg, rootManifest)),
+    ...(tarballDir === undefined ? [] : checkTarballs(tarballDir, packages, rootManifest.version)),
+  ]
 
   if (errors.length > 0) {
     for (const error of errors) {
