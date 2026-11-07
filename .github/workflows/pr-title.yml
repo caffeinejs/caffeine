@@ -1,0 +1,48 @@
+name: PR - Title Check
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    name: PR Title
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Conventional Commits
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          fail() {
+            echo "::error title=Pull request title::Cannot accept the pull request title: $1"
+            printf 'Title: "%s"\n' "$TITLE"
+            echo 'Write it as <type>(<optional scope>): <description>, with ! before the colon for a breaking change'
+            echo 'Types: feat, fix, docs, test, refactor, perf, chore, build, ci, bench'
+            echo 'The description is under 72 characters, in the imperative mood, with no trailing period'
+            exit 1
+          }
+
+          shape='^(feat|fix|docs|test|refactor|perf|chore|build|ci|bench)(\([a-z0-9/,-]+\))?!?: [^[:space:]]'
+          if [[ ! "$TITLE" =~ $shape ]]; then
+            fail 'it does not start with a known type, an optional scope and ": "'
+          fi
+          if [[ "$TITLE" == *. ]]; then
+            fail 'it ends with a period'
+          fi
+
+          # Dependabot writes its own titles; only their "chore" prefix comes from .github/dependabot.yml.
+          description="${TITLE#*: }"
+          if [[ "$AUTHOR" != 'dependabot[bot]' ]] && (( ${#description} > 71 )); then
+            fail "its description is ${#description} characters, over 71"
+          fi
