@@ -23,6 +23,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@sinclair/typebox": "^0.34.52"
+  },
+  "peerDependencies": {
     "@caffeinejs/application": "*",
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",

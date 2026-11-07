@@ -56,6 +56,7 @@
     "fmt:check": "oxfmt --check",
     "lint:markdown": "markdownlint-cli2",
     "license:check": "node tools/check-licenses.mjs",
+    "packages:check": "node tools/check-packages.mjs",
     "pins:check": "node tools/check-pins.mjs",
     "spec:check": "node tools/generate-spec.mjs --check",
     "spec:gen": "node tools/generate-spec.mjs",

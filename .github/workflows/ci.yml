@@ -75,6 +75,10 @@ jobs:
         if: ${{ matrix.primary }}
         run: npm run lint
 
+      - name: Package Manifests
+        if: ${{ matrix.primary }}
+        run: npm run packages:check
+
       - name: Type Check
         if: ${{ matrix.primary }}
         run: npm run test:typecheck

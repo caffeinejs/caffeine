@@ -25,12 +25,10 @@
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@caffeinejs/application": "*",
     "@caffeinejs/di": "*",
-    "@caffeinejs/std": "*"
-  },
-  "peerDependencies": {
+    "@caffeinejs/std": "*",
     "typeorm": "^0.3"
   },
   "devDependencies": {

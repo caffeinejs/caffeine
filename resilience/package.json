@@ -27,10 +27,8 @@
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@caffeinejs/std": "*"
-  },
   "peerDependencies": {
+    "@caffeinejs/std": "*",
     "@opentelemetry/api": ">=1 <2"
   },
   "peerDependenciesMeta": {

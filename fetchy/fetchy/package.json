@@ -38,7 +38,7 @@
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@caffeinejs/std": "*"
   }
 }

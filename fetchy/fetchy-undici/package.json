@@ -23,8 +23,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeinejs/fetchy": "*",
-    "@caffeinejs/std": "*",
     "undici": "^8.12.3"
+  },
+  "peerDependencies": {
+    "@caffeinejs/fetchy": "*",
+    "@caffeinejs/std": "*"
   }
 }

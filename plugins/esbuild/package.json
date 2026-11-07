@@ -20,6 +20,9 @@
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist"
   },
+  "peerDependencies": {
+    "esbuild": "*"
+  },
   "devDependencies": {
     "esbuild": "*"
   }

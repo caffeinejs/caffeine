@@ -40,9 +40,6 @@
     "@caffeinejs/brewer": {
       "optional": true
     },
-    "@caffeinejs/di": {
-      "optional": true
-    },
     "@caffeinejs/http": {
       "optional": true
     },

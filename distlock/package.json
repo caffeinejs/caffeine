@@ -38,12 +38,10 @@
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@caffeinejs/application": "*",
     "@caffeinejs/di": "*",
-    "@caffeinejs/std": "*"
-  },
-  "peerDependencies": {
+    "@caffeinejs/std": "*",
     "@opentelemetry/api": ">=1 <2",
     "@redis/client": "^6.2.1"
   },

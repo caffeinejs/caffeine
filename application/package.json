@@ -87,13 +87,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeinejs/di": "*",
-    "@caffeinejs/std": "*",
     "@sinclair/typebox": "^0.34.52",
     "@standard-schema/spec": "^1.1.0",
     "yaml": "^2.9.1"
   },
   "peerDependencies": {
+    "@caffeinejs/di": "*",
+    "@caffeinejs/std": "*",
     "pino": "^10.3.1"
   },
   "peerDependenciesMeta": {

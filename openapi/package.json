@@ -23,11 +23,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "fastify-plugin": "^6.0.0",
     "yaml": "^2.9.1"
   },
   "peerDependencies": {
     "@caffeinejs/application": "*",
-    "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/std": "*",
     "@scalar/api-reference": "^1.0.0",
@@ -39,8 +39,10 @@
     }
   },
   "devDependencies": {
+    "@caffeinejs/di": "*",
     "@caffeinejs/multipart": "*",
     "@scalar/api-reference": "^1.68.0",
-    "fastify": "^5.12.8"
+    "fastify": "^5.12.8",
+    "jose": "^6.2.10"
   }
 }

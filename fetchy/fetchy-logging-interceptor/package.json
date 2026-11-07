@@ -26,10 +26,8 @@
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@caffeinejs/fetchy": "*"
-  },
   "peerDependencies": {
+    "@caffeinejs/fetchy": "*",
     "pino": "^10.3.1"
   },
   "peerDependenciesMeta": {
