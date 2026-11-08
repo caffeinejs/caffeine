@@ -20,6 +20,7 @@ const servers: ServerConfig[] = [
   { name: 'caffeine', port: 3023, ...built('caffeine', 'caffeine.js') },
   { name: 'caffeine (request scoped)', port: 3025, ...built('caffeine-request-scope', 'caffeine.js') },
   { name: 'caffeine (router)', port: 3026, ...built('caffeine-router', 'caffeine.js') },
+  { name: 'caffeine (router, codec)', port: 3030, ...built('caffeine-codec', 'caffeine.js') },
   { name: 'elysia', port: 3024, ...built('elysia', 'elysia.js') },
 ]
 

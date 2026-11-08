@@ -1,4 +1,4 @@
-import type { AnySchema, InferSchema } from '@caffeinejs/application/schema'
+import type { AnySchema, InferWire } from '@caffeinejs/application/schema'
 
 import type { IAdapterTypes, AnyAdapterTypes } from '../../../adapter.js'
 import type { IContext } from '../../../context.js'
@@ -93,6 +93,15 @@ export type ParamsOf<S extends RouteValidationSchema, P extends string> = S exte
   ? InferParams<S>
   : Simplify<PathParams<P>>
 
+// As `ParamsOf`, for a client: what it sends, where a codec such as `$t.Duration()` is still text.
+type WireParamsOf<S extends RouteValidationSchema, P extends string> = S extends { params: AnySchema }
+  ? WireSlot<S, 'params', never>
+  : Simplify<PathParams<P>>
+
+// What a client sends in a request slot: the slot schema's wire side, or `Fallback` when the route declares none.
+type WireSlot<S, Slot extends keyof RouteValidationSchema, Fallback> =
+  S extends Record<Slot, infer Schema extends AnySchema> ? InferWire<Schema, 'input'> : Fallback
+
 /**
  * The context a programmatic handler receives, typed by the route's schema and path.
  *
@@ -171,14 +180,17 @@ export interface RouteDef<
 /**
  * The descriptor a router accumulates for one route it declared: everything {@link RouteDef} holds, worked out
  * from the route's method, its full path, the schema it validates against and what its handler returns.
+ *
+ * It describes the route as a client sees it, on the wire: a codec such as `$t.Duration()` is the text sent and
+ * received, not the value the handler works with.
  */
 export type DeclaredRoute<M extends string, P extends string, S extends RouteValidationSchema, O> = RouteDef<
   M,
   P,
-  ParamsOf<S, P>,
-  InferQuery<S>,
-  InferHeaders<S>,
-  InferBody<S>,
+  WireParamsOf<S, P>,
+  WireSlot<S, 'querystring', Record<string, string>>,
+  WireSlot<S, 'headers', Record<string, string>>,
+  WireSlot<S, 'body', unknown>,
   OutputOf<S, O>,
   ResponsesOf<S>
 >
@@ -197,9 +209,9 @@ export type OutputOf<S extends RouteValidationSchema, O> = S extends { response:
   : HandlerOutput<O>
 
 type SuccessBody<R> = R extends { 200: infer S extends AnySchema }
-  ? InferSchema<S>
+  ? InferWire<S, 'output'>
   : R extends { 201: infer S extends AnySchema }
-    ? InferSchema<S>
+    ? InferWire<S, 'output'>
     : never
 
 type HandlerOutput<O> =
@@ -213,7 +225,7 @@ type HandlerOutput<O> =
  * `number` stops `res.status === 200` narrowing to the 200 body. {@link OutputOf} still reads what it always read.
  */
 export type ResponsesOf<S extends RouteValidationSchema> = S extends { response: infer R }
-  ? { [K in Extract<keyof R, number> as K]: R[K] extends AnySchema ? InferSchema<R[K]> : never }
+  ? { [K in Extract<keyof R, number> as K]: R[K] extends AnySchema ? InferWire<R[K], 'output'> : never }
   : unknown
 
 /** Re-bases a set of route descriptors under a prefix, for a router mounted inside another. */

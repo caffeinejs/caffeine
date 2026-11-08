@@ -29,7 +29,7 @@ export type AdapterRequest = Parameters<AdapterOnRequestFn>[0]
 export type AdapterReply = Parameters<AdapterOnRequestFn>[1]
 
 /** The route hook slots anything in this package writes to. */
-export type RouteHookKey = 'onRequest' | 'onSend'
+export type RouteHookKey = 'onRequest' | 'preValidation' | 'preSerialization' | 'onSend'
 
 /**
  * Adds a hook to a route's hook slot, allocating as little as the slot needs.
