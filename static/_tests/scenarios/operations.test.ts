@@ -1,27 +1,15 @@
 import { gunzipSync } from 'node:zlib'
 
-import { type WebApplication, Authentication, Authorization } from '@caffeinejs/http'
-import { authenticationExempt, newRouter, authentication, healthProbes } from '@caffeinejs/http/fastify'
+import { type WebApplication } from '@caffeinejs/http'
+import { authenticationExempt, newRouter, healthProbes } from '@caffeinejs/http/fastify'
 import fastifyCompress from '@fastify/compress'
 import fastifyCors from '@fastify/cors'
-import fastifyStatic from '@fastify/static'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { spaMount, staticFiles } from '../../index.js'
-import {
-  clientRouteOf,
-  dist,
-  expectNotFoundJSON,
-  fixtures,
-  HeaderAuthenticationHandler,
-  isolated,
-  NAVIGATION,
-  notFound,
-  PROBE,
-  shellOf,
-} from './_headers.js'
+import { staticFiles } from '../../index.js'
+import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, notFound, PROBE, shellOf } from './_headers.js'
 
 const api = () =>
   newRouter('/api')
@@ -36,7 +24,7 @@ const pages = () =>
     .get('/index.html', shellOf(dist))
     .get('/*', clientRouteOf(dist))
 
-const files = () => staticFiles(s => s.serve(dist, spaMount(), { anonymous: true }))
+const files = () => staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true }))
 
 describe('a single-page application next to the plugins an application runs in production', () => {
   let app: WebApplication
@@ -152,56 +140,5 @@ describe('a single-page application next to the plugins an application runs in p
     // An exact URL that matched a route never reaches the client-route wildcard; a miss beside it does, and
     // a probe is not a browser.
     await expectNotFoundJSON(await app.request('/metrics/x', { headers: PROBE }))
-  })
-
-  // `@fastify/static`'s default wildcard registers `GET /*`, which is the application's own client-route
-  // path. That used to make the shell silently unreachable; now it is a duplicate route at start-up. This is
-  // what `spaMount()` turns off, and why it is not a tuning knob.
-  it('refuses to start next to a catch-all static mount the application registered itself', async () => {
-    app = isolated()
-      .with(() =>
-        fp(
-          async (instance: FastifyInstance) => instance.register(fastifyStatic, { root: dist, decorateReply: false }),
-          {
-            name: 'my-static',
-          },
-        ),
-      )
-      .with(files())
-      .mount(api(), pages()) as WebApplication
-
-    await expect(app.bootstrap()).rejects.toThrow(/already declared/)
-  })
-
-  // `@fastify/static` forwards a route config only on the per-file routes it registers: the wildcard it
-  // registers by default, and the redirect beside it, arrive without one. Marking an `anonymous` mount from an
-  // `onRoute` hook has to reach those too, or a mount serving on the default `wildcard: true` — where the
-  // wildcard *is* every route it has — is exempt in name only and answers 401 for the whole bundle.
-  it('exempts the wildcard route of an anonymous mount, not only its per-file routes', async () => {
-    app = isolated()
-      .install(Authentication(auth => auth.addStrategy('header', new HeaderAuthenticationHandler())))
-      .with(authentication())
-      .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
-      .with(staticFiles(s => s.serve(fixtures, { prefix: '/bundle' }, { anonymous: true }))) as WebApplication
-    await app.bootstrap()
-
-    const asset = await app.request('/bundle/hello.txt', { headers: PROBE })
-
-    expect(asset.status).toBe(200)
-    expect(await asset.text()).toContain('hello static world')
-  })
-
-  // A second mount that also wants the decoration is refused earlier still, by Fastify itself.
-  it('refuses a second mount that also asks to decorate the reply', async () => {
-    app = isolated()
-      .with(() =>
-        fp(async (instance: FastifyInstance) => instance.register(fastifyStatic, { root: dist, prefix: '/mine' }), {
-          name: 'my-static',
-        }),
-      )
-      .with(files())
-      .mount(api(), pages()) as WebApplication
-
-    await expect(app.bootstrap()).rejects.toThrow(/has already been added/)
   })
 })

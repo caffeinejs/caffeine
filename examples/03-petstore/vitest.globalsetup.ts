@@ -3,12 +3,16 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { buildStatic } from '@caffeinejs/static/build'
+
 // The Prisma client is generated and untracked, and the specs import it. It is generated here so the example
 // is self-sufficient wherever its vitest project runs — no codegen leaks into the root scripts. The module
 // graph (`src/**/*.gen.mod.ts`) is committed, so nothing regenerates it on a test run; a change to the file
-// layout is regenerated deliberately, with `npm run generate -w @caffeinejs/example-petstore`.
-export default function setup(): void {
+// layout is regenerated deliberately, with `npm run generate -w @caffeinejs/example-petstore`. The static files are
+// built too, since `staticFiles(...)` serves `public/` from the manifest the build writes.
+export default async function setup(): Promise<void> {
   const cwd = dirname(fileURLToPath(import.meta.url))
+  await buildStatic({ root: join(cwd, 'public') })
   const prismaClient = join(cwd, 'generated/prisma')
   if (existsSync(prismaClient)) {
     return

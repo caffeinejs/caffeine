@@ -18,20 +18,20 @@ import {
 /**
  * An administration site where the page *and* its bundle are for administrators.
  *
- * There is deliberately no `@fastify/static` mount: its file routes are raw Fastify routes, which carry no
+ * There is deliberately no routed mount: a mount's file routes are raw Fastify routes, which carry no
  * authorization of their own and fall to the application's fallback policy — so the bundle of a role-gated
  * site would be readable by anyone, or by any signed-in user. Serving the files from a compiled route instead
- * puts every byte behind the same `authorize` as the page. `sendFile` still goes through `@fastify/static`,
- * so the `..` and non-canonical-path guards apply.
+ * puts every byte behind the same `authorize` as the page. `sendFile` looks the path up in the manifest, so a
+ * `..` or a path the build did not list is a 404.
  *
- * `serve: false` is what makes that possible: the mount registers no routes at all, and exists only to
- * decorate the reply and to name the root `sendFile` resolves against.
+ * `unrouted: ['**']` is what makes that possible: the mount registers no routes at all, and exists only to
+ * name the files and the root `sendFile` resolves against.
  */
 function adminSite(authenticateByDefault: boolean): WebApplication {
   const app = isolated()
     .install(Authentication(a => a.addStrategy('header', new HeaderAuthenticationHandler())))
     .with(authentication())
-    .with(staticFiles(s => s.serve(dist, { serve: false })))
+    .with(staticFiles(s => s.serve(dist, { unrouted: ['**'] })))
     .mount(
       newRouter('/api')
         .authorize({ roles: ['admin'] })
