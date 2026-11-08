@@ -1,0 +1,30 @@
+{
+  "files": {
+    "assets/app.js": {
+      "hash": "oXLO3K5HR0thXFTVEKXYSo3qMDLpWFh0MLQTU4vj8zM=",
+      "lastModified": "2026-11-01T10:00:00.000Z",
+      "size": 2048,
+      "type": "text/javascript; charset=utf-8",
+      "variants": {
+        "br": {
+          "hash": "3AaMjvOZO8KpKL/ledZHabZeRWKB93lFQCovYxMqhg4=",
+          "path": "assets/app.js.br",
+          "size": 512
+        },
+        "gzip": {
+          "hash": "HtA7EulPe84vgg4lxKvVJFT7hLVMUWn4Cx5fN6J232s=",
+          "path": "assets/app.js.gz",
+          "size": 640
+        }
+      }
+    },
+    "favicon.svg": {
+      "hash": "rNsTc9F2GTnLXaozMiIymFKVgUZKkK+uOZJ+eu+O3UY=",
+      "lastModified": "2026-11-01T10:00:00.000Z",
+      "size": 97,
+      "type": "image/svg+xml",
+      "variants": {}
+    }
+  },
+  "version": 1
+}
