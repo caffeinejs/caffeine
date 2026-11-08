@@ -388,10 +388,6 @@ read. That value was made under a signal that has already aborted: a body tied t
 Where it sits decides what it bounds: inside a retry, each attempt; outside it, every attempt and every wait between
 them (see [Composing policies](#composing-policies)).
 
-The time limiter links its signal to the caller's with `AbortSignal.any`. On Node 22 that keeps about 176 bytes per
-call on a caller signal that lives long, such as a server's shutdown signal; Node 24 and later keep nothing. On Node
-22, pass a signal per request. A call without a caller signal links nothing.
-
 `deadline.metrics()` counts `successfulCalls`, `failedCalls` and `timedOutCalls`. The timer keeps the process
 alive: it is what settles a call whose operation ignores its signal.
 

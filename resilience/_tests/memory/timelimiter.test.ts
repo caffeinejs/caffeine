@@ -21,13 +21,10 @@ async function retained(): Promise<number> {
   return getHeapSpaceStatistics().find(space => space.space_name === 'old_space')!.space_used_size
 }
 
-// Node 22 keeps an entry on the source signal for every signal combined from it, and drops none of them.
-const major = Number(process.versions.node.split('.')[0])
-
 // A caller signal can outlive every call it is passed to, as a shutdown signal does. The time limiter combines it
 // with its own on every call: what each call combined must go once the call settles, or a long-lived worker grows
 // until it dies.
-describe.skipIf(major < 24)('a time limiter called with one long-lived signal', () => {
+describe('a time limiter called with one long-lived signal', () => {
   it('leaves nothing behind per call once the calls settle', async () => {
     const shutdown = new AbortController().signal
     const fetchStock = decorate(
