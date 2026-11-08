@@ -47,7 +47,7 @@ src/app.config.ts                 the configuration schema and its token
 src/auction/auction.controller.ts POST /ad: runs the auction, answers 200 with the winner or 204, sends the win notice
 src/auction/auctioneer.ts         fans the bid request out to every DSP and picks the winner
 src/dsps/dsp.api.ts               the fetchy API a DSP answers: POST /bid and POST /win
-src/dsps/dsp.fleet.ts             one fetchy client and one guarded bid per DSP, and the outcome counts
+src/dsps/dsp.fleet.ts             two fetchy clients per DSP, for bids and for win notices, its guarded bid, and the outcome counts
 src/dsps/dsps.controller.ts       GET /dsps: each DSP's breaker, bulkhead, rate limiter and outcomes
 src/wins/win.notifier.ts          the win notice, @Resilient('win-notice')
 src/util/testing/                 fake DSPs on real sockets, and the exchange the tests start

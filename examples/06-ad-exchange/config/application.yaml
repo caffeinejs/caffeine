@@ -53,7 +53,7 @@ resilience:
     # The auction deadline. Each DSP is told it as `tmax`, and an answer later than this is not waited for.
     timeLimiter:
       timeoutDuration: 80ms
-    # The calls one DSP may have in flight. The fetchy client opens as many connections, and no call waits for one.
+    # The bids one DSP may have in flight. Its bid client opens as many connections, and no bid waits for one.
     bulkhead:
       maxConcurrentCalls: 64
 

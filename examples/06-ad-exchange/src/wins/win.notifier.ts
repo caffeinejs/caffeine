@@ -36,7 +36,7 @@ export class WinNotifier {
     if (target === undefined) {
       throw new RangeError(`No DSP has the id "${dsp}"`)
     }
-    await target.api.win(notice, this.attempt.signal)
+    await target.win(notice, this.attempt.signal)
   }
 }
 

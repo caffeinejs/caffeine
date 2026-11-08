@@ -81,4 +81,28 @@ describe('the win notice', () => {
       { id: second, price: 2 },
     ])
   })
+
+  // A notice the DSP holds must not keep the next auction from reaching that same DSP: the bulkhead counts bids alone,
+  // and its connections were sized for them. The `test` profile gives the DSP two.
+  it('leaves the bid connections free while its notices hang', async () => {
+    const dsp = await startDSP()
+    fakes.push(dsp)
+    dsp.setDefault('/bid', bid(2))
+    dsp.setDefault('/win', 'hang')
+    // Every notice keeps its connection for as long as the DSP holds it.
+    exchange = await startExchange([{ id: 'dsp-busy', dsp }], {
+      resilience: { presets: { 'win-notice': { timeLimiter: { timeoutDuration: '1h' } } } },
+    })
+    await sold()
+    await dsp.arrived('/win', 1)
+    await sold()
+    await dsp.arrived('/win', 2)
+
+    const res = await auction(exchange)
+
+    expect(await res.json()).toMatchObject({ winner: { dsp: 'dsp-busy', price: 2 } })
+    expect(dsp.count('/bid')).toBe(3)
+    // The third notice waits for a connection the held ones free at the end; it must not be held in turn.
+    dsp.setDefault('/win', { status: 200 })
+  })
 })

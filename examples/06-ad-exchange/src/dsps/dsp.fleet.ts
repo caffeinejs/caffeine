@@ -20,6 +20,7 @@ import {
   type DSPStatus,
   type Outcome,
   OUTCOMES,
+  type WinNotice,
 } from './dsp.schemas.js'
 
 /** Why a DSP gave no bid, read from what its policies or its client threw. */
@@ -51,13 +52,14 @@ function isBid(value: unknown): value is BidResponse {
   )
 }
 
-/** One DSP the exchange calls: its client, its guarded bid, and what became of its bids so far. */
+/** One DSP the exchange calls: its clients, its guarded bid, and what became of its bids so far. */
 export class DSP {
   readonly id: string
-  readonly api: DSPAPI
   /** What the DSP is told it has to answer: its time limit, in milliseconds. */
   readonly tmax: number
-  readonly #client: FetchyClient
+  readonly #bids: DSPAPI
+  readonly #notices: DSPAPI
+  readonly #clients: readonly FetchyClient[]
   readonly #registry: ResilienceRegistry
   readonly #bid: Operation<BidResult, BidRequest>
   readonly #outcomes = new Map<Outcome, number>(OUTCOMES.map(outcome => [outcome, 0]))
@@ -66,18 +68,21 @@ export class DSP {
     this.id = config.id
     this.#registry = registry
     this.tmax = registry.timeLimiter(config.id).timeoutDuration
-    this.#client = newClient()
-      .baseURL(config.url)
-      // One connection per call the bulkhead lets through, so no call waits for a socket.
-      .transportFactory(
-        new UndiciTransportFactory({ connections: registry.bulkhead(config.id).metrics().maxAllowedConcurrentCalls }),
-      )
-      .build()
-    this.api = this.#client.create(DSPAPI)
+
+    // One connection per call the bulkhead lets through, so no bid waits for a socket. Win notices pass no bulkhead,
+    // so they get connections of their own: a DSP that holds its notices would otherwise hold every bid's socket.
+    const connections = registry.bulkhead(config.id).metrics().maxAllowedConcurrentCalls
+    const client = (): FetchyClient =>
+      newClient().baseURL(config.url).transportFactory(new UndiciTransportFactory({ connections })).build()
+    const bids = client()
+    const notices = client()
+    this.#clients = [bids, notices]
+    this.#bids = bids.create(DSPAPI)
+    this.#notices = notices.create(DSPAPI)
 
     const id = this.id
     const call: Operation<BidResult, BidRequest> = async (ctx, request) => {
-      const bid = await this.api.bid(request, ctx.signal)
+      const bid = await this.#bids.bid(request, ctx.signal)
       if (bid === undefined) {
         return { dsp: id, outcome: 'no_bid' }
       }
@@ -114,6 +119,11 @@ export class DSP {
     return result
   }
 
+  /** Tells the DSP it won, over the connections kept for notices. Unguarded: the caller brings the policies. */
+  win(notice: WinNotice, signal?: AbortSignal): Promise<void> {
+    return this.#notices.win(notice, signal)
+  }
+
   /** Where the DSP's policies stand, and how many auctions ended in each outcome since the application started. */
   status(): DSPStatus {
     const registry = this.#registry
@@ -127,8 +137,8 @@ export class DSP {
     }
   }
 
-  close(): Promise<void> {
-    return this.#client.close()
+  async close(): Promise<void> {
+    await Promise.all(this.#clients.map(client => client.close()))
   }
 }
 
