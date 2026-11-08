@@ -65,6 +65,26 @@ describe('GET /dsps', () => {
   })
 })
 
+describe('a DSP that answers 200 with no bid in it', () => {
+  // JSON with no numeric price or no markup cannot win, and says the DSP is broken rather than passing.
+  it('counts each such answer as an error, not a bid', async () => {
+    const [empty, unpriced] = await fleet(2)
+    empty.setDefault('/bid', { status: 200, body: {} })
+    unpriced.setDefault('/bid', { status: 200, body: { adm: '<img src="https://ads.test/x.png">' } })
+    exchange = await startExchange([
+      { id: 'dsp-empty', dsp: empty },
+      { id: 'dsp-unpriced', dsp: unpriced },
+    ])
+
+    const res = await auction(exchange)
+
+    expect(res.status).toBe(204)
+    const [first, second] = await dsps(exchange)
+    expect(first?.outcomes).toMatchObject({ bid: 0, error: 1 })
+    expect(second?.outcomes).toMatchObject({ bid: 0, error: 1 })
+  })
+})
+
 describe('a DSP whose breaker is open', () => {
   // One DSP down is a missing bid, not an exchange that cannot serve: taking the exchange out of the load balancer
   // would lose every auction.

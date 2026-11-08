@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { WinNotice } from '../dsps/dsp.schemas.js'
 import { bid, type FakeDSP, NO_BID, startDSP } from '../util/testing/dsp.js'
 import { auction, type Exchange, startExchange } from '../util/testing/exchange.js'
+import { WinNotifier } from './win.notifier.js'
 
 // Win notices, against fake DSPs on real sockets, with the `test` profile: 4 attempts, 1ms apart.
 
@@ -104,5 +105,15 @@ describe('the win notice', () => {
     expect(dsp.count('/bid')).toBe(3)
     // The third notice waits for a connection the held ones free at the end; it must not be held in turn.
     dsp.setDefault('/win', { status: 200 })
+  })
+
+  // The winner's id comes from the fleet, so only a caller that made one up can name a DSP the fleet does not have.
+  it('refuses a notice for a DSP the fleet does not have', async () => {
+    await sale()
+    const notifier = (exchange as Exchange).app.container.get(WinNotifier)
+
+    await expect(notifier.notify('dsp-unknown', { id: 'a-1', price: 2 })).rejects.toThrow(
+      new RangeError('No DSP has the id "dsp-unknown"'),
+    )
   })
 })

@@ -62,7 +62,7 @@ export class DSP {
   readonly #clients: readonly FetchyClient[]
   readonly #registry: ResilienceRegistry
   readonly #bid: Operation<BidResult, BidRequest>
-  readonly #outcomes = new Map<Outcome, number>(OUTCOMES.map(outcome => [outcome, 0]))
+  readonly #outcomes = Object.fromEntries(OUTCOMES.map(outcome => [outcome, 0])) as Record<Outcome, number>
 
   constructor(config: DSPConfig, registry: ResilienceRegistry, guarded: boolean) {
     this.id = config.id
@@ -115,7 +115,7 @@ export class DSP {
   /** The DSP's answer to one auction. Resolves with a bid or a reason for none; rejects only when `signal` aborts. */
   async bid(request: BidRequest, signal: AbortSignal): Promise<BidResult> {
     const result = await this.#bid({ signal }, request)
-    this.#outcomes.set(result.outcome, (this.#outcomes.get(result.outcome) ?? 0) + 1)
+    this.#outcomes[result.outcome]++
     return result
   }
 
@@ -130,7 +130,7 @@ export class DSP {
     return {
       id: this.id,
       state: registry.circuitBreaker(this.id).state,
-      outcomes: Object.fromEntries(this.#outcomes) as Record<Outcome, number>,
+      outcomes: { ...this.#outcomes },
       circuitBreaker: registry.circuitBreaker(this.id).metrics(),
       bulkhead: registry.bulkhead(this.id).metrics(),
       rateLimiter: registry.has(this.id, 'rateLimiter') ? registry.rateLimiter(this.id).metrics() : null,

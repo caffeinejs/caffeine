@@ -42,6 +42,17 @@ describe('the load test verdict', () => {
     expect(failures(result({ [status]: 8 }))).toEqual([`8 auctions answered ${status}`])
   })
 
+  // An exchange that never answered must not pass for one that sold nothing wrong: every share reads as zero.
+  it('fails a run in which no auction was answered', () => {
+    const silent: Measured = { latency: { p99: 0 }, requests: { total: 0 }, errors: 64, timeouts: 64 }
+
+    expect(failures(silent, new Map())).toEqual([
+      '64 requests failed',
+      '0.0% of the auctions sold, under the 95.0% budget',
+      "the dead DSP's breaker refused 0.0% of its auctions, under 90.0%",
+    ])
+  })
+
   it('passes a run of 200s and 204s within every budget', () => {
     expect(failures(result())).toEqual([])
   })

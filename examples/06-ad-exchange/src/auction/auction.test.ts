@@ -240,6 +240,25 @@ describe('the auction', () => {
   })
 
   // The baseline the load test compares against: with no policy, the auction waits for the slowest DSP.
+  // The baseline differs from the guarded exchange in time alone: a DSP that fails still costs its bid, not the auction.
+  it('turns a failing DSP into a missing bid when resilience is off', async () => {
+    const [good, failing] = await fleet(2)
+    good.setDefault('/bid', bid(1.5))
+    failing.setDefault('/bid', { status: 500 })
+    exchange = await startExchange(
+      [
+        { id: 'dsp-good', dsp: good },
+        { id: 'dsp-failing', dsp: failing },
+      ],
+      { exchange: { resilience: false } },
+    )
+
+    const res = await auction(exchange)
+
+    expect(((await res.json()) as { winner: { dsp: string } }).winner.dsp).toBe('dsp-good')
+    expect((await dsps(exchange))[1]?.outcomes).toMatchObject({ error: 1 })
+  })
+
   it('waits for a held DSP when resilience is off', async () => {
     const [fast, held] = await fleet(2)
     fast.setDefault('/bid', bid(1.5))
