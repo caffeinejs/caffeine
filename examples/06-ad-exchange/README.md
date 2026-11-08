@@ -53,6 +53,7 @@ src/wins/win.notifier.ts          the win notice, @Resilient('win-notice')
 src/util/testing/                 fake DSPs on real sockets, and the exchange the tests start
 dsps/<name>/bid_mock.yaml         each VLatte DSP's mocks
 load/load.ts                      the load script
+load/verdict.ts                   the budgets a load run must hold to, and what failed them
 ```
 
 The DSPs are listed in the configuration, so their policies cannot be annotations: [`src/dsps/dsp.fleet.ts`](src/dsps/dsp.fleet.ts)
