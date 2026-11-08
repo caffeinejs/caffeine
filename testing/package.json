@@ -3,7 +3,16 @@
   "version": "0.0.0",
   "description": "CaffeineJS testing utilities",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/testing#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "testing"
+  },
   "type": "module",
   "types": "dist/index.d.ts",
   "exports": {
@@ -23,24 +32,29 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@caffeinejs/brewer": "*",
-    "@caffeinejs/di": "*",
-    "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*"
+    "@caffeinejs/brewer": "0.0.0",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/std": "0.0.0"
   },
   "peerDependenciesMeta": {
     "@caffeinejs/brewer": {
-      "optional": true
-    },
-    "@caffeinejs/di": {
       "optional": true
     },
     "@caffeinejs/http": {
@@ -51,11 +65,11 @@
     }
   },
   "devDependencies": {
-    "@caffeinejs/application": "*",
-    "@caffeinejs/brewer": "*",
-    "@caffeinejs/di": "*",
-    "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*",
-    "fastify": "^5.12.5"
+    "@caffeinejs/application": "0.0.0",
+    "@caffeinejs/brewer": "0.0.0",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/std": "0.0.0",
+    "fastify": "^5.12.8"
   }
 }

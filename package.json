@@ -4,6 +4,17 @@
   "description": "CaffeineJS monorepo",
   "license": "MIT",
   "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
   "private": true,
   "type": "module",
   "workspaces": [
@@ -56,6 +67,8 @@
     "fmt:check": "oxfmt --check",
     "lint:markdown": "markdownlint-cli2",
     "license:check": "node tools/check-licenses.mjs",
+    "packages:check": "node tools/check-packages.mjs",
+    "release:version": "node tools/release-version.mjs",
     "pins:check": "node tools/check-pins.mjs",
     "spec:check": "node tools/generate-spec.mjs --check",
     "spec:gen": "node tools/generate-spec.mjs",
@@ -64,14 +77,14 @@
   "devDependencies": {
     "@fast-check/vitest": "^0.5.0",
     "@redis/client": "^6.2.1",
-    "@swc/core": "^1.16.13",
-    "@types/node": "^26.6.4",
-    "@vitest/coverage-v8": "^5.0.3",
+    "@swc/core": "^1.16.20",
+    "@types/node": "^26.6.5",
+    "@vitest/coverage-v8": "^5.0.5",
     "fast-check": "^4.10.2",
     "globby": "^16.2.4",
-    "markdownlint-cli2": "^0.23.3",
-    "oxfmt": "^0.72.0",
-    "oxlint": "^1.87.0",
+    "markdownlint-cli2": "^0.24.0",
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0",
     "oxlint-tsgolint": "^7.0.2002",
     "reflect-metadata": "^0.2.2",
     "tough-cookie": "^6.0.2",

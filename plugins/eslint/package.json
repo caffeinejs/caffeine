@@ -3,7 +3,16 @@
   "version": "0.0.0",
   "description": "CaffeineJS ESLint plugin",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/plugins/eslint#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "plugins/eslint"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -14,8 +23,16 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
@@ -25,8 +42,8 @@
     "eslint": ">=9"
   },
   "devDependencies": {
-    "eslint": "^10.12.0",
+    "eslint": "^10.13.0",
     "typescript": "6.0.3",
-    "typescript-eslint": "^8.71.1"
+    "typescript-eslint": "^8.72.1"
   }
 }

@@ -75,6 +75,10 @@ jobs:
         if: ${{ matrix.primary }}
         run: npm run lint
 
+      - name: Package Manifests
+        if: ${{ matrix.primary }}
+        run: npm run packages:check
+
       - name: Type Check
         if: ${{ matrix.primary }}
         run: npm run test:typecheck
@@ -147,7 +151,7 @@ jobs:
           github.actor != 'dependabot[bot]' &&
           (github.event_name != 'pull_request' ||
            github.event.pull_request.head.repo.full_name == github.repository)
-        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304 # v8.4.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -185,7 +189,7 @@ jobs:
 
       # `mode=max` keeps the Maven dependency stage. Separate scopes: one shared scope is overwritten by the last target.
       - name: Build service images
-        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         env:
           # The docker exporter used by `load` rejects the provenance attestation Buildx turns on in GitHub Actions.
           BUILDX_NO_DEFAULT_ATTESTATIONS: '1'

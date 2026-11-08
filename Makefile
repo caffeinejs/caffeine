@@ -39,6 +39,7 @@ check: ## run all checks
 	@npm run pins:check
 	@npm run err-message:copy
 	@npm run build
+	@npm run packages:check
 	@npm run lint:fix
 	@npm run lint:markdown
 	@npm run spec:check

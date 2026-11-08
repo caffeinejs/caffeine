@@ -7,7 +7,7 @@
     "start": "node --import tsx/esm index.js"
   },
   "dependencies": {
-    "@caffeinejs/di": "*"
+    "@caffeinejs/di": "0.0.0"
   },
   "devDependencies": {
     "tsx": "^4.23.15"

@@ -3,7 +3,16 @@
   "version": "0.0.0",
   "description": "Caffeine template-based server-side rendering plugin",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/view#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "view"
+  },
   "type": "module",
   "types": "dist/index.d.ts",
   "exports": {
@@ -15,28 +24,35 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
   "dependencies": {
-    "@fastify/view": "^12.0.0"
-  },
-  "peerDependencies": {
-    "@caffeinejs/application": "*",
-    "@caffeinejs/di": "*",
-    "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*",
-    "fastify": "^5.0.0",
+    "@fastify/view": "^12.0.0",
     "fastify-plugin": "^6.0.0"
   },
+  "peerDependencies": {
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/std": "0.0.0",
+    "fastify": "^5.0.0"
+  },
   "devDependencies": {
+    "@caffeinejs/application": "0.0.0",
     "@types/ejs": "^3.1.5",
     "ejs": "^6.0.1",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.8",
     "handlebars": "^4.7.10"
   }
 }

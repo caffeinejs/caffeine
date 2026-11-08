@@ -1,4 +1,4 @@
-import { type AddressInfo, createServer } from 'node:net'
+import { createServer } from 'node:net'
 
 import {
   createApplication,
@@ -23,15 +23,6 @@ import { listenersOf, type ListenerConfigurer } from './listener.js'
  */
 
 const listener = { host: '127.0.0.1', port: 0 }
-
-// A port nothing listens on: the system hands one out, and it is given back at once.
-async function freePort(): Promise<number> {
-  const server = createServer()
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
-  const { port } = server.address() as AddressInfo
-  await new Promise<void>(resolve => server.close(() => resolve()))
-  return port
-}
 
 /** A feature shipping a listener of its own, the way a metrics feature ships its port. */
 class Probe<C = unknown> extends FeatureBuilder<C> {
@@ -87,11 +78,15 @@ describe('listeners', () => {
   })
 
   it('hands the callback the resolved configuration, so a port read from it is the one listened on', async () => {
+    const free = await new Promise<number>(resolve => {
+      const probe = createServer().listen(0, '127.0.0.1', () => {
+        const { port } = probe.address() as { port: number }
+        probe.close(() => resolve(port))
+      })
+    })
     const schema = $t.Object({ admin: $t.Object({ host: $t.String(), port: $t.Number() }) })
-    // A fixed port, where the application's own listener takes whatever port the system gives it.
-    const port = await freePort()
     const conf = newConfiguration(schema)
-      .source(new InlineConfigSource({ admin: { host: '127.0.0.1', port } }))
+      .source(new InlineConfigSource({ admin: { host: '127.0.0.1', port: free } }))
       .build().config
     app = createWebApplication({ config: conf })
       .server(() => ({ listener }))
@@ -99,7 +94,7 @@ describe('listeners', () => {
 
     await app.run()
 
-    expect(app.listeners.get('admin')!.address!.port).toBe(port)
+    expect(app.listeners.get('admin')!.address!.port).toBe(free)
   })
 
   it('keeps the order listeners were added in, the application before the features it configures', async () => {

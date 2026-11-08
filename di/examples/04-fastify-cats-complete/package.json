@@ -10,15 +10,15 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@caffeinejs/di": "*",
-    "@caffeinejs/testing": "*",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/testing": "0.0.0",
     "@google-cloud/storage": "^8.1.0",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.8",
     "ioredis": "^6.0.0",
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
     "vitest": "^5.0.1"
