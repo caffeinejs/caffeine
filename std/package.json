@@ -36,7 +36,7 @@
     "!dist/**/_spectypes"
   ],
   "engines": {
-    "node": "^22.19.0 || >=24"
+    "node": ">=24"
   },
   "publishConfig": {
     "access": "public"

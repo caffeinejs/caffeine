@@ -30,7 +30,7 @@
     "!dist/**/_spectypes"
   ],
   "engines": {
-    "node": "^22.19.0 || >=24"
+    "node": ">=24"
   },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",

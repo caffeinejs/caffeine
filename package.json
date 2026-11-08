@@ -13,7 +13,7 @@
     "url": "git+https://github.com/caffeinejs/caffeine.git"
   },
   "engines": {
-    "node": "^22.19.0 || >=24"
+    "node": ">=24"
   },
   "private": true,
   "type": "module",
