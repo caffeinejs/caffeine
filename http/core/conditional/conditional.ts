@@ -1,6 +1,13 @@
-import type { AttachmentOptions } from './attachment.js'
-
-type Validators = Pick<AttachmentOptions, 'etag' | 'lastModified'>
+/**
+ * What a representation is validated by: its entity tag and when it last changed, as `ETag` and `Last-Modified` carry
+ * them. Either may be absent; each check says what an absent one means.
+ */
+export interface Validators {
+  /** The entity tag, quoted, weak with a `W/` prefix: `'"v42"'`, `'W/"v42"'`. */
+  etag?: string
+  /** When the representation last changed, compared to the second. */
+  lastModified?: Date
+}
 
 // RFC 9110 §8.8.3: one entity tag of a list. Its quoted part holds no quote, so a comma inside one does not split it.
 const LISTED_TAG = /(?:W\/)?"[^"]*"/g
@@ -16,10 +23,13 @@ const RFC850_DATE = new RegExp(
 )
 const ASCTIME_DATE = new RegExp(String.raw`^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) ${MONTH} ( \d|\d{2}) ${TIME} (\d{4})$`)
 
-// Whether the client's precondition fails for the current content, by RFC 9110 §13.2.2: `If-Match` decides alone when
-// it is sent, `*` holding and a listed tag holding only by strong comparison, so a weak tag on either side never does;
-// otherwise `If-Unmodified-Since` fails when the content changed after its date. A value that is not an HTTP-date, or
-// content with no Last-Modified, leaves it holding.
+/**
+ * Whether the client's precondition fails for the current content, by RFC 9110 §13.2.2.
+ *
+ * `If-Match` decides alone when it is sent: `*` holds, and a listed tag holds only by strong comparison, so a weak tag
+ * on either side never does. Otherwise `If-Unmodified-Since` fails when the content changed after its date. A value
+ * that is not an HTTP-date, or content with no `Last-Modified`, leaves it holding.
+ */
 export function preconditionFailed(
   ifMatch: string | undefined,
   ifUnmodifiedSince: string | undefined,
@@ -34,9 +44,12 @@ export function preconditionFailed(
   return date !== undefined && lastModified !== undefined && toSecond(lastModified) > date
 }
 
-// Whether the client holds the current content already, by RFC 9110 §13.2.2: `If-None-Match` decides alone when it
-// is sent, comparing tags weakly; otherwise `If-Modified-Since`, to the second, when the content has a Last-Modified
-// and the value is an HTTP-date.
+/**
+ * Whether the client holds the current content already, by RFC 9110 §13.2.2.
+ *
+ * `If-None-Match` decides alone when it is sent, comparing tags weakly, `*` matching any. Otherwise
+ * `If-Modified-Since`, to the second, when the content has a `Last-Modified` and the value is an HTTP-date.
+ */
 export function notModified(
   ifNoneMatch: string | undefined,
   ifModifiedSince: string | undefined,
@@ -51,8 +64,12 @@ export function notModified(
   return date !== undefined && lastModified !== undefined && toSecond(lastModified) <= date
 }
 
-// Whether the content is still the one the client holds part of, by RFC 9110 §13.1.5: an entity tag compared
-// strongly, so a weak one never holds, or the very second of Last-Modified. No If-Range at all holds.
+/**
+ * Whether the content is still the one the client holds part of, by RFC 9110 §13.1.5.
+ *
+ * An entity tag is compared strongly, so a weak one never holds; a date holds on the very second of `Last-Modified`.
+ * No `If-Range` at all holds.
+ */
 export function rangeHolds(ifRange: string | undefined, { etag, lastModified }: Validators): boolean {
   if (ifRange === undefined) {
     return true
@@ -86,9 +103,14 @@ function toSecond(date: Date): number {
   return Math.floor(date.getTime() / 1000) * 1000
 }
 
-// The time an HTTP-date names, or `undefined` for a value that is not one, which every field carrying a date has its
-// recipient ignore: `Date.parse` would read `2026` or `12/31` as dates.
-function httpDate(value: string): number | undefined {
+/**
+ * The time an HTTP-date names, in milliseconds since the epoch, or `undefined` for a value that is not one.
+ *
+ * It reads the three forms RFC 9110 §5.6.7 names: IMF-fixdate, the obsolete RFC 850 form and asctime. A two-digit
+ * RFC 850 year more than 50 years ahead is taken from the century before. A value in no form names no time, where
+ * `Date.parse` would read `2026` or `12/31` as dates.
+ */
+export function httpDate(value: string): number | undefined {
   const fields = dateFields(value)
   if (fields === undefined) {
     return undefined

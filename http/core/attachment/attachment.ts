@@ -6,11 +6,11 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { IContext } from '../../context.js'
 import { MediaType } from '../../media.js'
 import { Responder, type ActionResult } from '../../response.js'
+import { notModified, preconditionFailed, rangeHolds, type Validators } from '../conditional/conditional.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPPreconditionFailed } from '../error/http.js'
-import { notModified, preconditionFailed, rangeHolds } from './_conditional.js'
+import { byteRanges, multipartByteRanges } from '../range/range.js'
 import { contentDisposition } from './_disposition.js'
-import { byteRanges, multipartByteRanges } from './_range.js'
 
 // The largest end offset Node's `Blob.slice` takes: it asserts a 32-bit one, aborting the process past it.
 const LARGEST_SLICEABLE = 2 ** 32 - 1
@@ -23,7 +23,7 @@ const ENTITY_TAG = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/
 const FIELD_VALUE = /^[\t\x20-\x7e\x80-\xff]*$/
 
 /** {@link Attachment}'s options. */
-export interface AttachmentOptions {
+export interface AttachmentOptions extends Validators {
   /**
    * The name the client saves the download under. A `File`'s own name when not given. Either is reduced to a plain
    * file name: its last `/` or `\` segment, without control characters or the marks that reorder how it reads.

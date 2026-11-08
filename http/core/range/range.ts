@@ -4,11 +4,14 @@ import { Blob as NodeBlob } from 'node:buffer'
 // server MAY ignore Range).
 const MOST_RANGES = 100
 
-// The byte ranges a `Range` header asks of a body of `size` bytes, as RFC 9110 §14 reads it: each `[first, last]`
-// inside the body, in the order asked for, with those starting past its end left out, or `'unsatisfiable'` when that
-// leaves none. `undefined` when the body is to be sent whole: another unit, a malformed or reversed range, an empty
-// body, more than `MOST_RANGES` ranges, or ranges adding up to more than the body, which only a broken client or an
-// attack asks for (§14.2), and Go's server sends whole too.
+/**
+ * The byte ranges a `Range` header asks of a body of `size` bytes, as RFC 9110 §14 reads it.
+ *
+ * Each `[first, last]` lies inside the body, in the order asked for, with those starting past its end left out, or
+ * `'unsatisfiable'` when that leaves none. `undefined` when the body is to be sent whole: no header, another unit, a
+ * malformed or reversed range, an empty body, more than 100 ranges, or ranges adding up to more than the body, which
+ * only a broken client or an attack asks for (§14.2).
+ */
 export function byteRanges(
   header: string | undefined,
   size: number,
@@ -89,10 +92,14 @@ function rangeOf(spec: string, size: number): readonly [number, number] | 'unsat
   return [start, last === '' ? size - 1 : Math.min(Number(last), size - 1)]
 }
 
-// Several ranges of `body` as one `multipart/byteranges` body, laid out as RFC 9110 §14.6 has it: each part opens with
-// the boundary's delimiter, names its type and range, and holds its bytes after a blank line; the close delimiter
-// ends the body. A Blob's parts are slices of it, read as the answer is sent; bytes are copied once, into the Blob
-// that holds the answer.
+/**
+ * Several ranges of `body` as one `multipart/byteranges` body, laid out as RFC 9110 §14.6 has it.
+ *
+ * Each part opens with the boundary's delimiter, names `type` and its range, and holds its bytes after a blank line;
+ * the close delimiter ends the body. A `Blob`'s parts are slices of it, read as the answer is sent; bytes are copied
+ * once, into the `Blob` that holds the answer. `type` and `boundary` are written as given, so neither may hold a line
+ * break.
+ */
 export function multipartByteRanges(
   body: NodeBlob | Uint8Array<ArrayBuffer>,
   ranges: ReadonlyArray<readonly [number, number]>,
