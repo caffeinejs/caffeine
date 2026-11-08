@@ -17,7 +17,8 @@ RUN node_modules/.bin/tsc --build devtools-ui/tsconfig.build.json
 # The manifest and compressed variants `staticFiles(...)` serves public/ from.
 RUN npm run build:static -w @caffeinejs/devtools-ui
 
-# Copies each linked workspace package as published: its `files` plus any nested node_modules.
+# Copies each linked workspace package as published: its `files`, its package.json (npm always packs it) and any
+# nested node_modules.
 RUN --mount=type=cache,target=/root/.npm \
   npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@caffeinejs/devtools-ui
 RUN mkdir /app \
@@ -28,7 +29,7 @@ RUN mkdir /app \
     for (const name of readdirSync("node_modules/@caffeinejs")) { \
       const dir = relative(".", realpathSync(join("node_modules/@caffeinejs", name))); \
       const { files } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")); \
-      for (const file of [...files, "node_modules"]) { \
+      for (const file of [...files, "package.json", "node_modules"]) { \
         if (existsSync(join(dir, file))) { \
           cpSync(join(dir, file), join("/app", dir, file), { recursive: true, verbatimSymlinks: true }); \
         } \
