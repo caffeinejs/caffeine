@@ -82,8 +82,7 @@ the gateway's job or authorization's.
 - `ctx.req.url` is the path the application sees; `ctx.req.basePath` is what was taken off (`''` when nothing was),
   so the base follows the request: a request that came without it is answered without it.
 - Redirects the framework builds carry the base: cookie sign-in's `loginPath` / `accessDeniedPath` and the return
-  URL, OAuth/OIDC's return URL and `defaultRedirectPath`, a `@caffeinejs/static` mount's `redirect` and `list`
-  links, and the directory redirect of `sendFile` / `download`. A handler's own redirect says so with `~/`:
+  URL, OAuth/OIDC's return URL and `defaultRedirectPath`. A handler's own redirect says so with `~/`:
   `ctx.redirect('~/done')` is `/api/done`, while `ctx.redirect('/done')` is sent as written.
   `AuthenticationProperties.redirectURI` and the `returnTo` query of an OAuth/OIDC `loginPath` take `~/` too. A
   link in a page writes `ctx.req.basePath + '/done'`.
@@ -485,8 +484,8 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
   character, which no header value may.
 - A stream is sent whole, since its length is not known. So is a `Blob` past 4 GiB: Node's `Blob.slice` cannot cut a
   part out of one.
-- `fs.openAsBlob` reports a file past 4 GiB at its size modulo 2^32 (Node 22 and 24). Serve such a file from disk
-  with `@caffeinejs/static`'s `sendFile` or `download`.
+- `fs.openAsBlob` reports a file past 4 GiB at its size modulo 2^32 (Node 22 and 24). Serve such a file with
+  `@caffeinejs/static`'s `sendFile` when its build lists it, or as a stream otherwise.
 
 ## Plugins without Fastify
 
@@ -804,4 +803,4 @@ await client.pets.post({ body: { name: 'Rex' } })
   with no verb: `client.$request('GET', '/pets/:id', { params: { id: 1 } })`. A trailing `?` makes a segment
   optional only when the segment starts with its parameter and has no constraint (`:id?`, `:lat-:lng?`), and the
   parameters of such a segment are given together or not at all.
-- Static: `.with(staticFiles(s => s.serve(root, { prefix: '/static' })))`. That serves files. It is not SPA history fallback — for a single-page application see [spa.md](spa.md), which is routing the application writes. Default `@fastify/static` `wildcard: true` will 404 missing files under the prefix, not return `index.html`.
+- Static: `.with(staticFiles(s => s.serve(root, { prefix: '/static' })))`, after `buildStatic({ root })` from `@caffeinejs/static/build` in the build. That serves the files the build listed. It is not SPA history fallback — for a single-page application see [spa.md](spa.md), which is routing the application writes. A miss under a directory of the mount is a 404, not `index.html`.
