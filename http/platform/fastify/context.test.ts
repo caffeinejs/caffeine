@@ -191,6 +191,91 @@ describe('the request signal', () => {
       held.resolve()
     }
   })
+
+  // Read late, as work a handler started may first read it: it tells what became of the answer all the same.
+  it('is aborted when first read after the client left', async () => {
+    const started = Promise.withResolvers<IContext>()
+    const held = Promise.withResolvers<void>()
+    const router = new Router('/left-unread')
+    router.post('/').handler(async ctx => {
+      started.resolve(ctx)
+      await held.promise
+      return { ok: true }
+    })
+    const origin = await listen(a => a.mount(router) as WebApplication)
+    const client = new AbortController()
+
+    try {
+      const call = fetch(`${origin}/left-unread`, { ...json, signal: client.signal })
+      const ctx = await started.promise
+      const closed = once(ctx.platform.reply.raw, 'close')
+      client.abort()
+      await expect(call).rejects.toThrow()
+      await closed
+
+      expect(ctx.signal.aborted).toBe(true)
+    } finally {
+      held.resolve()
+    }
+  })
+
+  it('stays open when first read after a full answer', async () => {
+    const closed = Promise.withResolvers<IContext>()
+    const router = new Router('/answered-unread')
+    router.post('/').handler(ctx => {
+      ctx.platform.reply.raw.once('close', () => closed.resolve(ctx))
+      return { ok: true }
+    })
+    const origin = await listen(a => a.mount(router) as WebApplication)
+
+    const res = await fetch(`${origin}/answered-unread`, json)
+    expect(await res.json()).toEqual({ ok: true })
+
+    const ctx = await closed.promise
+    expect(ctx.signal.aborted).toBe(false)
+  })
+
+  // Fastify's own signal on a timed route aborts when the body has been read too: only its timeout is the handler's.
+  it('stays open on a timed route once the body of a POST has been read', async () => {
+    const router = new Router('/timed-read')
+    router.post('/').handler(async ctx => {
+      const signal = ctx.signal
+      await requestClosed(ctx)
+      return { aborted: signal.aborted }
+    })
+    const origin = await listen(
+      a => a.server(() => ({ factory: { handlerTimeout: 60_000 } })).mount(router) as WebApplication,
+    )
+
+    const res = await fetch(`${origin}/timed-read`, json)
+
+    expect(await res.json()).toEqual({ aborted: false })
+  })
+
+  it("is aborted with the timeout's reason when first read after the handler timeout fired", async () => {
+    const started = Promise.withResolvers<IContext>()
+    const held = Promise.withResolvers<void>()
+    const router = new Router('/timed-unread')
+    router.get('/').handler(async ctx => {
+      started.resolve(ctx)
+      await held.promise
+      return { late: true }
+    })
+    const origin = await listen(
+      a => a.server(() => ({ factory: { handlerTimeout: 30 } })).mount(router) as WebApplication,
+    )
+
+    try {
+      const res = await fetch(`${origin}/timed-unread`)
+      const ctx = await started.promise
+
+      expect(res.status).toBe(503)
+      expect(ctx.signal.aborted).toBe(true)
+      expect((ctx.signal.reason as { code?: string }).code).toBe('FST_ERR_HANDLER_TIMEOUT')
+    } finally {
+      held.resolve()
+    }
+  })
 })
 
 // An HTTP/2 client leaves by cancelling its stream, and the connection stays up. Node reports such a response finished,
