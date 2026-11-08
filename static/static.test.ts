@@ -104,6 +104,44 @@ describe('staticFiles', () => {
     expect(await (await app.request('/missing')).text()).toBe('client route')
   })
 
+  // A 416 is not the file: a shared cache must not keep it for the file's lifetime.
+  it('answers a range past the end with 416 and no Cache-Control', async () => {
+    await start(s => s.serve(spa, { anonymous: true, immutable: ['assets/**'] })).bootstrap()
+
+    const res = await app!.request('/assets/app-eZr2sdaR.js', { headers: { range: 'bytes=999999-' } })
+
+    expect(res.status).toBe(416)
+    expect(res.headers.get('cache-control')).toBe(null)
+  })
+
+  // A router that folds case folds a per-file route's URL; a directory route must answer the same URLs.
+  it('finds a file under a directory by any case, when the router folds it', async () => {
+    const root = await tree('folded', ['assets/App.js'])
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
+      .with(staticFiles(s => s.serve(root))) as WebApplication
+    await app.bootstrap()
+
+    expect(await (await app.request('/ASSETS/app.JS')).text()).toBe('assets/App.js')
+  })
+
+  // The router takes the longest prefix, so neither mount hides the other, whichever is declared first.
+  it.each([
+    ['outer first', true],
+    ['inner first', false],
+  ])('serves a mount nested under another one, %s', async (_case, outerFirst) => {
+    const outer = await tree('outer', ['assets/app.js'])
+    const inner = await tree('inner', ['logo/a.png'])
+    await start(s =>
+      outerFirst
+        ? s.serve(outer).serve(inner, { prefix: '/assets/img' })
+        : s.serve(inner, { prefix: '/assets/img' }).serve(outer),
+    ).bootstrap()
+
+    expect(await (await app!.request('/assets/app.js')).text()).toBe('assets/app.js')
+    expect(await (await app!.request('/assets/img/logo/a.png')).text()).toBe('logo/a.png')
+  })
+
   describe('under requireAuthenticatedByDefault()', () => {
     function gated(options: MountOptions) {
       app = start(s => s.serve(spa, options))
@@ -266,6 +304,19 @@ describe('staticFiles', () => {
       expect(err).toBeInstanceOf(ErrStaticRouteConflict)
       expect(firstLine(err)).toBe(
         `Cannot register "/static/img/a.png": "${name(outer, 'static/img/a.png')}" and "${name(inner, 'img/b.png')}" both answer it`,
+      )
+    })
+
+    // One route carries one gate: merging the two would expose the protected files or lock out the public ones.
+    it('from two mounts sharing a directory that disagree on anonymous', async () => {
+      const open = await tree('open', ['assets/a.js'])
+      const closed = await tree('closed', ['assets/b.js'])
+
+      const err = await refusal(s => s.serve(open, { anonymous: true }).serve(closed))
+
+      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+      expect(firstLine(err)).toBe(
+        `Cannot register "/assets/*": "${name(open, 'assets/a.js')}" and "${name(closed, 'assets/b.js')}" both answer it`,
       )
     })
 

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -63,6 +63,24 @@ describe('readManifest', () => {
     )
   })
 
+  // Not missing, so rebuilding is not the fix: the message must not send the reader looking for a lost file.
+  it('tells a manifest it cannot read from a missing one', async () => {
+    await mkdir(join(root, MANIFEST_FILE))
+
+    expect(firstLine(await refusal(undefined))).toBe(`Cannot serve "${root}": ${MANIFEST_FILE} cannot be read`)
+  })
+
+  // A truncated or hand-edited manifest fails at start-up, naming what is wrong, instead of as a TypeError on the
+  // first request that reaches the broken part.
+  it.each([
+    ['an array', '[]', `${MANIFEST_FILE} does not hold an object`],
+    ['null', 'null', `${MANIFEST_FILE} does not hold an object`],
+    ['no version', JSON.stringify({ files: {} }), '"version" is not a number'],
+    ['files that are a list', JSON.stringify({ version: 1, files: [] }), '"files" is not an object'],
+  ])('refuses a document that is %s', async (_case, manifest, detail) => {
+    expect(firstLine(await refusal(manifest))).toBe(`Cannot serve "${root}": ${detail}`)
+  })
+
   // A manifest a later build wrote may mean things this server would misread.
   it('refuses a version it does not read', async () => {
     expect(firstLine(await refusal(JSON.stringify({ version: 2, files: {} })))).toBe(
@@ -99,6 +117,14 @@ describe('readManifest', () => {
       { 'config/.env': file },
       '"files.config/.env" has a segment starting with ".", which is never served',
     ],
+    ['a file that is not an object', { 'a.svg': 'a.svg' }, '"files.a.svg" is not an object'],
+    ['an empty type', { 'a.svg': { ...file, type: '' } }, '"files.a.svg.type" is not a string'],
+    ['variants that are a list', { 'a.svg': { ...file, variants: [] } }, '"files.a.svg.variants" is not an object'],
+    [
+      'a variant that is not an object',
+      { 'a.svg': { ...file, variants: { br: 'a.svg.br' } } },
+      '"files.a.svg.variants.br" is not an object',
+    ],
     [
       'an encoding it does not read',
       { 'a.svg': { ...file, variants: { zstd: {} } } },
@@ -111,5 +137,18 @@ describe('readManifest', () => {
     ],
   ])('refuses %s, naming the field', async (_case, files, detail) => {
     expect(firstLine(await refusal(JSON.stringify({ version: 1, files })))).toBe(`Cannot serve "${root}": ${detail}`)
+  })
+
+  // The dot-segment rule must not cost an application its ACME challenge or security.txt.
+  it('reads a file under a leading .well-known, and no other dot segment', async () => {
+    await writeFile(
+      join(root, MANIFEST_FILE),
+      JSON.stringify({ version: 1, files: { '.well-known/security.txt': file } }),
+    )
+
+    expect(Object.keys((await readManifest(root)).files)).toEqual(['.well-known/security.txt'])
+    expect(firstLine(await refusal(JSON.stringify({ version: 1, files: { 'a/.well-known/x.txt': file } })))).toBe(
+      `Cannot serve "${root}": "files.a/.well-known/x.txt" has a segment starting with ".", which is never served`,
+    )
   })
 })

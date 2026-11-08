@@ -23,6 +23,9 @@ describe('selectEncoding', () => {
     ['identity, br;q=0.9', 'identity'],
     ['br;q=abc, gzip', 'gzip'],
     ['br;q=0, br', 'identity'],
+    // A parameter that is not `q` neither rates nor refuses the coding it follows.
+    ['br;level=5, gzip;q=0.5', 'br'],
+    ['br;fast;q=0, gzip', 'gzip'],
   ])('answers %j with %s', (header, selected) => {
     expect(selectEncoding(header, ['br', 'gzip'])).toBe(selected)
   })

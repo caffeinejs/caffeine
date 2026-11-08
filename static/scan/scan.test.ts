@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -100,6 +101,33 @@ describe('scan', () => {
         `no content type for ".xyz" (2 files, such as "data/a.xyz")`,
     )
     expect(err.message).toContain(`Add the type to types: { 'LICENSE': '...', '.xyz': '...' }`)
+  })
+
+  // The first line stays one line a log keeps whole, however many files a build gets wrong.
+  it('names five problems and counts the rest', async () => {
+    await tree(['a.x1', 'a.x2', 'a.x3', 'a.x4', 'a.x5', 'a.x6', 'a.x7'])
+
+    expect(await refusal()).toBe(
+      `Cannot build static files from "${root}": ` +
+        ['1', '2', '3', '4', '5'].map(n => `no content type for ".x${n}" (1 file, such as "a.x${n}")`).join('; ') +
+        '; and 2 more',
+    )
+  })
+
+  // Read like a file, a socket a dev server left in the output would fail the build, and a FIFO would hang it.
+  it('skips what is not a regular file', async () => {
+    await tree(['index.html'])
+    const server = createServer()
+    await new Promise<void>(resolve => server.listen(join(root, 'dev.sock'), resolve))
+
+    try {
+      const { files, skipped } = await scan(root)
+
+      expect(files.map(({ path }) => path)).toEqual(['index.html'])
+      expect(skipped).toEqual([{ path: 'dev.sock', reason: 'not-a-file' }])
+    } finally {
+      await new Promise(resolve => server.close(resolve))
+    }
   })
 
   it('types a file types names', async () => {
