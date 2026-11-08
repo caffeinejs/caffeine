@@ -16,7 +16,7 @@
   "type": "module",
   "engines": {
     "bun": ">=1.2.0",
-    "node": "^22.19.0 || >=24"
+    "node": ">=24"
   },
   "bin": {
     "caffeine": "./dist/caffeine"
