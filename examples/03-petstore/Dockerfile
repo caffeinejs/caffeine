@@ -15,7 +15,7 @@ RUN npm ci
 RUN npm run build
 
 # The caffeine CLI's `generate` command is Bun-only — it uses Bun.Glob, Bun.file and Bun.write, and its published
-# bin is a `bun build --compile` native binary that the root `tsc --build` never produces. So codegen runs in a Bun
+# bin runs a `bun build --compile` native binary that the root `tsc --build` never produces. So codegen runs in a Bun
 # stage and only its one output file crosses back; Bun stays out of the runtime image.
 #
 # The whole /app is carried over rather than re-copied from context because .caffeinerc.ts imports

@@ -16,11 +16,12 @@
 // project (`tsconfig.json`) does. `_spectypes/` is compiled but left out of the published package, so it counts as a
 // test.
 //
-// Publishing: a workspace is published unless it is `private`. Every workspace's version and every `@caffeinejs/*`
-// specifier is the root version. A published package carries the root's `license`, `author`, `bugs` and `engines`, a
-// `repository` naming its own directory, a `homepage`, public access, the standard `files`, and a copy of the root
-// LICENSE. With `--tarballs <dir>`, each `npm pack` tarball there is checked too: one per published package, and
-// nothing in it that the build left behind for the repository alone.
+// Publishing: a workspace is published unless it is `private`, and no published package depends on one that is,
+// which npm could not install. Every workspace's version and every `@caffeinejs/*` specifier is the root version. A
+// published package carries the root's `license`, `author`, `bugs` and `engines`, a `repository` naming its own
+// directory, a `homepage`, public access, the standard `files`, and a copy of the root LICENSE. With
+// `--tarballs <dir>`, each `npm pack` tarball there is checked too: one per published package, and nothing in it that
+// the build left behind for the repository alone.
 import { execFileSync } from 'node:child_process'
 import { existsSync, globSync, readdirSync, readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
@@ -189,13 +190,13 @@ function installedManifest(name, fromDir) {
   }
 }
 
-function check({ dir, manifest }, rootManifest) {
+function check({ dir, manifest }, rootManifest, unpublished) {
   const where = `${posix(relative(root, dir))}/package.json`
   const errors = []
   const fail = message => errors.push(`Cannot accept ${where}: ${message}`)
   const rootDevDependencies = rootManifest.devDependencies ?? {}
 
-  checkPublishing(dir, manifest, rootManifest, fail)
+  checkPublishing(dir, manifest, rootManifest, unpublished, fail)
   if (!existsSync(join(dir, 'tsconfig.build.json'))) {
     fail('it is published but has no tsconfig.build.json to build it: add one, or mark the package "private": true')
     return errors
@@ -401,9 +402,22 @@ function check({ dir, manifest }, rootManifest) {
 
 const isEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
-/** The metadata npm shows and provenance verifies, and the license text every tarball carries. */
-function checkPublishing(dir, manifest, rootManifest, fail) {
+/**
+ * The metadata npm shows and provenance verifies, the license text every tarball carries, and no dependency on a
+ * workspace that is never published.
+ */
+function checkPublishing(dir, manifest, rootManifest, unpublished, fail) {
   const directory = posix(relative(root, dir))
+
+  for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+    for (const name of Object.keys(manifest[field] ?? {})) {
+      if (unpublished.has(name)) {
+        fail(
+          `its "${field}" names "${name}", which is "private" and never published, so npm cannot install it: drop "private": true from the package.json of "${name}", or remove it from "${field}"`,
+        )
+      }
+    }
+  }
 
   for (const field of ['license', 'author', 'bugs']) {
     if (!isEqual(manifest[field], rootManifest[field])) {
@@ -565,10 +579,13 @@ function main() {
     .toSorted()
     .map(file => ({ dir: join(root, dirname(file)), manifest: readJSON(join(root, file)) }))
   const packages = workspaces.filter(({ manifest }) => manifest.private !== true)
+  const unpublished = new Set(
+    workspaces.filter(({ manifest }) => manifest.private === true).map(({ manifest }) => manifest.name),
+  )
 
   const errors = [
     ...checkLockstep(workspaces, rootManifest),
-    ...packages.flatMap(pkg => check(pkg, rootManifest)),
+    ...packages.flatMap(pkg => check(pkg, rootManifest, unpublished)),
     ...(tarballDir === undefined ? [] : checkTarballs(tarballDir, packages, rootManifest.version)),
   ]
 
