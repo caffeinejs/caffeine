@@ -115,18 +115,22 @@ export class Context<
    * been read, usually while its handler runs, so that signal aborts on every request with a body.
    */
   get signal(): AbortSignal {
-    return (this.#signal ??= this.#listen()).signal
+    this.#signal ??= this.#listen()
+    return this.#signal.signal
   }
 
   // Created on the first read only: a route that never reads the signal pays for no controller.
   #listen(): AbortController {
     const controller = new AbortController()
 
-    // The response closing before its end was written is the client leaving; closing after is the answer done. Not
-    // `writableFinished`: an in-process response closes before it reports itself finished.
+    // The client left when the response closed before its end was written, or when its connection failed: an end
+    // written is still flushing, and a reset then loses it. Not `writableFinished` nor the `finish` event: Node reports
+    // an HTTP/2 stream the client cancelled as finished, and an in-process response closes before it reports itself
+    // finished. An in-process request's socket has no `errored`.
     const res = this.#reply.raw
+    const socket = this.#fastifyRequest.raw.socket
     const onClose = (): void => {
-      if (!res.writableEnded) {
+      if (!res.writableEnded || (socket.errored ?? null) !== null) {
         controller.abort()
       }
     }

@@ -1,4 +1,6 @@
 import { once } from 'node:events'
+import { type ClientHttp2Session, connect as connectH2, constants } from 'node:http2'
+import { connect } from 'node:net'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -24,6 +26,9 @@ async function listen(build: (app: WebApplication) => WebApplication = a => a): 
   const { address } = await app.run()
   return address.origin
 }
+
+// Far more than a socket's buffers hold, so the answer is still flushing when its client goes.
+const large = (): Buffer => Buffer.alloc(64 * 1024 * 1024)
 
 const json = { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"a":1}' } as const
 
@@ -101,6 +106,29 @@ describe('the request signal', () => {
     }
   })
 
+  // Node has taken the whole answer once its end is written, but has not sent it: a client gone before then never got
+  // it, and the work behind it is as wasted as for one that left while the handler ran.
+  it('aborts when the client resets the connection while a large answer is still flushing', async () => {
+    const closed = Promise.withResolvers<AbortSignal>()
+    const router = new Router('/large')
+    router.get('/').handler(ctx => {
+      const signal = ctx.signal
+      ctx.platform.reply.raw.once('close', () => closed.resolve(signal))
+      return large()
+    })
+    const { hostname, port } = new URL(await listen(a => a.mount(router) as WebApplication))
+
+    const socket = connect(Number(port), hostname)
+    socket.on('error', () => undefined)
+    await once(socket, 'connect')
+    socket.write(`GET /large HTTP/1.1\r\nHost: ${hostname}\r\n\r\n`)
+    await once(socket, 'data')
+    socket.resetAndDestroy()
+
+    const signal = await closed.promise
+    expect(signal.aborted).toBe(true)
+  })
+
   // Work a handler started that outlives its answer, such as a notice sent after it, belongs to no client that left.
   it('never aborts on a request answered in full', async () => {
     const closed = Promise.withResolvers<AbortSignal>()
@@ -162,5 +190,63 @@ describe('the request signal', () => {
     } finally {
       held.resolve()
     }
+  })
+})
+
+// An HTTP/2 client leaves by cancelling its stream, and the connection stays up. Node reports such a response finished,
+// with `writableFinished` while its handler runs and with a `finish` event while it flushes, so neither tells a stream
+// the client cancelled from an answer it got.
+describe('the request signal over HTTP/2', () => {
+  let session: ClientHttp2Session | undefined
+
+  afterEach(() => {
+    session?.destroy()
+    session = undefined
+  })
+
+  // Runs `answer` as the handler of GET /h2, with the signal read first, and cancels the stream once the handler has
+  // started or once the answer's first bytes arrived. Resolves with the signal when the response closes.
+  async function cancelled(answer: () => unknown, cancelOn: 'started' | 'data'): Promise<AbortSignal> {
+    const started = Promise.withResolvers<void>()
+    const closed = Promise.withResolvers<AbortSignal>()
+    const router = new Router('/h2')
+    router.get('/').handler(ctx => {
+      const signal = ctx.signal
+      ctx.platform.reply.raw.once('close', () => closed.resolve(signal))
+      started.resolve()
+      return answer()
+    })
+    app = createWebApplication()
+      .server(() => ({ factory: { http2: true }, listener: { host: '127.0.0.1', port: 0 } }))
+      .mount(router) as WebApplication
+    const { address } = await app.run()
+
+    session = connectH2(address.origin)
+    const stream = session.request({ ':path': '/h2' })
+    stream.on('error', () => undefined)
+    await (cancelOn === 'started' ? started.promise : once(stream, 'data'))
+    stream.close(constants.NGHTTP2_CANCEL)
+
+    return closed.promise
+  }
+
+  it('aborts when the client cancels its stream while the handler runs', async () => {
+    const held = Promise.withResolvers<void>()
+    try {
+      const signal = await cancelled(async () => {
+        await held.promise
+        return { ok: true }
+      }, 'started')
+
+      expect(signal.aborted).toBe(true)
+    } finally {
+      held.resolve()
+    }
+  })
+
+  it('aborts when the client cancels its stream while a large answer is still flushing', async () => {
+    const signal = await cancelled(large, 'data')
+
+    expect(signal.aborted).toBe(true)
   })
 })
