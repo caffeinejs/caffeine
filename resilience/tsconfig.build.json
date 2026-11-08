@@ -8,6 +8,15 @@
   "references": [
     {
       "path": "../std/tsconfig.build.json"
+    },
+    {
+      "path": "../di/tsconfig.build.json"
+    },
+    {
+      "path": "../application/tsconfig.build.json"
+    },
+    {
+      "path": "../http/tsconfig.build.json"
     }
   ],
   "exclude": [
@@ -20,6 +29,7 @@
     "**/*.spec.ts",
     "**/*.testkit.ts",
     "**/*.e2e.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "vitest.leak.config.ts"
   ]
 }

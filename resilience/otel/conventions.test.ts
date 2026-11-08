@@ -1,7 +1,22 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { instrumentCircuitBreaker, instrumentRetry } from './otel.js'
-import { driveBreaker, driveRetry, metricsHarness, newStrategies, type MetricsHarness } from './otel.testkit.js'
+import {
+  instrumentBulkhead,
+  instrumentCircuitBreaker,
+  instrumentFallback,
+  instrumentRateLimiter,
+  instrumentRetry,
+  instrumentTimeLimiter,
+} from './otel.js'
+import {
+  driveBreaker,
+  driveOthers,
+  driveRetry,
+  metricsHarness,
+  newOtherStrategies,
+  newStrategies,
+  type MetricsHarness,
+} from './otel.testkit.js'
 
 let h: MetricsHarness | undefined
 
@@ -16,17 +31,23 @@ describe('OpenTelemetry naming conventions', () => {
     const { breaker, retries } = newStrategies()
     instrumentCircuitBreaker(breaker, { meterProvider: h.meterProvider })
     instrumentRetry(retries, { meterProvider: h.meterProvider })
+    const others = newOtherStrategies()
+    instrumentTimeLimiter(others.limiter, { meterProvider: h.meterProvider })
+    instrumentBulkhead(others.pool, { meterProvider: h.meterProvider })
+    instrumentRateLimiter(others.quota, { meterProvider: h.meterProvider })
+    instrumentFallback(others.stale, { meterProvider: h.meterProvider })
     await driveBreaker(breaker)
     await driveRetry(retries)
+    await driveOthers(others)
 
     const descriptors = (await h.collect()).scopeMetrics.flatMap(scope => scope.metrics.map(m => m.descriptor))
 
-    expect(descriptors).toHaveLength(8)
+    expect(descriptors).toHaveLength(17)
     for (const { name, unit } of descriptors) {
       expect(name, name).toMatch(/^resilience(\.[a-z][a-z0-9_]*)+$/)
       expect(name, name).not.toMatch(/_total$/)
       expect(name, name).not.toMatch(/(^|[._])(seconds|second|milliseconds|ms|percent)($|[._])/)
-      expect(['s', '1', '{call}'], name).toContain(unit)
+      expect(['s', '1', '{call}', '{permission}'], name).toContain(unit)
       if (unit === 's') {
         expect(name, name).toMatch(/\.duration$/)
       }

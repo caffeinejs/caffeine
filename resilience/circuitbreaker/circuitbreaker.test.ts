@@ -1,19 +1,22 @@
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { compose, runWith } from '../compose.js'
-import { ErrCallNotPermitted, ErrInvalidOption } from '../errors.js'
-import { useFakeClock } from '../fake_clock.testkit.js'
-import type { ExecutionContext, Next, Strategy } from '../strategy.js'
+import { fakeTimersClock } from '../clock.testkit.js'
+import { compose, run } from '../compose.js'
+import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
+import type { Operation, Policy } from '../policy.js'
+import { unhandledRejections } from '../unhandled.testkit.js'
 import {
   circuitBreaker,
   type CircuitBreaker,
   type CircuitBreakerEvents,
   type CircuitBreakerOptions,
-} from './circuit_breaker.js'
+  type CircuitBreakerPermit,
+  ErrCallNotPermitted,
+} from './circuitbreaker.js'
 
 beforeEach(() => {
-  useFakeClock()
+  vi.useFakeTimers()
 })
 
 afterEach(() => {
@@ -28,19 +31,22 @@ function breakerOf(options: Partial<CircuitBreakerOptions> = {}): CircuitBreaker
     minimumNumberOfCalls: 4,
     waitDurationInOpenState: 1_000,
     permittedNumberOfCallsInHalfOpenState: 2,
+    clock: fakeTimersClock,
     ...options,
   })
 }
 
 function succeed(breaker: CircuitBreaker): Promise<string> {
-  return runWith(() => 'ok', breaker)
+  return run(breaker.wrap(async () => 'ok'))
 }
 
 // Settles with the call's error instead of rejecting, so a test can look at what the caller got.
 function fail(breaker: CircuitBreaker, error: unknown = new Error('boom')): Promise<unknown> {
-  return runWith(() => {
-    throw error
-  }, breaker).catch((reason: unknown) => reason)
+  return run(
+    breaker.wrap(async () => {
+      throw error
+    }),
+  ).catch((reason: unknown) => reason)
 }
 
 async function trip(breaker: CircuitBreaker): Promise<void> {
@@ -50,9 +56,18 @@ async function trip(breaker: CircuitBreaker): Promise<void> {
   expect(breaker.state).toBe('open')
 }
 
+// A permit the test expects the breaker to grant.
+function permitOf(breaker: CircuitBreaker): CircuitBreakerPermit {
+  const permit = breaker.acquire()
+  if (permit instanceof ErrCallNotPermitted) {
+    throw permit
+  }
+  return permit
+}
+
 // An operation that takes `ms` on the fake clock and then returns.
-function slowly(ms: number): () => string {
-  return () => {
+function slowly(ms: number): () => Promise<string> {
+  return async () => {
     vi.advanceTimersByTime(ms)
     return 'ok'
   }
@@ -109,7 +124,8 @@ describe('circuitBreaker options', () => {
       { automaticTransitionFromOpenToHalfOpen: 'yes' },
       'automaticTransitionFromOpenToHalfOpen must be a boolean, got string',
     ],
-    [{ recordError: true }, 'recordError must be a function, got boolean'],
+    [{ recordError: true }, 'recordError must be a function or an array of error classes, got a boolean'],
+    [{ ignoreError: ['RangeError'] }, 'ignoreError must be a function or an array of error classes, got an object'],
     [{ captureStackTrace: 'yes' }, 'captureStackTrace must be a boolean, got string'],
   ])('rejects %o when the breaker is created, naming the breaker', (options, reason) => {
     expect(() => circuitBreaker({ name: 'inventory', ...(options as object) })).toThrow(ErrInvalidOption)
@@ -174,8 +190,8 @@ describe('circuitBreaker, closed', () => {
     const breaker = breakerOf({ slowCallRateThreshold: 50, slowCallDurationThreshold: 100 })
     const seen = listen(breaker, 'slowCallRateExceeded')
 
-    await runWith(slowly(150), breaker)
-    await runWith(slowly(150), breaker)
+    await run(breaker.wrap(slowly(150)))
+    await run(breaker.wrap(slowly(150)))
     await succeed(breaker)
     await succeed(breaker)
 
@@ -187,7 +203,7 @@ describe('circuitBreaker, closed', () => {
     const breaker = breakerOf({ slowCallRateThreshold: 50, slowCallDurationThreshold: 100 })
 
     for (let i = 0; i < 4; i++) {
-      await runWith(slowly(100), breaker)
+      await run(breaker.wrap(slowly(100)))
     }
 
     expect(breaker.state).toBe('closed')
@@ -209,10 +225,12 @@ describe('circuitBreaker, closed', () => {
     const breaker = breakerOf({ recordError: error => !(error instanceof TypeError) })
     const seen = listen(breaker, 'success', 'failure')
 
-    await runWith(() => {
-      vi.advanceTimersByTime(100)
-      throw new TypeError('bad input')
-    }, breaker).catch(() => undefined)
+    await run(
+      breaker.wrap(async () => {
+        vi.advanceTimersByTime(100)
+        throw new TypeError('bad input')
+      }),
+    ).catch(() => undefined)
 
     expect(seen).toEqual([['success', { name: 'inventory', duration: 100 * Millisecond, slow: false }]])
   })
@@ -223,7 +241,7 @@ describe('circuitBreaker, closed', () => {
     const seen = listen(breaker, 'failure')
 
     for (let i = 0; i < 4; i++) {
-      await expect(runWith(() => 'unavailable', breaker)).resolves.toBe('unavailable')
+      await expect(run(breaker.wrap(async () => 'unavailable'))).resolves.toBe('unavailable')
     }
 
     expect(breaker.state).toBe('open')
@@ -245,6 +263,47 @@ describe('circuitBreaker, closed', () => {
     expect(seen[0][1]).toMatchObject({ name: 'inventory', reason: 'ignored' })
   })
 
+  it('counts as failures only the errors of the classes recordError lists, subclasses included', async () => {
+    class ErrUpstream extends Error {}
+    class ErrUpstreamTimeout extends ErrUpstream {}
+    const breaker = breakerOf({ recordError: [ErrUpstream] })
+
+    await fail(breaker, new ErrUpstreamTimeout('upstream is slow'))
+    await fail(breaker, new ErrUpstream('upstream is down'))
+    await fail(breaker, new TypeError('bad input'))
+
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 3, failedCalls: 2, successfulCalls: 1 })
+  })
+
+  it('ignores the errors of the classes ignoreError lists', async () => {
+    const breaker = breakerOf({ ignoreError: [RangeError, SyntaxError] })
+
+    await fail(breaker, new RangeError('caller bug'))
+    await fail(breaker, new SyntaxError('caller bug'))
+    await fail(breaker, new Error('down'))
+
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 1, failedCalls: 1 })
+  })
+
+  // A spent quota or a full bulkhead inside the breaker is this process turning the call away: counted as failures,
+  // a burst would open the breaker on a healthy dependency.
+  it('ignores a refusal from a policy inside it, whatever recordError says', async () => {
+    const breaker = breakerOf({ recordError: () => true })
+    const seen = listen(breaker, 'ignored', 'failure')
+    const refusal = new ErrCallRefused('Cannot call "inventory": queue is full', 'ERR_QUEUE_FULL', undefined)
+
+    await expect(
+      run(
+        breaker.wrap(async () => {
+          throw refusal
+        }),
+      ),
+    ).rejects.toBe(refusal)
+
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 0, failedCalls: 0 })
+    expect(seen).toEqual([['ignored', { name: 'inventory', duration: 0, error: refusal, reason: 'refused' }]])
+  })
+
   // A caller that gave up is not a dependency that failed.
   it('ignores a failure that settles after the caller aborted', async () => {
     const breaker = breakerOf()
@@ -252,12 +311,13 @@ describe('circuitBreaker, closed', () => {
     const controller = new AbortController()
     const reason = new Error('caller gave up')
 
-    const call = runWith(
-      ({ signal }) =>
-        new Promise((_, reject) => {
-          signal!.addEventListener('abort', () => reject(signal!.reason))
-        }),
-      breaker,
+    const call = run(
+      breaker.wrap(
+        async ({ signal }) =>
+          new Promise((_, reject) => {
+            signal!.addEventListener('abort', () => reject(signal!.reason))
+          }),
+      ),
       controller.signal,
     )
     controller.abort(reason)
@@ -306,13 +366,15 @@ describe('circuitBreaker, open', () => {
     const breaker = breakerOf()
     await trip(breaker)
     const seen = listen(breaker, 'notPermitted')
-    const operation = vi.fn(() => 'ok')
+    const operation = vi.fn(async () => 'ok')
     vi.advanceTimersByTime(400)
 
-    const refused = await runWith(operation, breaker).catch((error: unknown) => error)
+    const refused = await run(breaker.wrap(operation)).catch((error: unknown) => error)
 
     expect(operation).not.toHaveBeenCalled()
     expect(refused).toBeInstanceOf(ErrCallNotPermitted)
+    // The kind every refusal shares, which retry never retries and an HTTP layer answers with 503.
+    expect(refused).toBeInstanceOf(ErrCallRefused)
     expect(refused).toMatchObject({
       breaker: 'inventory',
       state: 'open',
@@ -371,7 +433,7 @@ describe('circuitBreaker, half open', () => {
     await halfOpen(breaker)
     const hung = Promise.withResolvers<string>()
 
-    const trials = [runWith(() => hung.promise, breaker), runWith(() => hung.promise, breaker)]
+    const trials = [run(breaker.wrap(async () => hung.promise)), run(breaker.wrap(async () => hung.promise))]
     const refused = await succeed(breaker).catch((error: unknown) => error)
 
     expect(refused).toMatchObject({
@@ -442,7 +504,7 @@ describe('circuitBreaker, half open', () => {
     const breaker = breakerOf({ maxWaitDurationInHalfOpenState: 500, permittedNumberOfCallsInHalfOpenState: 1 })
     await halfOpen(breaker)
     const hung = Promise.withResolvers<string>()
-    const trial = runWith(() => hung.promise, breaker)
+    const trial = run(breaker.wrap(async () => hung.promise))
 
     vi.advanceTimersByTime(500)
     const refused = await succeed(breaker).catch((error: unknown) => error)
@@ -482,7 +544,7 @@ describe('circuitBreaker, half open', () => {
     await trip(breaker)
     vi.advanceTimersByTime(11_000)
     const hung = Promise.withResolvers<string>()
-    const trial = runWith(() => hung.promise, breaker)
+    const trial = run(breaker.wrap(async () => hung.promise))
 
     vi.advanceTimersByTime(499)
     expect(await succeed(breaker).catch((error: unknown) => error)).toMatchObject({ state: 'half_open' })
@@ -502,7 +564,7 @@ describe('circuitBreaker, half open', () => {
     const breaker = breakerOf({ maxWaitDurationInHalfOpenState: 500, permittedNumberOfCallsInHalfOpenState: 1 })
     await halfOpen(breaker)
     const hung = Promise.withResolvers<string>()
-    const trial = runWith(() => hung.promise, breaker)
+    const trial = run(breaker.wrap(async () => hung.promise))
     breaker.on('stateChange', event => {
       if (event.to === 'open') {
         breaker.reset()
@@ -532,13 +594,83 @@ describe('circuitBreaker, half open', () => {
   })
 })
 
+describe('circuitBreaker, client errors', () => {
+  class ErrNotFound extends Error {}
+  const isClientError = (error: unknown): boolean => error instanceof ErrNotFound
+
+  // Calls the breaker as an entrypoint's transport does: the context says which errors are the client's own answer.
+  function failForClient(breaker: CircuitBreaker, error: unknown, classify = isClientError): Promise<unknown> {
+    const op = breaker.wrap(async () => {
+      throw error
+    })
+    return op({ signal: undefined, isClientError: classify }, undefined).catch((reason: unknown) => reason)
+  }
+
+  // A burst of requests for records that do not exist says nothing about the dependency: counted, it would open the
+  // breaker for every client.
+  it('records an error the context calls a client error as ignored, so a burst of them never opens it', async () => {
+    const breaker = breakerOf()
+    const seen = listen(breaker, 'ignored', 'failure', 'success')
+    const missing = new ErrNotFound('no such record')
+
+    for (let i = 0; i < 100; i++) {
+      expect(await failForClient(breaker, missing)).toBe(missing)
+    }
+
+    expect(breaker.state).toBe('closed')
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 0, failedCalls: 0, successfulCalls: 0 })
+    expect(seen).toHaveLength(100)
+    expect(seen[0]).toEqual(['ignored', { name: 'inventory', duration: 0, error: missing, reason: 'ignored' }])
+  })
+
+  it('still counts an error the context does not call a client error', async () => {
+    const breaker = breakerOf()
+
+    for (let i = 0; i < 4; i++) {
+      await failForClient(breaker, new Error('down'))
+    }
+
+    expect(breaker.state).toBe('open')
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 4, failedCalls: 4 })
+  })
+
+  it('gives the trial slot back in half open, and neither closes nor reopens the breaker', async () => {
+    const breaker = breakerOf({ permittedNumberOfCallsInHalfOpenState: 1 })
+    await trip(breaker)
+    vi.advanceTimersByTime(1_000)
+
+    await failForClient(breaker, new ErrNotFound('no such record'))
+    expect(breaker.state).toBe('half_open')
+
+    await succeed(breaker)
+    expect(breaker.state).toBe('closed')
+  })
+
+  it('rejects the call with the error the classification threw, and records nothing', async () => {
+    const breaker = breakerOf({ permittedNumberOfCallsInHalfOpenState: 1 })
+    const broken = new Error('classification bug')
+    await trip(breaker)
+    vi.advanceTimersByTime(1_000)
+
+    const error = await failForClient(breaker, new Error('down'), () => {
+      throw broken
+    })
+
+    expect(error).toBe(broken)
+    expect(breaker.state).toBe('half_open')
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+    await succeed(breaker)
+    expect(breaker.state).toBe('closed')
+  })
+})
+
 describe('circuitBreaker, late results', () => {
   // The outcome of a call belongs to the state it started in; counting it later would judge the wrong period.
   it('does not record a call that settles after the breaker opened, but still reports it', async () => {
     const breaker = breakerOf()
     const seen = listen(breaker, 'success')
     const slow = Promise.withResolvers<string>()
-    const call = runWith(() => slow.promise, breaker)
+    const call = run(breaker.wrap(async () => slow.promise))
 
     await trip(breaker)
     slow.resolve('ok')
@@ -553,7 +685,7 @@ describe('circuitBreaker, late results', () => {
     const breaker = breakerOf()
     const seen = listen(breaker, 'failure')
     const slow = Promise.withResolvers<string>()
-    const call = runWith(() => slow.promise, breaker).catch(() => undefined)
+    const call = run(breaker.wrap(async () => slow.promise)).catch(() => undefined)
 
     breaker.reset()
     slow.reject(new Error('boom'))
@@ -658,6 +790,237 @@ describe('circuitBreaker, manual control', () => {
   })
 })
 
+describe('circuitBreaker, manual transitions', () => {
+  // An operator who knows the dependency is down, from a deploy or a status page, opens it before calls fail.
+  it('opens on transitionToOpen for the configured wait, then lets a trial call through', async () => {
+    const breaker = breakerOf()
+    const seen = listen(breaker, 'stateChange')
+
+    breaker.transitionToOpen()
+
+    expect(await succeed(breaker).catch((error: unknown) => error)).toMatchObject({ state: 'open', retryAfter: 1_000 })
+    vi.advanceTimersByTime(1_000)
+    await succeed(breaker)
+    expect(breaker.state).toBe('half_open')
+    expect(seen).toEqual([
+      ['stateChange', { name: 'inventory', from: 'closed', to: 'open' }],
+      ['stateChange', { name: 'inventory', from: 'open', to: 'half_open' }],
+    ])
+  })
+
+  it('stays open for the wait transitionToOpen names instead of the configured one', async () => {
+    const breaker = breakerOf({ automaticTransitionFromOpenToHalfOpen: true })
+
+    breaker.transitionToOpen({ for: 5 * Second })
+
+    expect(await succeed(breaker).catch((error: unknown) => error)).toMatchObject({ state: 'open', retryAfter: 5_000 })
+    vi.advanceTimersByTime(4_999)
+    expect(breaker.state).toBe('open')
+    vi.advanceTimersByTime(1)
+    expect(breaker.state).toBe('half_open')
+  })
+
+  // A manual opening is an opening: the backoff of the next one starts from it.
+  it('counts a manual opening towards the next wait of a backoff', async () => {
+    const breaker = breakerOf({ waitDurationInOpenState: openCount => openCount * 1_000 })
+
+    breaker.transitionToOpen({ for: 10 * Second })
+    breaker.transitionToHalfOpen()
+    await fail(breaker)
+    await fail(breaker)
+
+    expect(await succeed(breaker).catch((error: unknown) => error)).toMatchObject({ state: 'open', retryAfter: 2_000 })
+  })
+
+  it.each([
+    [-1, 'got -1ms'],
+    [Infinity, 'got Infinity'],
+  ])('refuses a for of %s and leaves the breaker as it was', (wait, got) => {
+    const breaker = breakerOf()
+
+    expect(() => breaker.transitionToOpen({ for: wait })).toThrow(ErrInvalidOption)
+    expect(() => breaker.transitionToOpen({ for: wait })).toThrow(
+      `Cannot open circuit breaker "inventory": for must be a finite Duration of at least 0s, ${got}`,
+    )
+    expect(breaker.state).toBe('closed')
+  })
+
+  it('lets trial calls through at once on transitionToHalfOpen, and closes on their success', async () => {
+    const breaker = breakerOf()
+    await trip(breaker)
+
+    breaker.transitionToHalfOpen()
+    await succeed(breaker)
+    await succeed(breaker)
+
+    expect(breaker.state).toBe('closed')
+  })
+
+  // The trials decide whether the dependency recovered; a call that started before them knows nothing about that.
+  it('does not count a call that started before transitionToHalfOpen as a trial', async () => {
+    const breaker = breakerOf()
+    const late = Promise.withResolvers<string>()
+    const call = run(breaker.wrap(() => late.promise))
+
+    breaker.transitionToHalfOpen()
+    late.resolve('ok')
+    await call
+    await succeed(breaker)
+
+    expect(breaker.state).toBe('half_open')
+    expect(breaker.metrics().bufferedCalls).toBe(1)
+  })
+
+  it('closes and forgets the window on transitionToClosed, without the reset event', async () => {
+    const breaker = breakerOf()
+    await trip(breaker)
+    const seen = listen(breaker, 'stateChange', 'reset')
+
+    breaker.transitionToClosed()
+
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+    expect(seen).toEqual([['stateChange', { name: 'inventory', from: 'open', to: 'closed' }]])
+  })
+})
+
+describe('circuitBreaker, acquire', () => {
+  // A streamed body fails after the response started, outside any operation a wrapper could watch.
+  it('records the permits settled by hand, and refuses once they open it', () => {
+    const breaker = breakerOf()
+    const seen = listen(breaker, 'notPermitted')
+
+    for (let i = 0; i < 4; i++) {
+      permitOf(breaker).onError(new Error('stream reset'))
+    }
+    const refused = breaker.acquire()
+
+    expect(breaker.state).toBe('open')
+    expect(refused).toBeInstanceOf(ErrCallNotPermitted)
+    expect(refused).toMatchObject({ breaker: 'inventory', state: 'open', retryAfter: 1_000 })
+    expect(seen).toEqual([['notPermitted', { name: 'inventory', state: 'open' }]])
+    expect(breaker.metrics().notPermittedCalls).toBe(1)
+  })
+
+  it('measures a permit from acquire to its settlement', () => {
+    const breaker = breakerOf({ slowCallDurationThreshold: 100 * Millisecond })
+    const seen = listen(breaker, 'success')
+
+    const permit = permitOf(breaker)
+    vi.advanceTimersByTime(150)
+    permit.onSuccess()
+
+    expect(seen).toEqual([['success', { name: 'inventory', duration: 150, slow: true }]])
+  })
+
+  it('records a permit once, however often it is settled', () => {
+    const breaker = breakerOf()
+
+    const permit = permitOf(breaker)
+    permit.onError(new Error('down'))
+    permit.onError(new Error('down'))
+    permit.onSuccess()
+    permit.release()
+
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 1, failedCalls: 1 })
+  })
+
+  it('judges a result with recordResult, and never a success reported without one', () => {
+    const recordResult = vi.fn((result: unknown) => result === 503)
+    const breaker = breakerOf({ recordResult })
+
+    permitOf(breaker).onResult(503)
+    permitOf(breaker).onSuccess()
+
+    expect(recordResult).toHaveBeenCalledTimes(1)
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 2, failedCalls: 1 })
+  })
+
+  it('ignores the errors handed to onError that it ignores for a wrapped call', () => {
+    const breaker = breakerOf({ ignoreError: [RangeError] })
+    const seen = listen(breaker, 'ignored')
+
+    permitOf(breaker).onError(new RangeError('caller bug'))
+    permitOf(breaker).onError(new ErrCallRefused('Cannot call "inventory": queue is full', 'ERR_QUEUE_FULL', undefined))
+
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+    expect(seen.map(([, event]) => event.reason)).toEqual(['ignored', 'refused'])
+  })
+
+  // A caller that leaves mid-stream says nothing about the dependency, and must not hold a trial slot forever.
+  it('gives its trial slot back once, and records nothing, when a permit is released', async () => {
+    const breaker = breakerOf()
+    await trip(breaker)
+    vi.advanceTimersByTime(1_000)
+
+    const left = permitOf(breaker)
+    permitOf(breaker)
+    left.release()
+    left.release()
+
+    expect(breaker.acquire()).not.toBeInstanceOf(ErrCallNotPermitted)
+    expect(breaker.acquire()).toBeInstanceOf(ErrCallNotPermitted)
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+  })
+
+  it('reports nothing for a permit acquired while disabled', () => {
+    const breaker = breakerOf()
+    breaker.disable()
+    const seen = listen(breaker, 'success', 'failure')
+
+    permitOf(breaker).onError(new Error('down'))
+    permitOf(breaker).onSuccess()
+
+    expect(seen).toEqual([])
+  })
+
+  it('throws what a predicate threw from the permit method that ran it, and records nothing', () => {
+    const thrown = new Error('predicate bug')
+    const breaker = breakerOf({
+      recordError: () => {
+        throw thrown
+      },
+    })
+    const permit = permitOf(breaker)
+
+    expect(() => permit.onError(new Error('down'))).toThrow(thrown)
+    expect(breaker.metrics().bufferedCalls).toBe(0)
+  })
+})
+
+describe('circuitBreaker, dispose', () => {
+  it('cancels the automatic move to half open, and moves on the first call after the wait instead', async () => {
+    const breaker = breakerOf({ automaticTransitionFromOpenToHalfOpen: true })
+    await trip(breaker)
+
+    breaker.dispose()
+    vi.advanceTimersByTime(5_000)
+
+    expect(vi.getTimerCount()).toBe(0)
+    expect(breaker.state).toBe('open')
+    await succeed(breaker)
+    expect(breaker.state).toBe('half_open')
+  })
+
+  it('sets no timer when it opens after dispose', async () => {
+    const breaker = breakerOf({ automaticTransitionFromOpenToHalfOpen: true })
+    breaker.dispose()
+
+    await trip(breaker)
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('is what a using declaration calls at the end of its block', async () => {
+    {
+      using breaker = breakerOf({ automaticTransitionFromOpenToHalfOpen: true })
+      await trip(breaker)
+      expect(vi.getTimerCount()).toBe(1)
+    }
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
 describe('circuitBreaker, events', () => {
   it('reports the outcome, then the rate that tripped the breaker, then the state change', async () => {
     const breaker = breakerOf()
@@ -721,7 +1084,7 @@ describe('circuitBreaker, failing predicates and wait functions', () => {
     await trip(breaker)
     vi.advanceTimersByTime(1_000)
 
-    await expect(runWith(() => 'explode', breaker)).rejects.toThrow('predicate bug')
+    await expect(run(breaker.wrap(async () => 'explode'))).rejects.toThrow('predicate bug')
     expect(breaker.state).toBe('half_open')
 
     await succeed(breaker)
@@ -763,25 +1126,24 @@ describe('circuitBreaker, refusal cost', () => {
 
   // A stack is captured only when asked for, and then its few frames must lead to the caller, not to the breaker's
   // bookkeeping.
-  it("starts a captured refusal's stack at CircuitBreaker.run, directly under the caller's entry", async () => {
+  it("starts a captured refusal's stack in the breaker, directly under the caller's entry", async () => {
     const errorClass = Error as { stackTraceLimit?: number }
     const original = errorClass.stackTraceLimit
     errorClass.stackTraceLimit = 50
     try {
       const breaker = breakerOf({ captureStackTrace: true })
       breaker.forceOpen()
-      const run = compose(breaker)
+      const guarded = breaker.wrap(async () => 'ok')
       function callsTheOpenBreaker(): Promise<string> {
-        return run(() => 'ok')
+        return guarded({ signal: undefined }, undefined)
       }
 
       const refused = (await callsTheOpenBreaker().catch((error: unknown) => error)) as Error
       const frames = refused.stack?.split('\n').slice(1) ?? []
       const caller = frames.findIndex(frame => frame.includes('callsTheOpenBreaker'))
 
-      expect(frames[0]).toContain('CircuitBreaker.run')
-      expect(caller).toBeGreaterThan(0)
-      expect(caller).toBeLessThanOrEqual(2)
+      expect(frames[0]).toContain('CircuitBreaker')
+      expect(caller).toBe(2)
     } finally {
       errorClass.stackTraceLimit = original
     }
@@ -804,91 +1166,92 @@ describe('circuitBreaker, refusal cost', () => {
     }
   })
 
-  it('hands a refusal back as a rejected promise when run is called directly, never as a throw', async () => {
+  it('hands a refusal back as a rejected promise, never as a throw', async () => {
     const breaker = breakerOf()
     breaker.forceOpen()
-    const ctx = { signal: undefined, attempt: 1 } as unknown as ExecutionContext
     let returned: Promise<number> | undefined
 
     expect(() => {
-      returned = breaker.run(ctx, () => Promise.resolve(1))
+      returned = breaker.wrap(() => Promise.resolve(1))({ signal: undefined }, undefined)
     }).not.toThrow()
     await expect(returned).rejects.toBeInstanceOf(ErrCallNotPermitted)
   })
 
-  // Without this, a trial whose inner strategy throws before returning a promise would hold its slot forever.
-  it('records a trial call whose inner strategy throws synchronously as a failure', async () => {
+  // Without this, a trial whose inner layer throws before returning a promise would hold its slot forever.
+  it('records a trial call whose inner layer throws synchronously as a failure', async () => {
     const breaker = breakerOf({ permittedNumberOfCallsInHalfOpenState: 1 })
     await trip(breaker)
     vi.advanceTimersByTime(1_000)
-    const throwing: Strategy = () => {
-      throw new Error('inner strategy bug')
+    const throwing: Policy = () => () => {
+      throw new Error('inner layer bug')
     }
 
-    await expect(runWith(() => 'ok', breaker, throwing)).rejects.toThrow('inner strategy bug')
+    await expect(run(compose(breaker, throwing)(async () => 'ok'))).rejects.toThrow('inner layer bug')
 
     expect(breaker.state).toBe('open')
   })
 
-  it('records a trial call whose inner strategy returns a plain value as a success', async () => {
+  it('records a trial call whose inner layer returns a plain value as a success', async () => {
     const breaker = breakerOf({ permittedNumberOfCallsInHalfOpenState: 1 })
     await trip(breaker)
     vi.advanceTimersByTime(1_000)
-    const plainValue = (() => 42) as unknown as Strategy
+    const plainValue = (() => () => 42) as unknown as Policy
 
-    await expect(runWith(() => 'ok', breaker, plainValue)).resolves.toBe(42)
+    await expect(run(compose(breaker, plainValue)(async () => 'ok'))).resolves.toBe(42)
 
     expect(breaker.state).toBe('closed')
   })
 })
 
-// `run` is public: a strategy that nests a breaker by hand may hand it a `next` the chain never normalised. Whatever
-// that `next` does, the call is recorded, its trial slot is settled, and the caller gets a promise.
-describe('circuitBreaker, run called by hand', () => {
-  const ctx = { signal: undefined, attempt: 1 } as unknown as ExecutionContext
+// `wrap` is public: an operation wrapped by hand may throw synchronously or return a plain value. Whatever it does, the
+// call is recorded, its trial slot is settled, and the caller gets a promise.
+describe('circuitBreaker, wrap called by hand', () => {
+  const ctx = { signal: undefined }
 
-  it('records a trial call as a failure when a hand-made next throws synchronously', async () => {
+  it('records a trial call as a failure when an operation wrapped by hand throws synchronously', async () => {
     const breaker = breakerOf({ permittedNumberOfCallsInHalfOpenState: 1 })
     await trip(breaker)
     vi.advanceTimersByTime(1_000)
+    const throwing = (() => {
+      throw new Error('hand-made operation bug')
+    }) as Operation<never>
     let result: Promise<unknown> | undefined
 
     expect(() => {
-      result = breaker.run(ctx, () => {
-        throw new Error('hand-made next bug')
-      })
+      result = breaker.wrap(throwing)(ctx, undefined)
     }).not.toThrow()
-    await expect(result).rejects.toThrow('hand-made next bug')
+    await expect(result).rejects.toThrow('hand-made operation bug')
 
     expect(breaker.state).toBe('open')
   })
 
-  it('records a trial call as a success when a hand-made next returns a plain value', async () => {
+  it('records a trial call as a success when an operation wrapped by hand returns a plain value', async () => {
     const breaker = breakerOf({ permittedNumberOfCallsInHalfOpenState: 1 })
     await trip(breaker)
     vi.advanceTimersByTime(1_000)
-    const plainValue = (() => 42) as unknown as Next<number>
+    const plainValue = (() => 42) as unknown as Operation<number>
 
-    await expect(breaker.run(ctx, plainValue)).resolves.toBe(42)
+    await expect(breaker.wrap(plainValue)(ctx, undefined)).resolves.toBe(42)
 
     expect(breaker.state).toBe('closed')
   })
 
-  it('hands a synchronous throw from a hand-made next back as a rejection while disabled', async () => {
+  it('hands a synchronous throw from an operation wrapped by hand back as a rejection while disabled', async () => {
     const breaker = breakerOf()
     breaker.disable()
+    const throwing = (() => {
+      throw new Error('hand-made operation bug')
+    }) as Operation<never>
     let result: Promise<unknown> | undefined
 
     expect(() => {
-      result = breaker.run(ctx, () => {
-        throw new Error('hand-made next bug')
-      })
+      result = breaker.wrap(throwing)(ctx, undefined)
     }).not.toThrow()
-    await expect(result).rejects.toThrow('hand-made next bug')
+    await expect(result).rejects.toThrow('hand-made operation bug')
   })
 
   // A wait function that throws while the breaker re-opens must reach the caller as a rejection, like every failure.
-  it('hands a failing wait function back as a rejection when a hand-called run re-opens the breaker', async () => {
+  it('hands a failing wait function back as a rejection when a call re-opens the breaker', async () => {
     const breaker = breakerOf({
       maxWaitDurationInHalfOpenState: 500,
       permittedNumberOfCallsInHalfOpenState: 1,
@@ -901,13 +1264,61 @@ describe('circuitBreaker, run called by hand', () => {
     })
     await trip(breaker)
     vi.advanceTimersByTime(1_000)
-    void breaker.run(ctx, () => new Promise<number>(() => undefined))
+    void breaker.wrap(() => new Promise<number>(() => undefined))(ctx, undefined)
     vi.advanceTimersByTime(500)
     let returned: Promise<number> | undefined
 
     expect(() => {
-      returned = breaker.run(ctx, () => Promise.resolve(1))
+      returned = breaker.wrap(() => Promise.resolve(1))(ctx, undefined)
     }).not.toThrow()
     await expect(returned).rejects.toThrow('bad wait')
+  })
+})
+
+describe('circuitBreaker, unhandled rejections', () => {
+  // Every way a call can end must settle the caller's promise and leave no other one rejected behind it.
+  it('leaves no rejection unhandled, whichever way a call ends', async () => {
+    const reasons = await unhandledRejections(async () => {
+      const forced = breakerOf()
+      forced.forceOpen()
+      const disabled = breakerOf()
+      disabled.disable()
+      const judging = breakerOf({
+        recordResult: () => {
+          throw new Error('predicate bug')
+        },
+      })
+      const reopening = breakerOf({
+        waitDurationInOpenState: () => {
+          throw new Error('wait bug')
+        },
+      })
+      const caller = new AbortController()
+      const down = async (): Promise<string> => {
+        throw new Error('down')
+      }
+
+      const calls = [
+        run(forced.wrap(async () => 'ok')),
+        run(breakerOf().wrap(down)),
+        run(judging.wrap(async () => 'ok')),
+        run(
+          disabled.wrap(() => {
+            throw new Error('sync')
+          }),
+        ),
+        run(
+          breakerOf().wrap(async () => {
+            caller.abort()
+            throw new Error('down')
+          }),
+          caller.signal,
+        ),
+        ...Array.from({ length: 4 }, () => run(reopening.wrap(down))),
+      ].map(call => call.catch(() => undefined))
+      await Promise.all(calls)
+    })
+
+    expect(reasons).toEqual([])
   })
 })

@@ -1,85 +1,96 @@
-import { describe, expect, expectTypeOf, it } from 'vitest'
+import { Minute } from '@caffeinejs/std/duration'
+import { describe, expect, it } from 'vitest'
 
-import { circuitBreaker } from './circuit_breaker/circuit_breaker.js'
-import { compose, runWith } from './compose.js'
-import { ErrCallNotPermitted, ErrInvalidOption } from './errors.js'
+import { circuitBreaker, ErrCallNotPermitted } from './circuitbreaker/circuitbreaker.js'
+import { compose, decorate, run } from './compose.js'
+import { ErrInvalidOption } from './errors.js'
+import type { CallContext, Operation, Policy, Wrapper } from './policy.js'
 import { retry } from './retry/retry.js'
-import type { ExecutionContext, Next, Strategy, StrategyObject } from './strategy.js'
+import { timeLimiter } from './timelimiter/timelimiter.js'
 
-function recorder(log: string[], name: string): Strategy {
-  return async (ctx, next) => {
+function recorder(log: string[], name: string): Policy {
+  return op => async (ctx, input) => {
     log.push(`${name}:enter`)
     try {
-      return await next(ctx)
+      return await op(ctx, input)
     } finally {
       log.push(`${name}:exit`)
     }
   }
 }
 
-describe('runWith', () => {
-  // The order decides semantics (retry around a breaker is not a breaker around a retry), so it must be the
-  // reading order of the arguments.
-  it('runs strategies from the outermost to the innermost, so the first one listed sees the call first', async () => {
+// An operation that returns or throws synchronously, as untyped code can; the chain must still hand back a promise.
+function sync<T>(fn: (ctx: CallContext) => T): Operation<T> {
+  return fn as unknown as Operation<T>
+}
+
+describe('compose', () => {
+  // The order decides semantics (retry around a breaker is not a breaker around a retry), so it must be the reading
+  // order of the arguments.
+  it('runs layers from the outermost to the innermost, so the first one listed sees the call first', async () => {
     const log: string[] = []
 
-    await runWith(() => log.push('op'), recorder(log, 'a'), recorder(log, 'b'))
+    await run(compose(recorder(log, 'a'), recorder(log, 'b'))(async () => log.push('op')))
 
     expect(log).toEqual(['a:enter', 'b:enter', 'op', 'b:exit', 'a:exit'])
   })
 
-  it('delivers a sync value as a resolved promise', async () => {
-    await expect(runWith(() => 42)).resolves.toBe(42)
+  it('runs the operation directly when given no layers, and still returns a promise', async () => {
+    const result = compose()(sync(() => 7))({ signal: undefined }, undefined)
+
+    expect(result).toBeInstanceOf(Promise)
+    await expect(result).resolves.toBe(7)
   })
 
   // A caller that chains .catch() must see every failure there, not as an exception thrown by the call itself.
-  it('delivers a sync throw from the operation as a rejection, never as a synchronous throw', async () => {
+  it('delivers a synchronous throw from the operation as a rejection', async () => {
     const boom = new Error('boom')
+    const guarded = compose(recorder([], 'a'))(
+      sync(() => {
+        throw boom
+      }),
+    )
     let result: Promise<never> | undefined
 
     expect(() => {
-      result = runWith(() => {
-        throw boom
-      })
+      result = guarded({ signal: undefined }, undefined)
     }).not.toThrow()
     await expect(result).rejects.toBe(boom)
   })
 
-  it('delivers a strategy that throws synchronously as a rejection', async () => {
+  // A breaker or a bulkhead chains on what the layer inside returns: a synchronous throw there would skip its handler
+  // and keep its permit forever.
+  it('delivers a layer whose operation throws synchronously as a rejection, so the layer outside settles', async () => {
     const boom = new Error('boom')
-    const broken: Strategy = () => {
+    const broken: Policy = () => () => {
       throw boom
     }
-    let result: Promise<number> | undefined
+    const breaker = circuitBreaker({ name: 'inventory' })
+    const guarded = compose(breaker, broken)(async () => 1)
 
-    expect(() => {
-      result = runWith(() => 1, recorder([], 'outer'), broken)
-    }).not.toThrow()
-    await expect(result).rejects.toBe(boom)
-    await expect(runWith(() => 1, broken)).rejects.toBe(boom)
+    await expect(guarded({ signal: undefined }, undefined)).rejects.toBe(boom)
+    expect(breaker.metrics().failedCalls).toBe(1)
   })
 
-  it('delivers a first strategy that returns a plain value as a resolved promise', async () => {
-    const plainValue = (() => 42) as unknown as Strategy
+  it('delivers a layer whose operation returns a plain value as a resolved promise', async () => {
+    const plainValue = (() => () => 42) as unknown as Policy
 
-    const result = runWith(() => 1, plainValue)
+    const result = compose(recorder([], 'a'), plainValue)(async () => 1)({ signal: undefined }, undefined)
 
     expect(result).toBeInstanceOf(Promise)
     await expect(result).resolves.toBe(42)
   })
 
-  // A strategy chains on next(ctx) with .then or .finally; a synchronous throw or a bare value there would skip its
-  // cleanup, whatever a strategy further in does wrong.
-  it('hands every strategy a next that returns a promise and never throws, whatever the strategy inside it does', async () => {
+  it('hands every layer an operation that returns a promise and never throws, whatever the layer inside it does', async () => {
     const boom = new Error('boom')
-    const throwing: Strategy = () => {
+    const throwing: Policy = () => () => {
       throw boom
     }
-    const plainValue = (() => 42) as unknown as Strategy
+    const plainValue = (() => () => 42) as unknown as Policy
     const seen: string[] = []
-    const probe: Strategy = (ctx, next) => {
+    const probe: Policy = op => (ctx, input) => {
       try {
-        const result = next(ctx)
+        const result = op(ctx, input)
         seen.push(result instanceof Promise ? 'promise' : 'value')
         return result
       } catch (error) {
@@ -88,195 +99,295 @@ describe('runWith', () => {
       }
     }
 
-    await expect(runWith(() => 1, probe, throwing)).rejects.toBe(boom)
-    await expect(runWith(() => 1, probe, plainValue)).resolves.toBe(42)
+    await expect(run(compose(probe, throwing)(async () => 1))).rejects.toBe(boom)
+    await expect(run(compose(probe, plainValue)(async () => 1))).resolves.toBe(42)
 
     expect(seen).toEqual(['promise', 'promise'])
   })
 
-  it('hands a trailing signal to the operation', async () => {
-    const controller = new AbortController()
-    let seen: AbortSignal | undefined
+  it('accepts policy functions and instances with wrap() in one chain, calling wrap() with the instance as this', async () => {
+    class Counting implements Wrapper {
+      calls = 0
+      wraps = 0
 
-    await runWith(ctx => (seen = ctx.signal), recorder([], 'a'), controller.signal)
+      wrap<T, I>(op: Operation<T, I>): Operation<T, I> {
+        this.wraps++
+        return (ctx, input) => {
+          this.calls++
+          return op(ctx, input)
+        }
+      }
+    }
+    const counting = new Counting()
+    const guarded = compose(recorder([], 'a'), counting, recorder([], 'b'))(async () => 1)
 
-    expect(seen).toBe(controller.signal)
+    await run(guarded)
+    await run(guarded)
+
+    expect(counting.wraps).toBe(1)
+    expect(counting.calls).toBe(2)
   })
 
-  // `getStock(id, signal?)` passes an optional signal straight through; `undefined` there must not be mistaken for a
-  // missing strategy.
-  it('treats a trailing undefined as "no signal" and still runs every strategy', async () => {
+  // A wrong argument is a programming error; failing where the chain is built points straight at it.
+  it('throws ErrInvalidOption for a layer that is neither a function nor an instance, naming the first one', () => {
+    expect(() => compose(recorder([], 'a'), null as never)).toThrow(
+      'Cannot compose: layer #2 is neither a function nor an object with a wrap() method',
+    )
+    expect(() => compose(recorder([], 'a'), 1 as never, { run: () => 1 } as never)).toThrow('layer #2')
+    expect(() => compose(1 as never)).toThrow(ErrInvalidOption)
+  })
+
+  // One chain serves every request; a call must never see another call's context.
+  it('keeps each concurrent call on its own context while sharing the chain', async () => {
+    const yielding: Policy = op => async (ctx, input) => {
+      await new Promise(resolve => setTimeout(resolve, 1))
+      return op(ctx, input)
+    }
+    const guarded = compose(yielding)(async ctx => ctx.signal)
+    const first = new AbortController()
+    const second = new AbortController()
+
+    const seen = await Promise.all([run(guarded, first.signal), run(guarded, second.signal)])
+
+    expect(seen).toEqual([first.signal, second.signal])
+  })
+
+  // A policy that derives a signal must be able to hand it to everything inside it, with nothing to validate.
+  it('lets a layer hand the rest of the chain another signal with a plain object', async () => {
+    const outer = new AbortController()
+    const inner = new AbortController()
+    let original: CallContext | undefined
+    const deriving: Policy = op => (ctx, input) => {
+      original = ctx
+      return op({ ...ctx, signal: inner.signal }, input)
+    }
+
+    const seen = await run(
+      compose(deriving)(async ctx => ctx.signal),
+      outer.signal,
+    )
+
+    expect(seen).toBe(inner.signal)
+    expect(original?.signal).toBe(outer.signal)
+  })
+
+  it('composes a composed policy as a layer', async () => {
     const log: string[] = []
-    let seen: AbortSignal | undefined = new AbortController().signal
+    const inner = compose(recorder(log, 'b'), recorder(log, 'c'))
 
-    await runWith(ctx => (seen = ctx.signal), recorder(log, 'a'), undefined)
+    await run(compose(recorder(log, 'a'), inner)(async () => log.push('op')))
 
-    expect(seen).toBeUndefined()
-    expect(log).toEqual(['a:enter', 'a:exit'])
+    expect(log).toEqual(['a:enter', 'b:enter', 'c:enter', 'op', 'c:exit', 'b:exit', 'a:exit'])
+  })
+})
+
+describe('run', () => {
+  it('hands the signal to the operation', async () => {
+    const controller = new AbortController()
+
+    await expect(run(async ctx => ctx.signal, controller.signal)).resolves.toBe(controller.signal)
+    await expect(run(async ctx => ctx.signal)).resolves.toBeUndefined()
+  })
+
+  it('delivers a synchronous value or throw as a promise', async () => {
+    const boom = new Error('boom')
+    let result: Promise<never> | undefined
+
+    await expect(run(sync(() => 42))).resolves.toBe(42)
+    expect(() => {
+      result = run(
+        sync(() => {
+          throw boom
+        }),
+      )
+    }).not.toThrow()
+    await expect(result).rejects.toBe(boom)
   })
 
   it('rejects with the abort reason without running anything when the signal is already aborted', async () => {
     const reason = new Error('caller gave up')
     const log: string[] = []
 
-    await expect(runWith(() => log.push('op'), recorder(log, 'a'), AbortSignal.abort(reason))).rejects.toBe(reason)
+    await expect(
+      run(
+        compose(recorder(log, 'a'))(async () => log.push('op')),
+        AbortSignal.abort(reason),
+      ),
+    ).rejects.toBe(reason)
     expect(log).toEqual([])
   })
+})
 
-  // A wrong argument is a programming error; failing at the call site points straight at it.
-  it('throws ErrInvalidOption synchronously for an argument that is not a strategy', () => {
-    expect(() => runWith(() => 1, 42 as never, recorder([], 'a'))).toThrow(ErrInvalidOption)
-    expect(() => runWith(() => 1, recorder([], 'a'), 42 as never)).toThrow(ErrInvalidOption)
-    expect(() => runWith(() => 1, { run: 'nope' } as never)).toThrow(
-      'Cannot run: the last argument is neither a strategy nor an AbortSignal',
-    )
+describe('decorate', () => {
+  it('keeps the function’s arguments and result', async () => {
+    const log: string[] = []
+    const add = decorate(recorder(log, 'a'), async (a: number, b: number) => a + b)
+
+    await expect(add(2, 3)).resolves.toBe(5)
+    expect(log).toEqual(['a:enter', 'a:exit'])
   })
 
-  it('accepts function and object strategies in one chain and calls an object strategy with itself as this', async () => {
-    const counting = {
-      calls: 0,
-      run<T>(ctx: ExecutionContext, next: Next<T>): Promise<T> {
-        this.calls++
-        return next(ctx)
+  it('builds the chain once, not per call', async () => {
+    let wraps = 0
+    const counting: Wrapper = {
+      wrap: op => {
+        wraps++
+        return op
       },
     }
+    const guarded = decorate(counting, async (id: string) => id)
 
-    await runWith(() => 1, recorder([], 'a'), counting)
-    await runWith(() => 1, counting, recorder([], 'a'))
+    await guarded('1')
+    await guarded('2')
 
-    expect(counting.calls).toBe(2)
+    expect(wraps).toBe(1)
   })
 
-  it('accepts a class implementing StrategyObject', async () => {
-    class Counting implements StrategyObject {
-      calls = 0
-
-      run<T>(ctx: ExecutionContext, next: Next<T>): Promise<T> {
-        this.calls++
-        return next(ctx)
-      }
-    }
-    const counting = new Counting()
-
-    await runWith(() => 1, counting)
-
-    expect(counting.calls).toBe(1)
-  })
-
-  // A strategy that derives a signal (a deadline, say) must be able to hand it to everything inside it.
-  it('lets a strategy hand the inner chain a derived context without touching the original', async () => {
-    const outer = new AbortController()
-    const inner = new AbortController()
-    let original: ExecutionContext | undefined
-    let seen: ExecutionContext | undefined
-
-    const deriving: Strategy = (ctx, next) => {
-      original = ctx
-      return next(ctx.with({ signal: inner.signal, attempt: 3 }))
+  it('takes the first AbortSignal argument as the caller’s signal', async () => {
+    const caller = new AbortController()
+    let seen: AbortSignal | undefined
+    const observing: Policy = op => (ctx, input) => {
+      seen = ctx.signal
+      return op(ctx, input)
     }
 
-    await runWith(ctx => (seen = ctx), deriving, outer.signal)
+    await decorate(observing, async (_id: string, _signal?: AbortSignal) => 1)('42', caller.signal)
 
-    expect(seen?.signal).toBe(inner.signal)
-    expect(seen?.attempt).toBe(3)
-    expect(original?.signal).toBe(outer.signal)
-    expect(original?.attempt).toBe(1)
+    expect(seen).toBe(caller.signal)
   })
 
-  it('removes the signal when a derived context sets it to undefined, and keeps the attempt', async () => {
-    let seen: ExecutionContext | undefined
-    const dropping: Strategy = (ctx, next) => next(ctx.with({ signal: undefined }))
+  it('rejects with the abort reason without calling the function when the caller’s signal is already aborted', async () => {
+    const reason = new Error('caller gave up')
+    let calls = 0
 
-    await runWith(ctx => (seen = ctx), dropping, new AbortController().signal)
-
-    expect(seen?.signal).toBeUndefined()
-    expect(seen?.attempt).toBe(1)
+    await expect(
+      decorate(recorder([], 'a'), async (_signal: AbortSignal) => calls++)(AbortSignal.abort(reason)),
+    ).rejects.toBe(reason)
+    expect(calls).toBe(0)
   })
 
-  it('rejects with ErrInvalidOption when a strategy hands next a context it built itself', async () => {
-    const forging: Strategy = (ctx, next) => next({ ...ctx })
+  // A time limiter must be able to stop the work itself, so the function gets the signal the limiter owns.
+  it('hands the function the attempt’s signal in place of the caller’s', async () => {
+    const caller = new AbortController()
+    let received: AbortSignal | undefined
+    const guarded = decorate(
+      timeLimiter({ name: 'inventory', timeoutDuration: 1 * Minute }),
+      async (_id: string, signal?: AbortSignal) => {
+        received = signal
+        return 1
+      },
+    )
 
-    await expect(runWith(() => 1, forging)).rejects.toThrow(ErrInvalidOption)
+    await guarded('42', caller.signal)
+
+    expect(received).toBeInstanceOf(AbortSignal)
+    expect(received).not.toBe(caller.signal)
+    caller.abort(new Error('client left'))
+    expect(received?.aborted).toBe(true)
   })
 
-  it('types the result as a promise of the awaited operation result', () => {
-    expectTypeOf(runWith(() => 1)).toEqualTypeOf<Promise<number>>()
-    expectTypeOf(runWith(async () => 1)).toEqualTypeOf<Promise<number>>()
-    expectTypeOf(runWith(() => 'x', recorder([], 'a'), undefined)).toEqualTypeOf<Promise<string>>()
-    expectTypeOf(compose()(() => 1)).toEqualTypeOf<Promise<number>>()
-    expectTypeOf(compose(recorder([], 'a'))(async () => true)).toEqualTypeOf<Promise<boolean>>()
+  // Without a place for it, a signal the caller did not pass could never reach the function, and nothing would stop
+  // the work at the time limit.
+  it('puts the attempt’s signal at signalAt even when the caller passed none', async () => {
+    let received: AbortSignal | undefined
+    const guarded = decorate(
+      timeLimiter({ name: 'inventory', timeoutDuration: 1 * Minute }),
+      async (_id: string, signal?: AbortSignal) => {
+        received = signal
+        return 1
+      },
+      { signalAt: 1 },
+    )
+
+    await guarded('42')
+
+    expect(received).toBeInstanceOf(AbortSignal)
   })
-})
 
-describe('compose', () => {
-  it('runs the operation directly when given no strategies, and still returns a promise', async () => {
-    const run = compose()
+  it('reads the caller’s signal at signalAt, ignoring a signal elsewhere', async () => {
+    const first = new AbortController()
+    const second = new AbortController()
+    let seen: AbortSignal | undefined
+    const observing: Policy = op => (ctx, input) => {
+      seen = ctx.signal
+      return op(ctx, input)
+    }
 
-    const result = run(() => 7)
+    await decorate(observing, async (_a: AbortSignal, _b: AbortSignal) => 1, { signalAt: 1 })(
+      first.signal,
+      second.signal,
+    )
 
-    expect(result).toBeInstanceOf(Promise)
-    await expect(result).resolves.toBe(7)
+    expect(seen).toBe(second.signal)
   })
 
-  it('delivers a first strategy that throws synchronously as a rejection, never as a synchronous throw', async () => {
+  it('hands the arguments through untouched when no layer changes the signal', async () => {
+    const caller = new AbortController()
+    let received: unknown[] | undefined
+    const args = ['42', caller.signal] as const
+
+    await decorate(recorder([], 'a'), async (...got: unknown[]) => {
+      received = got
+      return 1
+    })(...args)
+
+    expect(received).toEqual(['42', caller.signal])
+  })
+
+  it('delivers a synchronous throw from the function as a rejection', async () => {
     const boom = new Error('boom')
-    const broken: Strategy = () => {
+    const guarded = decorate(recorder([], 'a'), (() => {
       throw boom
-    }
-    const run = compose(broken)
-    let result: Promise<number> | undefined
+    }) as () => Promise<never>)
 
-    expect(() => {
-      result = run(() => 1)
-    }).not.toThrow()
-    await expect(result).rejects.toBe(boom)
+    await expect(guarded()).rejects.toBe(boom)
   })
 
-  it('delivers a first strategy that returns a plain value as a resolved promise', async () => {
-    const plainValue = (() => 42) as unknown as Strategy
-
-    const result = compose(plainValue)(() => 1)
-
-    expect(result).toBeInstanceOf(Promise)
-    await expect(result).resolves.toBe(42)
+  it.each([
+    [null, 'Cannot decorate: the policy is neither a function nor an object with a wrap() method'],
+    [{ wrap: 1 }, 'Cannot decorate: the policy is neither a function nor an object with a wrap() method'],
+  ])('throws ErrInvalidOption for a policy that is %o', (policy, message) => {
+    expect(() => decorate(policy as never, async () => 1)).toThrow(message)
   })
 
-  it('orders strategies the same way as runWith', async () => {
-    const log: string[] = []
-
-    await compose(recorder(log, 'a'), recorder(log, 'b'))(() => log.push('op'))
-
-    expect(log).toEqual(['a:enter', 'b:enter', 'op', 'b:exit', 'a:exit'])
-  })
-
-  it('throws ErrInvalidOption synchronously for an argument that is not a strategy', () => {
-    expect(() => compose(recorder([], 'a'), null as never)).toThrow(
-      'Cannot compose: strategy #2 is neither a function nor an object with a run() method',
+  it('throws ErrInvalidOption for a function that is not one', () => {
+    expect(() => decorate(recorder([], 'a'), 'nope' as never)).toThrow(
+      'Cannot decorate: fn must be a function, got string',
     )
   })
 
-  it('reports the first invalid argument when several are invalid', () => {
-    expect(() => compose(recorder([], 'a'), 1 as never, null as never)).toThrow('strategy #2')
+  // A signalAt that points at the wrong argument would hand every policy something that is not a signal; the call must
+  // still fail as a promise, saying where the signal belongs.
+  it.each([
+    [null, 'null'],
+    [{ signal: new AbortController().signal }, 'object'],
+  ])('rejects with ErrInvalidOption when the argument at signalAt is %o', async (value, got) => {
+    const guarded = decorate(
+      timeLimiter({ name: 'inventory', timeoutDuration: 1 * Minute }),
+      async (_id: string, _options?: unknown) => 1,
+      { signalAt: 1 },
+    )
+
+    let call: Promise<number> | undefined
+    expect(() => {
+      call = guarded('42', value)
+    }).not.toThrow()
+    const error = await call!.catch((thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(ErrInvalidOption)
+    expect((error as Error).message).toContain(
+      `Cannot call a decorated function: its argument 1 must be an AbortSignal or undefined, as signalAt says, got ${got}`,
+    )
   })
 
-  // One runner serves every request; the per-call context must never leak between concurrent calls.
-  it('keeps each concurrent call on its own context while sharing the chain', async () => {
-    const yielding: Strategy = async (ctx, next) => {
-      await new Promise(resolve => setTimeout(resolve, 1))
-      return next(ctx)
-    }
-    const run = compose(yielding)
-    const first = new AbortController()
-    const second = new AbortController()
-
-    const seen = await Promise.all([run(ctx => ctx.signal, first.signal), run(ctx => ctx.signal, second.signal)])
-
-    expect(seen).toEqual([first.signal, second.signal])
+  it.each([-1, 1.5, Number.NaN])('throws ErrInvalidOption for a signalAt of %s', at => {
+    expect(() => decorate(recorder([], 'a'), async () => 1, { signalAt: at })).toThrow(
+      `Cannot decorate: signalAt must be an integer of at least 0, got ${String(at)}`,
+    )
   })
 })
 
-describe('with the built-in strategies', () => {
-  const alwaysFail = (): never => {
+describe('with the built-in policies', () => {
+  const alwaysFail = async (): Promise<never> => {
     throw new Error('down')
   }
 
@@ -286,8 +397,8 @@ describe('with the built-in strategies', () => {
     const inside = circuitBreaker({ name: 'inside', minimumNumberOfCalls: 100 })
     const retries = retry({ name: 'inventory', maxAttempts: 3, backoff: 0 })
 
-    await runWith(alwaysFail, retries, outside).catch(() => undefined)
-    await runWith(alwaysFail, inside, retries).catch(() => undefined)
+    await run(compose(retries, outside)(alwaysFail)).catch(() => undefined)
+    await run(compose(inside, retries)(alwaysFail)).catch(() => undefined)
 
     expect(outside.metrics().bufferedCalls).toBe(3)
     expect(inside.metrics().bufferedCalls).toBe(1)
@@ -295,71 +406,50 @@ describe('with the built-in strategies', () => {
 
   it('fails fast through a retry when the breaker is open', async () => {
     const breaker = circuitBreaker({ name: 'inventory' })
-    const retries = retry({ name: 'inventory', backoff: 60_000 })
+    const retries = retry({ name: 'inventory', backoff: 1 * Minute })
     breaker.forceOpen()
 
-    await expect(runWith(() => 'ok', retries, breaker)).rejects.toBeInstanceOf(ErrCallNotPermitted)
+    await expect(run(compose(retries, breaker)(async () => 'ok'))).rejects.toBeInstanceOf(ErrCallNotPermitted)
     expect(retries.metrics().failedCallsWithoutRetry).toBe(1)
-  })
-
-  it('keeps the attempt count of concurrent calls through one runner apart', async () => {
-    const run = compose(retry({ name: 'inventory', backoff: 1 }))
-    const flaky = () => {
-      const attempts: number[] = []
-      return {
-        attempts,
-        operation: (ctx: ExecutionContext) => {
-          attempts.push(ctx.attempt)
-          if (attempts.length === 1) {
-            throw new Error('first attempt fails')
-          }
-          return attempts.length
-        },
-      }
-    }
-    const first = flaky()
-    const second = flaky()
-
-    await Promise.all([run(first.operation), run(second.operation)])
-
-    expect(first.attempts).toEqual([1, 2])
-    expect(second.attempts).toEqual([1, 2])
   })
 
   // Node keeps 10 frames by default. Every frame the chain puts between the caller and the operation is one of the
   // caller's that an error thrown synchronously in the operation loses.
-  it('adds at most 2n + 1 frames between the caller and a synchronously throwing operation', async () => {
+  it('adds one frame per built-in plus one, n + 1, between the caller and a synchronously throwing operation', async () => {
     const errorClass = Error as { stackTraceLimit?: number }
     const original = errorClass.stackTraceLimit
     errorClass.stackTraceLimit = 50
     try {
-      const operationThatThrows = (): never => {
+      function throwsSynchronously(): never {
         throw new Error('sync')
       }
+      const operationThatThrows = sync(throwsSynchronously)
       const breaker = circuitBreaker({ name: 'inventory' })
       const retries = retry({ name: 'inventory', maxAttempts: 1 })
-      const breakerOnly = compose(breaker)
-      const retryAndBreaker = compose(retries, breaker)
+      const breakerOnly = compose(breaker)(operationThatThrows)
+      const retryAndBreaker = compose(retries, breaker)(operationThatThrows)
+      const decorated = decorate(compose(retries, breaker), operationThatThrows as unknown as () => Promise<never>)
       function callsTheBreaker(): Promise<unknown> {
-        return breakerOnly(operationThatThrows)
+        return breakerOnly({ signal: undefined }, undefined)
       }
       function callsRetryAndBreaker(): Promise<unknown> {
-        return retryAndBreaker(operationThatThrows)
+        return retryAndBreaker({ signal: undefined }, undefined)
       }
-      function callsRunWith(): Promise<unknown> {
-        return runWith(operationThatThrows, retries, breaker)
+      function callsDecorated(): Promise<unknown> {
+        return decorated()
       }
       const framesBelow = async (caller: () => Promise<unknown>): Promise<number | undefined> => {
         const error = (await caller().catch((reason: unknown) => reason)) as Error
         const lines = error.stack?.split('\n') ?? []
-        const operation = lines.findIndex(line => line.includes('operationThatThrows'))
+        const operation = lines.findIndex(line => line.includes('throwsSynchronously'))
         const entry = lines.findIndex(line => line.includes(caller.name))
         return operation > 0 && entry > operation ? entry - operation - 1 : undefined
       }
 
-      expect(await framesBelow(callsTheBreaker)).toBeLessThanOrEqual(3)
-      expect(await framesBelow(callsRetryAndBreaker)).toBeLessThanOrEqual(5)
-      expect(await framesBelow(callsRunWith)).toBeLessThanOrEqual(5)
+      expect(await framesBelow(callsTheBreaker)).toBe(2)
+      expect(await framesBelow(callsRetryAndBreaker)).toBe(3)
+      // decorate() adds its entry, where it reads the caller's signal.
+      expect(await framesBelow(callsDecorated)).toBe(4)
     } finally {
       errorClass.stackTraceLimit = original
     }
