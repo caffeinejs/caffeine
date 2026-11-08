@@ -220,6 +220,26 @@ describe('sendFile', () => {
     expect((thrown as Error).message.split('\n')[0]).toBe('Cannot send a file: staticFiles(...) is not installed')
   })
 
+  // Installed, so "not installed" would send the reader to the wrong fix.
+  it('names a staticFiles(...) that serves no root', async () => {
+    let thrown: unknown
+    await start(
+      s => s,
+      newRouter().get('/pick', ctx => {
+        try {
+          return sendFile(ctx, 'hello.txt')
+        } catch (err) {
+          thrown = err
+          throw err
+        }
+      }),
+    )
+
+    expect((await app!.request('/pick')).status).toBe(500)
+    expect(thrown).toBeInstanceOf(ErrSendFileUnavailable)
+    expect((thrown as Error).message.split('\n')[0]).toBe('Cannot send a file: staticFiles(...) serves no root')
+  })
+
   it('names the root no mount serves', async () => {
     let thrown: unknown
     const started = await start(

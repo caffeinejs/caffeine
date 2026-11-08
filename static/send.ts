@@ -52,7 +52,7 @@ export function sendFile(ctx: StaticContext, path: string, root?: StaticRoot): R
     root === undefined ? served.mounts[0] : served.mounts.find(({ root: served }) => served === resolveRoot(root))
 
   if (mount === undefined) {
-    throw root === undefined ? new ErrSendFileUnavailable() : new ErrSendFileUnavailable(resolveRoot(root))
+    throw new ErrSendFileUnavailable(root === undefined ? undefined : resolveRoot(root), true)
   }
 
   const key = manifestKey(path)

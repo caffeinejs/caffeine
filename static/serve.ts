@@ -102,9 +102,6 @@ export interface ServeOptions {
 /** The stream buffer, so a slow reader holds one file descriptor and this much memory. */
 const HIGH_WATER_MARK = 64 * KiB
 
-// Not every platform defines it; where it does, a symlink swapped in after start-up is refused at open.
-const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0
-
 /** `root` as {@link prepareFile} checks files against it. */
 export function rootOnDisk(root: string): RootOnDisk {
   return { root, real: realpathSync(root), directories: new Map() }
@@ -304,7 +301,11 @@ async function openFile(
 
 function openDescriptor(path: string): Promise<number> {
   return new Promise((resolve, reject) => {
-    openCallback(path, constants.O_RDONLY | O_NOFOLLOW, (err, fd) => (err === null ? resolve(fd) : reject(err)))
+    // A symlink swapped in after start-up is refused at open. Where a platform has no `O_NOFOLLOW` it is undefined,
+    // which `|` reads as 0.
+    openCallback(path, constants.O_RDONLY | constants.O_NOFOLLOW, (err, fd) =>
+      err === null ? resolve(fd) : reject(err),
+    )
   })
 }
 

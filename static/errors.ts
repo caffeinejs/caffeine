@@ -46,20 +46,25 @@ export class ErrStaticRouteConflict extends ErrCaffeineWebApplication {
 }
 
 /**
- * ErrSendFileUnavailable is thrown when `sendFile` is called on a server with no `staticFiles(...)` installed, or
- * with a root no mount serves.
+ * ErrSendFileUnavailable is thrown when `sendFile` is called on a server with no `staticFiles(...)` installed, on
+ * one whose `staticFiles(...)` serves no root, or with a root no mount serves.
  */
 export class ErrSendFileUnavailable extends ErrCaffeineWebApplication {
-  constructor(root?: string) {
+  /** @param installed - Whether `staticFiles(...)` is installed; read only without a `root` */
+  constructor(root?: string, installed = false) {
     const message =
-      root === undefined
-        ? errMessage('Cannot send a file: staticFiles(...) is not installed').solutions(
-            'Install staticFiles(s => s.serve(root)) on the server that serves this route',
-          )
-        : errMessage(`Cannot send a file from "${root}": no mount serves it`).solutions(
+      root !== undefined
+        ? errMessage(`Cannot send a file from "${root}": no mount serves it`).solutions(
             'Pass a root a .serve(...) call serves',
             `Add .serve("${root}") to staticFiles(...)`,
           )
+        : installed
+          ? errMessage('Cannot send a file: staticFiles(...) serves no root').solutions(
+              'Add .serve(root) to staticFiles(...)',
+            )
+          : errMessage('Cannot send a file: staticFiles(...) is not installed').solutions(
+              'Install staticFiles(s => s.serve(root)) on the server that serves this route',
+            )
 
     super(message.reference('@caffeinejs/static', ErrSendFileUnavailable).build(), 'ERR_SEND_FILE_UNAVAILABLE')
     this.name = 'ErrSendFileUnavailable'

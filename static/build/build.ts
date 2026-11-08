@@ -116,7 +116,8 @@ function sorted(value: unknown): unknown {
 
   return Object.fromEntries(
     Object.keys(value)
-      .toSorted()
+      // By code unit, not by locale: two builds on two machines write the same bytes.
+      .toSorted((a, b) => Number(a > b) - Number(a < b))
       .map(key => [key, sorted((value as Record<string, unknown>)[key])]),
   )
 }

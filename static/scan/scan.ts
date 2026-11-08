@@ -71,7 +71,7 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
   const listed = entries
     .filter(entry => !entry.isDirectory())
     .map(entry => ({ entry, path: relative(root, join(entry.parentPath, entry.name)).split(sep).join('/') }))
-    .toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    .toSorted((a, b) => (a.path < b.path ? -1 : 1))
   const regular = new Set(listed.filter(({ entry }) => entry.isFile()).map(({ path }) => path))
 
   const files: ScannedFile[] = []
@@ -125,7 +125,8 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
  * `type`. The file is opened without following a symlink.
  */
 export async function readFileEntry(root: string, path: string, type: string): Promise<ReadFile> {
-  const handle = await open(join(root, path), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+  // Undefined where a platform has no `O_NOFOLLOW`, which `|` reads as 0.
+  const handle = await open(join(root, path), constants.O_RDONLY | constants.O_NOFOLLOW)
 
   try {
     const stats = await handle.stat()

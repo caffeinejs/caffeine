@@ -290,15 +290,16 @@ interface RouterFlags {
 }
 
 function routerOptionsOf(instance: FastifyInstance): RouterFlags {
+  // Fastify's options schema defaults both top-level flags, so only `routerOptions` may leave one out.
   const config = instance.initialConfig as {
     routerOptions?: { caseSensitive?: boolean; ignoreTrailingSlash?: boolean }
-    caseSensitive?: boolean
-    ignoreTrailingSlash?: boolean
+    caseSensitive: boolean
+    ignoreTrailingSlash: boolean
   }
 
   return {
-    caseSensitive: config.routerOptions?.caseSensitive ?? config.caseSensitive ?? true,
-    ignoreTrailingSlash: config.routerOptions?.ignoreTrailingSlash ?? config.ignoreTrailingSlash ?? false,
+    caseSensitive: config.routerOptions?.caseSensitive ?? config.caseSensitive,
+    ignoreTrailingSlash: config.routerOptions?.ignoreTrailingSlash ?? config.ignoreTrailingSlash,
   }
 }
 
@@ -350,16 +351,16 @@ function routesOf(mounts: readonly PreparedMount[], router: RouterFlags): Map<st
   // find-my-way gives a request to the longest wildcard that takes it: a nested mount's directory route would answer,
   // and miss, the other's files under it.
   const caseOf = (url: string) => (router.caseSensitive ? url : url.toLowerCase())
-  const bases = [...routes]
-    .filter(([, target]) => target.kind === 'directory')
-    .map(([url, target]) => ({ base: caseOf(url.slice(0, -1)), target }))
+  const bases = [...routes].flatMap(([url, target]) =>
+    target.kind === 'directory' ? [{ base: caseOf(url.slice(0, -1)), target }] : [],
+  )
 
   for (const { target } of bases) {
-    for (const file of target.kind === 'directory' ? target.files.values() : []) {
+    for (const file of target.files.values()) {
       const url = target.mount.prefix + file.path
       const nearest = bases
         .filter(({ base }) => caseOf(url).startsWith(base))
-        .reduce((a, b) => (b.base.length > a.base.length ? b : a))
+        .reduce((a, b) => (b.base.length > a.base.length ? b : a), { base: '', target })
 
       if (nearest.target !== target) {
         throw new ErrStaticRouteConflict(
