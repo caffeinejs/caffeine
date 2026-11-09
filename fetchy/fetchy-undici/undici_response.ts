@@ -55,6 +55,12 @@ export class UndiciResponse implements FetchyResponse {
 
   constructor(data: Dispatcher.ResponseData) {
     this.#data = data
+
+    // A body nobody can read must close by itself: undici lets go of the call's signal only then, and Node keeps a
+    // combined signal, as `AbortSignal.any` makes, alive for as long as that listener is on it.
+    if (NULL_BODY_STATUSES.has(data.statusCode)) {
+      void data.body.dump()
+    }
   }
 
   get status(): number {

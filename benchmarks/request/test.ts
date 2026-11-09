@@ -46,6 +46,13 @@ const servers: ServerConfig[] = [
     requiresBuild: true,
   },
   {
+    name: 'nestjs (node)',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs-node', 'nestjs.js')],
+    port: 3019,
+    requiresBuild: true,
+  },
+  {
     name: 'nestjs (fastify, request scoped)',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs-request-scope', 'nestjs.js')],
