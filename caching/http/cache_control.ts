@@ -5,6 +5,7 @@ import {
   type AdapterRequest,
   type AdapterRouteOptions,
   type ContextRequest,
+  requestSignal,
 } from '@caffeinejs/http/fastify'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import { type Duration, Second } from '@caffeinejs/std/duration'
@@ -372,11 +373,13 @@ export function attachCacheHooks(
     let cached: HTTPCacheEntry | undefined
     let readFailed = false
     try {
-      cached = await withStoreSignal('get', request.signal, storeTimeout, signal => store.get(key, { tags, signal }))
+      cached = await withStoreSignal('get', requestSignal(request), storeTimeout, signal =>
+        store.get(key, { tags, signal }),
+      )
     } catch (error) {
-      // The request is over — the client left, or Fastify has answered its handler timeout: nothing to serve,
+      // The request is over — the client left, or its handler timeout has been answered: nothing to serve,
       // nothing to report.
-      if (request.signal.aborted) {
+      if (requestSignal(request).aborted) {
         return
       }
 
@@ -500,9 +503,9 @@ export function attachCacheHooks(
     directives: RequestCacheControl,
     flight: Flight,
   ): Promise<unknown> {
-    const outcome = await flight.wait(request.signal)
+    const outcome = await flight.wait(requestSignal(request))
 
-    // The request is over — the client left, or Fastify has answered its handler timeout: nothing to serve,
+    // The request is over — the client left, or its handler timeout has been answered: nothing to serve,
     // nobody to tell.
     if (outcome === undefined) {
       return
@@ -511,9 +514,11 @@ export function attachCacheHooks(
     if (outcome !== 'not-stored') {
       let again: HTTPCacheEntry | undefined
       try {
-        again = await withStoreSignal('get', request.signal, storeTimeout, signal => store.get(key, { tags, signal }))
+        again = await withStoreSignal('get', requestSignal(request), storeTimeout, signal =>
+          store.get(key, { tags, signal }),
+        )
       } catch (error) {
-        if (request.signal.aborted) {
+        if (requestSignal(request).aborted) {
           return
         }
 

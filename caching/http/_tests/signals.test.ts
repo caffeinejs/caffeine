@@ -1,6 +1,6 @@
 import { connect } from 'node:net'
 
-import { Controller, Get } from '@caffeinejs/http'
+import { Controller, Get, Timeout } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { Second } from '@caffeinejs/std/duration'
 import fastify from 'fastify'
@@ -293,5 +293,50 @@ describe('storeTimeout on HTTPCaching', () => {
     expect(errors[0].operation).toBe('get')
     expect(errors[0].error).toBeInstanceOf(ErrCacheStoreTimeout)
     expect((errors[0].error as Error).message).toContain('2000ms')
+  })
+})
+
+// The adapter times a route itself, so it is the request's own signal, not Fastify's, that aborts at the timeout.
+describe('a route timeout on a Caffeine server', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    vi.useRealTimers()
+    await close?.()
+    close = undefined
+  })
+
+  it('takes the read out at the timeout, and reports nothing', async () => {
+    @Controller('/route-timeout')
+    class RouteTimeoutController {
+      @Get('/data')
+      @Timeout(50)
+      @CacheControl({ ttl: 60 * Second })
+      data() {
+        return { ok: true }
+      }
+    }
+    void [RouteTimeoutController]
+
+    const errors: CacheErrorEvent[] = []
+    const store = new RecordingStore()
+    store.hang = true
+    const watched = new WatchedStore(store)
+    const app = createWebApplication().with(
+      HTTPCaching(b => b.store(watched).observer({ onError: e => errors.push(e) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    const pending = app.request('/route-timeout/data')
+    await watched.reads.reached(1)
+    await vi.advanceTimersByTimeAsync(50)
+    const res = await pending
+
+    expect(res.status).toBe(503)
+    expect(store.signalOf('get')?.aborted).toBe(true)
+    expect((store.signalOf('get')!.reason as { code?: string }).code).toBe('FST_ERR_HANDLER_TIMEOUT')
+    expect(errors).toEqual([])
   })
 })
