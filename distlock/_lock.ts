@@ -264,19 +264,27 @@ export class HeldLock implements Lock {
 
   // An extension that answered after the lock stopped waiting for it. A lock still held, whose lease nothing has
   // replaced since, carries it from here on. Anything else gives it back, or a backend that rotates the token on
-  // extend would keep the key under a token nobody holds. A renewal that timed out always gives it back: it marks
+  // extend would keep the key under a token nobody holds, except a lease under the token the lock still holds. A renewal that timed out always gives it back: it marks
   // the lease lost, possibly only after this runs.
   #adoptLate(late: LockLease | undefined, sent: LockLease, renewal: boolean): void {
     if (late === undefined) {
       return
     }
 
-    if (renewal || this.#released || this.#taken || this.#lease !== sent) {
-      this.#host.giveBack(late)
-      return
+    if (!renewal && !this.#released && !this.#taken) {
+      if (this.#lease === sent) {
+        this.#lease = late
+        return
+      }
+
+      // A newer answer superseded this one. Under the same token, giving it back would free the key this lock
+      // still holds.
+      if (late.token === this.#lease.token) {
+        return
+      }
     }
 
-    this.#lease = late
+    this.#host.giveBack(late)
   }
 
   #lose(reason: 'taken' | 'error', renewal: boolean): void {

@@ -378,6 +378,27 @@ describe('distributed lock against a backend that does not answer', () => {
     expect(backend.released).toEqual([])
   })
 
+  // Redis keeps the token on extend: releasing a superseded answer would free the key the lock still holds.
+  it('keeps the key when a superseded extend under the same token answers late', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    backend.late = ['extend']
+    const stale = held.extend(1 * Minute).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await stale
+
+    backend.late = []
+    expect(await held.extend(10 * Minute)).toBe(true)
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(backend.released).toEqual([])
+    expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
+  })
+
   it('refuses an empty key with ErrInvalidLockKey before touching the backend', async () => {
     const backend = new RecordingBackend()
     const lock = await newLock(backend)

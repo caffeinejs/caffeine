@@ -72,13 +72,8 @@ export function boundedCall<T>(
 
     signal.addEventListener('abort', onAbort, { once: true })
 
-    try {
-      pending = call(signal)
-    } catch (error) {
-      settle()
-      reject(error)
-      return
-    }
+    // A call that throws instead of rejecting is a rejection like any other.
+    pending = Promise.try(call, signal)
 
     // The backend may have aborted synchronously from inside `call`; its answer is then already late.
     if (signal.aborted) {
