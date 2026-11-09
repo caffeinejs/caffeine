@@ -51,8 +51,24 @@ example\:watt: ## run the Watt example (entrypoint at http://127.0.0.1:3042/shop
 	@npm run build -w @caffeinejs/example-watt
 	@node_modules/.bin/wattpm start examples/05-watt
 
+.PHONY: example\:ad-exchange
+example\:ad-exchange: ## run the ad exchange example (8 VLatte DSPs in Docker, exchange on host at http://127.0.0.1:9500)
+	@docker compose -f examples/06-ad-exchange/docker-compose.yml up -d --wait --wait-timeout 60 \
+		dsp-alpha dsp-bravo dsp-charlie dsp-delta dsp-echo dsp-dead dsp-slow dsp-flaky || { \
+		docker compose -f examples/06-ad-exchange/docker-compose.yml logs --tail 100; \
+		exit 1; \
+	}
+	@npm run build
+	@cd examples/06-ad-exchange && ../../node_modules/.bin/tsx src/main.ts
+
+.PHONY: example\:ad-exchange-load
+example\:ad-exchange-load: ## load test a running ad exchange example (fails when p99 or the fill rate miss their budget)
+	@node_modules/.bin/tsx examples/06-ad-exchange/load/load.ts
+
 help::
 	@printf "\033[36m%-20s\033[0m %s\n" "example:petstore" "run the petstore example (Postgres in Docker, app on host at http://localhost:9999)"
 	@printf "\033[36m%-20s\033[0m %s\n" "example:petstore-devtools" "run the devtools UI for a running petstore example (UI at http://127.0.0.1:9091)"
 	@printf "\033[36m%-20s\033[0m %s\n" "example:spa-dashboard" "run the SPA dashboard example (app on host at http://127.0.0.1:9010)"
 	@printf "\033[36m%-20s\033[0m %s\n" "example:watt" "run the Watt example (entrypoint at http://127.0.0.1:3042/shop, probes at http://127.0.0.1:9090)"
+	@printf "\033[36m%-20s\033[0m %s\n" "example:ad-exchange" "run the ad exchange example (8 VLatte DSPs in Docker, exchange on host at http://127.0.0.1:9500)"
+	@printf "\033[36m%-20s\033[0m %s\n" "example:ad-exchange-load" "load test a running ad exchange example (fails when p99 or the fill rate miss their budget)"
