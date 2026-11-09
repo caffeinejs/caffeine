@@ -1,0 +1,4 @@
+# The `bare` profile: every DSP is called with no policy at all, so an auction waits for the slowest DSP, the dead
+# one included. `make example:ad-exchange-load BASELINE=1` runs the load against it, to compare with the real one.
+exchange:
+  resilience: false
