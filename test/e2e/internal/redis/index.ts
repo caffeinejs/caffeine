@@ -1,10 +1,10 @@
 import { connect } from 'node:net'
 
-export function reachable(url: string): Promise<boolean> {
+export function reachable(url: string, defaultPort = 6379): Promise<boolean> {
   const { hostname, port } = new URL(url)
 
   return new Promise(resolve => {
-    const socket = connect({ host: hostname, port: Number(port || 6379), timeout: 2000 })
+    const socket = connect({ host: hostname, port: Number(port || defaultPort), timeout: 2000 })
     const done = (up: boolean) => {
       socket.destroy()
       resolve(up)

@@ -6,7 +6,8 @@ import { defineConfig } from 'vitest/config'
 // Opt-in e2e project (not in the root vitest projects list). Runs authentication and authorization over a real
 // socket — against the dockerized Spring Authorization Server (test/services/oauthserver) and Redis
 // (test/services/redis) where a spec needs them — distlock and the caching Redis store
-// (caching/store/redis/redis.e2e.ts) against the dockerized Redis and Valkey, the HTTP cache through a staged
+// (caching/store/redis/redis.e2e.ts) against the dockerized Redis and Valkey, distlock against the dockerized
+// PostgreSQL (test/services/postgres), the HTTP cache through a staged
 // Redis outage (caching.chaos.e2e.ts), and configuration against the dockerized Spring Cloud Config Server
 // (test/services/configserver), and the resilience strategies against a scripted dependency on a local socket
 // (resilience_*.e2e.ts), which needs no service. Specs skip when their service is not up, unless
@@ -47,6 +48,9 @@ export default defineConfig({
         new URL('../../distlock/observability/otel/index.ts', import.meta.url),
       ),
       '@caffeinejs/distlock/testing': fileURLToPath(new URL('../../distlock/testing/index.ts', import.meta.url)),
+      '@caffeinejs/distlock/backend/postgres': fileURLToPath(
+        new URL('../../distlock/backend/postgres/index.ts', import.meta.url),
+      ),
       '@caffeinejs/distlock/backend/redis': fileURLToPath(
         new URL('../../distlock/backend/redis/index.ts', import.meta.url),
       ),

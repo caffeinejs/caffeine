@@ -28,6 +28,10 @@
       "types": "./dist/backend/redis/index.d.ts",
       "default": "./dist/backend/redis/index.js"
     },
+    "./backend/postgres": {
+      "types": "./dist/backend/postgres/index.d.ts",
+      "default": "./dist/backend/postgres/index.js"
+    },
     "./observability": {
       "types": "./dist/observability/index.d.ts",
       "default": "./dist/observability/index.js"
@@ -64,13 +68,17 @@
     "@caffeinejs/di": "0.0.0",
     "@caffeinejs/std": "0.0.0",
     "@opentelemetry/api": ">=1 <2",
-    "@redis/client": "^6.2.1"
+    "@redis/client": "^6.2.1",
+    "pg": "^8"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
       "optional": true
     },
     "@redis/client": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     }
   },

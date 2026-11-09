@@ -151,12 +151,22 @@ redis-up: ## spin up Redis and Valkey locally, standalone and one-node clusters 
 redis-down: ## stop Redis and Valkey
 	@docker compose -f test/services/redis/docker-compose.yml down
 
+.PHONY: postgres-up
+postgres-up: ## spin up PostgreSQL locally (Docker)
+	@docker compose -f test/services/postgres/docker-compose.yml up -d --wait
+	@echo "postgresql is up on 5432"
+
+.PHONY: postgres-down
+postgres-down: ## stop PostgreSQL
+	@docker compose -f test/services/postgres/docker-compose.yml down
+
 .PHONY: test-e2e
-test-e2e: oauthserver-up configserver-up redis-up ## run the e2e against a real Spring Authorization Server, Config Server, Redis and Valkey
+test-e2e: oauthserver-up configserver-up redis-up postgres-up ## run the e2e against a real Spring Authorization Server, Config Server, Redis, Valkey and PostgreSQL
 	@status=0; npm run test:e2e || status=$$?; \
 		docker compose -f test/services/oauthserver/docker-compose.yml down; \
 		docker compose -f test/services/configserver/docker-compose.yml down; \
 		docker compose -f test/services/redis/docker-compose.yml down; \
+		docker compose -f test/services/postgres/docker-compose.yml down; \
 		exit $$status
 
 .PHONY: kafka-up

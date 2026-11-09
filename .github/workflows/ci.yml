@@ -218,10 +218,13 @@ jobs:
           oauth_pid=$!
           docker compose -f test/services/redis/docker-compose.yml up --wait --wait-timeout 120 &
           redis_pid=$!
+          docker compose -f test/services/postgres/docker-compose.yml up --wait --wait-timeout 120 &
+          postgres_pid=$!
           status=0
           wait "$config_pid" || status=$?
           wait "$oauth_pid" || status=$?
           wait "$redis_pid" || status=$?
+          wait "$postgres_pid" || status=$?
           exit "$status"
 
       - name: E2E
@@ -233,6 +236,7 @@ jobs:
           docker compose -f test/services/configserver/docker-compose.yml logs
           docker compose -f test/services/oauthserver/docker-compose.yml logs
           docker compose -f test/services/redis/docker-compose.yml logs
+          docker compose -f test/services/postgres/docker-compose.yml logs
 
   devtools-ui-image:
     name: DevTools UI Image
