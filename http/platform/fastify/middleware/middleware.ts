@@ -8,7 +8,8 @@ import type { MiddlewarePath, Next } from '../../../core/middleware/middleware.j
 import type { ResolvedMiddleware } from '../../../core/middleware/pipeline.js'
 import { rawContext } from '../../../core/middleware/raw_context.js'
 import { protocolOf } from '../protocol.js'
-import { type Engine, type NormalizationOptions, createEngine } from './_engine.js'
+import { routerFlagsOf } from '../router.js'
+import { type Engine, createEngine } from './_engine.js'
 
 /**
  * Where a middleware runs under the Fastify adapter: one of Fastify's request-lifecycle hooks.
@@ -51,10 +52,14 @@ const HOOKS_WITH_PAYLOAD: ReadonlySet<MiddlewareHook> = new Set(['onError', 'onS
  * The hooks are registered in Fastify's callback style, not as `async` functions: an async hook returns a
  * promise on every request, so Fastify defers to a microtask even when every middleware ran synchronously.
  *
- * @throws ErrConfiguration when a middleware names a hook Fastify does not have.
+ * A path matches as the server's router matches it, by {@link routerFlagsOf}, so a request the router sends to a
+ * guarded route cannot skip the guard.
+ *
+ * @throws ErrConfiguration when a middleware names a hook Fastify does not have, or on a server the adapter did not
+ *   build.
  */
 export function installMiddlewares(server: FastifyInstance, resolved: readonly ResolvedMiddleware[]): void {
-  const options = normalizationOptions(server)
+  const options = routerFlagsOf(server)
   const engines = new Map<MiddlewareHook, Engine>()
 
   for (const middleware of resolved) {
@@ -155,18 +160,6 @@ function toHook(hook: string | undefined): MiddlewareHook {
       .reference('@caffeinejs/http', ErrConfiguration)
       .build(),
   )
-}
-
-function normalizationOptions(server: FastifyInstance): NormalizationOptions {
-  const config = server.initialConfig
-  // find-my-way reads `useSemicolonDelimiter` from its options, but its types do not declare it.
-  const router: NormalizationOptions = config.routerOptions ?? {}
-
-  return {
-    ignoreDuplicateSlashes: router.ignoreDuplicateSlashes ?? config.ignoreDuplicateSlashes,
-    ignoreTrailingSlash: router.ignoreTrailingSlash ?? config.ignoreTrailingSlash,
-    useSemicolonDelimiter: router.useSemicolonDelimiter ?? config.useSemicolonDelimiter,
-  }
 }
 
 function stampRaw(request: FastifyRequest, reply: FastifyReply): void {
