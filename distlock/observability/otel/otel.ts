@@ -264,7 +264,11 @@ function endAttributes(operation: TracedOperation, ctx: LockEventBase): Attribut
     }
     case 'withLock': {
       const hold = ctx as WithLockContext
-      return defined({ 'distlock.lease_id': hold.leaseID, 'distlock.lapsed': hold.lapsed })
+      return defined({
+        'distlock.outcome': hold.outcome,
+        'distlock.lease_id': hold.leaseID,
+        'distlock.lapsed': hold.lapsed,
+      })
     }
     case 'once': {
       const once = ctx as OnceContext

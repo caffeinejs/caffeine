@@ -3,8 +3,8 @@ import { ErrConfigValidation, type InferConfig } from '@caffeinejs/application/c
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Second, type Duration } from '@caffeinejs/std/duration'
-import { afterEach, describe, expect, it } from 'vitest'
+import { Millisecond, Second, type Duration } from '@caffeinejs/std/duration'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DistLockConfigSchema } from './_spectypes/index.js'
 import type { Backend, LockLease } from './backend.js'
@@ -56,6 +56,7 @@ class HangingBackend implements Backend {
 const opened: Array<() => Promise<unknown>> = []
 
 afterEach(async () => {
+  vi.useRealTimers()
   for (const close of opened.splice(0)) {
     await close()
   }
@@ -73,6 +74,7 @@ interface DistLockTree {
   ttl?: string
   wait?: string
   retryDelay?: string
+  maxRetryDelay?: string
   retryJitter?: number
   storeTimeout?: string
 }
@@ -188,6 +190,62 @@ describe('distlock configuration', () => {
     await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
   })
 
+  // Capped at 10ms the pauses stay flat: an attempt every 10ms over 100ms makes 11, where doubling up to the 1s
+  // default makes 5 (at 0, 10, 30, 70 and 100ms).
+  it('reads maxRetryDelay out of the tree', async () => {
+    const backend = new SpyBackend()
+    const lock = await newLock(backend, { wait: '100ms', retryDelay: '10ms', maxRetryDelay: '10ms', retryJitter: 0 })
+    await lock.acquire('k')
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const before = backend.ttls.length
+    const contended = lock.acquire('k').catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(100 * Millisecond)
+    await contended
+
+    expect(backend.ttls.length - before).toBe(11)
+  })
+
+  it('refuses a negative retryDelay', async () => {
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).retryDelay(-1 * Millisecond)),
+    )
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+  })
+
+  it('refuses a maxRetryDelay below retryDelay', async () => {
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d =>
+        d
+          .backend(new MemoryLockBackend())
+          .retryDelay(500 * Millisecond)
+          .maxRetryDelay(100 * Millisecond),
+      ),
+    )
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+  })
+
+  // A jitter of 1 spreads a pause down to zero, which puts every waiter back on the same tick.
+  it('refuses a retry jitter of 1', async () => {
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).retryJitter(1)),
+    )
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+  })
+
+  it('refuses a retry jitter of 1 in the tree', async () => {
+    await expect(newLock(new SpyBackend(), { retryJitter: 1 })).rejects.toThrow(/retryJitter/)
+  })
+
   // A bare number names no unit. Read as duration text it was a lease of 0, which lapses as it is granted.
   it('refuses a duration the tree gives as a bare number', async () => {
     const conf = newConfiguration(appConfigSchema)
@@ -238,6 +296,28 @@ describe('distlock configuration', () => {
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
       DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).storeTimeout(2 ** 31)),
+    )
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+  })
+
+  // A negative wait would fire at once like zero, hiding a sign error as "abort immediately".
+  it('refuses a negative drain timeout', async () => {
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).drainTimeout(-1)),
+    )
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+  })
+
+  // Node fires a timer longer than 2^31 - 1 ms after 1 ms, which would abort every action at once on close.
+  it('refuses a drain timeout above 2^31 - 1 ms', async () => {
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).drainTimeout(2 ** 31)),
     )
 
     await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)

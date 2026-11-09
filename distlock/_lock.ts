@@ -20,6 +20,10 @@ export interface LockHost extends DistLock {
 
   // Releases a lease that arrived after nobody wanted it any more.
   giveBack(lease: LockLease): void
+
+  // Counts a backend call a lock started as in flight until it settles, so closing the service can wait for it.
+  // Returns the call itself.
+  track<T>(call: Promise<T>): Promise<T>
 }
 
 // The longest delay `setTimeout` honours; a longer deadline is reached in steps of at most this.
@@ -69,15 +73,17 @@ export class HeldLock implements Lock {
   within: WithLockContext | undefined
 
   readonly #host: LockHost
-  // The locks the service renews, when this one renews: it joins on construction and leaves once renewal stops, so
-  // the service's `onDestroy` reaches every renewal still running and nothing else.
-  readonly #renewing: Set<HeldLock> | undefined
+  // The locks the service holds: this one joins on construction and leaves once it is released, lost or left as a
+  // `once` window, so the service's `onDestroy` reaches every lease still in a holder's hands and nothing else.
+  readonly #held: Set<HeldLock>
 
   #ttl: Duration
   #lease: LockLease
   #released = false
   // Set by the one loss a lease can have, whichever of the deadline, a renewal or shutdown notices it first.
   #taken = false
+  // Set when that loss was shutdown ending the lease, which is not the lease lapsing.
+  #shutdown = false
   // Whether a lapse of this lease was already warned about, so no later warning repeats it.
   #lapseWarned = false
   // Set once `once` leaves its window standing: the lease is out of the holder's hands, so nothing about it aborts
@@ -93,18 +99,18 @@ export class HeldLock implements Lock {
   #renewal: Promise<void> | undefined
   readonly #controller = new AbortController()
 
-  constructor(host: LockHost, lease: LockLease, ttl: Duration, renewing: Set<HeldLock> | undefined) {
+  constructor(host: LockHost, lease: LockLease, ttl: Duration, renew: boolean, held: Set<HeldLock>) {
     this.key = lease.key
     this.leaseID = ++nextLeaseID
     this.acquiredAt = Date.now()
     this.#host = host
-    this.#renewing = renewing
+    this.#held = held
     this.#lease = lease
     this.#ttl = ttl
     this.#armDeadline()
+    held.add(this)
 
-    if (renewing !== undefined) {
-      renewing.add(this)
+    if (renew) {
       this.#schedule()
     }
   }
@@ -123,6 +129,11 @@ export class HeldLock implements Lock {
 
   get lost(): boolean {
     return this.#released || this.#taken || Date.now() >= this.#lease.expiresAt
+  }
+
+  // Whether the lease ran out from under its holder: lost, or past its expiry. A lease shutdown ended was not.
+  get lapsed(): boolean {
+    return (this.#taken && !this.#shutdown) || Date.now() >= this.#lease.expiresAt
   }
 
   get signal(): AbortSignal {
@@ -152,22 +163,31 @@ export class HeldLock implements Lock {
 
     const span = ttl ?? this.#ttl
 
-    return traced(
-      extendChannel,
-      () => this.#extendContext(span, false),
-      ctx => this.#extendLease(span, false, ctx),
+    return this.#host.track(
+      traced(
+        extendChannel,
+        () => this.#extendContext(span, false),
+        ctx => this.#extendLease(span, false, ctx),
+      ),
     )
   }
 
-  async release(): Promise<void> {
+  release(): Promise<void> {
     if (this.#released) {
-      return
+      return Promise.resolve()
     }
 
     this.#released = true
+    this.#held.delete(this)
     this.stopRenewal()
     this.#clearDeadline()
 
+    // Counted from here, not from the backend call: a holder that releases as its signal aborts must be waited for
+    // by a shutdown that is about to look whether anything is still in flight.
+    return this.#host.track(this.#release())
+  }
+
+  async #release(): Promise<void> {
     // A renewal already on the wire has to land first, or its write outlives the release and the key stays
     // taken for another lease. Reading the lease afterwards is what makes that safe: it is the one the
     // renewal left behind.
@@ -196,8 +216,7 @@ export class HeldLock implements Lock {
     return this.release()
   }
 
-  // Stops renewing without touching the key. What shutdown calls, and what `once` calls when it leaves the
-  // window standing.
+  // Stops renewing without touching the key.
   stopRenewal(): void {
     this.#stopped = true
 
@@ -205,16 +224,28 @@ export class HeldLock implements Lock {
       clearTimeout(this.#timer)
       this.#timer = undefined
     }
-
-    this.#renewing?.delete(this)
   }
 
   // Leaves the lease standing without its holder: stops renewing and stops watching the deadline, so the lease
   // lapsing later aborts nothing and publishes nothing. What `once` calls when its action returned.
   detach(): void {
     this.#detached = true
+    this.#held.delete(this)
     this.stopRenewal()
     this.#clearDeadline()
+  }
+
+  // Ends a lease still in its holder's hands because the service is closing: renewal stops and the signal aborts
+  // with reason `shutdown`. The key is not released: the holder releases it on its own path once it has stopped,
+  // or it lapses. Says whether this ended the lease, rather than finding it already over.
+  endForShutdown(): boolean {
+    if (this.#released || this.#taken || this.#detached) {
+      return false
+    }
+
+    this.#shutdown = true
+    this.#lose('shutdown', false)
+    return true
   }
 
   // Resolves once no renewal is in flight. A renewal that already reached the backend cannot be called back,
@@ -264,7 +295,7 @@ export class HeldLock implements Lock {
     delay ??= Math.max(1, Math.floor((this.#lease.expiresAt - Date.now()) / 3))
 
     this.#timer = setTimeout(() => {
-      this.#renewal = this.#renew().finally(() => {
+      this.#renewal = this.#host.track(this.#renew()).finally(() => {
         this.#renewal = undefined
       })
     }, delay)
@@ -496,6 +527,7 @@ export class HeldLock implements Lock {
     }
 
     this.#taken = true
+    this.#held.delete(this)
     this.stopRenewal()
     this.#clearDeadline()
 
@@ -519,7 +551,7 @@ export class HeldLock implements Lock {
 
   async #releaseLease(ctx: Writable<ReleaseContext> | undefined): Promise<void> {
     const held = Date.now() - this.acquiredAt
-    const lapsed = this.#taken || Date.now() >= this.#lease.expiresAt
+    const lapsed = this.lapsed
     const unreported = this.claimLapseWarning()
 
     if (ctx !== undefined) {

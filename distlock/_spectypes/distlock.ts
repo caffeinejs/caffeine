@@ -21,8 +21,10 @@ export const DistLockConfigSchema = $t.Object({
   ttl: $t.Optional($t.Duration()),
   wait: $t.Optional($t.Duration()),
   retryDelay: $t.Optional($t.Duration()),
-  retryJitter: $t.Optional($t.Number({ minimum: 0, maximum: 1 })),
+  maxRetryDelay: $t.Optional($t.Duration()),
+  retryJitter: $t.Optional($t.Number({ minimum: 0, exclusiveMaximum: 1 })),
   storeTimeout: $t.Optional($t.Duration()),
+  drainTimeout: $t.Optional($t.Duration()),
 })
 
 type _Satisfies = SchemaSatisfies<DistLockConfig, InferConfig<typeof DistLockConfigSchema>>

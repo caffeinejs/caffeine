@@ -138,6 +138,7 @@ describe('instrumentDistLock spans', () => {
 
     expect(acquire.attributes).toMatchObject({ 'distlock.outcome': 'acquired', 'distlock.mode': 'wait' })
     expect(Number.isSafeInteger(acquire.attributes['distlock.fencing_token'])).toBe(true)
+    expect(withLock.attributes['distlock.outcome']).toBe('executed')
     expect(release.attributes['distlock.lease_id']).toBe(acquire.attributes['distlock.lease_id'])
     expect(release.attributes['distlock.lapsed']).toBe(false)
   })
@@ -153,6 +154,21 @@ describe('instrumentDistLock spans', () => {
     expect(once.parentSpanContext).toBeUndefined()
     expect(acquire.parentSpanContext?.spanId).toBe(once.spanContext().spanId)
     expect(acquire.attributes['distlock.mode']).toBe('once')
+  })
+
+  // A skip is the policy working: it must not light up an error dashboard.
+  it('records a skipped tryWithLock as a withLock span with outcome skipped, not an error', async () => {
+    const otel = instrument()
+    const lock = await newLock()
+    const holder = await lock.acquire('job')
+
+    await lock.tryWithLock('job', () => 'ran')
+
+    const spans = otel.spans().filter(span => span.name === 'distlock.withLock')
+    expect(spans).toHaveLength(1)
+    expect(spans[0].attributes['distlock.outcome']).toBe('skipped')
+    expect(spans[0].status.code).toBe(SpanStatusCode.UNSET)
+    await holder.release()
   })
 
   // A timeout is a failure somebody should see; an abort is the caller changing its mind and must not light up

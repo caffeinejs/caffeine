@@ -1,3 +1,4 @@
+import type { Backoff } from '@caffeinejs/resilience'
 import { type Duration, Millisecond, Second } from '@caffeinejs/std/duration'
 
 /** The settings a lock service runs on, resolved. */
@@ -8,16 +9,29 @@ export interface DistLockOptions {
   /** How long `acquire` spends retrying when a call does not say. */
   wait: Duration
 
-  /** The pause between two attempts, before jitter. */
+  /**
+   * The pause after the first attempt, before jitter. Each later pause doubles it, up to `maxRetryDelay`. Also the
+   * longest pause before a failed renewal is tried again, which `backoff` does not change.
+   */
   retryDelay: Duration
 
+  /** The longest pause between two attempts, before jitter. */
+  maxRetryDelay: Duration
+
   /**
-   * The fraction of `retryDelay` added at random to each pause, between `0` and `1`.
+   * How far each pause is spread at random, in `[0, 1)`: a pause `d` lands in `[d·(1−j), d·(1+j)]`, cut at
+   * `maxRetryDelay`.
    *
    * A lock is where retries synchronize: every waiter woke up because the same holder released, so without
    * jitter they all attempt again on the same tick.
    */
   retryJitter: number
+
+  /**
+   * The pause after each attempt, by attempt number from 1. Replaces `retryDelay`, `maxRetryDelay` and
+   * `retryJitter` when set. Code only: a configuration tree cannot carry a function.
+   */
+  backoff?: Backoff
 
   /**
    * How long one backend call may take before the caller stops waiting for it.
@@ -27,14 +41,26 @@ export interface DistLockOptions {
    * caller gave up is released with its own token.
    */
   storeTimeout: Duration
+
+  /**
+   * How long closing the service waits for running `withLock`, `tryWithLock` and `once` actions to finish before
+   * it aborts every lock still held with `ErrLockLost` reason `shutdown`. `0` aborts at once.
+   *
+   * Renewal keeps running while it waits. After the abort it waits up to `storeTimeout` more for the releases
+   * that follow, and leaves any key it did not see released to lapse, so closing takes at most
+   * `drainTimeout + storeTimeout`.
+   */
+  drainTimeout: Duration
 }
 
 export const DEFAULT_DIST_LOCK_OPTIONS: DistLockOptions = {
   ttl: 30 * Second,
   wait: 5 * Second,
-  retryDelay: 100 * Millisecond,
+  retryDelay: 50 * Millisecond,
+  maxRetryDelay: 1 * Second,
   retryJitter: 0.5,
   storeTimeout: 5 * Second,
+  drainTimeout: 5 * Second,
 }
 
 /**
@@ -48,6 +74,8 @@ export interface DistLockConfig {
   ttl?: Duration
   wait?: Duration
   retryDelay?: Duration
+  maxRetryDelay?: Duration
   retryJitter?: number
   storeTimeout?: Duration
+  drainTimeout?: Duration
 }

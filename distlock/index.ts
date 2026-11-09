@@ -1,7 +1,7 @@
 export type { Backend, LockLease } from './backend.js'
 export type { DistLockBuilder } from './builder.js'
 export { CaffeineDistLock } from './distlock.js'
-export type { AcquireOptions, DistLock, Lock, OnceOptions, OnceResult } from './distlock.js'
+export type { AcquireOptions, DistLock, Lock, OnceOptions, RunResult, TryWithLockOptions } from './distlock.js'
 export {
   ErrDistLock,
   ErrDistLockConfiguration,
