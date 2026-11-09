@@ -207,6 +207,67 @@ describe('buildStatic', () => {
     expect((await readdir(root)).filter(name => name.startsWith('.'))).toEqual([])
   })
 
+  // A record cut short by a failed append must not swallow the record written after it: that one is what lets the
+  // next build know the bytes it renamed into place for its own.
+  it('rebuilds an earlier input after a retry wrote its record behind one cut short', async () => {
+    // One file alone, so the record cut short is the last one, and the brotli variant's the first written after it.
+    const site = join(root, 'manual')
+    await mkdir(site)
+    const first = 'first '.repeat(400)
+    await writeFile(join(site, 'manual.txt'), first)
+    await buildStatic({ root: site })
+    const firstBrotli = await readFile(join(site, 'manual.txt.br'))
+    await writeFile(join(site, 'manual.txt'), 'second '.repeat(400))
+    // Where the gzip variant goes, a directory: the build stops there, after renaming its new brotli variant.
+    await rm(join(site, 'manual.txt.gz'))
+    await mkdir(join(site, 'manual.txt.gz'))
+    await expect(buildStatic({ root: site })).rejects.toThrow()
+    // As if appending the brotli record had failed halfway: the record cut short, the earlier variant still in place.
+    const [header, record] = (await readFile(join(site, '.static.variants'), 'utf8')).split('\n')
+    await writeFile(join(site, '.static.variants'), `${header}\n${record!.slice(0, record!.length / 2)}`)
+    await writeFile(join(site, 'manual.txt.br'), firstBrotli)
+    // The retry stops at the same place, its record written behind the one cut short.
+    await expect(buildStatic({ root: site })).rejects.toThrow()
+    await rm(join(site, 'manual.txt.gz'), { recursive: true })
+    await writeFile(join(site, 'manual.txt'), first)
+
+    await buildStatic({ root: site })
+
+    expect(brotliDecompressSync(await readFile(join(site, 'manual.txt.br'))).toString()).toBe(first)
+  })
+
+  // The record is the build's own: a link there would have it write to a file anywhere, and a file of the site there
+  // would be read as the build's and removed.
+  it('refuses a symlink where it keeps its record, and writes nothing through it', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'caffeine-outside-'))
+
+    try {
+      await writeFile(join(outside, 'notes.txt'), 'notes of its own\n')
+      await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+      await symlink(join(outside, 'notes.txt'), join(root, '.static.variants'))
+
+      const err = await buildStatic({ root }).catch((err: unknown) => err)
+
+      expect(err).toBeInstanceOf(ErrStaticBuild)
+      expect((err as Error).message.split('\n')[0]).toBe(
+        `Cannot build static files from "${root}": ".static.variants" is not a record a build wrote, and the build keeps its record there`,
+      )
+      expect((await lstat(join(root, '.static.variants'))).isSymbolicLink()).toBe(true)
+      expect(await readFile(join(outside, 'notes.txt'), 'utf8')).toBe('notes of its own\n')
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a file of the site where it keeps its record, and leaves it', async () => {
+    await writeFile(join(root, '.static.variants'), 'notes of its own\n')
+
+    const err = await buildStatic({ root }).catch((err: unknown) => err)
+
+    expect(err).toBeInstanceOf(ErrStaticBuild)
+    expect(await readFile(join(root, '.static.variants'), 'utf8')).toBe('notes of its own\n')
+  })
+
   // A build stopped after writing its variants and before its manifest leaves the same bytes the next one writes.
   it('rebuilds over the variants of a build that wrote no manifest', async () => {
     await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))

@@ -281,6 +281,49 @@ describe('staticFiles', () => {
     }
   })
 
+  // A miss under a directory is the handler's answer too, and as late as a file would have been.
+  it("leaves a timeout's 503 alone when a directory finds no file after it", async () => {
+    const root = await tree('nested', ['assets/app.js'])
+    const holding = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<void>()
+    const handling = Promise.withResolvers<void>()
+    const statuses: number[] = []
+    const plugin: FastifyPluginAsync = async instance => {
+      instance.addHook('onRequest', async () => {
+        await holding.promise
+      })
+      instance.addHook('preHandler', async () => {
+        handling.resolve()
+      })
+      instance.addHook('onSend', async (_request, reply, payload) => {
+        statuses.push(reply.statusCode)
+        if (reply.statusCode === 503) {
+          holding.resolve()
+          await held.promise
+        }
+        return payload
+      })
+    }
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { handlerTimeout: 30 * Millisecond } }))
+      .with(() => fp(plugin, { name: 'holding' }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    await app.bootstrap()
+
+    try {
+      const response = app.request('/assets/missing.txt')
+      await handling.promise
+      // The handler runs right after the hook, and what the server does with its answer runs on microtasks.
+      await new Promise(resolve => setImmediate(resolve))
+      held.resolve()
+
+      expect((await response).status).toBe(503)
+      expect(statuses).toEqual([503])
+    } finally {
+      held.resolve()
+    }
+  })
+
   // A timed route's signal exists before its handler runs: only a timeout that fired keeps the file from going out.
   it('serves the file on a timed route', async () => {
     const root = await tree('timed', ['report.txt'])
@@ -300,6 +343,17 @@ describe('staticFiles', () => {
     const root = await tree('nested', ['assets/app.js'])
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ factory: { useSemicolonDelimiter: true } }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    await app.bootstrap()
+
+    expect((await app.request('/assets/app.js;tag=a%2Bb')).status).toBe(200)
+  })
+
+  // Fastify's router reads a top-level flag that `routerOptions` leaves out, where `initialConfig` reports the default.
+  it('reads the path where the router does, with ";" set apart from the other router options', async () => {
+    const root = await tree('nested', ['assets/app.js'])
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { useSemicolonDelimiter: true, routerOptions: { caseSensitive: false } } }))
       .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
     await app.bootstrap()
 
@@ -623,6 +677,47 @@ describe('staticFiles', () => {
       const err = await app.bootstrap().catch((err: unknown) => err)
 
       expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+    })
+
+    // The router folds the mount's prefix as it folds the other route's URL: both answer one path.
+    it.each([
+      ['before', true],
+      ['after', false],
+    ])(
+      'from a route registered %s the mount at the folded URL of a file under a prefix the router folds',
+      async (_case, before) => {
+        const root = await tree('nested', ['assets/report.txt'])
+        const plugin: FastifyPluginAsync = async instance => {
+          instance.get('/web/public/assets/report.txt', async () => 'protected')
+        }
+        const other = () => fp(plugin, { name: 'other' })
+        const mount = staticFiles(s => s.serve(root, { prefix: '/web//public', anonymous: true }))
+        app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+          .server(() => ({ factory: { routerOptions: { ignoreDuplicateSlashes: true } } }))
+          .with(before ? other : mount)
+          .with(before ? mount : other) as WebApplication
+
+        const err = await app.bootstrap().catch((err: unknown) => err)
+
+        expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+      },
+    )
+
+    // Fastify finds a route only by the constraints it was registered with: requests without that version would reach
+    // the file by the mount's wildcard, under the mount's gate rather than the route's.
+    it('from a route constrained to a version, registered before the mount at the URL of a file under a directory', async () => {
+      const root = await tree('nested', ['assets/report.txt'])
+      const plugin: FastifyPluginAsync = async instance => {
+        instance.get('/assets/report.txt', { constraints: { version: '2.0.0' } }, async () => 'protected')
+      }
+      const earlier: HTTPPluginFactory = () => plugin
+
+      const err = await refusal(s => s.serve(root, { anonymous: true }), [earlier])
+
+      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+      expect(firstLine(err)).toBe(
+        `Cannot register "/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
+      )
     })
 
     it('from a route registered before the mount', async () => {

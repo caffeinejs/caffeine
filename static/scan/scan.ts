@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { constants, type Dirent } from 'node:fs'
-import { appendFile, open, readFile, readdir, rm, stat } from 'node:fs/promises'
+import { lstat, open, readFile, readdir, rm, stat } from 'node:fs/promises'
 import { join, posix, relative, sep } from 'node:path'
 
 import { Second } from '@caffeinejs/std/duration'
@@ -50,6 +50,9 @@ export interface ScanResult {
 }
 
 const VARIANT_SUFFIXES = ['.br', '.gz']
+
+/** Opens nothing through a symlink. `O_NOFOLLOW` is undefined where a platform has none, which `|` reads as 0. */
+const NO_FOLLOW = constants.O_NOFOLLOW
 
 /**
  * Walks `root` and decides, file by file, what is served.
@@ -145,8 +148,7 @@ export async function hashFile(path: string): Promise<{ hash: string; size: numb
   const hash = createHash('sha256')
   let size = 0
 
-  // Undefined where a platform has no `O_NOFOLLOW`, which `|` reads as 0.
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+  const handle = await open(path, constants.O_RDONLY | NO_FOLLOW)
 
   // The stream closes the handle when it ends or fails.
   for await (const chunk of handle.createReadStream()) {
@@ -163,6 +165,9 @@ export async function hashFile(path: string): Promise<{ hash: string; size: numb
  */
 const RECORD_FILE = '.static.variants'
 
+/** The first line of a record a build wrote: what tells it from a file of the site at that name. */
+const RECORD_HEADER = '@caffeinejs/static variants 1\n'
+
 /** The bytes a variant holds: its hash and size. */
 type Recorded = Pick<ManifestVariant, 'hash' | 'size'>
 
@@ -171,7 +176,8 @@ export type RecordedVariants = ReadonlyMap<string, readonly Recorded[]>
 
 /**
  * Every variant a build wrote at `root` and recorded, by path: those the manifest lists, and those a build stopped
- * before its manifest recorded. A path can hold either. Whatever cannot be read records nothing.
+ * before its manifest recorded. A path can hold either. Whatever cannot be read, or is not a record a build wrote,
+ * records nothing.
  */
 export async function recordedVariants(root: string): Promise<RecordedVariants> {
   const recorded = new Map<string, Recorded[]>()
@@ -186,7 +192,7 @@ export async function recordedVariants(root: string): Promise<RecordedVariants> 
     // No manifest, or one this version cannot read: it records nothing.
   }
 
-  const lines = await readFile(join(root, RECORD_FILE), 'utf8').catch(() => '')
+  const lines = (await readRecord(root)) ?? ''
 
   for (const line of lines.split('\n')) {
     try {
@@ -196,21 +202,76 @@ export async function recordedVariants(root: string): Promise<RecordedVariants> 
         add({ path, hash, size })
       }
     } catch {
-      // An empty line, or one a stopped build cut short.
+      // The header, an empty line, or one a stopped build cut short.
     }
   }
 
   return recorded
 }
 
-/** Records that the build is about to put `variant` in place. */
-export async function recordVariant(root: string, variant: ManifestVariant): Promise<void> {
-  await appendFile(join(root, RECORD_FILE), `${JSON.stringify(variant)}\n`)
+/**
+ * Refuses to build where the record goes something no build wrote: a link, which would have the build write wherever
+ * it points, or a file of the site, which the build would read as its own and remove.
+ */
+export async function assertRecordOwned(root: string): Promise<void> {
+  if ((await readRecord(root)) === undefined) {
+    throw new ErrStaticBuild(
+      root,
+      `"${RECORD_FILE}" is not a record a build wrote, and the build keeps its record there`,
+      `Rename "${RECORD_FILE}", or move it out of the root`,
+    )
+  }
 }
 
-/** Drops the record once a manifest lists what the build wrote. */
+/**
+ * Records that the build is about to put `variant` in place, on a line of its own even after one a failed append cut
+ * short. Never through a link: {@link assertRecordOwned} has refused one, and this refuses one put there since.
+ */
+export async function recordVariant(root: string, variant: ManifestVariant): Promise<void> {
+  const flags = constants.O_RDWR | constants.O_APPEND | constants.O_CREAT | NO_FOLLOW
+  const handle = await open(join(root, RECORD_FILE), flags)
+
+  try {
+    // A failed append can leave its line without an end: the next record starts one of its own rather than join it.
+    const { size } = await handle.stat()
+    const { buffer } = await handle.read(Buffer.alloc(1), 0, 1, Math.max(size - 1, 0))
+    const start = size === 0 ? RECORD_HEADER : buffer[0] === 0x0a ? '' : '\n'
+    await handle.write(`${start}${JSON.stringify(variant)}\n`)
+  } finally {
+    await handle.close()
+  }
+}
+
+/** Drops the record once a manifest lists what the build wrote, and nothing at that path a build did not write. */
 export async function clearRecordedVariants(root: string): Promise<void> {
-  await rm(join(root, RECORD_FILE), { force: true })
+  const text = await readRecord(root)
+
+  if (text !== undefined && text !== '') {
+    await rm(join(root, RECORD_FILE), { force: true })
+  }
+}
+
+/**
+ * The record's text: `''` when there is none, and `undefined` when what is there is not one a build wrote: no regular
+ * file, or one without the header.
+ */
+async function readRecord(root: string): Promise<string | undefined> {
+  const path = join(root, RECORD_FILE)
+  // Checked first where `O_NOFOLLOW` is not there to refuse a link.
+  const stats = await lstat(path).catch(() => undefined)
+
+  if (stats === undefined) {
+    return ''
+  }
+
+  if (!stats.isFile()) {
+    return undefined
+  }
+
+  // `O_NOFOLLOW` refuses a link put there since.
+  const text = await readFile(path, { encoding: 'utf8', flag: constants.O_RDONLY | NO_FOLLOW })
+
+  return text.startsWith(RECORD_HEADER) ? text : undefined
 }
 
 /** Whether `bytes` are what a build recorded writing at `path`. */

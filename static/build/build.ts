@@ -15,6 +15,7 @@ import {
 } from '../manifest/manifest.js'
 import { ErrStaticBuild } from '../scan/errors.js'
 import {
+  assertRecordOwned,
   clearRecordedVariants,
   hashFile,
   isRecorded,
@@ -65,14 +66,15 @@ const ENCODINGS: readonly Encoding[] = ['br', 'gzip']
  * least 1 KiB, and a variant is kept when it is at most 95% of the file's size. Dotfiles but `.well-known/`,
  * symlinks and the variants of an earlier build are left out, and the variants the new manifest no longer lists are
  * removed. Only bytes a build recorded writing are the build's, in the manifest or, for a build stopped before its
- * manifest, in a hidden record beside it: an `x.gz` or `x.br` beside `x` holding other bytes is neither served nor
- * removed, and the build refuses to write a variant over it, or over anything at that path that is not a regular
- * file. Two builds of one tree write the same bytes. Files are read and compressed as streams, so a file's size is not
+ * manifest, in a hidden record beside it, `.static.variants`: an `x.gz` or `x.br` beside `x` holding other bytes is
+ * neither served nor removed, and the build refuses to write a variant over it, or over anything at that path that is
+ * not a regular file. It refuses a `.static.variants` no build wrote too, rather than read, write or remove it. Two builds of one tree write the same bytes. Files are read and compressed as streams, so a file's size is not
  * bounded by memory. Every file and the manifest are written under a hidden temporary name and renamed, so a failed
  * build leaves no half-written one, and nothing the next build reads.
  *
  * @throws {@link ErrStaticBuild} for a file nothing types, a name the router would read as syntax, a variant's path
- * holding bytes no build wrote or something other than a regular file, or a root that cannot be read
+ * holding bytes no build wrote or something other than a regular file, a `.static.variants` no build wrote, or a root
+ * that cannot be read
  * @example
  * ```ts
  * const report = await buildStatic({ root: 'web/dist', exclude: ['assets/*.map'] })
@@ -83,6 +85,7 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
   const started = performance.now()
   const root = resolve(options.root)
   const { files, skipped } = await scan(root, options)
+  await assertRecordOwned(root)
   const entries: Record<string, ManifestFile> = {}
   const saved: Record<Encoding, number> = { br: 0, gzip: 0 }
   let variants = 0

@@ -1,7 +1,14 @@
 import { join, posix, relative } from 'node:path'
 
 import { ErrConfiguration, ErrHTTPNotFound } from '@caffeinejs/http'
-import { authenticationExempt, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
+import {
+  authenticationExempt,
+  hasRouteAt,
+  routerFlagsOf,
+  type HTTPPluginConfigurer,
+  type HTTPPluginFactory,
+  type RouterFlags,
+} from '@caffeinejs/http/fastify'
 import { Day, Second, formatDuration, truncate } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
@@ -68,8 +75,8 @@ const COMPUTED = new Set([
  * routes. Compressed variants are negotiated by `Accept-Encoding` and are never URLs of their own.
  *
  * Start-up fails loudly: a missing or stale manifest, a listed file that is not there, two files answering one URL,
- * and a URL another route already answers each name the file and the fix. Install it once per server; one
- * `staticFiles(...)` takes several `.serve(...)` calls.
+ * and a URL another route answers, registered before the mount or after it and whatever its constraints, each name
+ * the file and the fix. Install it once per server; one `staticFiles(...)` takes several `.serve(...)` calls.
  */
 export function staticFiles<C = unknown>(configure?: StaticConfigurer<C>): HTTPPluginFactory<C> {
   return async context => {
@@ -254,7 +261,7 @@ function staticPlugin(
   log: (fields: object, message: string) => void,
 ): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
-    const router = routerOptionsOf(instance)
+    const router = routerFlagsOf(instance)
     const routes = routesOf(mounts, router)
 
     if (router.useSemicolonDelimiter) {
@@ -299,7 +306,7 @@ function staticPlugin(
         const url = mount.prefix + file.path
 
         if (!routes.has(url)) {
-          underDirectories.set(key(url, router), { mount, file })
+          underDirectories.set(key(effectivePath(url, router), router), { mount, file })
         }
       }
     }
@@ -329,36 +336,6 @@ function staticPlugin(
   }
 
   return fp(plugin, { name: '@caffeinejs/static' })
-}
-
-interface RouterFlags {
-  readonly caseSensitive: boolean
-  readonly ignoreTrailingSlash: boolean
-  readonly ignoreDuplicateSlashes: boolean
-  readonly useSemicolonDelimiter: boolean
-}
-
-function routerOptionsOf(instance: FastifyInstance): RouterFlags {
-  // Fastify's options schema defaults both top-level flags, so only `routerOptions` may leave one out.
-  const config = instance.initialConfig as {
-    routerOptions?: {
-      caseSensitive?: boolean
-      ignoreTrailingSlash?: boolean
-      ignoreDuplicateSlashes?: boolean
-      useSemicolonDelimiter?: boolean
-    }
-    caseSensitive: boolean
-    ignoreTrailingSlash: boolean
-    ignoreDuplicateSlashes: boolean
-    useSemicolonDelimiter: boolean
-  }
-
-  return {
-    caseSensitive: config.routerOptions?.caseSensitive ?? config.caseSensitive,
-    ignoreTrailingSlash: config.routerOptions?.ignoreTrailingSlash ?? config.ignoreTrailingSlash,
-    ignoreDuplicateSlashes: config.routerOptions?.ignoreDuplicateSlashes ?? config.ignoreDuplicateSlashes,
-    useSemicolonDelimiter: config.routerOptions?.useSemicolonDelimiter ?? config.useSemicolonDelimiter,
-  }
 }
 
 /** The path of a request URL, where the router ends it: at `?`, or at `;` too when it reads one as the query's start. */
@@ -393,9 +370,12 @@ function assertNoSemicolon(mounts: readonly PreparedMount[]): void {
   }
 }
 
-/** Whether a route of the server answers a GET or a HEAD at `url`: either one answers the file. */
+/**
+ * Whether a route registered before the mount answers a GET or a HEAD at `url`, whatever its constraints: either one
+ * answers the file.
+ */
 function answered(instance: FastifyInstance, url: string): boolean {
-  return instance.hasRoute({ method: 'GET', url }) || instance.hasRoute({ method: 'HEAD', url })
+  return hasRouteAt(instance, 'GET', url) || hasRouteAt(instance, 'HEAD', url)
 }
 
 /** The path the router registers for a route written as `url`, case aside: what it matches, slashes folded. */
@@ -543,11 +523,14 @@ function directoryHandler(files: ReadonlyMap<string, PreparedFile>, router: Rout
     const escaped = RESERVED_ESCAPE.test(pathOf(request.url, router))
     const file = escaped ? undefined : files.get(key((request.params as { '*': string })['*'], router))
 
-    if (file === undefined) {
-      throw new ErrHTTPNotFound(`Route ${request.method}:${request.url} not found`)
-    }
-
-    return answer(request, reply, decide(file, request))
+    // A miss is this handler's answer as a file is, so it is as late as one after the timeout: the 503 answers.
+    return answer(
+      request,
+      reply,
+      file === undefined
+        ? Promise.reject(new ErrHTTPNotFound(`Route ${request.method}:${request.url} not found`))
+        : decide(file, request),
+    )
   }
 }
 

@@ -168,6 +168,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `onRoute` hook recorded, readable once every server is built. Nothing else writes it, and no server decoration
   holds the route table. A plugin needing its own server's compiled groups at start-up still adds an `onRoute` hook
   (`collectRouteGroups(instance)`); nothing scans the instance for routes.
+- A plugin that must refuse a route registered before it asks `hasRouteAt(instance, method, path)`
+  (`platform/fastify/router.ts`), never Fastify's `hasRoute`, which misses a route constrained to a version or a host.
+  It answers one path from the adapter's own `onRoute` record, constraints ignored, while the route table is open: it
+  is not the route table.
 - `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
   plugins, or a listener's. A later call is recorded and thrown from `onReady`: avvio does not catch a
   callback-style plugin's throw. It adds the group to the server whose plugin calls it, and refuses a group bound to

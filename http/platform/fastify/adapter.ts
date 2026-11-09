@@ -56,6 +56,7 @@ import { fetchInProcess } from './fetch.js'
 import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
+import { installRouteLookup, recordRouterFlags } from './router.js'
 import { routeRecordsOf } from './routing/inventory.js'
 import { installNotFoundHandler } from './routing/not_found.js'
 import { compileArgs, compileHandler } from './routing/parameters.js'
@@ -241,11 +242,11 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // afterwards, and the configured logger exists only once every feature has configured.
     const { factory = {}, listener } = input.server
     // Fastify's HTTP/1 overload whatever `factory` asks for: the instance is one type whichever server it builds.
-    const fastify = Fastify(
-      withValidationFormatter(
-        withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath),
-      ) as FastifyHttpOptions<Server>,
-    )
+    const options = withValidationFormatter(
+      withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath),
+    ) as FastifyHttpOptions<Server>
+    const fastify = Fastify(options)
+    recordRouterFlags(fastify, options)
 
     // Node's `close()` waits on what it does not end itself, so the adapter keeps what the server has open. An HTTP/1
     // server ends its idle connections once, and counts one that has not sent a request as active, never idle: a
@@ -297,6 +298,9 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // the spot inside a callback-style plugin it would escape the boot as an uncaught exception.
     let routeTable: 'open' | 'closing' | 'closed' = 'open'
     let refusedRoute: ErrConfiguration | undefined
+
+    // What a plugin asks of the routes registered before it, constrained ones included, from the record above.
+    installRouteLookup(fastify, registered, () => routeTable === 'closed')
 
     // Also ahead of `customize`, so it is the first `onReady` hook to run: every route has registered and every
     // gate has stamped the ones it owns, and no plugin's own `onReady` work has started yet.
