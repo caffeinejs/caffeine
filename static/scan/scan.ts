@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { constants, type Dirent } from 'node:fs'
-import { open, readdir, stat } from 'node:fs/promises'
+import { appendFile, open, readFile, readdir, rm, stat } from 'node:fs/promises'
 import { join, posix, relative, sep } from 'node:path'
 
 import { Second } from '@caffeinejs/std/duration'
@@ -56,8 +56,9 @@ const VARIANT_SUFFIXES = ['.br', '.gz']
  *
  * Fixed rules first: a symlink or anything else that is not a regular file is skipped; a path with a segment starting
  * with `.` is skipped, but under a leading `.well-known/`; the manifest is skipped. `x.br` and `x.gz` are skipped as
- * an earlier build's variants when the manifest already at the root lists them and they still hold the bytes it
- * records, as `reserved` when they hold other bytes and `x` is on disk, and are files of their own otherwise. Then
+ * an earlier build's variants while they hold bytes a build recorded writing there, in the manifest or before a
+ * manifest listed them, as `reserved` when they hold other bytes and `x` is on disk, and are files of their own
+ * otherwise. Then
  * the names: one
  * holding a character the router or a URL reads as syntax, a control character, or not in Unicode NFC fails the scan.
  * Then `exclude`. Then the type: a file nothing types fails the scan. Every file a rule drops is in `skipped`.
@@ -79,7 +80,7 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
     .map(entry => ({ entry, path: relative(root, join(entry.parentPath, entry.name)).split(sep).join('/') }))
     .toSorted((a, b) => (a.path < b.path ? -1 : 1))
   const regular = new Set(listed.filter(({ entry }) => entry.isFile()).map(({ path }) => path))
-  const earlier = await earlierVariants(root)
+  const recorded = await recordedVariants(root)
 
   const files: ScannedFile[] = []
   const skipped: SkippedFile[] = []
@@ -87,7 +88,7 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
   const untyped: string[] = []
 
   for (const { entry, path } of listed) {
-    const reason = fixedRule(entry, path) ?? (await siblingRule(root, path, regular, earlier))
+    const reason = fixedRule(entry, path) ?? (await siblingRule(root, path, regular, recorded))
 
     if (reason !== undefined) {
       skipped.push({ path, reason })
@@ -156,24 +157,74 @@ export async function hashFile(path: string): Promise<{ hash: string; size: numb
   return { hash: hash.digest('base64'), size }
 }
 
-/** The variants the manifest already at `root` lists, by path; none when there is no manifest, or it cannot be read. */
-async function earlierVariants(root: string): Promise<ReadonlyMap<string, ManifestVariant>> {
+/**
+ * Where a build records each variant before renaming it into place, until its manifest records them: a build stopped
+ * in between leaves bytes no manifest lists, and they are still its own. A dotfile, so the scan never serves it.
+ */
+const RECORD_FILE = '.static.variants'
+
+/** The bytes a variant holds: its hash and size. */
+type Recorded = Pick<ManifestVariant, 'hash' | 'size'>
+
+/** What builds recorded writing, by path: a path can hold any of them. */
+export type RecordedVariants = ReadonlyMap<string, readonly Recorded[]>
+
+/**
+ * Every variant a build wrote at `root` and recorded, by path: those the manifest lists, and those a build stopped
+ * before its manifest recorded. A path can hold either. Whatever cannot be read records nothing.
+ */
+export async function recordedVariants(root: string): Promise<RecordedVariants> {
+  const recorded = new Map<string, Recorded[]>()
+  const add = ({ path, hash, size }: ManifestVariant): void => {
+    recorded.set(path, [...(recorded.get(path) ?? []), { hash, size }])
+  }
+
   try {
     const { files } = await readManifest(root)
-
-    return new Map(Object.values(files).flatMap(file => Object.values(file.variants).map(v => [v.path, v] as const)))
+    Object.values(files).forEach(file => Object.values(file.variants).forEach(add))
   } catch {
-    return new Map()
+    // No manifest, or one this version cannot read: it records nothing.
   }
+
+  const lines = await readFile(join(root, RECORD_FILE), 'utf8').catch(() => '')
+
+  for (const line of lines.split('\n')) {
+    try {
+      const { path, hash, size } = JSON.parse(line) as ManifestVariant
+
+      if (typeof path === 'string' && typeof hash === 'string' && typeof size === 'number') {
+        add({ path, hash, size })
+      }
+    } catch {
+      // An empty line, or one a stopped build cut short.
+    }
+  }
+
+  return recorded
 }
 
-// `x.br` and `x.gz`: the build's own while they hold the bytes its manifest records, whether or not `x` is still there,
-// and reserved for a variant of `x` otherwise.
+/** Records that the build is about to put `variant` in place. */
+export async function recordVariant(root: string, variant: ManifestVariant): Promise<void> {
+  await appendFile(join(root, RECORD_FILE), `${JSON.stringify(variant)}\n`)
+}
+
+/** Drops the record once a manifest lists what the build wrote. */
+export async function clearRecordedVariants(root: string): Promise<void> {
+  await rm(join(root, RECORD_FILE), { force: true })
+}
+
+/** Whether `bytes` are what a build recorded writing at `path`. */
+export function isRecorded(recorded: RecordedVariants, path: string, bytes: Recorded): boolean {
+  return recorded.get(path)?.some(({ hash, size }) => hash === bytes.hash && size === bytes.size) ?? false
+}
+
+// `x.br` and `x.gz`: the build's own while they hold bytes a build recorded writing there, whether or not `x` is still
+// there, and reserved for a variant of `x` otherwise.
 async function siblingRule(
   root: string,
   path: string,
   regular: ReadonlySet<string>,
-  earlier: ReadonlyMap<string, ManifestVariant>,
+  recorded: RecordedVariants,
 ): Promise<SkipReason | undefined> {
   const suffix = VARIANT_SUFFIXES.find(s => path.endsWith(s))
 
@@ -181,14 +232,8 @@ async function siblingRule(
     return undefined
   }
 
-  const variant = earlier.get(path)
-
-  if (variant !== undefined) {
-    const { hash, size } = await hashFile(join(root, path))
-
-    if (hash === variant.hash && size === variant.size) {
-      return 'variant'
-    }
+  if (recorded.has(path) && isRecorded(recorded, path, await hashFile(join(root, path)))) {
+    return 'variant'
   }
 
   return regular.has(path.slice(0, -suffix.length)) ? 'reserved' : undefined

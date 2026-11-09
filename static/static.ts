@@ -257,8 +257,12 @@ function staticPlugin(
     const router = routerOptionsOf(instance)
     const routes = routesOf(mounts, router)
 
+    if (router.useSemicolonDelimiter) {
+      assertNoSemicolon(mounts)
+    }
+
     for (const [url, target] of routes) {
-      if (instance.hasRoute({ method: 'GET', url })) {
+      if (answered(instance, url)) {
         throw new ErrStaticRouteConflict(url, describe(target.mount, firstOf(target)))
       }
     }
@@ -269,7 +273,7 @@ function staticPlugin(
       for (const file of mount.routed) {
         const url = mount.prefix + file.path
 
-        if (!routes.has(url) && instance.hasRoute({ method: 'GET', url })) {
+        if (!routes.has(url) && answered(instance, url)) {
           throw new ErrStaticRouteConflict(url, describe(mount, file))
         }
       }
@@ -302,8 +306,7 @@ function staticPlugin(
 
     instance.addHook('onRoute', route => {
       const methods = Array.isArray(route.method) ? route.method : [route.method]
-      const url = router.ignoreTrailingSlash && route.url.length > 1 ? route.url.replace(/\/$/, '') : route.url
-      const served = underDirectories.get(key(url, router))
+      const served = underDirectories.get(key(effectivePath(route.url, router), router))
 
       if (served !== undefined && methods.some(method => method === 'GET' || method === 'HEAD')) {
         throw new ErrStaticRouteConflict(route.url, describe(served.mount, served.file))
@@ -331,20 +334,75 @@ function staticPlugin(
 interface RouterFlags {
   readonly caseSensitive: boolean
   readonly ignoreTrailingSlash: boolean
+  readonly ignoreDuplicateSlashes: boolean
+  readonly useSemicolonDelimiter: boolean
 }
 
 function routerOptionsOf(instance: FastifyInstance): RouterFlags {
   // Fastify's options schema defaults both top-level flags, so only `routerOptions` may leave one out.
   const config = instance.initialConfig as {
-    routerOptions?: { caseSensitive?: boolean; ignoreTrailingSlash?: boolean }
+    routerOptions?: {
+      caseSensitive?: boolean
+      ignoreTrailingSlash?: boolean
+      ignoreDuplicateSlashes?: boolean
+      useSemicolonDelimiter?: boolean
+    }
     caseSensitive: boolean
     ignoreTrailingSlash: boolean
+    ignoreDuplicateSlashes: boolean
+    useSemicolonDelimiter: boolean
   }
 
   return {
     caseSensitive: config.routerOptions?.caseSensitive ?? config.caseSensitive,
     ignoreTrailingSlash: config.routerOptions?.ignoreTrailingSlash ?? config.ignoreTrailingSlash,
+    ignoreDuplicateSlashes: config.routerOptions?.ignoreDuplicateSlashes ?? config.ignoreDuplicateSlashes,
+    useSemicolonDelimiter: config.routerOptions?.useSemicolonDelimiter ?? config.useSemicolonDelimiter,
   }
+}
+
+/** The path of a request URL, where the router ends it: at `?`, or at `;` too when it reads one as the query's start. */
+function pathOf(url: string, router: RouterFlags): string {
+  const end = router.useSemicolonDelimiter ? url.search(/[?;]/) : url.indexOf('?')
+
+  return end === -1 ? url : url.slice(0, end)
+}
+
+/**
+ * Refuses a routed file with `;` in its name where the router reads `;` as the start of the query: its URL ends
+ * before the `;`, and `%3B` is no name under a directory, so nothing would reach it.
+ */
+function assertNoSemicolon(mounts: readonly PreparedMount[]): void {
+  for (const mount of mounts) {
+    const file = mount.routed.find(({ path }) => path.includes(';'))
+
+    if (file !== undefined) {
+      throw new ErrConfiguration(
+        errMessage(
+          `Cannot serve "${mount.root}": "${file.path}" holds ";", which useSemicolonDelimiter reads as the start of the query`,
+        )
+          .solutions(
+            `Rename "${file.path}" without ";"`,
+            `Add "${file.path}" to unrouted on its mount and send it with sendFile`,
+            'Turn useSemicolonDelimiter off',
+          )
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+  }
+}
+
+/** Whether a route of the server answers a GET or a HEAD at `url`: either one answers the file. */
+function answered(instance: FastifyInstance, url: string): boolean {
+  return instance.hasRoute({ method: 'GET', url }) || instance.hasRoute({ method: 'HEAD', url })
+}
+
+/** The path the router registers for a route written as `url`, case aside: what it matches, slashes folded. */
+function effectivePath(url: string, router: RouterFlags): string {
+  const collapsed = router.ignoreDuplicateSlashes ? url.replace(/\/{2,}/g, '/') : url
+
+  return router.ignoreTrailingSlash && collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
 }
 
 /**
@@ -471,7 +529,7 @@ function describe(mount: PreparedMount, file: PreparedFile): string {
 }
 
 function fileHandler(file: PreparedFile) {
-  return async (request: FastifyRequest, reply: FastifyReply) => send(reply, await decide(file, request))
+  return (request: FastifyRequest, reply: FastifyReply) => answer(request, reply, decide(file, request))
 }
 
 /** The escapes find-my-way keeps while matching: `#`, `$`, `&`, `+`, `,`, `/`, `:`, `;`, `=`, `?` and `@`. */
@@ -482,14 +540,14 @@ function directoryHandler(files: ReadonlyMap<string, PreparedFile>, router: Rout
     // The router matches these escapes as written, then decodes them in the wildcard. An exact route at a file's URL
     // matches only the literal spelling, so the escaped one would reach the file here, under this route's gate; and
     // `%2F`, read as `/`, would reach a file by a URL another route answers. So they name nothing here either.
-    const escaped = RESERVED_ESCAPE.test(request.url.split('?', 1)[0]!)
+    const escaped = RESERVED_ESCAPE.test(pathOf(request.url, router))
     const file = escaped ? undefined : files.get(key((request.params as { '*': string })['*'], router))
 
     if (file === undefined) {
       throw new ErrHTTPNotFound(`Route ${request.method}:${request.url} not found`)
     }
 
-    return send(reply, await decide(file, request))
+    return answer(request, reply, decide(file, request))
   }
 }
 
@@ -505,6 +563,29 @@ function decide(file: PreparedFile, request: FastifyRequest): Promise<FileDecisi
     },
     { via: 'route', conditional: true, log: request.log },
   )
+}
+
+/** Sends what `deciding` settles to, unless the request was answered meanwhile, by a timeout's 503 most likely. */
+async function answer(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  deciding: Promise<FileDecision>,
+): Promise<FastifyReply> {
+  let decision: FileDecision
+
+  try {
+    decision = await deciding
+  } catch (err) {
+    // A failure after the timeout is as late as the file would have been: the 503 answers, sent or still in a hook.
+    if (reply.sent || timedOut(request)) {
+      request.log.error({ err }, 'Static file failed after its timeout; the 503 stands')
+      return reply
+    }
+
+    throw err
+  }
+
+  return send(reply, decision)
 }
 
 function send(reply: FastifyReply, decision: FileDecision): FastifyReply {

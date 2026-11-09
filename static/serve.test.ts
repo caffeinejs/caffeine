@@ -52,7 +52,7 @@ describe('serveFile', () => {
   })
 
   // Computed once at start-up: a request only picks one of these objects.
-  it('computes the headers of every representation, Vary on each of a file with variants', () => {
+  it('computes the headers of every representation, Vary on each, a file without variants included', () => {
     const entry = manifest.files['index.html']!
 
     expect(page.identity.headers).toEqual({
@@ -74,8 +74,10 @@ describe('serveFile', () => {
       'content-encoding': 'br',
       vary: 'Accept-Encoding',
     })
-    // Without a variant, nothing varies, and a shared cache keeps one copy.
-    expect(icon.identity.headers.vary).toBe(undefined)
+    // Without a variant, Accept-Encoding still decides between the file and a 406, so a shared cache must key on it,
+    // on the 304 that refreshes its copy too.
+    expect(icon.identity.headers.vary).toBe('Accept-Encoding')
+    expect(icon.identity.notModified.vary).toBe('Accept-Encoding')
   })
 
   // Each representation is its own tag: a client holding the gzip copy that now asks for brotli needs the body.

@@ -123,7 +123,6 @@ export function prepareFile(disk: RootOnDisk, path: string, entry: ManifestFile,
     ([, a], [, b]) => a.size - b.size,
   )
   const lastModified = new Date(entry.lastModified)
-  const hasVariants = variants.length > 0
   const extra = policy.headers(path, entry)
 
   const representation = (
@@ -150,7 +149,7 @@ export function prepareFile(disk: RootOnDisk, path: string, entry: ManifestFile,
 
     Object.assign(headers, extra)
     delete headers.vary
-    varyOf(headers, extra?.vary, hasVariants)
+    varyOf(headers, extra?.vary)
 
     const notModifiedHeaders: Record<string, string> = {
       etag: headers.etag!,
@@ -388,8 +387,11 @@ export async function verifyHashes(root: string, file: PreparedFile, entry: Mani
   }
 }
 
-/** Writes `Vary` into `headers`: what `headers(file)` asked for, merged with `Accept-Encoding` for a file with variants. */
-function varyOf(headers: Record<string, string>, given: string | undefined, hasVariants: boolean): void {
+/**
+ * Writes `Vary` into `headers`: what `headers(file)` asked for, merged with `Accept-Encoding`. A file without variants
+ * varies too: the header decides between it and a 406, and a shared cache must not answer one with the other.
+ */
+function varyOf(headers: Record<string, string>, given: string | undefined): void {
   const reply = {
     getHeader: (name: string) => headers[name],
     header: (name: string, value: string) => {
@@ -401,7 +403,5 @@ function varyOf(headers: Record<string, string>, given: string | undefined, hasV
     appendVary(reply, given.split(','))
   }
 
-  if (hasVariants) {
-    appendVary(reply, ['Accept-Encoding'])
-  }
+  appendVary(reply, ['Accept-Encoding'])
 }

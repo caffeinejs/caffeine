@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, open, readdir, readlink, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
+import { Writable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Authentication, Authorization, ErrConfiguration, RouteInventory, type WebApplication } from '@caffeinejs/http'
@@ -229,6 +230,57 @@ describe('staticFiles', () => {
     expect(res.headers.get('etag')).toBe(null)
   })
 
+  // Fastify's timer starts before the request hooks: a hook still running when it fires lets the handler start while
+  // the 503 waits in `onSend`. A file removed after start-up then fails to open, and that failure is as late as the
+  // file would have been.
+  it("leaves a timeout's 503 alone when the file fails to open after it", async () => {
+    const root = await tree('removed', ['gone.txt'])
+    const holding = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<void>()
+    const failed = Promise.withResolvers<void>()
+    const statuses: number[] = []
+    const plugin: FastifyPluginAsync = async instance => {
+      instance.addHook('onRequest', async () => {
+        await holding.promise
+      })
+      instance.addHook('onSend', async (_request, reply, payload) => {
+        statuses.push(reply.statusCode)
+        if (reply.statusCode === 503) {
+          holding.resolve()
+          await held.promise
+        }
+        return payload
+      })
+    }
+    const logs = new Writable({
+      write(line: Buffer, _encoding, done) {
+        if (line.toString().includes('Cannot open a static file the manifest lists')) {
+          failed.resolve()
+        }
+        done()
+      },
+    })
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { handlerTimeout: 30 * Millisecond, logger: { level: 'error', stream: logs } } }))
+      .with(() => fp(plugin, { name: 'holding' }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    await app.bootstrap()
+    await rm(join(root, 'gone.txt'))
+
+    try {
+      const response = app.request('/gone.txt')
+      await failed.promise
+      // The rejection and anything the server does with it run on microtasks, which drain before an immediate.
+      await new Promise(resolve => setImmediate(resolve))
+      held.resolve()
+
+      expect((await response).status).toBe(503)
+      expect(statuses).toEqual([503])
+    } finally {
+      held.resolve()
+    }
+  })
+
   // A timed route's signal exists before its handler runs: only a timeout that fired keeps the file from going out.
   it('serves the file on a timed route', async () => {
     const root = await tree('timed', ['report.txt'])
@@ -241,6 +293,32 @@ describe('staticFiles', () => {
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('report.txt')
+  })
+
+  // With the router reading ";" as the start of the query, an escape after it is the query's, not the path's.
+  it('reads the path where the router does, when ";" starts the query', async () => {
+    const root = await tree('nested', ['assets/app.js'])
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { useSemicolonDelimiter: true } }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    await app.bootstrap()
+
+    expect((await app.request('/assets/app.js;tag=a%2Bb')).status).toBe(200)
+  })
+
+  // No spelling reaches such a file: ";" ends the path, and "%3B" names nothing under a directory.
+  it('fails start-up on a routed file with ";" in its name, when ";" starts the query', async () => {
+    const root = await tree('nested', ['assets/report;final.txt'])
+
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { useSemicolonDelimiter: true } }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    const err = await app.bootstrap().catch((err: unknown) => err)
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(firstLine(err as Error)).toBe(
+      `Cannot serve "${root}": "assets/report;final.txt" holds ";", which useSemicolonDelimiter reads as the start of the query`,
+    )
   })
 
   // The router takes the longest prefix, so neither mount hides the other, whichever is declared first.
@@ -513,6 +591,38 @@ describe('staticFiles', () => {
 
       expect(await (await app!.request('/assets/private/report.txt', { method: 'POST' })).text()).toBe('posted')
       expect(await (await app!.request('/assets/private/report.txt')).text()).toBe('assets/private/report.txt')
+    })
+
+    // A HEAD of its own answers the file's URL as a GET would: the mount's HEAD would answer every other spelling.
+    it('from a HEAD registered before the mount at the URL of a file under a directory', async () => {
+      const root = await tree('nested', ['assets/report.txt'])
+      const plugin: FastifyPluginAsync = async instance => {
+        instance.head('/assets/report.txt', async (_request, reply) => reply.send())
+      }
+      const earlier: HTTPPluginFactory = () => plugin
+
+      const err = await refusal(s => s.serve(root, { anonymous: true }), [earlier])
+
+      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+      expect(firstLine(err)).toBe(
+        `Cannot register "/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
+      )
+    })
+
+    // The router collapses the slashes when it registers the route, so it answers the file's own URL.
+    it('from a route registered after the mount at a spelling of the URL the router folds', async () => {
+      const root = await tree('nested', ['assets/report.txt'])
+      const plugin: FastifyPluginAsync = async instance => {
+        instance.get('/assets//report.txt', async () => 'later')
+      }
+      app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+        .server(() => ({ factory: { routerOptions: { ignoreDuplicateSlashes: true } } }))
+        .with(staticFiles(s => s.serve(root, { anonymous: true })))
+        .with(() => fp(plugin, { name: 'later' })) as WebApplication
+
+      const err = await app.bootstrap().catch((err: unknown) => err)
+
+      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
     })
 
     it('from a route registered before the mount', async () => {

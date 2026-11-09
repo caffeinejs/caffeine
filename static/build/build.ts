@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 
 import type { Duration } from '@caffeinejs/std/duration'
@@ -14,7 +14,17 @@ import {
   variantPath,
 } from '../manifest/manifest.js'
 import { ErrStaticBuild } from '../scan/errors.js'
-import { hashFile, readFileEntry, scan, type SkippedFile } from '../scan/scan.js'
+import {
+  clearRecordedVariants,
+  hashFile,
+  isRecorded,
+  readFileEntry,
+  recordVariant,
+  recordedVariants,
+  scan,
+  type RecordedVariants,
+  type SkippedFile,
+} from '../scan/scan.js'
 import { KEPT_RATIO, SMALLEST_COMPRESSED, compressFile } from './_compress.js'
 
 /** {@link buildStatic}'s options. */
@@ -54,13 +64,15 @@ const ENCODINGS: readonly Encoding[] = ['br', 'gzip']
  * Run it at the end of the front-end build. A file is compressed when its type is compressible and it holds at
  * least 1 KiB, and a variant is kept when it is at most 95% of the file's size. Dotfiles but `.well-known/`,
  * symlinks and the variants of an earlier build are left out, and the variants the new manifest no longer lists are
- * removed. Only bytes the earlier manifest records are the build's: an `x.gz` or `x.br` beside `x` holding other bytes
- * is neither served nor removed, and the build refuses to write a variant over it. Two builds of one tree write the same bytes. Files are read and compressed as streams, so a file's size is not
+ * removed. Only bytes a build recorded writing are the build's, in the manifest or, for a build stopped before its
+ * manifest, in a hidden record beside it: an `x.gz` or `x.br` beside `x` holding other bytes is neither served nor
+ * removed, and the build refuses to write a variant over it, or over anything at that path that is not a regular
+ * file. Two builds of one tree write the same bytes. Files are read and compressed as streams, so a file's size is not
  * bounded by memory. Every file and the manifest are written under a hidden temporary name and renamed, so a failed
  * build leaves no half-written one, and nothing the next build reads.
  *
  * @throws {@link ErrStaticBuild} for a file nothing types, a name the router would read as syntax, a variant's path
- * holding bytes no build wrote, or a root that cannot be read
+ * holding bytes no build wrote or something other than a regular file, or a root that cannot be read
  * @example
  * ```ts
  * const report = await buildStatic({ root: 'web/dist', exclude: ['assets/*.map'] })
@@ -76,8 +88,7 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
   let variants = 0
   let bytes = 0
 
-  // Where a variant goes, holding bytes no build recorded: overwritten only by the same bytes.
-  const reserved = new Set(skipped.filter(({ reason }) => reason === 'reserved').map(({ path }) => path))
+  const recorded = await recordedVariants(root)
 
   // One file at a time, so the build holds one file's chunks at once.
   for (const file of files) {
@@ -87,24 +98,16 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
     if (file.compressible && entry.size >= SMALLEST_COMPRESSED) {
       for (const encoding of ENCODINGS) {
         const path = variantPath(file.path, encoding)
-        // A build stopped before its manifest left its variants unrecorded, and this one writes the same bytes.
-        const present = reserved.has(path) ? (await hashFile(join(root, path))).hash : undefined
         const variant = await writeAtomically(
           join(root, path),
           temporary => compressFile(join(root, file.path), temporary, encoding, entry.size),
-          ({ hash, size }) => {
-            if (size > entry.size * KEPT_RATIO) {
+          async written => {
+            if (written.size > entry.size * KEPT_RATIO) {
               return false
             }
 
-            if (present !== undefined && present !== hash) {
-              throw new ErrStaticBuild(
-                root,
-                `"${path}" holds bytes no build wrote, where the ${encoding} variant of "${file.path}" goes`,
-                `Rename "${path}", or move it out of the root`,
-                `Delete "${path}" if an earlier build wrote it`,
-              )
-            }
+            await claim(root, path, written, recorded, `the ${encoding} variant of "${file.path}"`)
+            await recordVariant(root, { ...written, path })
 
             return true
           },
@@ -136,8 +139,47 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
   await writeAtomically(join(root, MANIFEST_FILE), temporary =>
     writeFile(temporary, `${JSON.stringify(sorted(manifest), null, 2)}\n`, { flag: 'wx' }),
   )
+  await clearRecordedVariants(root)
 
   return { files: files.length, variants, bytes, saved, skipped, duration: performance.now() - started }
+}
+
+/**
+ * Refuses to put `written` at `path` over anything the build does not own: whatever is there, found as the file system
+ * finds it, case folding and all, must be a regular file holding bytes a build recorded there, or `written` itself.
+ */
+async function claim(
+  root: string,
+  path: string,
+  written: { hash: string; size: number },
+  recorded: RecordedVariants,
+  what: string,
+): Promise<void> {
+  const absolute = join(root, path)
+  const stats = await lstat(absolute).catch(() => undefined)
+
+  if (stats === undefined) {
+    return
+  }
+
+  if (!stats.isFile()) {
+    throw new ErrStaticBuild(
+      root,
+      `"${path}" is not a regular file, where ${what} goes`,
+      `Rename "${path}", or move it out of the root`,
+    )
+  }
+
+  const present = await hashFile(absolute)
+
+  if (present.hash !== written.hash && !isRecorded(recorded, path, present)) {
+    throw new ErrStaticBuild(
+      root,
+      `"${path}" holds bytes no build wrote, where ${what} goes`,
+      `Rename "${path}", or move it out of the root`,
+      `Delete "${path}" if an earlier build wrote it`,
+    )
+  }
 }
 
 /**
@@ -148,14 +190,14 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
 async function writeAtomically<T>(
   path: string,
   write: (temporary: string) => Promise<T>,
-  keep: (written: T) => boolean = () => true,
+  keep: (written: T) => boolean | Promise<boolean> = () => true,
 ): Promise<T | undefined> {
   const temporary = join(dirname(path), `.${basename(path)}.${randomBytes(6).toString('hex')}.tmp`)
 
   try {
     const written = await write(temporary)
 
-    if (keep(written)) {
+    if (await keep(written)) {
       await rename(temporary, path)
       return written
     }

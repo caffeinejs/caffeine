@@ -194,3 +194,60 @@ describe('a route timeout that is not a whole number of milliseconds', () => {
     }
   })
 })
+
+// A Responder runs after the handler returned, so it can fail after the timeout: that rejection is the late result too,
+// and the 503 an `onSend` hook still holds answers the request.
+describe('a Responder that rejects after its handler timed out', () => {
+  it.each([
+    ['returned', false],
+    ['resolved', true],
+  ])('leaves the 503 to answer, when the handler %s it', async (_case, resolved) => {
+    const holding = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<void>()
+    const statuses: number[] = []
+    const plugin: FastifyPluginAsync = async instance => {
+      instance.addHook('onSend', async (_request, reply, payload) => {
+        statuses.push(reply.statusCode)
+        if (reply.statusCode === 503) {
+          holding.resolve()
+          await held.promise
+        }
+        return payload
+      })
+    }
+
+    class Failing extends Responder {
+      async respond(): Promise<never> {
+        await holding.promise
+        throw new Error('late')
+      }
+    }
+
+    const timed = new Router('/timed-failing')
+    timed
+      .get('/slow')
+      .timeout(30 * Millisecond)
+      .handler(() => {
+        const failing = new Failing()
+        return resolved ? Promise.resolve(failing) : failing
+      })
+    const app = createWebApplication()
+      .with(() => fp(plugin, { name: 'holding' }))
+      .mount(timed)
+
+    try {
+      await app.bootstrap()
+      const response = app.request('/timed-failing/slow')
+      await holding.promise
+      // The rejection and anything the server does with it run on microtasks, which drain before an immediate.
+      await new Promise(resolve => setImmediate(resolve))
+      held.resolve()
+
+      expect((await response).status).toBe(503)
+      expect(statuses).toEqual([503])
+    } finally {
+      held.resolve()
+      await app.close()
+    }
+  })
+})

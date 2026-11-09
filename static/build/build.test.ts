@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, truncate, writeFile } from 'node:fs/promises'
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -162,6 +162,48 @@ describe('buildStatic', () => {
       `Cannot build static files from "${root}": "manual.txt.gz" holds bytes no build wrote, where the gzip variant of "manual.txt" goes`,
     )
     expect(await readFile(join(root, 'manual.txt.gz'), 'utf8')).toBe('an archive of its own')
+    expect((await readdir(root)).filter(name => name.endsWith('.tmp'))).toEqual([])
+  })
+
+  // The scan skips a symlink, so only the destination itself shows the build would replace something it never wrote.
+  it('refuses to write a variant over a symlink, leaving it and its target as they were', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'caffeine-outside-'))
+
+    try {
+      await writeFile(join(outside, 'archive.gz'), 'an archive of its own')
+      await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+      await symlink(join(outside, 'archive.gz'), join(root, 'manual.txt.gz'))
+
+      const err = await buildStatic({ root }).catch((err: unknown) => err)
+
+      expect(err).toBeInstanceOf(ErrStaticBuild)
+      expect((err as Error).message.split('\n')[0]).toBe(
+        `Cannot build static files from "${root}": "manual.txt.gz" is not a regular file, where the gzip variant of "manual.txt" goes`,
+      )
+      expect((await lstat(join(root, 'manual.txt.gz'))).isSymbolicLink()).toBe(true)
+      expect(await readFile(join(outside, 'archive.gz'), 'utf8')).toBe('an archive of its own')
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  // A build stopped between its variants leaves new bytes where the manifest records old ones. They are still the
+  // build's: going back to the old input must rebuild, not refuse them as a file of the site.
+  it('rebuilds an earlier input over the variants of a build stopped before its manifest', async () => {
+    const first = 'first '.repeat(400)
+    await writeFile(join(root, 'manual.txt'), first)
+    await buildStatic({ root })
+    await writeFile(join(root, 'manual.txt'), 'second '.repeat(400))
+    // Where the gzip variant goes, a directory: the build stops there, after renaming its new brotli variant.
+    await rm(join(root, 'manual.txt.gz'))
+    await mkdir(join(root, 'manual.txt.gz'))
+    await expect(buildStatic({ root })).rejects.toThrow()
+    await rm(join(root, 'manual.txt.gz'), { recursive: true })
+    await writeFile(join(root, 'manual.txt'), first)
+
+    await buildStatic({ root })
+
+    expect(brotliDecompressSync(await readFile(join(root, 'manual.txt.br'))).toString()).toBe(first)
     expect((await readdir(root)).filter(name => name.startsWith('.'))).toEqual([])
   })
 
