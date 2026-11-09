@@ -660,19 +660,14 @@ instance it holds.
 ### The attempt context
 
 A method with a time limiter receives each attempt's signal in place of its own `AbortSignal` argument, which it
-must then pass to every call below it. `r.context(...)` hands that signal, and the attempt's number, to code anywhere
-below the method instead, through an injected `ResilienceContext`:
+must then pass to every call below it. An injected `ResilienceContext` hands that signal, and the attempt's number,
+to code anywhere below the method instead. Each attempt runs in a frame of its own on the container's
+[execution context](../di/README.md#execution-context), extending the caller's:
 
 ```ts
-import { AsyncLocalStorage } from 'node:async_hooks'
-
 import { ResilienceContext } from '@caffeinejs/resilience/aop'
 
-Resilience(r =>
-  r
-    .context(new AsyncLocalStorage())
-    .preset('inventory', p => p.retry({ maxAttempts: 3 }).timeLimiter({ timeoutDuration: 2 * Second })),
-)
+Resilience(r => r.preset('inventory', p => p.retry({ maxAttempts: 3 }).timeLimiter({ timeoutDuration: 2 * Second })))
 
 @Injectable([InventoryHTTP])
 class InventoryClient {
@@ -701,10 +696,10 @@ class InventoryHTTP {
 - Inside nested annotated methods, the innermost attempt is the one read. An inner method that takes no signal runs
   under the outer attempt's, so the outer deadline still reaches the code below it. Outside every attempt, `signal`
   and `attempt` are `undefined`, so the same class works when called directly.
-- The package imports nothing from Node: any object with `run(store, callback)` and `getStore()` works. Give it a
-  storage of its own.
-- Without `r.context(...)`, `ResilienceContext` is still bound, and reading it throws `ErrInvalidOption`. The
-  method's own signal argument works either way.
+- `r.context(storage)` keeps attempts on a storage of their own in place of the container's `ContextStorage`. The
+  package imports nothing from Node: any object with `run(context, fn)` and `getStore()` works.
+- Where no `ContextStorage` is bound and `r.context(...)` gave none, `ResilienceContext` is still bound, and reading
+  it throws `ErrInvalidOption`. The method's own signal argument works either way.
 
 ### Health
 

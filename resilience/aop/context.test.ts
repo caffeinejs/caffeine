@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 import { createApplication, type Feature } from '@caffeinejs/application'
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, contextKey, ExecutionContext } from '@caffeinejs/di'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -90,7 +90,7 @@ async function boot(feature: Feature) {
   Object.assign(http, { context })
   Object.assign(ledger, { http, context })
   Object.assign(client, { http, ledger })
-  return { context, http, ledger, client }
+  return { context, http, ledger, client, storage: app.container.contextStorage }
 }
 
 describe('ResilienceContext', () => {
@@ -151,14 +151,21 @@ describe('ResilienceContext', () => {
     expect(context.signal).toBe(undefined)
   })
 
-  // Reading it unconfigured would always answer undefined, which looks like "not in an attempt": fail instead.
-  it('refuses a read when Resilience() was given no storage', async () => {
-    const { context } = await boot(Resilience(presets))
+  // One storage carries the request and the attempt, so code below an annotated method sees both.
+  it('keeps attempts on the container’s storage by default, under the caller’s frame', async () => {
+    const { http, client, storage } = await boot(Resilience(presets))
+    const kTenant = contextKey<string>('tenant')
+    const tenants: Array<string | undefined> = []
+    const get = http.get.bind(http)
+    http.get = () => {
+      tenants.push(storage.getStore()?.get(kTenant))
+      return get()
+    }
 
-    expect(() => context.attempt).toThrow(ErrInvalidOption)
-    expect(() => context.signal).toThrow(
-      'Cannot read the resilience context: Resilience() was given no context storage',
-    )
+    await expect(storage.run(ExecutionContext.ROOT.with(kTenant, 'acme'), () => client.stock())).resolves.toBe('ok')
+
+    expect(http.seen.map(seen => seen.attempt)).toEqual([1, 2, 3])
+    expect(tenants).toEqual(['acme', 'acme', 'acme'])
   })
 
   it('refuses a storage without run and getStore', async () => {

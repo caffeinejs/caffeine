@@ -1,18 +1,31 @@
 import { Binding } from '../../../binding.js'
+import { contextKey, type ContextStorage, ExecutionContext } from '../../../context/context.js'
 import { ErrIllegalScopeState, ErrNoRequestStorageSet, ErrOutOfScope } from '../../../errors.js'
 import { Factory } from '../../../factory.js'
 import { keyStr } from '../../../key.js'
-import { RequestScopeStorage } from '../../../request_scope_manager.js'
 import { ResolutionContext } from '../../../resolution_context.js'
 import { Scope, ScopedInstance } from '../../../scope.js'
 import { errMessage } from '../../util/errutil/index.js'
 import { RequestScopeContext } from './request_context.js'
 
-export class RequestScope implements Scope {
-  private _storage: RequestScopeStorage | undefined
+const kRequestScope = contextKey<RequestScopeContext>('@caffeinejs/di:request-scope')
 
-  constructor(storage?: RequestScopeStorage) {
-    this._storage = storage
+export class RequestScope implements Scope {
+  // Given to the constructor or to setStorage(): wins over the source.
+  #storage: ContextStorage | undefined
+  // Resolved from the source on first use, dropped by clear() so a container initialized again resolves it again.
+  #resolved: ContextStorage | undefined
+  readonly #source: (() => ContextStorage) | undefined
+
+  /**
+   * @param storage - The storage to keep frames in, or a function returning it, called on first use.
+   */
+  constructor(storage?: ContextStorage | (() => ContextStorage)) {
+    if (typeof storage === 'function') {
+      this.#source = storage
+    } else {
+      this.#storage = storage
+    }
   }
 
   get lazy(): boolean {
@@ -23,14 +36,15 @@ export class RequestScope implements Scope {
     return false
   }
 
-  setStorage(storage: RequestScopeStorage): void {
-    this._storage = storage
+  setStorage(storage: ContextStorage): void {
+    this.#storage = storage
   }
 
   run<T>(fn: () => T | Promise<T>): Promise<T> {
-    this.#checkAndthrowIfNoStorageIsSet()
+    const storage = this.#current()
+    const current = storage.getStore() ?? ExecutionContext.ROOT
 
-    if (this._storage!.getStore() !== undefined) {
+    if (current.get(kRequestScope) !== undefined) {
       throw new ErrIllegalScopeState(
         errMessage('A request scope block is already in progress: only one is allowed at a time')
           .reference('@caffeinejs/di', ErrIllegalScopeState)
@@ -38,22 +52,18 @@ export class RequestScope implements Scope {
       )
     }
 
-    return (this._storage! as RequestScopeStorage<RequestScopeContext>).run(new RequestScopeContext(), async () => {
+    const scope = new RequestScopeContext()
+    return storage.run(current.with(kRequestScope, scope), async () => {
       try {
         return await Promise.resolve(fn())
       } finally {
-        const store = this._storage!.getStore()
-        if (store) {
-          await store.destroy()
-        }
+        await scope.destroy()
       }
     })
   }
 
   provide<T>(ctx: ResolutionContext, factory: Factory<T>): T {
-    this.#checkAndthrowIfNoStorageIsSet()
-
-    const context = (this._storage! as RequestScopeStorage<RequestScopeContext>).getStore()
+    const context = this.#current().getStore()?.get(kRequestScope)
     if (!context) {
       throw new ErrOutOfScope(
         errMessage(`Cannot access key "${keyStr(ctx.key)}" outside of a request scope block`)
@@ -86,9 +96,7 @@ export class RequestScope implements Scope {
   }
 
   cachedInstance<T>(binding: Binding<T>): T | undefined {
-    this.#checkAndthrowIfNoStorageIsSet()
-
-    return this._storage!.getStore()?.get(binding.id) as T | undefined
+    return this.#current().getStore()?.get(kRequestScope)?.get(binding.id) as T | undefined
   }
 
   reset(_binding: Binding): void {
@@ -96,22 +104,24 @@ export class RequestScope implements Scope {
   }
 
   // Request instances belong to the context the scope block installed, which destroys them when the block
-  // ends. Nothing here outlives a request, so the container has nothing to dispose or clear.
+  // ends. Nothing here outlives a request, so the container has nothing to dispose.
   instances(): Iterable<ScopedInstance> {
     return []
   }
 
   clear(): void {
-    // noop
+    this.#resolved = undefined
   }
 
   configure(_binding: Binding): void {
     // noop
   }
 
-  #checkAndthrowIfNoStorageIsSet(): void {
-    if (this._storage === undefined) {
+  #current(): ContextStorage {
+    const storage = this.#storage ?? (this.#resolved ??= this.#source?.())
+    if (storage === undefined) {
       throw new ErrNoRequestStorageSet()
     }
+    return storage
   }
 }

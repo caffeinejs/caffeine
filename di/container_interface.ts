@@ -2,6 +2,7 @@ import type { MethodAspect } from './aop.js'
 import type { AspectSpec } from './aspect_spec.js'
 import { Binding } from './binding.js'
 import { BindingSpec } from './binding_spec.js'
+import type { ContextStorage } from './context/context.js'
 import { HookListener } from './hooks.js'
 import { Injection, ResolveInjection } from './injection.js'
 import { InjectionToken, NamedToken, TokenValue } from './key.js'
@@ -108,6 +109,7 @@ export interface Container extends AsyncDisposable {
   readonly postProcessors: Set<PostProcessor>
   readonly refresher: Refresher
   readonly requestScopeManager: RequestScopeManager
+  readonly contextStorage: ContextStorage
   readonly ready: boolean
   readonly hasRequestScope: boolean
   readonly values: unknown
@@ -214,6 +216,7 @@ export type ContainerOps = Pick<
   | 'hasValues'
   | 'scopedConfig'
   | 'hasScopedConfig'
+  | 'contextStorage'
 >
 
 /**

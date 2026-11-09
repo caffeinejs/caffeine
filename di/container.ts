@@ -14,6 +14,7 @@ import {
   OverrideOps,
   ScopeCheckMode,
 } from './container_interface.js'
+import { ContextStorage, newDefaultContextStorage } from './context/context.js'
 import { getBindingConfigurations, providedBindingConfigurations, hasInjectable } from './decorators/registrar/index.js'
 import {
   ErrDuplicateBinding,
@@ -154,6 +155,18 @@ export class CaffeineIoC implements Container {
       this.bind(Keys.kRefresher, t => t.toValue(refresher).byPassPostProcessors().internal())
     }
 
+    // A default the application replaces by binding ContextStorage itself: the condition never sees this binding.
+    const storage = newDefaultContextStorage()
+    if (storage !== undefined) {
+      this.bind(ContextStorage, t =>
+        t
+          .toValue(storage)
+          .conditional(c => c.missing(ContextStorage))
+          .byPassPostProcessors()
+          .internal(),
+      )
+    }
+
     if (this.scopes.has(Scopes.REQUEST)) {
       const requestScope = this.scopes.get(Scopes.REQUEST) as RequestScope
       const requestScopeManager: RequestScopeManager = {
@@ -185,6 +198,17 @@ export class CaffeineIoC implements Container {
    */
   get profiles(): ReadonlySet<string> {
     return this._profiles
+  }
+
+  /**
+   * The {@link ContextStorage} bound in the container: the one the application bound, or the default the runtime
+   * provides.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container is not initialized
+   * @throws {@link ErrNoResolutionForKey} if nothing binds {@link ContextStorage}, which only happens off Node
+   */
+  get contextStorage(): ContextStorage {
+    return this.get(ContextStorage)
   }
 
   /**

@@ -17,7 +17,7 @@ Node.js environments.
 ```ts
 interface RequestScopeManager {
   run<T>(fn: () => T | Promise<T>): Promise<T>
-  setStorage(storage: RequestScopeStorage): void
+  setStorage(storage: ContextStorage): void
 }
 ```
 
@@ -61,37 +61,21 @@ ended — a destroyed scope never resolves again.
 ### setStorage
 
 ```ts
-setStorage(storage: RequestScopeStorage): void
+setStorage(storage: ContextStorage): void
 ```
 
-Replaces the underlying storage strategy. CaffeineIoC uses `AsyncLocalStorage`
-internally by default. Call `setStorage()` only when you need to substitute a
-custom implementation — for example, in environments where `AsyncLocalStorage`
-is not available or when using a test double.
-
-`setStorage()` must be called before the first `run()`. Calling `run()` with no
-storage set throws `ErrNoRequestStorageSet`.
-
----
-
-## RequestScopeStorage
-
-```ts
-interface RequestScopeStorage<T = any> {
-  run<R>(context: T, fn: () => R): R
-  getStore(): T | undefined
-}
-```
-
-The storage contract used by the request scope. It mirrors the Node.js
-[`AsyncLocalStorage`](https://nodejs.org/api/async_context.html#class-asynclocalstorage)
-API, so an `AsyncLocalStorage` instance can be passed directly:
+Keeps the request scope's frames on `storage` in place of the container's
+`ContextStorage`, the one every container binds on Node. Bind your own
+`ContextStorage` instead when the HTTP adapter and other consumers must share
+it; call `setStorage()` only when the request scope alone needs a different one.
 
 ```ts
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 container.requestScopeManager.setStorage(new AsyncLocalStorage())
 ```
+
+See [Execution context](../../README.md#execution-context) for `ContextStorage`.
 
 ---
 

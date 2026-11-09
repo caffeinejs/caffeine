@@ -1,11 +1,4 @@
-/**
- * RequestScopeStorage is a contract for a request scope storage strategy.
- * It matches Node.js AsyncLocalStorage API.
- */
-export interface RequestScopeStorage<T = any> {
-  run<R>(context: T, fn: () => R): R
-  getStore(): T | undefined
-}
+import type { ContextStorage } from './context/context.js'
 
 /**
  * RequestScopeManager is a manager for request-scoped instances.
@@ -27,9 +20,9 @@ export interface RequestScopeManager {
   run<T>(fn: () => T | Promise<T>): Promise<T>
 
   /**
-   * Sets the storage strategy for the request scope.
+   * Sets the storage the request scope keeps its frames in, in place of the container's {@link ContextStorage}.
    *
    * @param storage - The storage to set.
    */
-  setStorage(storage: RequestScopeStorage): void
+  setStorage(storage: ContextStorage): void
 }

@@ -7,7 +7,7 @@ import {
   kFeatureName,
 } from '@caffeinejs/application'
 import { HealthIndicator } from '@caffeinejs/application/health'
-import { type AnyClass, reflect } from '@caffeinejs/di'
+import { type AnyClass, ContextStorage, reflect, type ResolutionContext, Scopes } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -20,7 +20,7 @@ import type { RetryOptions } from '../retry/retry.js'
 import type { TimeLimiterOptions } from '../timelimiter/timelimiter.js'
 import { ANNOTATIONS, Fallback } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
-import { checkedStorage, ResilienceContext, type ResilienceContextStorage } from './context.js'
+import { checkedStorage, ResilienceContext } from './context.js'
 import { criticalBreakers, ResilienceHealthIndicator, type ResilienceHealthOptions } from './health.js'
 import {
   labelOf,
@@ -256,7 +256,7 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   #order: readonly ResilienceKind[] | undefined
   readonly #presets = new Map<string, Policies>()
   #defaults: Policies | undefined
-  #storage: ResilienceContextStorage | undefined
+  #storage: ContextStorage | undefined
   #health: ResilienceHealthOptions | undefined
 
   /** The presets the configuration tree defines. What code sets for a preset's policy wins, option by option. */
@@ -322,13 +322,13 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   /**
-   * Runs every attempt of an annotated method inside `storage`, so an injected {@link ResilienceContext} reads the
-   * attempt's signal and number anywhere below the method: `r.context(new AsyncLocalStorage())`. The package imports
-   * nothing from Node; any object with `run(store, callback)` and `getStore()` works.
+   * Runs every attempt of an annotated method in a frame on `storage` in place of the container's
+   * `ContextStorage`. An injected {@link ResilienceContext} reads the attempt's signal and number anywhere below the
+   * method either way; give one only to keep attempts apart from the container's storage.
    *
    * @throws {@link ErrInvalidOption} when `storage` has no `run` or no `getStore` method.
    */
-  context(storage: ResilienceContextStorage): this {
+  context(storage: ContextStorage): this {
     this.#storage = checkedStorage(storage)
     return this
   }
@@ -360,17 +360,24 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
     const config = this.#config ?? {}
     const definitions = mergedPresets(config, this.#presets, this.#defaults)
     const registry = new ResilienceRegistry(definitions)
-    const aspect = new ResilienceAspect(registry, this.#order ?? config.order, this.#storage)
+    const order = this.#order ?? config.order
+    const storage = (ctx: ResolutionContext) => this.#storage ?? ctx.container.getOptional(ContextStorage)
 
     // Disposed at shutdown, so no backoff or queued call holds it.
     kit.container.bind(ResilienceRegistry, t => t.toValue(registry).preDestroy(instances => instances.dispose()))
-    kit.container.bind(ResilienceContext, t => t.toValue(new ResilienceContext(this.#storage)))
+    kit.container.bind(ResilienceContext, t =>
+      t.toFactory(ctx => new ResilienceContext(storage(ctx))).lifetime(Scopes.SINGLETON),
+    )
     if (this.#health !== undefined) {
       const indicator = new ResilienceHealthIndicator(registry, criticalBreakers(this.#health, definitions))
       kit.container.bind(ResilienceHealthIndicator, t => t.toValue(indicator).extends(HealthIndicator))
     }
     kit.container.aspect(ResilienceAspect, s =>
-      s.toValue(aspect).pointcuts(resiliencePointcut).order(RESILIENCE_ASPECT_ORDER),
+      s
+        .toFactory(ctx => new ResilienceAspect(registry, order, storage(ctx)))
+        .lifetime(Scopes.SINGLETON)
+        .pointcuts(resiliencePointcut)
+        .order(RESILIENCE_ASPECT_ORDER),
     )
   }
 

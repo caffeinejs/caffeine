@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from 'node:async_hooks'
 import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 import type { EventEmitter } from 'node:events'
 import type { IncomingMessage, Server, ServerOptions } from 'node:http'
@@ -9,7 +8,7 @@ import { Server as TLSServer, type TLSSocket } from 'node:tls'
 
 import { ConfigStore } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
-import { Container, Scopes } from '@caffeinejs/di'
+import { Container, contextKey, type ContextStorage, ExecutionContext, Scopes } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 import Fastify, {
   LogController,
@@ -200,6 +199,9 @@ declare module 'fastify' {
  */
 const CACHING_PLUGIN = '@caffeinejs/caching'
 
+// The request's context, in the frame the adapter opens on the container's storage for each request.
+const kHTTPContext = contextKey<Context>('@caffeinejs/http:context')
+
 export class Adapter implements IAdapter<AdapterTypes> {
   /**
    * The parameter compilers handed to every route's dispatch, built once for the whole server. The reply type
@@ -216,13 +218,15 @@ export class Adapter implements IAdapter<AdapterTypes> {
   }
 
   readonly #container: Container
-  readonly #fastifyCtxAls = new AsyncLocalStorage<Context>()
+  // The container's storage, read by the first setup(): the container is initialized by then, and every request
+  // comes after it.
+  #storage: ContextStorage | undefined
 
   constructor(kit: AdapterFactoryIn) {
     this.#container = kit.container
     this.#container.bind(Context, t =>
       t
-        .toFactory(() => this.#fastifyCtxAls.getStore()!)
+        .toFactory(() => this.#storage!.getStore()!.get(kHTTPContext)!)
         .lifetime(Scopes.REQUEST)
         .byPassPostProcessors()
         .internal(),
@@ -354,8 +358,9 @@ export class Adapter implements IAdapter<AdapterTypes> {
 
     // Always: the constructor binds `Context` request-scoped, so every application has a request scope.
     const man = container.requestScopeManager
+    const storage = (this.#storage ??= container.contextStorage)
     fastify.addHook('onRequest', (req, reply, done) => {
-      this.#fastifyCtxAls.run(req.httpContext, () => {
+      storage.run(ExecutionContext.ROOT.with(kHTTPContext, req.httpContext), () => {
         man
           .run(
             () =>

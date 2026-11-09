@@ -4,11 +4,12 @@ import { randomUUID } from 'node:crypto'
 import Supertest from 'supertest'
 import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
 
+import { contextKey, ExecutionContext } from '../../../context/context.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
 import { PostConstruct } from '../../../decorators/post_construct.js'
-import { ErrOutOfScope } from '../../../errors.js'
+import { ErrIllegalScopeState, ErrOutOfScope } from '../../../errors.js'
 import { CaffeineIoC, Scopes } from '../../../index.nodejs.js'
 import { token } from '../../../key.js'
 
@@ -184,6 +185,37 @@ describe('Request Scope', function () {
 
       await expect(di.dispose()).resolves.toBeUndefined()
       expect(destroyed).toHaveBeenCalledTimes(1)
+    })
+  })
+})
+
+describe("Request Scope on the container's ContextStorage", function () {
+  const kTenant = contextKey<string>('tenant')
+  const kAttempt = contextKey<number>('attempt')
+
+  // The HTTP context set by the adapter must stay visible inside the request scope and anything nested in it.
+  it('keeps the outer frame visible inside a request scope', async () => {
+    const di = new CaffeineIoC({ decorators: false })
+    await di.init()
+    const storage = di.contextStorage
+
+    const tenant = await storage.run(ExecutionContext.ROOT.with(kTenant, 'acme'), () =>
+      di.requestScopeManager.run(() => storage.getStore()?.get(kTenant)),
+    )
+
+    expect(tenant).toBe('acme')
+  })
+
+  // A frame of another consumer (a resilience attempt) is not a request scope, so it must not block one.
+  it('starts a request scope under a frame with other slots, and refuses one nested in another', async () => {
+    const di = new CaffeineIoC({ decorators: false })
+    await di.init()
+    const storage = di.contextStorage
+
+    await storage.run(ExecutionContext.ROOT.with(kAttempt, 1), async () => {
+      await di.requestScopeManager.run(async () => {
+        expect(() => di.requestScopeManager.run(() => undefined)).toThrow(ErrIllegalScopeState)
+      })
     })
   })
 })

@@ -12,8 +12,8 @@ import type { WinNotice } from '../dsps/dsp.schemas.js'
  * Tells the winning DSP it won. The DSP bills on it, so a failed notice is tried again, with the retry and the time
  * limit of preset `win-notice`; nobody waits for it, so the retries cost the auction nothing.
  *
- * No caller has a signal to pass, so each attempt's signal, which the time limit aborts, is read from the
- * `ResilienceContext` that `r.context(...)` in `app.ts` enables.
+ * No caller has a signal to pass, so each attempt's signal, which the time limit aborts, is read from the injected
+ * `ResilienceContext`.
  */
 @Injectable([DSPFleet, ResilienceContext, logToken()])
 export class WinNotifier {

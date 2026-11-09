@@ -1,5 +1,3 @@
-import { AsyncLocalStorage } from 'node:async_hooks'
-
 import type { ConfigDefinition } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
@@ -44,8 +42,6 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       .install(
         Resilience((r, { config }) => {
           r.config(config.resilience)
-            // Lets WinNotifier read each attempt's signal: nothing calls it with one.
-            .context(new AsyncLocalStorage())
             // Every breaker on /readyz. None is critical: one DSP down is a missing bid, not an exchange that
             // cannot serve, and pulling the exchange out of the load balancer would lose every auction.
             .health()

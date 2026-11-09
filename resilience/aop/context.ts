@@ -1,15 +1,7 @@
+import { contextKey, type ContextStorage } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { described, ErrInvalidOption } from '../errors.js'
-
-/**
- * What `Resilience(r => r.context(...))` takes: an `AsyncLocalStorage` from `node:async_hooks`, or any object with
- * the same `run` and `getStore`. Give it one of its own: the aspect stores every attempt in it.
- */
-export interface ResilienceContextStorage {
-  run<R>(store: object, callback: () => R): R
-  getStore(): unknown
-}
 
 /** One attempt of an annotated method, as the aspect stores it. */
 export class Attempt {
@@ -19,8 +11,11 @@ export class Attempt {
   ) {}
 }
 
+// The slot each attempt's frame holds its attempt in.
+export const kResilienceAttempt = contextKey<Attempt>('@caffeinejs/resilience:attempt')
+
 /** @throws {@link ErrInvalidOption} when `storage` has no `run` or no `getStore` method. */
-export function checkedStorage(storage: unknown): ResilienceContextStorage {
+export function checkedStorage(storage: unknown): ContextStorage {
   const { run, getStore } = (typeof storage === 'object' && storage !== null ? storage : {}) as Record<string, unknown>
   if (typeof run !== 'function' || typeof getStore !== 'function') {
     throw new ErrInvalidOption(
@@ -32,7 +27,7 @@ export function checkedStorage(storage: unknown): ResilienceContextStorage {
         .build(),
     )
   }
-  return storage as ResilienceContextStorage
+  return storage as ContextStorage
 }
 
 /**
@@ -40,7 +35,7 @@ export function checkedStorage(storage: unknown): ResilienceContextStorage {
  * calls reads the attempt's signal without the method passing it down. Inside nested annotated methods, the
  * innermost attempt is the one read; outside every attempt, both fields are `undefined`.
  *
- * `Resilience()` binds it; it needs a storage, given with `r.context(new AsyncLocalStorage())`.
+ * `Resilience()` binds it, reading the container's `ContextStorage`, or the storage given with `r.context(...)`.
  *
  * ```ts
  * @Injectable([ResilienceContext])
@@ -54,9 +49,9 @@ export function checkedStorage(storage: unknown): ResilienceContextStorage {
  * ```
  */
 export class ResilienceContext {
-  readonly #storage: ResilienceContextStorage | undefined
+  readonly #storage: ContextStorage | undefined
 
-  constructor(storage?: ResilienceContextStorage) {
+  constructor(storage?: ContextStorage) {
     this.#storage = storage
   }
 
@@ -65,7 +60,7 @@ export class ResilienceContext {
    * limiter gives the attempt one of its own. A method called with no signal inside another attempt takes that
    * attempt's signal as its caller's.
    *
-   * @throws {@link ErrInvalidOption} when `Resilience()` was given no storage.
+   * @throws {@link ErrInvalidOption} when no storage is bound and `Resilience()` was given none.
    */
   get signal(): AbortSignal | undefined {
     return this.#current()?.signal
@@ -74,7 +69,7 @@ export class ResilienceContext {
   /**
    * The attempt's number, from 1: the first call is 1, the first retry 2.
    *
-   * @throws {@link ErrInvalidOption} when `Resilience()` was given no storage.
+   * @throws {@link ErrInvalidOption} when no storage is bound and `Resilience()` was given none.
    */
   get attempt(): number | undefined {
     return this.#current()?.attempt
@@ -83,14 +78,16 @@ export class ResilienceContext {
   #current(): Attempt | undefined {
     if (this.#storage === undefined) {
       throw new ErrInvalidOption(
-        errMessage('Cannot read the resilience context: Resilience() was given no context storage')
-          .solutions('Pass one with Resilience(r => r.context(new AsyncLocalStorage()))')
+        errMessage('Cannot read the resilience context: no ContextStorage is bound and Resilience() was given none')
+          .solutions(
+            'Bind one with container.bind(ContextStorage, t => t.toValue(new AsyncLocalStorage()))',
+            'Pass one with Resilience(r => r.context(new AsyncLocalStorage()))',
+          )
           .reference('@caffeinejs/resilience', ErrInvalidOption)
           .build(),
       )
     }
 
-    const store = this.#storage.getStore()
-    return store instanceof Attempt ? store : undefined
+    return this.#storage.getStore()?.get(kResilienceAttempt)
   }
 }
