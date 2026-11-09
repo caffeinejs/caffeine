@@ -197,8 +197,9 @@ describe('sendFile', () => {
     expect(await res.text()).toBe('')
   })
 
-  // A 304 carries no body, and a HEAD of one must not tell a cache the file is now application/octet-stream.
-  it('answers a conditional HEAD with 304 and no stand-in Content-Type', async () => {
+  // A 304 carries no body, and a HEAD of one must not tell a cache the file is now application/octet-stream, nor that
+  // it is now empty: a cache updates its stored response with the headers of a 304.
+  it('answers a conditional HEAD with 304 and no stand-in Content-Type or Content-Length', async () => {
     const started = await start(
       s => s.serve(fixtures),
       newRouter().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
@@ -209,6 +210,7 @@ describe('sendFile', () => {
 
     expect(res.status).toBe(304)
     expect(res.headers.get('content-type')).toBe(null)
+    expect(res.headers.get('content-length')).toBe(null)
   })
 
   // A name is the manifest's key as written; only a path with a leading "/" is a URL path to decode.

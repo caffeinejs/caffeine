@@ -13,7 +13,8 @@ import {
   type StaticManifest,
   variantPath,
 } from '../manifest/manifest.js'
-import { readFileEntry, scan, type SkippedFile } from '../scan/scan.js'
+import { ErrStaticBuild } from '../scan/errors.js'
+import { hashFile, readFileEntry, scan, type SkippedFile } from '../scan/scan.js'
 import { KEPT_RATIO, SMALLEST_COMPRESSED, compressFile } from './_compress.js'
 
 /** {@link buildStatic}'s options. */
@@ -52,13 +53,14 @@ const ENCODINGS: readonly Encoding[] = ['br', 'gzip']
  *
  * Run it at the end of the front-end build. A file is compressed when its type is compressible and it holds at
  * least 1 KiB, and a variant is kept when it is at most 95% of the file's size. Dotfiles but `.well-known/`,
- * symlinks and the variants of an earlier build are left out, and the variants of a file deleted since are removed.
- * Two builds of one tree write the same bytes. Files are read and compressed as streams, so a file's size is not
+ * symlinks and the variants of an earlier build are left out, and the variants the new manifest no longer lists are
+ * removed. Only bytes the earlier manifest records are the build's: an `x.gz` or `x.br` beside `x` holding other bytes
+ * is neither served nor removed, and the build refuses to write a variant over it. Two builds of one tree write the same bytes. Files are read and compressed as streams, so a file's size is not
  * bounded by memory. Every file and the manifest are written under a hidden temporary name and renamed, so a failed
  * build leaves no half-written one, and nothing the next build reads.
  *
- * @throws {@link ErrStaticBuild} for a file nothing types, a name the router would read as syntax, or a root that
- * cannot be read
+ * @throws {@link ErrStaticBuild} for a file nothing types, a name the router would read as syntax, a variant's path
+ * holding bytes no build wrote, or a root that cannot be read
  * @example
  * ```ts
  * const report = await buildStatic({ root: 'web/dist', exclude: ['assets/*.map'] })
@@ -74,6 +76,9 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
   let variants = 0
   let bytes = 0
 
+  // Where a variant goes, holding bytes no build recorded: overwritten only by the same bytes.
+  const reserved = new Set(skipped.filter(({ reason }) => reason === 'reserved').map(({ path }) => path))
+
   // One file at a time, so the build holds one file's chunks at once.
   for (const file of files) {
     const entry = await readFileEntry(root, file.path, file.type)
@@ -82,10 +87,27 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
     if (file.compressible && entry.size >= SMALLEST_COMPRESSED) {
       for (const encoding of ENCODINGS) {
         const path = variantPath(file.path, encoding)
+        // A build stopped before its manifest left its variants unrecorded, and this one writes the same bytes.
+        const present = reserved.has(path) ? (await hashFile(join(root, path))).hash : undefined
         const variant = await writeAtomically(
           join(root, path),
           temporary => compressFile(join(root, file.path), temporary, encoding, entry.size),
-          ({ size }) => size <= entry.size * KEPT_RATIO,
+          ({ hash, size }) => {
+            if (size > entry.size * KEPT_RATIO) {
+              return false
+            }
+
+            if (present !== undefined && present !== hash) {
+              throw new ErrStaticBuild(
+                root,
+                `"${path}" holds bytes no build wrote, where the ${encoding} variant of "${file.path}" goes`,
+                `Rename "${path}", or move it out of the root`,
+                `Delete "${path}" if an earlier build wrote it`,
+              )
+            }
+
+            return true
+          },
         )
 
         if (variant !== undefined) {
@@ -100,12 +122,8 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
     bytes += entry.size
   }
 
-  const manifest: StaticManifest = { files: entries, version: MANIFEST_VERSION }
-  await writeAtomically(join(root, MANIFEST_FILE), temporary =>
-    writeFile(temporary, `${JSON.stringify(sorted(manifest), null, 2)}\n`, { flag: 'wx' }),
-  )
-
-  // The variants of a file deleted since the last build: the scan skipped them, and nothing lists them now.
+  // The variants the new manifest drops, a deleted file's among them. Removed while the earlier manifest still records
+  // them, so a build stopped here leaves the next one knowing them for its own.
   const listed = new Set(Object.values(entries).flatMap(entry => Object.values(entry.variants).map(v => v.path)))
 
   for (const { path, reason } of skipped) {
@@ -113,6 +131,11 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
       await rm(join(root, path), { force: true })
     }
   }
+
+  const manifest: StaticManifest = { files: entries, version: MANIFEST_VERSION }
+  await writeAtomically(join(root, MANIFEST_FILE), temporary =>
+    writeFile(temporary, `${JSON.stringify(sorted(manifest), null, 2)}\n`, { flag: 'wx' }),
+  )
 
   return { files: files.length, variants, bytes, saved, skipped, duration: performance.now() - started }
 }

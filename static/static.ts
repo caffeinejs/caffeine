@@ -286,6 +286,30 @@ function staticPlugin(
       })
     }
 
+    // The same check for every route registered after the mount, compiled routes among them: the router refuses a
+    // second route at a URL the mount registered itself, but not one at a file's URL under a directory.
+    const underDirectories = new Map<string, { mount: PreparedMount; file: PreparedFile }>()
+
+    for (const mount of mounts) {
+      for (const file of mount.routed) {
+        const url = mount.prefix + file.path
+
+        if (!routes.has(url)) {
+          underDirectories.set(key(url, router), { mount, file })
+        }
+      }
+    }
+
+    instance.addHook('onRoute', route => {
+      const methods = Array.isArray(route.method) ? route.method : [route.method]
+      const url = router.ignoreTrailingSlash && route.url.length > 1 ? route.url.replace(/\/$/, '') : route.url
+      const served = underDirectories.get(key(url, router))
+
+      if (served !== undefined && methods.some(method => method === 'GET' || method === 'HEAD')) {
+        throw new ErrStaticRouteConflict(route.url, describe(served.mount, served.file))
+      }
+    })
+
     for (const mount of mounts) {
       log(
         {
@@ -450,12 +474,16 @@ function fileHandler(file: PreparedFile) {
   return async (request: FastifyRequest, reply: FastifyReply) => send(reply, await decide(file, request))
 }
 
+/** The escapes find-my-way keeps while matching: `#`, `$`, `&`, `+`, `,`, `/`, `:`, `;`, `=`, `?` and `@`. */
+const RESERVED_ESCAPE = /%(?:2[346BCF]|3[ABDF]|40)/i
+
 function directoryHandler(files: ReadonlyMap<string, PreparedFile>, router: RouterFlags) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    // The router matches `%2F` as a character of one segment, then decodes it in the wildcard: read as `/`, it would
-    // reach a file by a URL another route answers. No name holds a `/` of its own, so it names nothing.
-    const encodedSlash = /%2f/i.test(request.url.split('?', 1)[0]!)
-    const file = encodedSlash ? undefined : files.get(key((request.params as { '*': string })['*'], router))
+    // The router matches these escapes as written, then decodes them in the wildcard. An exact route at a file's URL
+    // matches only the literal spelling, so the escaped one would reach the file here, under this route's gate; and
+    // `%2F`, read as `/`, would reach a file by a URL another route answers. So they name nothing here either.
+    const escaped = RESERVED_ESCAPE.test(request.url.split('?', 1)[0]!)
+    const file = escaped ? undefined : files.get(key((request.params as { '*': string })['*'], router))
 
     if (file === undefined) {
       throw new ErrHTTPNotFound(`Route ${request.method}:${request.url} not found`)
@@ -480,8 +508,9 @@ function decide(file: PreparedFile, request: FastifyRequest): Promise<FileDecisi
 }
 
 function send(reply: FastifyReply, decision: FileDecision): FastifyReply {
-  // The handler timed out while the file opened: the reply went out without it, and nothing would close it.
-  if (reply.sent) {
+  // The handler timed out while the file opened: the 503 answers, sent or still in a hook, and nothing would close the
+  // file. A timed route's signal says which, not `reply.sent`, which stays false while a hook holds the 503.
+  if (reply.sent || timedOut(reply.request)) {
     decision.body?.destroy()
 
     return reply
@@ -494,4 +523,16 @@ function send(reply: FastifyReply, decision: FileDecision): FastifyReply {
   }
 
   return reply.send(decision.body)
+}
+
+/**
+ * Whether Fastify's handler timeout fired. Read only on a timed route, which has built its signal already; its other
+ * abort is the request's close, which is not the client leaving.
+ */
+function timedOut(request: FastifyRequest): boolean {
+  return (
+    request.routeOptions.handlerTimeout > 0 &&
+    request.signal.aborted &&
+    (request.signal.reason as { code?: unknown } | null)?.code === 'FST_ERR_HANDLER_TIMEOUT'
+  )
 }

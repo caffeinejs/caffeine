@@ -40,14 +40,15 @@ describe('selectEncoding', () => {
     expect(selectEncoding(header, [])).toBe(selected)
   })
 
-  // Parsing stays linear. A header past 32 entries is not read at all: an entry left unread could refuse the coding
-  // the rest would pick, so identity goes out, as for a client that sent no header.
-  it('reads up to 32 entries, and answers identity to a longer header', () => {
+  // Parsing stays linear. A header past 32 entries is not read at all, and is refused: an entry left unread could
+  // refuse the coding the rest would pick, identity included, so no representation is known to be acceptable.
+  it('reads up to 32 entries, and refuses a longer header', () => {
     const filler = Array.from({ length: 31 }, (_, i) => `x-${i}`)
 
     expect(selectEncoding([...filler, 'br'].join(', '), ['br', 'gzip'])).toBe('br')
     expect(selectEncoding([...filler.slice(1), 'identity;q=0', 'br'].join(', '), ['br', 'gzip'])).toBe('br')
-    expect(selectEncoding(['*', ...filler, 'br;q=0'].join(', '), ['br', 'gzip'])).toBe('identity')
-    expect(selectEncoding([...filler, 'deflate', 'br'].join(', '), ['br', 'gzip'])).toBe('identity')
+    expect(selectEncoding(['identity;q=0', ...filler, 'br'].join(', '), ['br', 'gzip'])).toBe(undefined)
+    expect(selectEncoding(['*;q=0', ...filler, 'br'].join(', '), [])).toBe(undefined)
+    expect(selectEncoding([...filler, 'deflate', 'br'].join(', '), ['br', 'gzip'])).toBe(undefined)
   })
 })

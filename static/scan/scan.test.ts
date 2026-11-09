@@ -50,8 +50,9 @@ describe('scan', () => {
     ])
   })
 
-  // Built in place twice, a root holds the first build's variants: they are not files to compress again.
-  it('reads x.gz as a variant beside x, and as a file of its own without it', async () => {
+  // A name beside a file is where its variant goes, never a file to serve; without a manifest recording its bytes it
+  // is not the build's either. The build's own are in its tests, which write that manifest.
+  it('reads x.gz beside x as reserved without a record of it, and as a file of its own without x', async () => {
     await tree(['app.js', 'app.js.br', 'app.js.gz', 'backup.tar.gz', 'static.manifest.json'])
 
     const { files, skipped } = await scan(root)
@@ -61,8 +62,8 @@ describe('scan', () => {
       { path: 'backup.tar.gz', type: 'application/gzip', compressible: false },
     ])
     expect(skipped).toEqual([
-      { path: 'app.js.br', reason: 'variant' },
-      { path: 'app.js.gz', reason: 'variant' },
+      { path: 'app.js.br', reason: 'reserved' },
+      { path: 'app.js.gz', reason: 'reserved' },
       { path: 'static.manifest.json', reason: 'manifest' },
     ])
   })

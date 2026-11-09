@@ -137,6 +137,45 @@ describe('buildStatic', () => {
     expect(await readFile(join(root, 'manual.txt.gz'), 'utf8')).toBe('an archive of its own')
   })
 
+  // A name beside a file is reserved for its variant, but only bytes a build recorded are the build's to delete.
+  it('keeps an archive beside a file it never compressed, and serves neither as the other', async () => {
+    await writeFile(join(root, 'manual.txt'), 'short')
+    await writeFile(join(root, 'manual.txt.gz'), 'an archive of its own')
+
+    const report = await buildStatic({ root })
+
+    expect(await readFile(join(root, 'manual.txt.gz'), 'utf8')).toBe('an archive of its own')
+    expect(report.skipped).toContainEqual({ path: 'manual.txt.gz', reason: 'reserved' })
+    expect(Object.keys((await readManifest(root)).files).filter(path => path.startsWith('manual'))).toEqual([
+      'manual.txt',
+    ])
+  })
+
+  it('refuses to write a variant over bytes it did not write, leaving them as they were', async () => {
+    await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+    await writeFile(join(root, 'manual.txt.gz'), 'an archive of its own')
+
+    const err = await buildStatic({ root }).catch((err: unknown) => err)
+
+    expect(err).toBeInstanceOf(ErrStaticBuild)
+    expect((err as Error).message.split('\n')[0]).toBe(
+      `Cannot build static files from "${root}": "manual.txt.gz" holds bytes no build wrote, where the gzip variant of "manual.txt" goes`,
+    )
+    expect(await readFile(join(root, 'manual.txt.gz'), 'utf8')).toBe('an archive of its own')
+    expect((await readdir(root)).filter(name => name.startsWith('.'))).toEqual([])
+  })
+
+  // A build stopped after writing its variants and before its manifest leaves the same bytes the next one writes.
+  it('rebuilds over the variants of a build that wrote no manifest', async () => {
+    await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+    await buildStatic({ root })
+    await rm(join(root, MANIFEST_FILE))
+
+    await buildStatic({ root })
+
+    expect(Object.keys((await readManifest(root)).files['manual.txt']!.variants)).toEqual(['br', 'gzip'])
+  })
+
   // A build that fails mid-write must leave nothing the next build reads as a file of the site.
   it('leaves no temporary behind when a write fails, so the next build succeeds', async () => {
     await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))

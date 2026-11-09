@@ -23,8 +23,12 @@ export interface ScanOptions {
   readonly types?: Readonly<Record<string, string>>
 }
 
-/** Why the scan left a file out. */
-export type SkipReason = 'dotfile' | 'manifest' | 'variant' | 'symlink' | 'not-a-file' | 'excluded'
+/**
+ * Why the scan left a file out. A `variant` holds bytes an earlier build recorded writing, and the build may replace or
+ * delete it; a `reserved` file sits where a variant of a file on disk goes, with bytes no build recorded, and is
+ * neither served nor touched.
+ */
+export type SkipReason = 'dotfile' | 'manifest' | 'variant' | 'reserved' | 'symlink' | 'not-a-file' | 'excluded'
 
 /** A file the scan left out, and the rule that did. */
 export interface SkippedFile {
@@ -51,9 +55,10 @@ const VARIANT_SUFFIXES = ['.br', '.gz']
  * Walks `root` and decides, file by file, what is served.
  *
  * Fixed rules first: a symlink or anything else that is not a regular file is skipped; a path with a segment starting
- * with `.` is skipped, but under a leading `.well-known/`; the manifest is skipped; `x.br` and `x.gz` are skipped as
- * variants of an earlier build when `x` is on disk, or when the manifest already at the root lists them as variants
- * and they still hold the bytes it records; otherwise they are files of their own. Then the names: one
+ * with `.` is skipped, but under a leading `.well-known/`; the manifest is skipped. `x.br` and `x.gz` are skipped as
+ * an earlier build's variants when the manifest already at the root lists them and they still hold the bytes it
+ * records, as `reserved` when they hold other bytes and `x` is on disk, and are files of their own otherwise. Then
+ * the names: one
  * holding a character the router or a URL reads as syntax, a control character, or not in Unicode NFC fails the scan.
  * Then `exclude`. Then the type: a file nothing types fails the scan. Every file a rule drops is in `skipped`.
  *
@@ -82,7 +87,7 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
   const untyped: string[] = []
 
   for (const { entry, path } of listed) {
-    const reason = fixedRule(entry, path, regular) ?? (await orphanRule(root, path, earlier))
+    const reason = fixedRule(entry, path) ?? (await siblingRule(root, path, regular, earlier))
 
     if (reason !== undefined) {
       skipped.push({ path, reason })
@@ -162,25 +167,34 @@ async function earlierVariants(root: string): Promise<ReadonlyMap<string, Manife
   }
 }
 
-// A variant an earlier build wrote whose file has since gone: still the build's own while it holds the bytes the
-// manifest records, and never a file of the site.
-async function orphanRule(
+// `x.br` and `x.gz`: the build's own while they hold the bytes its manifest records, whether or not `x` is still there,
+// and reserved for a variant of `x` otherwise.
+async function siblingRule(
   root: string,
   path: string,
+  regular: ReadonlySet<string>,
   earlier: ReadonlyMap<string, ManifestVariant>,
 ): Promise<SkipReason | undefined> {
-  const variant = earlier.get(path)
+  const suffix = VARIANT_SUFFIXES.find(s => path.endsWith(s))
 
-  if (variant === undefined) {
+  if (suffix === undefined) {
     return undefined
   }
 
-  const { hash, size } = await hashFile(join(root, path))
+  const variant = earlier.get(path)
 
-  return hash === variant.hash && size === variant.size ? 'variant' : undefined
+  if (variant !== undefined) {
+    const { hash, size } = await hashFile(join(root, path))
+
+    if (hash === variant.hash && size === variant.size) {
+      return 'variant'
+    }
+  }
+
+  return regular.has(path.slice(0, -suffix.length)) ? 'reserved' : undefined
 }
 
-function fixedRule(entry: Dirent, path: string, regular: ReadonlySet<string>): SkipReason | undefined {
+function fixedRule(entry: Dirent, path: string): SkipReason | undefined {
   if (entry.isSymbolicLink()) {
     return 'symlink'
   }
@@ -196,11 +210,6 @@ function fixedRule(entry: Dirent, path: string, regular: ReadonlySet<string>): S
 
   if (path === MANIFEST_FILE) {
     return 'manifest'
-  }
-
-  const suffix = VARIANT_SUFFIXES.find(s => path.endsWith(s))
-  if (suffix !== undefined && regular.has(path.slice(0, -suffix.length))) {
-    return 'variant'
   }
 
   return undefined

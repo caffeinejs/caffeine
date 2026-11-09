@@ -167,7 +167,7 @@ and conditional requests:
 ```ts
 import { openAsBlob } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
-import { relative, resolve, sep } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { Attachment, ErrHTTPNotFound } from '@caffeinejs/http'
 
@@ -180,11 +180,11 @@ const notFound = (): never => {
 
 /** Where `path` is under `REPORTS`, or undefined when it is outside, the directory itself or a dotfile. */
 function confined(path: string): string | undefined {
+  // On Windows, a path on another drive is relative to nothing, and comes back absolute.
   const inside = relative(REPORTS, path)
+  const outside = inside === '' || isAbsolute(inside) || inside.split(sep).some(segment => segment.startsWith('.'))
 
-  return inside === '' || inside.startsWith('..') || inside.split(sep).some(segment => segment.startsWith('.'))
-    ? undefined
-    : inside
+  return outside ? undefined : inside
 }
 
 reports.get('/reports/*', async ctx => {

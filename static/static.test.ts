@@ -6,7 +6,7 @@ import { dirname, join, relative } from 'node:path'
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Authentication, Authorization, ErrConfiguration, RouteInventory, type WebApplication } from '@caffeinejs/http'
 import { authentication, createWebApplication, newRouter, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
-import { Day, Millisecond } from '@caffeinejs/std/duration'
+import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, beforeEach, describe, expect, inject, it, vi } from 'vitest'
@@ -149,6 +149,20 @@ describe('staticFiles', () => {
     expect((await app!.request('/assets/private%2freport.txt')).status).toBe(404)
   })
 
+  // The router matches these escapes as written and decodes them in the wildcard, as with "%2F": an exact route at
+  // the file's URL, gated its own way, answers only the literal spelling, so the wildcard answers none but that.
+  it.each(['%24', '%26', '%2B', '%2b', '%2C', '%3B', '%3D', '%40'])(
+    'answers 404 for %s under a directory, which an exact route would not match',
+    async escape => {
+      const name = `a${decodeURIComponent(escape)}b.txt`
+      const root = await tree('nested', [`assets/${name}`])
+      await start(s => s.serve(root, { anonymous: true })).bootstrap()
+
+      expect((await app!.request(`/assets/${name}`)).status).toBe(200)
+      expect((await app!.request(`/assets/a${escape}b.txt`)).status).toBe(404)
+    },
+  )
+
   // The 503 goes out while the open still waits, so nothing reads the descriptor it then gets: left open, every timed
   // out request would hold one until the process exits. A FIFO keeps the open waiting until a writer comes.
   it.skipIf(process.platform !== 'linux')('closes a file it opened after the handler timed out', async () => {
@@ -170,6 +184,63 @@ describe('staticFiles', () => {
     } finally {
       await writer.close()
     }
+  })
+
+  // Fastify aborts the timeout signal before it starts the 503, and the reply is not sent while a hook holds it: a
+  // file opened then must not rewrite that response, nor go out over it.
+  it.skipIf(process.platform !== 'linux')("leaves a timeout's 503 alone while a hook still holds it", async () => {
+    const root = await tree('slow', ['slow.txt'])
+    let holding!: () => void
+    const started = new Promise<void>(resolve => (holding = resolve))
+    let release!: () => void
+    const held = new Promise<void>(resolve => (release = resolve))
+    const plugin: FastifyPluginAsync = async instance => {
+      instance.addHook('onSend', async (_request, reply, payload) => {
+        if (reply.statusCode === 503) {
+          holding()
+          await held
+        }
+
+        return payload
+      })
+    }
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { handlerTimeout: 30 * Millisecond } }))
+      .with(() => fp(plugin, { name: 'holding' }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    await app.bootstrap()
+    const fifo = join(await realpath(root), 'slow.txt')
+    await rm(fifo)
+    execFileSync('mkfifo', [fifo])
+
+    const response = app.request('/slow.txt')
+    await started
+    // The writer's open completes the server's, and is then the only descriptor left on the FIFO.
+    const writer = await open(fifo, 'w')
+    try {
+      await vi.waitFor(async () => expect(await descriptorsOn(fifo)).toBe(1))
+    } finally {
+      release()
+      await writer.close()
+    }
+
+    const res = await response
+    expect(res.status).toBe(503)
+    expect(res.headers.get('etag')).toBe(null)
+  })
+
+  // A timed route's signal exists before its handler runs: only a timeout that fired keeps the file from going out.
+  it('serves the file on a timed route', async () => {
+    const root = await tree('timed', ['report.txt'])
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { handlerTimeout: 30 * Second } }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    await app.bootstrap()
+
+    const res = await app.request('/report.txt')
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('report.txt')
   })
 
   // The router takes the longest prefix, so neither mount hides the other, whichever is declared first.
@@ -412,8 +483,36 @@ describe('staticFiles', () => {
 
       expect(err).toBeInstanceOf(ErrStaticRouteConflict)
       expect(firstLine(err)).toBe(
-        `Cannot register "/assets/private/report.txt": "${name(root, 'assets/private/report.txt')}" answers a route registered before it`,
+        `Cannot register "/assets/private/report.txt": "${name(root, 'assets/private/report.txt')}" answers another route at that URL`,
       )
+    })
+
+    // Compiled routes are registered after every plugin: a gated one at a file's URL would answer the literal
+    // spelling while the anonymous mount answered every other.
+    it('from a route registered after the mount at the URL of a file under a directory', async () => {
+      const root = await tree('nested', ['assets/private/report.txt', 'assets/app.js'])
+      start(s => s.serve(root, { anonymous: true })).mount(
+        newRouter().get('/assets/private/report.txt', () => 'protected'),
+      )
+
+      const err = await app!.bootstrap().catch((err: unknown) => err)
+
+      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+      expect(firstLine(err as Error)).toBe(
+        `Cannot register "/assets/private/report.txt": "${name(root, 'assets/private/report.txt')}" answers another route at that URL`,
+      )
+    })
+
+    // The mount answers GET and HEAD alone: a form posting to a file's URL takes nothing from it.
+    it('but not from a POST registered after the mount at the URL of a file under a directory', async () => {
+      const root = await tree('nested', ['assets/private/report.txt'])
+      start(s => s.serve(root, { anonymous: true })).mount(
+        newRouter().post('/assets/private/report.txt', () => 'posted'),
+      )
+      await app!.bootstrap()
+
+      expect(await (await app!.request('/assets/private/report.txt', { method: 'POST' })).text()).toBe('posted')
+      expect(await (await app!.request('/assets/private/report.txt')).text()).toBe('assets/private/report.txt')
     })
 
     it('from a route registered before the mount', async () => {
@@ -426,7 +525,7 @@ describe('staticFiles', () => {
 
       expect(err).toBeInstanceOf(ErrStaticRouteConflict)
       expect(firstLine(err)).toBe(
-        `Cannot register "/hello.txt": "${name(fixtures, 'hello.txt')}" answers a route registered before it`,
+        `Cannot register "/hello.txt": "${name(fixtures, 'hello.txt')}" answers another route at that URL`,
       )
     })
   })
