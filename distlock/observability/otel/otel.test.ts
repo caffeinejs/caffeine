@@ -337,6 +337,26 @@ describe('instrumentDistLock store timeouts', () => {
       }),
     ])
   })
+  // A release that never lands leaves the key taken until its lease lapses: the store is the one to look at.
+  it('counts a release the store did not answer as a backend error on release', async () => {
+    const otel = instrument()
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('a')
+    backend.hang.add('release')
+    const releasing = held.release().catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await releasing
+
+    expect(await otel.points('distlock.backend.errors')).toEqual([
+      expect.objectContaining({
+        attributes: { 'distlock.operation': 'release', 'distlock.error': 'timeout' },
+        value: 1,
+      }),
+    ])
+  })
 })
 
 describe('instrumentDistLock lost leases', () => {
