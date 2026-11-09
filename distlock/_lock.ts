@@ -346,27 +346,9 @@ export class HeldLock implements Lock {
       throw error
     }
 
-    // A backend that changed the token breaks fencing for every write after this one: the lease is given back
-    // and the lock lost rather than carried on under a number the resource cannot trust.
     const violation = next === undefined ? undefined : fencingViolation(next, sent)
     if (violation !== undefined) {
-      this.#host.log.warn(
-        { err: violation, key: this.key, leaseID: this.leaseID, operation: 'extend' },
-        'lock backend failed',
-      )
-      this.#host.giveBack(next!)
-
-      if (ctx !== undefined) {
-        ctx.outcome = 'error'
-      }
-
-      if (renewal) {
-        // Not retried: `#renew` marks the lease lost once the channel has settled.
-        this.#givingUp = true
-      } else {
-        this.#lose('error', false)
-      }
-
+      this.#refuseExtended(violation, next!, renewal, ctx)
       throw violation
     }
 
@@ -433,6 +415,32 @@ export class HeldLock implements Lock {
 
     if (ctx !== undefined) {
       ctx.outcome = 'error'
+    }
+  }
+
+  // A backend that changed the token breaks fencing for every write after this one: the lease is given back and
+  // the lock lost rather than carried on under a number the resource cannot trust.
+  #refuseExtended(
+    violation: ErrLockBackendContract,
+    next: LockLease,
+    renewal: boolean,
+    ctx: Writable<ExtendContext> | undefined,
+  ): void {
+    this.#host.log.warn(
+      { err: violation, key: this.key, leaseID: this.leaseID, operation: 'extend' },
+      'lock backend failed',
+    )
+    this.#host.giveBack(next)
+
+    if (ctx !== undefined) {
+      ctx.outcome = 'error'
+    }
+
+    if (renewal) {
+      // Not retried: `#renew` marks the lease lost once the channel has settled.
+      this.#givingUp = true
+    } else {
+      this.#lose('error', false)
     }
   }
 
