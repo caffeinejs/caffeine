@@ -36,6 +36,10 @@
       "types": "./dist/observability/otel/index.d.ts",
       "default": "./dist/observability/otel/index.js"
     },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

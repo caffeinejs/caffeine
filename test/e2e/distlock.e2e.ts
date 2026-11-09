@@ -18,6 +18,7 @@ import {
 import { RedisLockBackend, type RedisLockClient } from '@caffeinejs/distlock/backend/redis'
 import type { AcquireOutcome, LostMessage } from '@caffeinejs/distlock/observability'
 import { instrumentDistLock } from '@caffeinejs/distlock/observability/otel'
+import { backendContractContext, lockBackendContract } from '@caffeinejs/distlock/testing'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import {
   AggregationTemporality,
@@ -106,6 +107,15 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
     })
 
     describe('RedisLockBackend', () => {
+      // Leases lapse on the server's clock, which no test can move: the contract waits them out.
+      it.each(lockBackendContract)('conforms to the backend contract: $name', async c => {
+        const ctx = backendContractContext(new RedisLockBackend(clients[0]), {
+          elapse: ms => sleep(ms),
+          prefix: key('contract:'),
+        })
+        await c.run(ctx)
+      })
+
       it('turns a second acquisition away until the server expires the key', async () => {
         const backend = new RedisLockBackend(clients[0])
         const k = key('expiry')
