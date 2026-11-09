@@ -3,7 +3,16 @@
   "version": "0.0.0",
   "description": "Dependency-free utilities for CaffeineJS: durations, byte sizes and error messages",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/std#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "std"
+  },
   "type": "module",
   "exports": {
     "./bytes": {
@@ -22,8 +31,16 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",

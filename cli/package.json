@@ -3,10 +3,20 @@
   "version": "0.0.0",
   "description": "CaffeineJS build-time CLI",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/cli#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "cli"
+  },
   "type": "module",
   "engines": {
-    "bun": ">=1.2.0"
+    "bun": ">=1.2.0",
+    "node": ">=24"
   },
   "bin": {
     "caffeine": "./dist/caffeine"
@@ -20,9 +30,14 @@
   },
   "files": [
     "dist",
-    "caffeinerc.schema.json",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes",
+    "caffeinerc.schema.json"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json && npm run generate:schema",
     "generate:schema": "bun tools/generate_schema.ts",

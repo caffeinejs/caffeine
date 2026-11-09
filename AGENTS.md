@@ -57,7 +57,7 @@ Keep code names, paths, and error text exact. Do not simplify those.
 
 - Never commit or push unless asked.
 - Branch: `<type>/<topic>`, a Conventional Commits type and a kebab-case topic (`fix/cookie-max-age`). Never an AI tool or model name (`claude`, `codex`, `copilot`, `cursor`, `gemini`, …).
-- Conventional Commits: `<type>(<optional scope>): <description>`. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`. Description under 72 characters, imperative mood, no trailing period.
+- Conventional Commits: `<type>(<optional scope>): <description>`. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`, `build`, `ci`, `bench`. Description under 72 characters, imperative mood, no trailing period. A `!` before the colon marks a breaking change (`feat(http)!: …`): a pull request's title becomes the commit and its line in the release notes.
 - No AI attribution in commits, pull requests, comments or reviews: no `Co-Authored-By` naming an assistant, no session link, no "Generated with" line. The contributor is the author of record.
 - `make check` green before review; `make lint-markdown` when every changed file is `*.md`.
 - Never use `git stash`. If uncommitted changes exist and you need to switch state, stop and ask.

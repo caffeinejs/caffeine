@@ -3,7 +3,16 @@
   "version": "0.0.0",
   "description": "undici-based transport for @caffeinejs/fetchy",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/fetchy/fetchy-undici#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "fetchy/fetchy-undici"
+  },
   "type": "module",
   "types": "dist/index.d.ts",
   "exports": {
@@ -15,16 +24,26 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeinejs/fetchy": "*",
-    "@caffeinejs/std": "*",
     "undici": "^8.12.3"
+  },
+  "peerDependencies": {
+    "@caffeinejs/fetchy": "0.0.0",
+    "@caffeinejs/std": "0.0.0"
   }
 }

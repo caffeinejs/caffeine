@@ -71,6 +71,10 @@ export interface IContext<
 
   get statusCode(): number
 
+  /**
+   * Aborts when the client leaves before the answer is out, and on a timed route when its handler timeout fires. An
+   * answer sent in full never aborts it, so work a handler started may outlive the answer under it.
+   */
   get signal(): AbortSignal
 
   /**

@@ -39,7 +39,6 @@ jobs:
         # 24 also runs what does not depend on the Node version: lint, type-check, the CLI's Bun tests, and the
         # coverage reports, whose artifact can be uploaded only once.
         include:
-          - node-version: '22'
           - node-version: '24'
             primary: true
 
@@ -74,6 +73,10 @@ jobs:
       - name: Lint
         if: ${{ matrix.primary }}
         run: npm run lint
+
+      - name: Package Manifests
+        if: ${{ matrix.primary }}
+        run: npm run packages:check
 
       - name: Type Check
         if: ${{ matrix.primary }}

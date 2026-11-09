@@ -4,6 +4,17 @@
   "description": "CaffeineJS monorepo",
   "license": "MIT",
   "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git"
+  },
+  "engines": {
+    "node": ">=24"
+  },
   "private": true,
   "type": "module",
   "workspaces": [
@@ -56,6 +67,8 @@
     "fmt:check": "oxfmt --check",
     "lint:markdown": "markdownlint-cli2",
     "license:check": "node tools/check-licenses.mjs",
+    "packages:check": "node tools/check-packages.mjs",
+    "release:version": "node tools/release-version.mjs",
     "pins:check": "node tools/check-pins.mjs",
     "spec:check": "node tools/generate-spec.mjs --check",
     "spec:gen": "node tools/generate-spec.mjs",

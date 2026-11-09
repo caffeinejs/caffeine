@@ -14,15 +14,15 @@
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@caffeinejs/application": "*",
-    "@caffeinejs/devtools": "*",
-    "@caffeinejs/di": "*",
-    "@caffeinejs/html": "*",
-    "@caffeinejs/http": "*",
-    "@caffeinejs/multipart": "*",
-    "@caffeinejs/openapi": "*",
-    "@caffeinejs/static": "*",
-    "@caffeinejs/std": "*",
+    "@caffeinejs/application": "0.0.0",
+    "@caffeinejs/devtools": "0.0.0",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/html": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/multipart": "0.0.0",
+    "@caffeinejs/openapi": "0.0.0",
+    "@caffeinejs/static": "0.0.0",
+    "@caffeinejs/std": "0.0.0",
     "@fastify/multipart": "^10.1.1",
     "@fastify/static": "^10.1.9",
     "@kitajs/html": "^4.2.13",
@@ -35,9 +35,9 @@
     "pino": "^10.3.1"
   },
   "devDependencies": {
-    "@caffeinejs/brewer": "*",
-    "@caffeinejs/cli": "*",
-    "@caffeinejs/testing": "*",
+    "@caffeinejs/brewer": "0.0.0",
+    "@caffeinejs/cli": "0.0.0",
+    "@caffeinejs/testing": "0.0.0",
     "@types/node": "^26.6.5",
     "prisma": "^7.10.1",
     "tsx": "^4.23.15"

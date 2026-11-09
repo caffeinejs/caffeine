@@ -1,0 +1,31 @@
+# The `test` profile, which the Vitest config activates. OS-assigned port, and windows small enough that each policy
+# trips within a few calls. Each test lists the fake DSPs it starts in `dsps`.
+server:
+  port: 0
+
+log:
+  level: warn
+
+resilience:
+  defaults:
+    circuitBreaker:
+      slidingWindow:
+        type: count
+        size: 4
+      minimumNumberOfCalls: 4
+      waitDurationInOpenState: 1h
+    rateLimiter:
+      limitRefreshPeriod: 1h
+    # No deadline passes on its own: a busy machine would turn a bid into a timeout. A test of the deadline sets its
+    # own and drives the clock.
+    timeLimiter:
+      timeoutDuration: 1h
+    bulkhead:
+      maxConcurrentCalls: 2
+
+  presets:
+    win-notice:
+      retry:
+        backoff:
+          type: fixed
+          delay: 1ms

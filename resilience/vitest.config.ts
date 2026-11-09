@@ -5,6 +5,7 @@ export default defineConfig({
     name: 'resilience',
     pool: 'threads',
     include: ['**/*.test.ts'],
+    exclude: ['node_modules/**', 'dist/**', '_tests/memory/**'],
     environment: 'node',
     passWithNoTests: true,
   },

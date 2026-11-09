@@ -1,3 +1,5 @@
+import { createServer } from 'node:net'
+
 import {
   createApplication,
   ErrApplicationStarted,
@@ -76,9 +78,15 @@ describe('listeners', () => {
   })
 
   it('hands the callback the resolved configuration, so a port read from it is the one listened on', async () => {
+    const free = await new Promise<number>(resolve => {
+      const probe = createServer().listen(0, '127.0.0.1', () => {
+        const { port } = probe.address() as { port: number }
+        probe.close(() => resolve(port))
+      })
+    })
     const schema = $t.Object({ admin: $t.Object({ host: $t.String(), port: $t.Number() }) })
     const conf = newConfiguration(schema)
-      .source(new InlineConfigSource({ admin: { host: '127.0.0.2', port: 0 } }))
+      .source(new InlineConfigSource({ admin: { host: '127.0.0.1', port: free } }))
       .build().config
     app = createWebApplication({ config: conf })
       .server(() => ({ listener }))
@@ -86,7 +94,7 @@ describe('listeners', () => {
 
     await app.run()
 
-    expect(app.listeners.get('admin')!.address!.host).toBe('127.0.0.2')
+    expect(app.listeners.get('admin')!.address!.port).toBe(free)
   })
 
   it('keeps the order listeners were added in, the application before the features it configures', async () => {

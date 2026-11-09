@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import { CacheInterceptor, CacheModule } from '@nestjs/cache-manager'
 import { Controller, Get, Module } from '@nestjs/common'
 import { APP_INTERCEPTOR, NestFactory } from '@nestjs/core'
-import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
+import { type NestNodeApplication, NodeAdapter } from '@nestjs/platform-node'
 
 import { PRODUCTS, TTL_SECONDS } from '../payload.js'
 
@@ -31,6 +31,6 @@ class ProductsController {
 })
 class AppModule {}
 
-const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false })
+const app = await NestFactory.create<NestNodeApplication>(AppModule, new NodeAdapter(), { logger: false })
 
 await app.listen(PORT, '0.0.0.0')

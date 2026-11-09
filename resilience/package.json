@@ -1,9 +1,18 @@
 {
   "name": "@caffeinejs/resilience",
   "version": "0.0.0",
-  "description": "Circuit breaker and retry for CaffeineJS",
+  "description": "Circuit breaker, retry, time limiter, bulkhead, rate limiter and fallback for CaffeineJS",
   "license": "MIT",
-  "private": true,
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/resilience#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "resilience"
+  },
   "type": "module",
   "sideEffects": false,
   "types": "dist/index.d.ts",
@@ -11,6 +20,38 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./circuitbreaker": {
+      "types": "./dist/circuitbreaker/index.d.ts",
+      "default": "./dist/circuitbreaker/index.js"
+    },
+    "./retry": {
+      "types": "./dist/retry/index.d.ts",
+      "default": "./dist/retry/index.js"
+    },
+    "./timelimiter": {
+      "types": "./dist/timelimiter/index.d.ts",
+      "default": "./dist/timelimiter/index.js"
+    },
+    "./bulkhead": {
+      "types": "./dist/bulkhead/index.d.ts",
+      "default": "./dist/bulkhead/index.js"
+    },
+    "./ratelimiter": {
+      "types": "./dist/ratelimiter/index.d.ts",
+      "default": "./dist/ratelimiter/index.js"
+    },
+    "./fallback": {
+      "types": "./dist/fallback/index.d.ts",
+      "default": "./dist/fallback/index.js"
+    },
+    "./aop": {
+      "types": "./dist/aop/index.d.ts",
+      "default": "./dist/aop/index.js"
+    },
+    "./http": {
+      "types": "./dist/http/index.d.ts",
+      "default": "./dist/http/index.js"
     },
     "./otel": {
       "types": "./dist/otel/index.d.ts",
@@ -20,25 +61,47 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
   ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "@caffeinejs/std": "*"
+    "test": "vitest run",
+    "test:memory": "vitest run --config vitest.leak.config.ts"
   },
   "peerDependencies": {
+    "@caffeinejs/application": "0.0.0",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/std": "0.0.0",
     "@opentelemetry/api": ">=1 <2"
   },
   "peerDependenciesMeta": {
+    "@caffeinejs/application": {
+      "optional": true
+    },
+    "@caffeinejs/di": {
+      "optional": true
+    },
+    "@caffeinejs/http": {
+      "optional": true
+    },
     "@opentelemetry/api": {
       "optional": true
     }
   },
   "devDependencies": {
+    "@caffeinejs/application": "0.0.0",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-prometheus": "^0.222.0",
     "@opentelemetry/sdk-metrics": "^2.11.0"
