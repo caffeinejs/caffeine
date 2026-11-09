@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://vlatte.dev/schemas/http.schema.json
+# dsp-flaky. Fails half its bid requests, each a different way, chosen by the first hex digit of the auction id:
+# 0-3 reset the connection, 4-5 answer 500, 6 sends garbage for a body, 7 closes without a byte, and 8-f bid.
+# Half its calls failing keeps its circuit breaker at the edge of its 50% threshold: watch it open and close.
+id: reset
+request:
+  method: POST
+  path: /bid
+  body: [jsonpath, $.id, [regex, '^[0-3]']]
+response:
+  status: 200
+wire_pipes:
+  - type: connection_reset_by_peer
+---
+id: error
+request:
+  method: POST
+  path: /bid
+  body: [jsonpath, $.id, [regex, '^[45]']]
+response:
+  status: 500
+  header:
+    content-type: application/json
+  body: '{"error": "internal"}'
+---
+id: malformed
+request:
+  method: POST
+  path: /bid
+  body: [jsonpath, $.id, [regex, '^6']]
+response:
+  status: 200
+  header:
+    content-type: application/json
+  body: '{"id": "x", "price": 1.5, "adm": "<img>"}'
+wire_pipes:
+  - type: malformed_response_chunk
+---
+id: empty
+request:
+  method: POST
+  path: /bid
+  body: [jsonpath, $.id, [regex, '^7']]
+response:
+  status: 200
+wire_pipes:
+  - type: empty_response
+---
+id: bid
+request:
+  method: POST
+  path: /bid
+  body: [jsonpath, $.id, [regex, '^[89a-f]']]
+delay:
+  type: lognormal
+  median: 20ms
+  sigma: 0.3
+  maxValue: 60ms
+response:
+  status: 200
+  header:
+    content-type: application/json
+  body: >-
+    {"id": {{ (fromJSON .Request.Body.String).id | toJSON }},
+    "price": {{ printf "%.2f" (randomFloat 0.8 2.8) }},
+    "adm": "<img src=\"https://flaky.ads.test/creative.png\">"}
+  template:
+    enabled: true
+---
+# The win notice: the exchange tells the winner what it pays.
+id: win
+request:
+  method: POST
+  path: /win
+response:
+  status: 200
