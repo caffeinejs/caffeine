@@ -470,6 +470,176 @@ describe('distributed lock against a backend that does not answer', () => {
     expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
   })
 
+  // The timeout already warned about the incident; what the backend says after it is a consequence, not a second
+  // one, and a warning per late answer would double every alert.
+  it('logs a late extend failure at debug, after the one warning its timeout gave', async () => {
+    const inner = new FaultyBackend()
+    const backend = new FaultyBackend(inner)
+    const log = new RecordingLogger()
+    const lock = await newLock(backend, log)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    backend.late = ['extend']
+    inner.failExtend = true
+    const extending = held.extend(1 * Minute).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await extending).toBeInstanceOf(ErrLockBackendTimeout)
+
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(log.at('warn').map(record => record.msg)).toEqual(['lock backend failed'])
+    expect(log.at('debug').filter(record => record.msg === 'lock backend failed late')).toEqual([
+      expect.objectContaining({ fields: expect.objectContaining({ operation: 'extend', key: 'orders:rebuild' }) }),
+    ])
+  })
+
+  it('logs a late release failure at debug, after the one warning its timeout gave', async () => {
+    const inner = new FaultyBackend()
+    const backend = new FaultyBackend(inner)
+    const log = new RecordingLogger()
+    const lock = await newLock(backend, log)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    backend.late = ['release']
+    inner.failRelease = true
+    const releasing = held.release().catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await releasing).toBeInstanceOf(ErrLockBackendTimeout)
+
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(log.at('warn').map(record => record.msg)).toEqual(['lock backend failed'])
+    expect(log.at('debug').filter(record => record.msg === 'lock backend failed late')).toEqual([
+      expect.objectContaining({ fields: expect.objectContaining({ operation: 'release', key: 'orders:rebuild' }) }),
+    ])
+  })
+
+  it('logs a late acquisition failure at debug, after the one warning its timeout gave', async () => {
+    const inner = new FaultyBackend()
+    const backend = new FaultyBackend(inner)
+    const log = new RecordingLogger()
+    const lock = await newLock(backend, log)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    backend.late = ['acquire']
+    inner.failAcquire = true
+    const attempt = lock.tryAcquire('orders:rebuild').catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await attempt).toBeInstanceOf(ErrLockBackendTimeout)
+
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(log.at('warn').map(record => record.msg)).toEqual(['lock backend failed'])
+    expect(log.at('debug').filter(record => record.msg === 'lock backend failed late')).toEqual([
+      expect.objectContaining({ fields: expect.objectContaining({ operation: 'acquire', key: 'orders:rebuild' }) }),
+    ])
+  })
+
+  // A late answer saying the key is gone carries no lease: there is nothing to give back, and the lock it belongs
+  // to keeps its key.
+  it('gives nothing back when an extend answers late that the key was taken', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    backend.late = ['extend']
+    backend.stolen = true
+    const extending = held.extend(1 * Minute).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await extending
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(backend.released).toEqual([])
+    expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
+  })
+
+  // Somebody else held the key when the late attempt landed: releasing anything here could only free their key.
+  it('gives nothing back when an acquisition answers late that the key was held', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const other = await lock.acquire('orders:rebuild', { ttl: 1 * Minute })
+    backend.late = ['acquire']
+    const attempt = lock.tryAcquire('orders:rebuild').catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await attempt).toBeInstanceOf(ErrLockBackendTimeout)
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(backend.released).toEqual([])
+    expect(other.lost).toBe(false)
+  })
+
+  // The give-back is housekeeping after an incident already reported; when it fails too, the lease lapses on its
+  // own and nobody is woken for it.
+  it('logs a failed give-back at debug and lets the lease lapse', async () => {
+    const backend = new FaultyBackend()
+    const log = new RecordingLogger()
+    const lock = await newLock(backend, log)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    backend.late = ['acquire']
+    const attempt = lock.tryAcquire('orders:rebuild', { ttl: 1 * Minute }).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await attempt
+
+    backend.late = []
+    backend.failRelease = true
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(log.at('debug').filter(record => record.msg === 'lock lease give-back failed')).toEqual([
+      expect.objectContaining({ fields: expect.objectContaining({ key: 'orders:rebuild' }) }),
+    ])
+    expect(log.at('warn').map(record => record.msg)).toEqual(['lock backend failed'])
+  })
+
+  // A store that stopped answering is one incident however many attempts run into it.
+  it('warns once when several attempts of one acquisition time out', async () => {
+    const backend = new FaultyBackend()
+    backend.hang.add('acquire')
+    const log = new RecordingLogger()
+    const lock = await newLock(backend, log)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const acquiring = lock.acquire('orders:rebuild', { wait: 12 * Second }).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(30 * Second)
+
+    expect(await acquiring).toBeInstanceOf(ErrLockBackendTimeout)
+    expect(log.at('warn').filter(record => record.msg === 'lock backend failed')).toHaveLength(1)
+    expect(log.at('debug').filter(record => record.msg === 'lock backend failed')).toHaveLength(2)
+  })
+
+  // When the lease is shorter than storeTimeout, the lease is what cut the wait short, and raising storeTimeout
+  // would change nothing: the message names the setting that does.
+  it('names ttl as the setting to raise when the lease bounded the wait', async () => {
+    const backend = new FaultyBackend()
+    backend.hang.add('acquire')
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const attempt = lock.tryAcquire('orders:rebuild', { ttl: 1 * Second }).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    const error = (await attempt) as ErrLockBackendTimeout
+    expect(error).toBeInstanceOf(ErrLockBackendTimeout)
+    expect(error.timeout).toBe(1 * Second)
+    expect(error.message).toContain('Raise ttl, such as { ttl: 60 * Second }')
+    expect(error.message).not.toContain('Raise storeTimeout')
+  })
+
   it('refuses an empty key with ErrInvalidLockKey before touching the backend', async () => {
     const backend = new RecordingBackend()
     const lock = await newLock(backend)
