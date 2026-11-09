@@ -24,6 +24,9 @@ type Fault =
   | 'ignoresAbortedSignal'
   | 'actsOnAbortedSignal'
   | 'rejectsAfterWrite'
+  | 'extendRefusesAll'
+  | 'rejectsWhenAbortedMidCall'
+  | 'answersNothingWhenAbortedMidCall'
 
 interface Held {
   token: string
@@ -43,6 +46,16 @@ class BrokenBackend implements Backend {
 
   async tryAcquire(key: string, ttl: Duration, signal?: AbortSignal): Promise<LockLease | undefined> {
     this.#checkSignal(signal)
+    // Conforming: looks at the signal again on a later turn, before writing anything.
+    if (this.#fault === 'rejectsWhenAbortedMidCall' || this.#fault === 'answersNothingWhenAbortedMidCall') {
+      await Promise.resolve()
+      if (signal?.aborted === true) {
+        if (this.#fault === 'rejectsWhenAbortedMidCall') {
+          throw signal.reason
+        }
+        return undefined
+      }
+    }
     const free = !this.#holds(key)
     if (this.#fault === 'racyAcquire') {
       // Reads, then writes on a later turn: every attempt in a burst sees the key free.
@@ -81,7 +94,11 @@ class BrokenBackend implements Backend {
       held = { token: lease.token, fencingToken: lease.fencingToken, expiresAt: Date.now() }
       this.#held.set(lease.key, held)
     }
-    if (held === undefined || (held.token !== lease.token && this.#fault !== 'extendIgnoresToken')) {
+    if (
+      held === undefined ||
+      this.#fault === 'extendRefusesAll' ||
+      (held.token !== lease.token && this.#fault !== 'extendIgnoresToken')
+    ) {
       return undefined
     }
 
@@ -172,6 +189,15 @@ describe('lockBackendContract', () => {
     expect(await failing(new BrokenBackend('ignoresAbortedSignal'))).toEqual([])
   })
 
+  // A backend that notices the abort before writing may reject or answer with no lease: either leaves the key as
+  // it was, and neither may be failed for it.
+  it.each<Fault>(['rejectsWhenAbortedMidCall', 'answersNothingWhenAbortedMidCall'])(
+    'passes every case against a backend that %s',
+    async fault => {
+      expect(await failing(new BrokenBackend(fault))).toEqual([])
+    },
+  )
+
   // A case that cannot fail proves nothing (AGENTS.md Rule 9): each fault must fail its own case. A fault that
   // necessarily breaks more than one behavior fails exactly the cases listed.
   it.each<[Fault, number[]]>([
@@ -190,6 +216,7 @@ describe('lockBackendContract', () => {
     ['racyAcquire', [11]],
     ['actsOnAbortedSignal', [12]],
     ['rejectsAfterWrite', [13]],
+    ['extendRefusesAll', [6, 7, 10]],
   ])('fails against %s exactly the cases %j', async (fault, cases) => {
     expect(await failing(new BrokenBackend(fault))).toEqual(named(...cases))
   })
