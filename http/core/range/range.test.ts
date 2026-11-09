@@ -34,6 +34,14 @@ describe('byteRanges reads the ranges a Range header asks of a body (RFC 9110 §
   })
 
   // RFC 9110 §14.2: a server may ignore Range, and a header it cannot read is better answered whole than refused.
+  // Endpoints past 2 ** 53 round to the same number; compared as numbers, this reversed range would read as one
+  // starting past the end and be left out, and the second served.
+  it('sends the body whole for a range reversed in digits too long to be exact as numbers', () => {
+    expect(byteRanges('bytes=9007199254740993-9007199254740992,0-0', 10)).toBe(undefined)
+    expect(byteRanges('bytes=0010-9,0-0', 10)).toBe(undefined)
+    expect(byteRanges('bytes=009-10', 10)).toEqual([[9, 9]])
+  })
+
   it('sends the body whole for no header, another unit, or a malformed or reversed range', () => {
     for (const header of [
       undefined,
@@ -105,5 +113,31 @@ describe('multipartByteRanges lays several ranges out as one multipart/byterange
         'b0',
       ),
     ).toThrow(RangeError)
+  })
+
+  // A caller passing its own ranges gets a RangeError it can catch, not an abort or a part from elsewhere in the body.
+  it('throws a RangeError for a range that is not whole bytes inside the body', () => {
+    const blob = new NodeBlob(['0123456789'])
+    const bytes = new TextEncoder().encode('0123456789')
+
+    for (const range of [
+      [5, 4],
+      [-1, 3],
+      [0, -1],
+      [8, 10],
+      [0.5, 2],
+      [0, Number.NaN],
+    ] as const) {
+      expect(() => multipartByteRanges(blob, [range], 'text/plain', 'b0'), String(range)).toThrow(RangeError)
+      expect(() => multipartByteRanges(bytes, [range], 'text/plain', 'b0'), String(range)).toThrow(RangeError)
+    }
+  })
+
+  // Node empties a reversed slice at its start, which past 32 bits aborts the process like any other offset.
+  it('throws a RangeError for a reversed Blob range starting past the last byte a Blob can be cut at', () => {
+    const mib = new NodeBlob([new Uint8Array(1024 * 1024)])
+    const large = new NodeBlob(Array.from({ length: 4097 }, () => mib))
+
+    expect(() => multipartByteRanges(large, [[2 ** 32, 0]], 'application/octet-stream', 'b0')).toThrow(RangeError)
   })
 })

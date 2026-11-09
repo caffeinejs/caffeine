@@ -21,18 +21,23 @@ const ENTITY_TAG = String.raw`(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"`
 const LISTED_TAG = new RegExp(ENTITY_TAG, 'g')
 // RFC 9110 §5.6.1: a list of entity tags, with whitespace around its commas and empty elements. Each element owns the
 // whitespace after it, so no run of whitespace can be split two ways and a malformed value fails in linear time.
+// `*`, padded with HTTP's whitespace alone (RFC 9110 §5.6.3): a no-break space is part of the value.
+const WILDCARD = /^[ \t]*\*[ \t]*$/
 const TAG_LIST = new RegExp(String.raw`^[ \t]*(?:${ENTITY_TAG}[ \t]*)?(?:,[ \t]*(?:${ENTITY_TAG}[ \t]*)?)*$`)
 
 // RFC 9110 §5.6.7: the three forms of an HTTP-date, each in GMT and case-sensitive. IMF-fixdate is the one sent; a
 // recipient reads the obsolete rfc850-date and asctime-date too.
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MONTH = `(${MONTHS.join('|')})`
+// In `getUTCDay()` order. An RFC 850 date spells the day out, and each name opens with its short form.
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const WEEKDAY = `(${WEEKDAYS.join('|')})`
 const TIME = String.raw`(\d{2}):(\d{2}):(\d{2})`
-const IMF_FIXDATE = new RegExp(String.raw`^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2}) ${MONTH} (\d{4}) ${TIME} GMT$`)
+const IMF_FIXDATE = new RegExp(String.raw`^${WEEKDAY}, (\d{2}) ${MONTH} (\d{4}) ${TIME} GMT$`)
 const RFC850_DATE = new RegExp(
-  String.raw`^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), (\d{2})-${MONTH}-(\d{2}) ${TIME} GMT$`,
+  String.raw`^((?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day), (\d{2})-${MONTH}-(\d{2}) ${TIME} GMT$`,
 )
-const ASCTIME_DATE = new RegExp(String.raw`^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) ${MONTH} ( \d|\d{2}) ${TIME} (\d{4})$`)
+const ASCTIME_DATE = new RegExp(String.raw`^${WEEKDAY} ${MONTH} ( \d|\d{2}) ${TIME} (\d{4})$`)
 
 /**
  * Whether the client's precondition fails for the current content, by RFC 9110 §13.2.2.
@@ -48,7 +53,7 @@ export function preconditionFailed(
   { etag, lastModified }: Validators,
 ): boolean {
   if (ifMatch !== undefined) {
-    return ifMatch.trim() !== '*' && !listedTags(ifMatch).some(tag => strongMatch(tag, etag))
+    return !WILDCARD.test(ifMatch) && !listedTags(ifMatch).some(tag => strongMatch(tag, etag))
   }
 
   const date = ifUnmodifiedSince === undefined ? undefined : httpDate(ifUnmodifiedSince)
@@ -69,7 +74,7 @@ export function notModified(
   { etag, lastModified }: Validators,
 ): boolean {
   if (ifNoneMatch !== undefined) {
-    return ifNoneMatch.trim() === '*' || listedTags(ifNoneMatch).some(tag => weakMatch(tag, etag))
+    return WILDCARD.test(ifNoneMatch) || listedTags(ifNoneMatch).some(tag => weakMatch(tag, etag))
   }
 
   const date = ifModifiedSince === undefined ? undefined : httpDate(ifModifiedSince)
@@ -139,16 +144,18 @@ export function httpDate(value: string): number | undefined {
     return undefined
   }
 
-  const [day, , year, hour, minute, second] = fields.map(Number)
-  const month = MONTHS.indexOf(fields[1])
+  const [, day, , year, hour, minute, second] = fields.map(Number)
+  const month = MONTHS.indexOf(fields[2])
   const time =
-    fields[2].length === 2
+    fields[3].length === 2
       ? rfc850Time(year, month, day, hour, minute, second)
       : Date.UTC(year, month, day, hour, minute, second)
   const date = new Date(time)
 
-  // A day the month does not have, or a time past the day's, names no time at all.
+  // A day the month does not have, a time past the day's, or a day of the week the date does not fall on, names no
+  // time at all (RFC 5322 §3.3).
   const named =
+    date.getUTCDay() === WEEKDAYS.indexOf(fields[0].slice(0, 3)) &&
     date.getUTCDate() === day &&
     date.getUTCMonth() === month &&
     date.getUTCHours() === hour &&
@@ -158,22 +165,24 @@ export function httpDate(value: string): number | undefined {
   return named ? time : undefined
 }
 
-// Day, month, year, hour, minute and second, in whichever of the three forms `value` is written. The year is as
-// written: two digits in the RFC 850 form alone.
+// Day of the week, day, month, year, hour, minute and second, in whichever of the three forms `value` is written. The
+// year is as written: two digits in the RFC 850 form alone.
 function dateFields(value: string): string[] | undefined {
   const imf = IMF_FIXDATE.exec(value)
   if (imf !== null) {
-    return [imf[1], imf[2], imf[3], imf[4], imf[5], imf[6]]
+    return imf.slice(1)
   }
 
   const rfc850 = RFC850_DATE.exec(value)
   if (rfc850 !== null) {
-    return [rfc850[1], rfc850[2], rfc850[3], rfc850[4], rfc850[5], rfc850[6]]
+    return rfc850.slice(1)
   }
 
   const asctime = ASCTIME_DATE.exec(value)
 
-  return asctime === null ? undefined : [asctime[2], asctime[1], asctime[6], asctime[3], asctime[4], asctime[5]]
+  return asctime === null
+    ? undefined
+    : [asctime[1], asctime[3], asctime[2], asctime[7], asctime[4], asctime[5], asctime[6]]
 }
 
 // RFC 9110 §5.6.7: a two-digit year is read in this century, unless that puts the whole date more than 50 years

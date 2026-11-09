@@ -84,17 +84,26 @@ function rangeOf(spec: string, size: number): readonly [number, number] | 'unsat
     return length === 0 ? 'unsatisfiable' : [Math.max(size - length, 0), size - 1]
   }
 
-  const start = Number(first)
-
-  if (last !== '' && Number(last) < start) {
+  if (last !== '' && decimalLess(last, first)) {
     return undefined
   }
+
+  const start = Number(first)
 
   if (start >= size) {
     return 'unsatisfiable'
   }
 
   return [start, last === '' ? size - 1 : Math.min(Number(last), size - 1)]
+}
+
+// Whether one string of digits names a smaller number than another, compared exactly: past 2 ** 53, two different
+// numbers can convert to the same one.
+function decimalLess(a: string, b: string): boolean {
+  const x = a.replace(/^0+/, '')
+  const y = b.replace(/^0+/, '')
+
+  return x.length === y.length ? x < y : x.length < y.length
 }
 
 /**
@@ -105,8 +114,11 @@ function rangeOf(spec: string, size: number): readonly [number, number] | 'unsat
  * once, into the `Blob` that holds the answer. `type` and `boundary` are written as given, so neither may hold a line
  * break.
  *
- * @throws {@link RangeError} for a range of a `Blob` ending at byte `2 ** 32 - 1` or later: Node cannot cut a part out
- * of a `Blob` past 4 GiB, and aborts the process when asked to.
+ * Each `[first, last]` is whole bytes inside the body, `0 <= first <= last < size`, as {@link byteRanges} returns
+ * them.
+ *
+ * @throws {@link RangeError} for a range that is not, and for a range of a `Blob` ending at byte `2 ** 32 - 1` or
+ * later: Node cannot cut a part out of a `Blob` past 4 GiB, and aborts the process when asked to.
  */
 export function multipartByteRanges(
   body: NodeBlob | Uint8Array<ArrayBuffer>,
@@ -118,6 +130,14 @@ export function multipartByteRanges(
   const parts: Array<string | NodeBlob | Uint8Array<ArrayBuffer>> = []
 
   for (const [start, end] of ranges) {
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start > end || end >= size) {
+      throw new RangeError(
+        errMessage(`Cannot cut bytes ${start}-${end} out of a body of ${size} bytes: the range is not inside it`)
+          .solutions('Pass whole byte offsets with 0 <= first <= last < size, as byteRanges() returns them')
+          .build(),
+      )
+    }
+
     if (body instanceof NodeBlob && end + 1 > LARGEST_SLICEABLE) {
       throw new RangeError(
         errMessage(`Cannot slice bytes ${start}-${end} of a Blob: Node takes offsets up to ${LARGEST_SLICEABLE} only`)
