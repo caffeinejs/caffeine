@@ -25,6 +25,16 @@ describe('the compiled binary', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
+  test('prints the version of the package it was compiled from, which tells an installed binary apart', async () => {
+    const { version } = JSON.parse(await readFile(join(cli, 'package.json'), 'utf8'))
+
+    const result = spawnSync(binary, ['--version'], { encoding: 'utf8' })
+
+    expect(result.stderr).toBe('')
+    expect(result.status).toBe(0)
+    expect(result.stdout).toBe(`${version}\n`)
+  })
+
   test('scaffolds a project, its agent files included, from what it embeds', async () => {
     const result = spawnSync(binary, ['scaffold', 'demo', '--arch', 'usecase'], { cwd: dir, encoding: 'utf8' })
 

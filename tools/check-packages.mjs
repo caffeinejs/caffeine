@@ -20,8 +20,9 @@
 // which npm could not install. Every workspace's version and every `@caffeinejs/*` specifier is the root version. A
 // published package carries the root's `license`, `author`, `bugs` and `engines`, a `repository` naming its own
 // directory, a `homepage`, public access, the standard `files`, and a copy of the root LICENSE. With
-// `--tarballs <dir>`, each `npm pack` tarball there is checked too: one per published package, and nothing in it that
-// the build left behind for the repository alone.
+// `--tarballs <dir>`, each `npm pack` tarball there is checked too: one per published package and per package a
+// tarball names in `optionalDependencies`, such as the caffeine binary's platform packages, all at the root version,
+// and nothing in any of them that the build left behind for the repository alone.
 import { execFileSync } from 'node:child_process'
 import { existsSync, globSync, readdirSync, readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
@@ -500,16 +501,39 @@ function strayReason(entry) {
 
 function checkTarballs(tarballDir, published, version) {
   const errors = []
-  const tarballs = globSync('*.tgz', { cwd: tarballDir }).toSorted()
-  const seen = new Set()
+  const tarballs = globSync('*.tgz', { cwd: tarballDir })
+    .toSorted()
+    .map(tarball => {
+      const file = join(tarballDir, tarball)
+      const manifest = JSON.parse(execFileSync('tar', ['-xzOf', file, 'package/package.json'], { encoding: 'utf8' }))
+      return { tarball, file, manifest }
+    })
 
-  for (const tarball of tarballs) {
-    const file = join(tarballDir, tarball)
-    const manifest = JSON.parse(execFileSync('tar', ['-xzOf', file, 'package/package.json'], { encoding: 'utf8' }))
+  // A package a tarball names in `optionalDependencies` that is no workspace, such as the one holding the caffeine
+  // binary for a platform, is packed with it: name -> the tarball that names it.
+  const optional = new Map()
+  for (const { tarball, manifest } of tarballs) {
+    for (const [name, specifier] of Object.entries(manifest.optionalDependencies ?? {})) {
+      if (!name.startsWith('@caffeinejs/')) {
+        continue
+      }
+      if (specifier !== version) {
+        errors.push(
+          `Cannot accept ${tarball}: optionalDependencies pins "${name}" to "${specifier}", not "${version}": pack the packages again`,
+        )
+      }
+      if (!published.some(({ manifest: workspace }) => workspace.name === name)) {
+        optional.set(name, tarball)
+      }
+    }
+  }
+
+  const seen = new Set()
+  for (const { tarball, file, manifest } of tarballs) {
     const pkg = published.find(candidate => candidate.manifest.name === manifest.name)
-    if (pkg === undefined) {
+    if (pkg === undefined && !optional.has(manifest.name)) {
       errors.push(
-        `Cannot accept ${tarball}: "${manifest.name}" is not a published workspace: remove it from ${tarballDir}`,
+        `Cannot accept ${tarball}: "${manifest.name}" is neither a published workspace nor in the optionalDependencies of another tarball: remove it from ${tarballDir}`,
       )
       continue
     }
@@ -527,7 +551,9 @@ function checkTarballs(tarballDir, published, version) {
 
     // A file the build project lists by name, such as a fixture the package exports, ships on purpose.
     const listed = new Set(
-      (readJSON(join(pkg.dir, 'tsconfig.build.json')).files ?? []).map(path => `package/dist/${posix(path)}`),
+      pkg === undefined
+        ? []
+        : (readJSON(join(pkg.dir, 'tsconfig.build.json')).files ?? []).map(path => `package/dist/${posix(path)}`),
     )
     const entries = execFileSync('tar', ['-tzf', file], { encoding: 'utf8' }).split('\n').filter(Boolean)
     for (const entry of entries) {
@@ -551,11 +577,10 @@ function checkTarballs(tarballDir, published, version) {
     }
   }
 
-  for (const { manifest } of published) {
-    if (!seen.has(manifest.name)) {
-      errors.push(
-        `Cannot accept ${tarballDir}: it holds no tarball of "${manifest.name}": pack every published package`,
-      )
+  for (const name of [...published.map(({ manifest }) => manifest.name), ...optional.keys()]) {
+    if (!seen.has(name)) {
+      const why = optional.has(name) ? `, which ${optional.get(name)} names in optionalDependencies` : ''
+      errors.push(`Cannot accept ${tarballDir}: it holds no tarball of "${name}"${why}: pack every published package`)
     }
   }
 
