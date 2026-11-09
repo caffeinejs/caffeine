@@ -67,6 +67,11 @@ async function get(app: WebApplication, url: string, init?: RequestInit) {
   return { status: res.status, body: json ? await res.json() : await res.text() }
 }
 
+function unstamped(problem: unknown): Record<string, unknown> {
+  const { correlation_id: _id, timestamp: _at, ...rest } = problem as Record<string, unknown>
+  return rest
+}
+
 describe('an application under a base path', () => {
   let app: WebApplication | undefined
 
@@ -303,7 +308,10 @@ describe('an application under a base path', () => {
       await plain.bootstrap()
 
       try {
-        expect(await get(app, '/api/nope')).toEqual(await get(plain, '/nope'))
+        // Each answer carries its own request ID and time; the rest is the same.
+        const miss = await get(app, '/api/nope')
+        const plainMiss = await get(plain, '/nope')
+        expect({ ...miss, body: unstamped(miss.body) }).toEqual({ ...plainMiss, body: unstamped(plainMiss.body) })
       } finally {
         await plain.close()
       }

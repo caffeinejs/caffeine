@@ -63,10 +63,10 @@ describe('OpenAPIOptionsBuilder', () => {
   // Setting one inference or status must keep the defaults of the others, or a single call would silently
   // switch off the 401/403 inference.
   it('merges inference and error statuses over the defaults, key by key', () => {
-    const options = new OpenAPIOptionsBuilder().infer({ auth: false }).errors({ validation: 422 })[kBuild]()
+    const options = new OpenAPIOptionsBuilder().infer({ auth: false }).errors({ parameterValidation: 409 })[kBuild]()
 
     expect(options.infer).toEqual({ validation: true, auth: false })
-    expect(options.errors).toEqual({ validation: 422, unauthorized: 401, forbidden: 403 })
+    expect(options.errors).toEqual({ bodyValidation: 422, parameterValidation: 409, unauthorized: 401, forbidden: 403 })
   })
 
   it('keeps the error schema and the naming overrides it was given', () => {

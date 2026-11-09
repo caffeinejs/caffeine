@@ -16,6 +16,27 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
   )
 }
 
+// Handles a returned promise's rejection, so nothing reports it.
+function drop(): void {
+  // Nothing to do: see detached.
+}
+
+/**
+ * Calls a callback the application gave to release a value nobody holds, such as `discard`. What it throws, or a
+ * promise it returns rejects with, is dropped: no caller is left to report to, and rethrown as uncaught it would stop
+ * the process over a cleanup.
+ */
+export function detached<V>(callback: (value: V) => unknown, value: V): void {
+  try {
+    const returned = callback(value)
+    if (isThenable(returned)) {
+      returned.then(undefined, drop)
+    }
+  } catch {
+    // Dropped, as a rejection is.
+  }
+}
+
 /**
  * Synchronous, typed events. Listener arrays are replaced on every `on` and removal, never mutated, so `emit`
  * iterates a stable array without copying it.

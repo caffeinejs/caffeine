@@ -109,10 +109,12 @@
     "test:memory": "vitest run --config vitest.leak.config.ts"
   },
   "dependencies": {
+    "@sinclair/typebox": "^0.34.52",
     "cookie": "^2.0.1",
     "fastify": "^5.12.8",
     "fastify-plugin": "^6.0.0",
     "jose": "^6.2.10",
+    "negotiator": "^1.1.0",
     "path-to-regexp": "^8.4.2"
   },
   "peerDependencies": {
@@ -127,6 +129,7 @@
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",
     "@types/cors": "^2.8.19",
+    "@types/negotiator": "^0.6.5",
     "cors": "^2.8.6",
     "zod": "^4.6.5"
   }

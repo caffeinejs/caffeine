@@ -1,12 +1,22 @@
 export { exponential, type Backoff, type ExponentialOptions } from './backoff.js'
-export * from './circuit_breaker/index.js'
-export { compose, runWith } from './compose.js'
+export { compose, decorate, type DecorateOptions, run } from './compose.js'
 export {
-  ErrCallNotPermitted,
+  ErrCallRefused,
+  type ErrorClass,
+  type ErrorMatcher,
   ErrInvalidOption,
-  ErrMaxRetriesExceeded,
   ErrResilience,
-  type NotPermittedState,
+  failureOf,
+  type ResilienceFailure,
 } from './errors.js'
-export * from './retry/index.js'
-export type { ExecutionContext, Next, Operation, Resilient, Strategy, StrategyFn, StrategyObject } from './strategy.js'
+export type {
+  CallContext,
+  Operation,
+  Policy,
+  PolicyLike,
+  Recovery,
+  RecoveryLike,
+  RecoveryWrapper,
+  Wrapper,
+} from './policy.js'
+export type { Clock } from './timers.js'

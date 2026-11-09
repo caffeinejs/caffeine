@@ -9,15 +9,18 @@ import { ContextState, type IContext } from '../../context.js'
 import type { CookieSerializeOptions } from '../../core/cookie/options.js'
 import type { CookieSecret, CookieUnsignResult } from '../../core/cookie/signer.js'
 import { ErrConfiguration } from '../../core/error/common.js'
-import { statusErrorBody } from '../../core/error/http.js'
+import { newProblem } from '../../core/error/problem.js'
 import type { RouteValidationSchema } from '../../core/routing/spec.js'
 import type { AuthenticationState } from '../../core/security/auth/authentication_state.js'
 import { type Principal } from '../../core/security/identity.js'
 import type { InferBody, InferHeaders, InferParams, InferQuery, IRequest, UnsignedCookie } from '../../request.js'
+import { appendVary } from '../../vary.js'
 import type { ContextPlatform, AdapterTypes } from './adapter.js'
 import { reopenCookieFlush, serverCookies } from './cookie/cookie.js'
+import { encodeProblem } from './error/error.js'
 import { protocolOf } from './protocol.js'
 import { payloadOf } from './response.js'
+import { isHandlerTimeout } from './timeout.js'
 
 /** The {@link IContext} the Fastify adapter builds for every request, over Fastify's own request and reply. */
 export class Context<
@@ -44,6 +47,8 @@ export class Context<
   #fastifyRequest: FastifyRequest
   #reply: REPLY
   #store: ConfigStore<unknown>
+
+  #signal?: AbortController
 
   // Set once one of this context's own answers has called `send`, which is earlier than Fastify's `reply.sent`:
   // that one is `raw.writableEnded`, and an `onSend` hook that awaits — a compressor, a cache storing the entry
@@ -105,8 +110,55 @@ export class Context<
     return this.#reply.statusCode
   }
 
+  /**
+   * See {@link IContext.signal}. A handler timeout aborts it with Fastify's `FST_ERR_HANDLER_TIMEOUT` error.
+   *
+   * Not Fastify's `request.signal`, which follows the request's `close`: Node closes a request as soon as its body has
+   * been read, usually while its handler runs, so that signal aborts on every request with a body.
+   */
   get signal(): AbortSignal {
-    return this.#fastifyRequest.signal
+    this.#signal ??= this.#listen()
+    return this.#signal.signal
+  }
+
+  // Created on the first read only: a route that never reads the signal pays for no controller.
+  #listen(): AbortController {
+    const controller = new AbortController()
+
+    // The client left when the response closed before its end was written, or when its connection failed: an end
+    // written is still flushing, and a reset then loses it. Not `writableFinished` nor the `finish` event: Node reports
+    // an HTTP/2 stream the client cancelled as finished, and an in-process response closes before it reports itself
+    // finished. An in-process request's socket has no `errored`.
+    const res = this.#reply.raw
+    const socket = this.#fastifyRequest.raw.socket
+    const onClose = (): void => {
+      if (!res.writableEnded || (socket.errored ?? null) !== null) {
+        controller.abort()
+      }
+    }
+    if (res.closed) {
+      onClose()
+    } else {
+      res.once('close', onClose)
+    }
+
+    // Fastify built its own controller on a timed route already, so reading its signal there creates nothing. Only
+    // its timeout is taken from it: its other aborts are the request's close, which is not the client leaving.
+    if (this.#fastifyRequest.routeOptions.handlerTimeout > 0) {
+      const timed = this.#fastifyRequest.signal
+      const onTimeout = (): void => {
+        if (isHandlerTimeout(timed.reason)) {
+          controller.abort(timed.reason)
+        }
+      }
+      if (timed.aborted) {
+        onTimeout()
+      } else {
+        timed.addEventListener('abort', onTimeout, { once: true })
+      }
+    }
+
+    return controller
   }
 
   status(code: number): this {
@@ -168,8 +220,8 @@ export class Context<
     return this.#fail(404, 'ERR_HTTP_NOT_FOUND', 'notFound', body)
   }
 
-  unprocessableEntity(body?: unknown): this {
-    return this.#fail(422, 'ERR_HTTP_UNPROCESSABLE_ENTITY', 'unprocessableEntity', body)
+  unprocessableContent(body?: unknown): this {
+    return this.#fail(422, 'ERR_HTTP_UNPROCESSABLE_CONTENT', 'unprocessableContent', body)
   }
 
   internalServerError(body?: unknown): this {
@@ -194,13 +246,23 @@ export class Context<
   }
 
   /**
-   * Sends an error status, defaulting the body to the same envelope a thrown `ErrHTTP` renders to.
+   * Sends an error status, defaulting the body to the same problem a thrown `ErrHTTP` renders to, under the same
+   * media type. A body given is sent as it stands, under the media type the reply already has.
    *
    * Without the default these shorthands answer with an empty body, which leaves an application emitting one
    * error shape from `@Catch` and a different one from `ctx.notFound()`.
    */
   #fail(statusCode: number, code: string, method: string, body?: unknown): this {
-    return this.#send(method, body ?? statusErrorBody(statusCode, code), statusCode)
+    if (body !== undefined) {
+      return this.#send(method, body, statusCode)
+    }
+
+    // Negotiated and encoded as the error handler does, so the route's response schema does not run on it.
+    const { contentType, body: encoded } = encodeProblem(this.#fastifyRequest, newProblem({ status: statusCode, code }))
+    appendVary(this.#reply, ['Accept'])
+    this.#reply.type(contentType)
+
+    return this.#send(method, encoded, statusCode)
   }
 
   /** Sends `body`, under `statusCode` when given, which stands over a Response's own. */
@@ -249,6 +311,10 @@ export class ContextRequest<SCHEMA extends RouteValidationSchema = RouteValidati
 
   get raw(): IncomingMessage {
     return this.request.raw
+  }
+
+  get id(): string {
+    return this.request.id
   }
 
   get url(): string {
