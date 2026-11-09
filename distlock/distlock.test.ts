@@ -1013,6 +1013,19 @@ describe('acquisition backoff', () => {
     expect(backend.attempts).toEqual([])
   })
 
+  // A NaN from a botched computation would make every pause NaN, which `setTimeout` turns into 1 ms: a caller
+  // hammering the backend instead of backing off.
+  it('refuses a max retry delay that is not a number before any attempt', async () => {
+    const backend = new TimedBackend()
+    const lock = await newLock(backend)
+
+    const error = await lock.acquire('orders:rebuild', { maxRetryDelay: Number.NaN }).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ErrDistLockConfiguration)
+    expect((error as ErrDistLockConfiguration).message).toContain('maxRetryDelay')
+    expect(backend.attempts).toEqual([])
+  })
+
   // The builder refuses it; a service constructed by hand has nothing in front of it but this.
   it('refuses a retry jitter of 1 on a service constructed by hand with ErrDistLockConfiguration', async () => {
     const backend = new TimedBackend()
