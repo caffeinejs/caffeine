@@ -902,6 +902,28 @@ describe('lock signal', () => {
     expect(Date.now()).toBeLessThan(persistent.expiresAt)
   })
 
+  // A retry can still be on the wire when the lease runs out. The clock notices first, but the backend failing is
+  // what lost the lease, not the holder letting it lapse.
+  it('aborts with error when the lease lapses while a renewal retry is still waiting on the backend', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newTunedLock(backend, d => d.retryDelay(2 * Second).maxRetryDelay(2 * Second))
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 9 * Second, renew: true })
+    backend.failExtend = true
+    // The renewal at 3s fails with 6s left, more than storeTimeout, so it is retried at 5s, which would only
+    // time out at 10s, after the lease expires.
+    await vi.advanceTimersByTimeAsync(3 * Second)
+    backend.failExtend = false
+    backend.hang.add('extend')
+    await vi.advanceTimersByTimeAsync(6 * Second - 1)
+    expect(held.signal.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(lossOf(held).reason).toBe('error')
+  })
+
   it('aborts lock.signal with ErrLockReleased after release, and keeps a loss reason over a later release', async () => {
     const lock = await newLock()
     fake()
