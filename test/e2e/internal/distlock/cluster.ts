@@ -86,7 +86,12 @@ async function startWorker(env: Record<string, string>): Promise<Worker> {
   }
 }
 
-/** Starts `n` workers against the lock server at `url`, each with its own connection, and waits until all are ready. */
-export function startWorkers(n: number, url: string): Promise<Worker[]> {
-  return Promise.all(Array.from({ length: n }, () => startWorker({ DISTLOCK_URL: url })))
+/**
+ * Starts `n` workers against the lock server at `url`, each with its own connection, and waits until all are ready.
+ * `jobKey` is the key the workers' decorated jobs lock on.
+ */
+export function startWorkers(n: number, url: string, jobKey?: string): Promise<Worker[]> {
+  const env: Record<string, string> =
+    jobKey === undefined ? { DISTLOCK_URL: url } : { DISTLOCK_URL: url, DISTLOCK_JOB_KEY: jobKey }
+  return Promise.all(Array.from({ length: n }, () => startWorker(env)))
 }

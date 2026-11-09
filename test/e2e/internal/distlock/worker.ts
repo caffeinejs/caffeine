@@ -1,8 +1,11 @@
+import { setTimeout as sleep } from 'node:timers/promises'
+
 // A lock service in a process of its own, driven over IPC by `cluster.ts`, so a spec can stop and resume a
 // holder the way an operating system or an orchestrator would.
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
 import { DistributedLock, kDistLock, type Campaign, type Lock } from '@caffeinejs/distlock'
+import { DistLockAOP, LeaderOnly, OneAtATime } from '@caffeinejs/distlock/aop'
 import { RedisLockBackend } from '@caffeinejs/distlock/backend/redis'
 import { createClient } from '@redis/client'
 
@@ -15,6 +18,7 @@ export type WorkerRequest =
   | { op: 'release'; id: number; key: string }
   | { op: 'campaign'; id: number; key: string; ttl: number }
   | { op: 'leading'; id: number; key: string }
+  | { op: 'job'; id: number; kind: 'leaderOnly' | 'oneAtATime'; every: number; body: number; duration: number }
   | { op: 'close'; id: number }
 
 export interface WorkerReply {
@@ -27,6 +31,9 @@ export interface WorkerReply {
   /** Whether this worker's campaign leads now, and how many times it was elected so far. */
   leader?: boolean
   elected?: number
+  /** The runs a `job` request made, by this process's clock, and how many of its calls were skipped. */
+  runs?: Array<{ enter: number; exit: number }>
+  skipped?: number
   error?: string
 }
 
@@ -38,9 +45,39 @@ if (url === undefined) {
 const client = createClient({ url })
 await client.connect()
 
-const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
-  DistributedLock(d => d.backend(new RedisLockBackend(client))),
-)
+// The decorated jobs lock on keys under the one the spec names, which a decorator takes when the class is defined.
+// Each job has its own: every replica campaigns for the owned job's key from bootstrap.
+const jobKey = process.env.DISTLOCK_JOB_KEY ?? 'caffeine:distlock:e2e:job'
+let body = 0
+const runs: Array<{ enter: number; exit: number }> = []
+
+async function work(): Promise<void> {
+  const enter = Date.now()
+  await sleep(body)
+  runs.push({ enter, exit: Date.now() })
+}
+
+class OwnedJob {
+  @LeaderOnly(`${jobKey}:owned`)
+  async run(): Promise<boolean | undefined> {
+    await work()
+    return true
+  }
+}
+
+class ExclusiveJob {
+  @OneAtATime(`${jobKey}:exclusive`)
+  async run(): Promise<boolean | undefined> {
+    await work()
+    return true
+  }
+}
+
+const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+  .install(DistributedLock(d => d.backend(new RedisLockBackend(client))))
+  .install(DistLockAOP())
+app.container.bind(OwnedJob, t => t.toSelf())
+app.container.bind(ExclusiveJob, t => t.toSelf())
 await app.bootstrap()
 const lock = app.container.get(kDistLock)
 
@@ -102,6 +139,25 @@ async function handle(request: WorkerRequest): Promise<Omit<WorkerReply, 'id'>> 
         throw new Error(`Cannot find a campaign for "${request.key}" in this worker: start one first`)
       }
       return { leader: entry.campaign.isLeader, elected: entry.elected }
+    }
+    case 'job': {
+      // Calls the job every `every` ms for `duration` ms, then waits for the calls still running.
+      const job = app.container.get(request.kind === 'leaderOnly' ? OwnedJob : ExclusiveJob)
+      body = request.body
+      runs.length = 0
+      let skipped = 0
+      const calls: Array<Promise<void>> = []
+      const timer = setInterval(() => {
+        calls.push(
+          job.run().then(ran => {
+            skipped += ran === true ? 0 : 1
+          }),
+        )
+      }, request.every)
+      await sleep(request.duration)
+      clearInterval(timer)
+      await Promise.all(calls)
+      return { runs: [...runs], skipped }
     }
     case 'close': {
       await app.close()

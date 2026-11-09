@@ -8,15 +8,16 @@ lease aborts a signal when it is lost, and carries a fencing token a resource ca
 npm install @caffeinejs/distlock @caffeinejs/resilience @caffeinejs/std
 ```
 
-| Import from                               | What                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------- |
-| `@caffeinejs/distlock`                    | `DistributedLock()`, `kDistLock`, the `DistLock` and `Lock` types, errors |
-| `@caffeinejs/distlock/backend/redis`      | `RedisLockBackend`, with `@redis/client` installed                        |
-| `@caffeinejs/distlock/backend/postgres`   | `PostgresLockBackend`, `postgresLockTableDDL`, with `pg` installed        |
-| `@caffeinejs/distlock/backend/memory`     | `MemoryLockBackend`, for tests and single-replica applications            |
-| `@caffeinejs/distlock/observability`      | `LockEvents`, `DIST_LOCK_CHANNELS` and the event types                    |
-| `@caffeinejs/distlock/observability/otel` | `instrumentDistLock`, with `@opentelemetry/api` installed                 |
-| `@caffeinejs/distlock/testing`            | `lockBackendContract`, the suite a custom backend must pass               |
+| Import from                               | What                                                                                   |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| `@caffeinejs/distlock`                    | `DistributedLock()`, `kDistLock`, the `DistLock` and `Lock` types, errors              |
+| `@caffeinejs/distlock/aop`                | `@Once`, `@OneAtATime`, `@LeaderOnly` and the `DistLockAOP()` feature that weaves them |
+| `@caffeinejs/distlock/backend/redis`      | `RedisLockBackend`, with `@redis/client` installed                                     |
+| `@caffeinejs/distlock/backend/postgres`   | `PostgresLockBackend`, `postgresLockTableDDL`, with `pg` installed                     |
+| `@caffeinejs/distlock/backend/memory`     | `MemoryLockBackend`, for tests and single-replica applications                         |
+| `@caffeinejs/distlock/observability`      | `LockEvents`, `DIST_LOCK_CHANNELS` and the event types                                 |
+| `@caffeinejs/distlock/observability/otel` | `instrumentDistLock`, with `@opentelemetry/api` installed                              |
+| `@caffeinejs/distlock/testing`            | `lockBackendContract`, the suite a custom backend must pass                            |
 
 ## Quick start
 
@@ -58,5 +59,17 @@ const campaign = lock.campaign('scheduler', {
 })
 ```
 
-The usage guide covers losing a lease, fencing tokens, deadlines, shutdown, backends and telemetry:
+With a scheduler of your own, the same policies are decorators, woven by `DistLockAOP()` installed beside
+`DistributedLock(...)`:
+
+```ts
+class Scheduler {
+  @LeaderOnly('scheduler')
+  async tick(): Promise<void> {
+    await this.dispatchDue()
+  }
+}
+```
+
+The usage guide covers the decorators, losing a lease, fencing tokens, deadlines, shutdown, backends and telemetry:
 [`ai/docs/distlock.md`](../ai/docs/distlock.md).

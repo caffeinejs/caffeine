@@ -420,6 +420,67 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
       })
     })
 
+    // The decorators are what an application with a scheduler of its own writes: every replica fires the job, and the
+    // lock decides which runs.
+    describe('decorated jobs across processes', () => {
+      let workers: Worker[] = []
+
+      afterEach(async () => {
+        await Promise.all(workers.map(worker => worker.close()))
+      })
+
+      it('runs an owned job on exactly one of three processes per tick, and moves it when the owner closes', async () => {
+        workers = await startWorkers(3, url, key('owned'))
+        const every = 100 * Millisecond
+        const duration = 2 * Second
+
+        const replies = await Promise.all(
+          workers.map(worker => worker.request({ op: 'job', kind: 'leaderOnly', every, body: 0, duration })),
+        )
+        const running = replies.flatMap((reply, i) => ((reply.runs ?? []).length > 0 ? [i] : []))
+        expect(running).toHaveLength(1)
+        // A loaded machine fires an interval late, never early.
+        const ticks = duration / every
+        expect(replies[running[0]].runs!.length).toBeGreaterThanOrEqual(ticks / 2)
+        expect(replies[running[0]].runs!.length).toBeLessThanOrEqual(ticks + 1)
+
+        await workers[running[0]].close()
+        const survivors = workers.filter((_, i) => i !== running[0])
+        // A follower's pause has backed off to maxRetryDelay, jitter included, by the time the owner leaves.
+        const after = await Promise.all(
+          survivors.map(worker =>
+            worker.request({ op: 'job', kind: 'leaderOnly', every, body: 0, duration: 3 * Second }),
+          ),
+        )
+        expect(after.filter(reply => (reply.runs ?? []).length > 0)).toHaveLength(1)
+      })
+
+      it('never overlaps two runs of an exclusive job across processes', async () => {
+        workers = await startWorkers(3, url, key('exclusive'))
+
+        const replies = await Promise.all(
+          workers.map(worker =>
+            worker.request({
+              op: 'job',
+              kind: 'oneAtATime',
+              every: 50 * Millisecond,
+              body: 120 * Millisecond,
+              duration: 2 * Second,
+            }),
+          ),
+        )
+
+        const runs = replies.flatMap(reply => reply.runs ?? []).toSorted((a, b) => a.enter - b.enter)
+        expect(runs.length).toBeGreaterThan(0)
+        for (let i = 1; i < runs.length; i++) {
+          expect(runs[i].enter).toBeGreaterThanOrEqual(runs[i - 1].exit)
+        }
+        for (const reply of replies) {
+          expect(reply.skipped).toBeGreaterThan(0)
+        }
+      })
+    })
+
     // A fencing token is what a resource uses to turn away a holder whose lease lapsed, so it only protects anything
     // while every later acquisition of a key carries a greater one, whichever client takes it.
     describe('fencing tokens', () => {

@@ -32,6 +32,10 @@
       "types": "./dist/backend/postgres/index.d.ts",
       "default": "./dist/backend/postgres/index.js"
     },
+    "./aop": {
+      "types": "./dist/aop/index.d.ts",
+      "default": "./dist/aop/index.js"
+    },
     "./observability": {
       "types": "./dist/observability/index.d.ts",
       "default": "./dist/observability/index.js"

@@ -27,12 +27,12 @@ const lock = app.container.get(kDistLock)
 
 ## Pick a policy
 
-| You want                                                                    | Call                                   | When another replica has the key        |
-| --------------------------------------------------------------------------- | -------------------------------------- | --------------------------------------- |
-| A job to run at most once per window, on whichever replica gets there first | `once(key, fn, { ttl })`               | Returns `{ executed: false }` at once   |
-| Runs never to overlap, and a run that finds one going to skip               | `tryWithLock(key, fn)`                 | Returns `{ executed: false }` at once   |
-| Runs never to overlap, and a run that finds one going to wait               | `withLock(key, fn, { wait })`          | Retries until `wait`, then throws       |
-| One replica to own a role (a scheduler, a consumer) until it stops          | `campaign(key, { onElected, onLost })` | Keeps campaigning; takes over when free |
+| You want                                                                    | Call                                   | Decorator             | When another replica has the key        |
+| --------------------------------------------------------------------------- | -------------------------------------- | --------------------- | --------------------------------------- |
+| A job to run at most once per window, on whichever replica gets there first | `once(key, fn, { ttl })`               | `@Once(key, { ttl })` | Returns `{ executed: false }` at once   |
+| Runs never to overlap, and a run that finds one going to skip               | `tryWithLock(key, fn)`                 | `@OneAtATime(key)`    | Returns `{ executed: false }` at once   |
+| Runs never to overlap, and a run that finds one going to wait               | `withLock(key, fn, { wait })`          | none                  | Retries until `wait`, then throws       |
+| One replica to own a role (a scheduler, a consumer) until it stops          | `campaign(key, { onElected, onLost })` | `@LeaderOnly(key)`    | Keeps campaigning; takes over when free |
 
 ```ts
 import { Hour } from '@caffeinejs/std/duration'
@@ -57,6 +57,41 @@ Things these do not do:
 - A campaign does not make leadership exclusive across a pause longer than the lease. `isLeader` is what this process believes; the resource is the judge (see Fencing).
 
 `acquire` and `tryAcquire` hand you the lock to release yourself, with `await using` or `release()` in a `finally`. Prefer the scoped calls above: they release on every path and renew by default.
+
+## Decorators
+
+For an application that runs its own scheduler (`setInterval`, a cron library, a message listener firing a job), the three skipping policies are also decorators. Install their feature beside the lock's:
+
+```ts
+import { createApplication } from '@caffeinejs/application'
+import { DistributedLock } from '@caffeinejs/distlock'
+import { DistLockAOP, LeaderOnly, Once, OneAtATime } from '@caffeinejs/distlock/aop'
+import { RedisLockBackend } from '@caffeinejs/distlock/backend/redis'
+import { Hour } from '@caffeinejs/std/duration'
+
+createApplication()
+  .install(DistributedLock(d => d.backend(new RedisLockBackend(client))))
+  .install(DistLockAOP())
+
+class Jobs {
+  @Once('cache:warm', { ttl: 1 * Hour })
+  async warm(): Promise<void> {}
+
+  @OneAtATime('catalog:sync')
+  async sync(): Promise<void> {}
+
+  @LeaderOnly('scheduler')
+  async tick(): Promise<void> {}
+}
+```
+
+- A skipped call resolves to `undefined` without running, so a decorated method returns a promise whose type includes `undefined`: `Promise<void>`, or `Promise<T | undefined>`. Anything else is a type error.
+- The key is always explicit. A key derived from the class and method names would change on a rename, and during a rolling deploy the old and the new replicas would not exclude each other.
+- `@OneAtATime` never waits: a job that queued behind itself would pile its runs up.
+- `@LeaderOnly` campaigns for its key from `bootstrap()` on every replica, one campaign per key, until the application closes. Several methods naming one key share its campaign, with the `ttl` of the first one found. A call made before the first election settled is skipped.
+- On one method they apply in a fixed order, whatever order they are written in: `@LeaderOnly`, then `@Once`, then `@OneAtATime`. `@LeaderOnly` with `@OneAtATime` keeps the job on one replica and still keeps a slow run from overlapping the next tick. Give them different keys (`'scheduler'` and `'scheduler:run'`): the campaign holds its own key while it leads, and `bootstrap()` refuses a method that names one key for both.
+- `DistLockAOP()` without `DistributedLock(...)` fails at `bootstrap()` with `ErrFeatureNotInstalled`. Without `DistLockAOP()`, the decorators only write annotations and nothing reads them: the methods run undecorated.
+- Only instance methods of classes the container builds are woven: bind the class, and keep the decorators off static and private methods, which `bootstrap()` refuses.
 
 ## Long work and losing the lease
 
