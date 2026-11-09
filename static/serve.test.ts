@@ -285,9 +285,11 @@ describe('a file served by a route and by sendFile', () => {
     const head = await app!.request('/index.html', { method: 'HEAD' })
 
     expect(get.status).toBe(500)
-    for (const name of ['content-encoding', 'etag', 'cache-control', 'vary']) {
+    for (const name of ['content-encoding', 'etag', 'cache-control']) {
       expect(get.headers.get(name)).toBe(null)
     }
+    // The problem details' own Vary, without the file's Accept-Encoding.
+    expect(get.headers.get('vary')).toBe('Accept')
     expect(head.status).toBe(200)
     expect(head.headers.get('content-length')).toBe(String(size))
   })
