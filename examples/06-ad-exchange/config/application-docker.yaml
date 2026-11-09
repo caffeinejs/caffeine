@@ -1,0 +1,22 @@
+# The `docker` profile, which docker-compose.yml activates: every DSP by its service name, on VLatte's port.
+server:
+  host: 0.0.0.0
+
+dsps:
+  - id: dsp-alpha
+    url: http://dsp-alpha:8080
+  - id: dsp-bravo
+    url: http://dsp-bravo:8080
+  - id: dsp-charlie
+    url: http://dsp-charlie:8080
+  - id: dsp-delta
+    url: http://dsp-delta:8080
+  - id: dsp-echo
+    url: http://dsp-echo:8080
+    qps: 500
+  - id: dsp-dead
+    url: http://dsp-dead:8080
+  - id: dsp-slow
+    url: http://dsp-slow:8080
+  - id: dsp-flaky
+    url: http://dsp-flaky:8080

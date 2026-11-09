@@ -168,8 +168,9 @@ function buildBasePicker<REQ extends FastifyRequest = FastifyRequest, RES extend
         const i = req.url.indexOf('?')
         return i === -1 ? req.url : req.url.slice(0, i)
       }
+    // The context's, not Fastify's: see `Context.signal`.
     case 'signal':
-      return req => req.signal
+      return req => req.httpContext.signal
     case 'port':
       return req => req.port
     case 'address':

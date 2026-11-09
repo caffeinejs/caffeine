@@ -1,5 +1,5 @@
-# Applies to repo-root build contexts: examples/03-petstore/Dockerfile and
-# examples/04-spa-dashboard/Dockerfile.
+# Applies to repo-root build contexts: examples/03-petstore/Dockerfile,
+# examples/04-spa-dashboard/Dockerfile and examples/06-ad-exchange/Dockerfile.
 **/node_modules
 **/dist
 **/*.tsbuildinfo
