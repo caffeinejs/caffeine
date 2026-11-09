@@ -9,7 +9,10 @@ import type { Duration } from '@caffeinejs/std/duration'
 export interface LockLease {
   readonly key: string
 
-  /** Identifies the holder. {@link Backend.extend} and {@link Backend.release} must do nothing unless the stored token still matches. */
+  /**
+   * Identifies the holder. {@link Backend.extend} and {@link Backend.release} must do nothing unless the stored
+   * token still matches.
+   */
   readonly token: string
 
   /**

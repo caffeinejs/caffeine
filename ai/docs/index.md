@@ -8,6 +8,7 @@ Read [rules.md](rules.md) first. Then the topic you are changing.
 | [http.md](http.md)                           | Controllers, routes, static files, HTTP errors    |
 | [di.md](di.md)                               | Container, `@Injectable`, `.install()`/`.with()`  |
 | [kafka.md](kafka.md)                         | Produce/consume on Kafka                          |
+| [distlock.md](distlock.md)                   | Locks, run-once jobs, leader election             |
 | [errors.md](errors.md)                       | `@Catch` vs unmatched URL vs SPA `index.html`     |
 | [spa.md](spa.md)                             | Serving a single-page application                 |
 | [mixing-decorators.md](mixing-decorators.md) | A library that needs legacy decorators            |

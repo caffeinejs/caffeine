@@ -52,9 +52,10 @@ export interface Lock {
   get lost(): boolean
 
   /**
-   * Aborts when the lease is gone: taken by another holder, expired by the clock, lost to a backend failure, or
-   * released. `signal.reason` is an {@link ErrLockLost} or an {@link ErrLockReleased}. A `once` lock whose action returned has
-   * left its holder's hands: the window lapsing aborts nothing and publishes no `lost`.
+   * Aborts when the lease is gone: taken by another holder, expired by the clock, lost to a backend failure or to
+   * the lock service closing, or released. `signal.reason` is an {@link ErrLockLost} or an {@link ErrLockReleased}.
+   * A `once` lock whose action returned has left its holder's hands: the window lapsing aborts nothing and
+   * publishes no `lost`.
    *
    * Cancellation is cooperative: pass the signal to the I/O the critical section does, such as `fetch` or a
    * database query, so the work stops with the lease.
@@ -130,7 +131,10 @@ export interface OnceOptions {
    */
   renew?: boolean
 
-  /** Whether a throwing action gives the key back, letting another caller retry inside the window. Defaults to `true`. */
+  /**
+   * Whether a throwing action gives the key back, letting another caller retry inside the window. Defaults to
+   * `true`.
+   */
   releaseOnError?: boolean
 
   signal?: AbortSignal
