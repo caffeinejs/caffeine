@@ -213,9 +213,8 @@ export class CampaignRunner implements Campaign {
 
   // Says whether the leadership ended as a step-down rather than a loss.
   async #lost(lock: Lock, cause: unknown): Promise<boolean> {
-    // Anything but a loss, such as the holder's own `lock.release()`, ends this leadership as the campaign letting go.
+    // Anything but a loss is the holder's own `lock.release()`, which already gave the key back: the campaign let go.
     if (!(cause instanceof ErrLockLost)) {
-      await lock.release().catch(() => undefined)
       this.#host.publishElection(this.key, 'stepped-down', lock.leaseID)
       this.#host.log.debug({ key: this.key, leaseID: lock.leaseID }, 'lock campaign stepped down')
       return true

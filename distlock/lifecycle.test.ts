@@ -8,7 +8,7 @@ import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLockBuilder } from './builder.js'
 import type { DistLock, Lock } from './distlock.js'
-import { ErrLockLost, ErrLockReleased } from './errors.js'
+import { ErrLockBackendTimeout, ErrLockLost, ErrLockReleased } from './errors.js'
 import { kDistLock } from './keys.js'
 import { RecordingLogger } from './log.testkit.js'
 import type { LostMessage } from './observability/channels.js'
@@ -466,6 +466,69 @@ describe('distlock lifecycle', () => {
     await vi.advanceTimersByTimeAsync(5 * Second)
     await releasing
 
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(await rotating.inner.tryAcquire('orders:rebuild', 1 * Minute)).toBeDefined()
+  })
+
+  // Once close resolved, the application may tear its client down. A renewal that answers after that must send
+  // nothing: the release would run into a closed client, and the key it renewed lapses at its ttl anyway.
+  it('sends no release for a renewal that answers after close resolved', async () => {
+    const backend = new FaultyBackend()
+    const { lock, close } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    backend.late = ['extend']
+    await vi.advanceTimersByTimeAsync(10 * Second)
+
+    const closing = close()
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await closing
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(backend.released).toEqual([])
+  })
+
+  it('sends no release for an acquisition that answers after close resolved', async () => {
+    const backend = new FaultyBackend()
+    const { lock, close } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    backend.late = ['acquire']
+    const attempt = lock.tryAcquire('orders:rebuild').catch((e: unknown) => e)
+    const closing = close()
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await closing
+    expect(await attempt).toBeInstanceOf(ErrLockBackendTimeout)
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(backend.released).toEqual([])
+  })
+
+  // The same hole as above, opened by the holder's own extend: it timed out, the holder let go, and the rotated
+  // token arrived after the release went out under the old one.
+  it('gives back an explicit extend that lands after the lock was released, so a backend that rotates the token on extend leaves the key free', async () => {
+    const rotating = new RotatingBackend()
+    const backend = new FaultyBackend(rotating)
+    const { lock } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    backend.late = ['extend']
+    const extending = held.extend(1 * Minute).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await extending
+
+    await held.release()
     backend.late = []
     backend.answerLate()
     await vi.advanceTimersByTimeAsync(0)
