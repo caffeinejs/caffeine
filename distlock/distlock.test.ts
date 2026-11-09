@@ -4,7 +4,7 @@ import { Day, Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
-import { FaultyBackend } from './backend.testkit.js'
+import { FaultyBackend, RenumberingBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLock, Lock } from './distlock.js'
 import {
@@ -125,24 +125,6 @@ class TakenAtExpiryBackend implements Backend {
 
   release(lease: LockLease): Promise<void> {
     return this.#inner.release(lease)
-  }
-}
-
-/** Answers every extend with the next fencing token, which breaks the contract. */
-class RenumberingBackend implements Backend {
-  readonly inner = new MemoryLockBackend()
-
-  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
-    return this.inner.tryAcquire(key, ttl)
-  }
-
-  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
-    const extended = await this.inner.extend(lease, ttl)
-    return extended === undefined ? undefined : { ...extended, fencingToken: extended.fencingToken + 1 }
-  }
-
-  release(lease: LockLease): Promise<void> {
-    return this.inner.release(lease)
   }
 }
 
