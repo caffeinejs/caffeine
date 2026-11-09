@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://vlatte.dev/schemas/http.schema.json
+# dsp-alpha. Fast and steady: bids 8 auctions of 10.
+id: bid
+request:
+  method: POST
+  path: /bid
+delay:
+  type: lognormal
+  median: 15ms
+  sigma: 0.3
+  maxValue: 60ms
+response_random:
+  responses:
+    - &bid
+      status: 200
+      header:
+        content-type: application/json
+      body: >-
+        {"id": {{ (fromJSON .Request.Body.String).id | toJSON }},
+        "price": {{ printf "%.2f" (randomFloat 0.8 2.8) }},
+        "adm": "<img src=\"https://alpha.ads.test/creative.png\">"}
+      template:
+        enabled: true
+    - *bid
+    - *bid
+    - *bid
+    - &pass
+      status: 204
+---
+# The win notice: the exchange tells the winner what it pays.
+id: win
+request:
+  method: POST
+  path: /win
+response:
+  status: 200
