@@ -372,14 +372,14 @@ export function attachCacheHooks(
 
     let cached: HTTPCacheEntry | undefined
     let readFailed = false
+    // Aborts once the request is over: the client left, or its handler timeout passed.
+    const over = requestSignal(request)
     try {
-      cached = await withStoreSignal('get', requestSignal(request), storeTimeout, signal =>
-        store.get(key, { tags, signal }),
-      )
+      cached = await withStoreSignal('get', over, storeTimeout, signal => store.get(key, { tags, signal }))
     } catch (error) {
       // The request is over — the client left, or its handler timeout has been answered: nothing to serve,
       // nothing to report.
-      if (requestSignal(request).aborted) {
+      if (over.aborted) {
         return
       }
 
@@ -503,7 +503,8 @@ export function attachCacheHooks(
     directives: RequestCacheControl,
     flight: Flight,
   ): Promise<unknown> {
-    const outcome = await flight.wait(requestSignal(request))
+    const over = requestSignal(request)
+    const outcome = await flight.wait(over)
 
     // The request is over — the client left, or its handler timeout has been answered: nothing to serve,
     // nobody to tell.
@@ -514,11 +515,9 @@ export function attachCacheHooks(
     if (outcome !== 'not-stored') {
       let again: HTTPCacheEntry | undefined
       try {
-        again = await withStoreSignal('get', requestSignal(request), storeTimeout, signal =>
-          store.get(key, { tags, signal }),
-        )
+        again = await withStoreSignal('get', over, storeTimeout, signal => store.get(key, { tags, signal }))
       } catch (error) {
-        if (requestSignal(request).aborted) {
+        if (over.aborted) {
           return
         }
 
