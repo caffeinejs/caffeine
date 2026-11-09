@@ -296,6 +296,24 @@ describe('instrumentDistLock metrics', () => {
       expect.objectContaining({ attributes: { 'distlock.operation': 'extend', 'distlock.error': 'other' }, value: 1 }),
     ])
   })
+
+  // A dashboard reads the leader gauge to see that exactly one replica leads; it must go back to 0 when it stops.
+  it('counts election events, and the campaigns leading at any moment', async () => {
+    const otel = instrument()
+    const lock = await newLock()
+
+    const campaign = lock.campaign('scheduler')
+    await until(() => campaign.isLeader)
+    expect(await otel.points('distlock.leader')).toEqual([expect.objectContaining({ attributes: {}, value: 1 })])
+
+    await campaign.stop()
+
+    expect(await otel.points('distlock.leader')).toEqual([expect.objectContaining({ attributes: {}, value: 0 })])
+    expect(await otel.points('distlock.election')).toEqual([
+      expect.objectContaining({ attributes: { 'distlock.event': 'elected' }, value: 1 }),
+      expect.objectContaining({ attributes: { 'distlock.event': 'stepped-down' }, value: 1 }),
+    ])
+  })
 })
 
 describe('instrumentDistLock store timeouts', () => {

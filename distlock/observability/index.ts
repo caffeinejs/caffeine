@@ -4,6 +4,8 @@ export {
   type AcquireMode,
   type AcquireOutcome,
   type ContendedMessage,
+  type ElectionEvent,
+  type ElectionMessage,
   type ExtendContext,
   type ExtendOutcome,
   type LockEventBase,

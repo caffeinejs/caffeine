@@ -19,6 +19,7 @@ import {
   DIST_LOCK_CHANNELS,
   type AcquireContext,
   type ContendedMessage,
+  type ElectionMessage,
   type ExtendContext,
   type LockEventBase,
   type LostMessage,
@@ -70,7 +71,9 @@ export interface DistLockInstrumentationOptions {
  * Metrics: `distlock.acquire.duration` and `distlock.acquire.attempts` (histograms, by outcome and mode),
  * `distlock.hold.duration` (histogram, by whether the lease lapsed), and the counters `distlock.contended`,
  * `distlock.lease.lost`, `distlock.backend.errors` (by operation, and `distlock.error`: `timeout` for a call that
- * outlived `storeTimeout`, `other` otherwise) and `distlock.once`.
+ * outlived `storeTimeout`, `other` otherwise), `distlock.once` and `distlock.election` (by `distlock.event`), and the
+ * up-down counter `distlock.leader`, the campaigns currently leading. It counts only the elections it saw, so it reads
+ * low, below zero even, when instrumentation is turned on while a campaign already leads.
  *
  * A handler that throws is reported to `diag.error` and never reaches the lock or the process.
  */
@@ -182,6 +185,14 @@ export function instrumentDistLock(options: DistLockInstrumentationOptions = {})
       description: 'Backend calls that failed',
     })
     const onceCalls = meter.createCounter('distlock.once', { unit: '{call}', description: 'Calls to once, by outcome' })
+    const elections = meter.createCounter('distlock.election', {
+      unit: '{event}',
+      description: 'Changes of a campaign leadership, by event',
+    })
+    const leaders = meter.createUpDownCounter('distlock.leader', {
+      unit: '{campaign}',
+      description: 'Campaigns this process runs that currently lead',
+    })
 
     on<AcquireContext>(`tracing:${DIST_LOCK_CHANNELS.acquire}:asyncEnd`, ctx => {
       const attributes = { 'distlock.outcome': ctx.outcome ?? 'error', 'distlock.mode': ctx.mode, ...label(ctx.key) }
@@ -228,6 +239,11 @@ export function instrumentDistLock(options: DistLockInstrumentationOptions = {})
         'distlock.renewal': message.renewal,
         ...label(message.key),
       })
+    })
+
+    on<ElectionMessage>(DIST_LOCK_CHANNELS.election, message => {
+      elections.add(1, { 'distlock.event': message.event, ...label(message.key) })
+      leaders.add(message.event === 'elected' ? 1 : -1, label(message.key))
     })
   }
 

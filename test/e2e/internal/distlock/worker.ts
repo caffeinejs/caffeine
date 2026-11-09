@@ -2,7 +2,7 @@
 // holder the way an operating system or an orchestrator would.
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { DistributedLock, kDistLock, type Lock } from '@caffeinejs/distlock'
+import { DistributedLock, kDistLock, type Campaign, type Lock } from '@caffeinejs/distlock'
 import { RedisLockBackend } from '@caffeinejs/distlock/backend/redis'
 import { createClient } from '@redis/client'
 
@@ -13,6 +13,8 @@ export type WorkerRequest =
   | { op: 'write'; id: number; key: string; value: string }
   | { op: 'status'; id: number; key: string }
   | { op: 'release'; id: number; key: string }
+  | { op: 'campaign'; id: number; key: string; ttl: number }
+  | { op: 'leading'; id: number; key: string }
   | { op: 'close'; id: number }
 
 export interface WorkerReply {
@@ -22,6 +24,9 @@ export interface WorkerReply {
   accepted?: boolean
   lost?: boolean
   signalReason?: { code: string; reason?: string }
+  /** Whether this worker's campaign leads now, and how many times it was elected so far. */
+  leader?: boolean
+  elected?: number
   error?: string
 }
 
@@ -40,6 +45,7 @@ await app.bootstrap()
 const lock = app.container.get(kDistLock)
 
 const held = new Map<string, Lock>()
+const campaigns = new Map<string, { campaign: Campaign; readonly elected: number }>()
 
 function heldLock(key: string): Lock {
   const acquired = held.get(key)
@@ -78,6 +84,24 @@ async function handle(request: WorkerRequest): Promise<Omit<WorkerReply, 'id'>> 
       await heldLock(request.key).release()
       held.delete(request.key)
       return {}
+    }
+    case 'campaign': {
+      let elected = 0
+      const campaign = lock.campaign(request.key, { ttl: request.ttl, onElected: () => void (elected += 1) })
+      campaigns.set(request.key, {
+        campaign,
+        get elected() {
+          return elected
+        },
+      })
+      return {}
+    }
+    case 'leading': {
+      const entry = campaigns.get(request.key)
+      if (entry === undefined) {
+        throw new Error(`Cannot find a campaign for "${request.key}" in this worker: start one first`)
+      }
+      return { leader: entry.campaign.isLeader, elected: entry.elected }
     }
     case 'close': {
       await app.close()

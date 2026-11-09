@@ -47,8 +47,8 @@ export interface DistLockOptions {
    * it aborts every lock still held with `ErrLockLost` reason `shutdown`. `0` aborts at once.
    *
    * Renewal keeps running while it waits. After the abort it waits up to `storeTimeout` more for the releases
-   * that follow, and leaves any key it did not see released to lapse, so closing takes at most
-   * `drainTimeout + storeTimeout`.
+   * that follow, and leaves any key it did not see released to lapse. Stopping campaigns first takes up to
+   * `storeTimeout` too, so closing takes at most `drainTimeout + 2 × storeTimeout`.
    */
   drainTimeout: Duration
 }

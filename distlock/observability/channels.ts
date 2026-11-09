@@ -8,8 +8,8 @@ import type { DistLock } from '../distlock.js'
  * `acquire`, `withLock`, `once`, `extend` and `release` are tracing channels: subscribe with
  * `tracingChannel(name)` and each call publishes `start`, `end`, `asyncStart` and `asyncEnd` around one context
  * object, with `error` before `asyncEnd` when the call rejects. `asyncEnd` is the one sub-event every call
- * reaches, and by then the context carries its outcome. `tryWithLock` publishes on `withLock`. `contended` and
- * `lost` are plain channels.
+ * reaches, and by then the context carries its outcome. `tryWithLock` publishes on `withLock`. `contended`,
+ * `lost` and `election` are plain channels.
  *
  * Channels are process-wide, so every context names the lock service that published it in `service`.
  */
@@ -21,6 +21,7 @@ export const DIST_LOCK_CHANNELS = {
   release: 'caffeinejs:distlock:release',
   contended: 'caffeinejs:distlock:contended',
   lost: 'caffeinejs:distlock:lost',
+  election: 'caffeinejs:distlock:election',
 } as const
 
 /** Which call an acquisition came from: `tryAcquire`, `acquire`, or the one inside `once`. */
@@ -142,6 +143,21 @@ export interface LostMessage extends LockEventBase {
 }
 
 /**
+ * What happened to a campaign's leadership. `elected`: it took the key. `lost`: the lease went without the campaign
+ * letting go, with the reason. `stepped-down`: the campaign let go, because it was stopped or `onElected` failed.
+ */
+export type ElectionEvent = 'elected' | 'lost' | 'stepped-down'
+
+/** One change of a campaign's leadership. Each leadership publishes `elected` once, then `lost` or `stepped-down` once. */
+export interface ElectionMessage extends LockEventBase {
+  readonly event: ElectionEvent
+  /** The lease the campaign leads, or led, under. */
+  readonly leaseID: number
+  /** Why leadership was lost, on `lost` only. */
+  readonly reason?: LostReason
+}
+
+/**
  * What `DistLock.events` emits: each tracing channel's context as it stands at `asyncEnd`, and each plain
  * channel's message, under the same names as {@link DIST_LOCK_CHANNELS}.
  */
@@ -153,4 +169,5 @@ export interface LockEventMap {
   release: [ReleaseContext]
   contended: [ContendedMessage]
   lost: [LostMessage]
+  election: [ElectionMessage]
 }

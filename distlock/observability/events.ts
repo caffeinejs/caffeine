@@ -19,6 +19,7 @@ const sources: Record<LockEventName, string> = {
   release: `tracing:${DIST_LOCK_CHANNELS.release}:asyncEnd`,
   contended: DIST_LOCK_CHANNELS.contended,
   lost: DIST_LOCK_CHANNELS.lost,
+  election: DIST_LOCK_CHANNELS.election,
 }
 
 function isLockEvent(event: string | symbol): event is LockEventName {

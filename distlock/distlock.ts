@@ -4,9 +4,18 @@ import { exponential, type Backoff } from '@caffeinejs/resilience'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { acquireChannel, onceChannel, publishContended, traced, withLockChannel, type Writable } from './_channels.js'
+import {
+  acquireChannel,
+  onceChannel,
+  publishContended,
+  publishElection,
+  traced,
+  withLockChannel,
+  type Writable,
+} from './_channels.js'
 import { fencingViolation, HeldLock } from './_lock.js'
 import { type Backend, type LockLease } from './backend.js'
+import { CampaignRunner, type Campaign, type CampaignOptions } from './election/election.js'
 import { ErrDistLockConfiguration, ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
 import type {
   AcquireContext,
@@ -195,6 +204,29 @@ export interface DistLock {
    * what keeps a later caller out as well as a concurrent one.
    */
   once<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options?: OnceOptions): Promise<RunResult<T>>
+
+  /**
+   * Campaigns for leadership of a key until stopped: at most one campaign per key leads across every replica.
+   *
+   * Returns at once. The campaign tries the key, and backs off as `acquire` does while another replica leads. Once
+   * elected it renews the lease and calls `onElected`; when the lease is lost it calls `onLost` and campaigns
+   * again. A backend failure is retried and never ends the campaign. Closing the application stops every campaign
+   * and hands leadership back; a lease lost with reason `shutdown` stops its campaign too.
+   *
+   * Stopping a campaign releases the key before the leader's `lock.signal` aborts, so leader-only work learns of
+   * the stop only once another replica may already lead. Work that writes shared state checks `lock.fencingToken`
+   * at the resource.
+   *
+   * @throws ErrInvalidLockKey when the key is empty or not a string.
+   * @example
+   * ```ts
+   * const campaign = lock.campaign('reports:scheduler', {
+   *   onElected: held => scheduler.start(held.signal),
+   *   onLost: reason => log.info({ reason }, 'no longer the scheduler'),
+   * })
+   * ```
+   */
+  campaign(key: string, options?: CampaignOptions): Campaign
 }
 
 /**
@@ -217,6 +249,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   readonly #held = new Set<HeldLock>()
   readonly #inFlight = new Set<Promise<unknown>>()
   readonly #actions = new Set<Promise<unknown>>()
+  readonly #campaigns = new Set<CampaignRunner>()
   // Set once closing has aborted the locks it found, so a lease taken after that is ended as it arrives.
   #aborted = false
   #events: LockEvents | undefined
@@ -235,7 +268,8 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   /**
    * Drains, then aborts, the locks this service holds when the container is disposed.
    *
-   * It waits up to `drainTimeout` for running `withLock`, `tryWithLock` and `once` actions to finish, renewing
+   * It first stops every campaign, waiting up to `storeTimeout` for each to hand leadership back. Then it waits up
+   * to `drainTimeout` for running `withLock`, `tryWithLock` and `once` actions to finish, renewing
    * their leases meanwhile. Every lock still held after that loses its lease with `ErrLockLost` reason `shutdown`
    * on its signal, and it waits up to `storeTimeout` more for the releases that follow and the backend calls
    * already on the wire. A key it did not see released is left to lapse at its expiry, so no other replica takes
@@ -245,6 +279,14 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
    */
   async onDestroy(): Promise<void> {
     const { drainTimeout, storeTimeout } = this.options
+
+    // Stopped first, so leadership is handed back while the backend is surely still there.
+    if (this.#campaigns.size > 0) {
+      await settleWithin(
+        [...this.#campaigns].map(campaign => campaign.stop()),
+        storeTimeout,
+      )
+    }
 
     // Renewal keeps running, so no lease lapses under an action this is waiting for.
     if (drainTimeout > 0) {
@@ -369,6 +411,26 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     if (this.#aborted && lock.endForShutdown()) {
       this.log.warn({ key: lock.key, leaseID: lock.leaseID }, 'lock acquired after the lock service closed')
     }
+  }
+
+  campaign(key: string, options: CampaignOptions = {}): Campaign {
+    checkKey(key)
+
+    const runner = new CampaignRunner(
+      {
+        tryAcquire: (k, o) => this.tryAcquire(k, o),
+        backoff: this.#backoff(key, {}),
+        log: this.log,
+        publishElection: (k, event, leaseID, reason) =>
+          publishElection(() => ({ service: this, key: k, event, leaseID, reason })),
+      },
+      key,
+      options,
+    )
+    this.#campaigns.add(runner)
+    void runner.done.finally(() => this.#campaigns.delete(runner))
+
+    return runner
   }
 
   // Counts a running `withLock`, `tryWithLock` or `once`, release included, until it settles, so closing the

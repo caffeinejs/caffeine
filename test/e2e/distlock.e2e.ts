@@ -356,6 +356,70 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
       })
     })
 
+    describe('electing a leader across processes', () => {
+      let workers: Worker[] = []
+
+      beforeEach(async () => {
+        workers = await startWorkers(3, url)
+      })
+
+      afterEach(async () => {
+        await Promise.all(workers.map(worker => worker.close()))
+      })
+
+      // Polls every live worker until exactly one leads, and returns its index.
+      async function leaderAmong(k: string, live: Worker[], timeout: number): Promise<number> {
+        let leader = -1
+        await waitFor(async () => {
+          const replies = await Promise.all(live.map(worker => worker.request({ op: 'leading', key: k })))
+          const leading = replies.flatMap((reply, i) => (reply.leader === true ? [i] : []))
+          leader = leading.length === 1 ? leading[0] : -1
+          return leader !== -1
+        }, timeout)
+        return leader
+      }
+
+      it("elects one leader among three processes, and another within one backoff pause of the dead leader's lease lapsing", async () => {
+        const k = key('elect')
+        const ttl = 1 * Second
+        for (const worker of workers) {
+          await worker.request({ op: 'campaign', key: k, ttl })
+        }
+
+        const first = await leaderAmong(k, workers, 5 * Second)
+        const elected = await Promise.all(workers.map(worker => worker.request({ op: 'leading', key: k })))
+        expect(elected.map(reply => reply.elected ?? 0).reduce((a, b) => a + b)).toBe(1)
+
+        await workers[first].kill()
+        const killed = performance.now()
+        const survivors = workers.filter((_, i) => i !== first)
+
+        await leaderAmong(k, survivors, ttl + 1 * Second + 1 * Second)
+        // The lease lapses, then one backoff pause at most (capped at the default maxRetryDelay).
+        expect(performance.now() - killed).toBeLessThan(ttl + DEFAULT_DIST_LOCK_OPTIONS.maxRetryDelay + 500)
+        const after = await Promise.all(survivors.map(worker => worker.request({ op: 'leading', key: k })))
+        expect(after.map(reply => reply.elected ?? 0).reduce((a, b) => a + b)).toBe(1)
+      })
+
+      it('steps down on close so a follower is elected within 1 s', async () => {
+        const k = key('elect-step')
+        for (const worker of workers) {
+          await worker.request({ op: 'campaign', key: k, ttl: 30 * Second })
+        }
+        const first = await leaderAmong(k, workers, 5 * Second)
+
+        await workers[first].close()
+        const closed = performance.now()
+
+        await leaderAmong(
+          k,
+          workers.filter((_, i) => i !== first),
+          1 * Second,
+        )
+        expect(performance.now() - closed).toBeLessThan(1 * Second)
+      })
+    })
+
     // A fencing token is what a resource uses to turn away a holder whose lease lapsed, so it only protects anything
     // while every later acquisition of a key carries a greater one, whichever client takes it.
     describe('fencing tokens', () => {

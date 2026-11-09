@@ -12,6 +12,7 @@ export {
   ErrLockNotAcquired,
   ErrLockReleased,
 } from './errors.js'
+export type { Campaign, CampaignOptions } from './election/index.js'
 export { kDistLock, kDistLockBackend } from './keys.js'
 export { DEFAULT_DIST_LOCK_OPTIONS, type DistLockConfig, type DistLockOptions } from './options.js'
 export type { LostReason } from './observability/channels.js'

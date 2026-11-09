@@ -15,6 +15,8 @@ export interface Worker {
   /** Stops the process where it stands, as a long pause or a frozen VM would. */
   pause(): void
   resume(): void
+  /** Kills the process outright, with no chance to release anything, as a crash would. */
+  kill(): Promise<void>
   /** Closes the worker's application and waits for the process to exit. */
   close(): Promise<void>
 }
@@ -66,6 +68,13 @@ async function startWorker(env: Record<string, string>): Promise<Worker> {
     request,
     pause: () => child.kill('SIGSTOP'),
     resume: () => child.kill('SIGCONT'),
+    async kill() {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        return
+      }
+      child.kill('SIGKILL')
+      await exited
+    },
     async close() {
       if (child.exitCode !== null || child.signalCode !== null) {
         return

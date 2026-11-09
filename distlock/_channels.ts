@@ -4,6 +4,7 @@ import {
   DIST_LOCK_CHANNELS,
   type AcquireContext,
   type ContendedMessage,
+  type ElectionMessage,
   type ExtendContext,
   type LostMessage,
   type OnceContext,
@@ -22,6 +23,7 @@ export const releaseChannel = tracingChannel<Writable<ReleaseContext>>(DIST_LOCK
 
 const contendedChannel = channel(DIST_LOCK_CHANNELS.contended)
 const lostChannel = channel(DIST_LOCK_CHANNELS.lost)
+const electionChannel = channel(DIST_LOCK_CHANNELS.election)
 
 // Runs `fn` inside the tracing channel, or bare when nobody listens: no context is built and no wrapper runs.
 export function traced<C extends object, R>(
@@ -47,5 +49,11 @@ export function publishContended(message: () => ContendedMessage): void {
 export function publishLost(message: () => LostMessage): void {
   if (lostChannel.hasSubscribers) {
     lostChannel.publish(message())
+  }
+}
+
+export function publishElection(message: () => ElectionMessage): void {
+  if (electionChannel.hasSubscribers) {
+    electionChannel.publish(message())
   }
 }
