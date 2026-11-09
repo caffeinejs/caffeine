@@ -18,6 +18,9 @@ import { buildStatic } from '@caffeinejs/static/build'
 await buildStatic({ root: 'site/dist' }) // the .br and .gz variants, and the manifest
 ```
 
+Start-up reads every file the manifest lists and checks its hash, so a file changed after the build fails the
+deployment instead of going out under the tag of the bytes it replaced.
+
 ## The two rules
 
 **A path the application declared answers any client; a wildcard answers only a document request.** `/` and
@@ -140,8 +143,9 @@ const admin = newRouter()
 app.with(staticFiles(s => s.serve(ADMIN, { unrouted: ['**'] }))).mount(admin)
 ```
 
-Path safety is the manifest's: `sendFile` looks the decoded path up among the files the build listed, so `..`,
-a dotfile or anything the build did not list is a 404, and nothing joins a request path onto `root`.
+Path safety is the manifest's: `sendFile` looks the path up among the files the build listed, decoding it first
+when it starts with `/`, so `..`, a dotfile or anything the build did not list is a 404, and nothing joins a
+request path onto `root`.
 
 Two applications on one origin are these two side by side. `/admin/*` beats `/*` by static-prefix length, so
 nothing coordinates them.
@@ -162,29 +166,50 @@ and conditional requests:
 
 ```ts
 import { openAsBlob } from 'node:fs'
-import { stat } from 'node:fs/promises'
-import { join, relative, resolve, sep } from 'node:path'
+import { realpath, stat } from 'node:fs/promises'
+import { relative, resolve, sep } from 'node:path'
 
 import { Attachment, ErrHTTPNotFound } from '@caffeinejs/http'
 
-const REPORTS = resolve('var/reports')
+// Resolved once, so a symlink on the way to the directory itself does not fail every check.
+const REPORTS = await realpath('var/reports')
 
-reports.get('/reports/*', async ctx => {
-  // A path from a request is guarded before it touches the file system: resolved, then confined to the directory.
-  const path = resolve(REPORTS, ctx.req.param('*') ?? '')
+const notFound = (): never => {
+  throw new ErrHTTPNotFound()
+}
+
+/** Where `path` is under `REPORTS`, or undefined when it is outside, the directory itself or a dotfile. */
+function confined(path: string): string | undefined {
   const inside = relative(REPORTS, path)
 
-  if (inside === '' || inside.startsWith('..') || inside.split(sep).some(segment => segment.startsWith('.'))) {
-    throw new ErrHTTPNotFound()
+  return inside === '' || inside.startsWith('..') || inside.split(sep).some(segment => segment.startsWith('.'))
+    ? undefined
+    : inside
+}
+
+reports.get('/reports/*', async ctx => {
+  // Confined twice: as written, then with symlinks resolved, since a link inside the directory can point anywhere.
+  const requested = resolve(REPORTS, ctx.req.param('*') ?? '')
+  confined(requested) ?? notFound()
+  const real = await realpath(requested).catch(notFound)
+  const name = confined(real) ?? notFound()
+  const stats = await stat(real).catch(notFound)
+
+  if (!stats.isFile()) {
+    notFound()
   }
 
-  const { mtime, size } = await stat(path).catch(() => {
-    throw new ErrHTTPNotFound()
+  // The checked path is the one opened, not the one requested.
+  return Attachment(await openAsBlob(real), {
+    name,
+    etag: `"${stats.size}-${stats.mtime.getTime()}"`,
+    lastModified: stats.mtime,
   })
-
-  return Attachment(await openAsBlob(path), { name: inside, etag: `"${size}-${mtime.getTime()}"`, lastModified: mtime })
 })
 ```
+
+This trusts whoever writes `var/reports`: a symlink swapped in between the check and the open is followed. Keep
+the directory writable only by the application, or serve files a build lists instead.
 
 A file the build lists is better served by a mount or `sendFile`, which never derive a path from a request.
 

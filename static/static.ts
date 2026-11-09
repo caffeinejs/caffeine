@@ -16,6 +16,7 @@ import {
   prepareFile,
   rootOnDisk,
   serveFile,
+  verifyHashes,
   writeHeaders,
   type FileDecision,
   type FilePolicy,
@@ -109,6 +110,13 @@ async function prepareMount({ root, options }: ResolvedMount, allowProduction: b
     files.set(file.path, file)
   }
 
+  // A scan has just hashed the files itself. One file at a time, as the build reads them.
+  if (mode === 'manifest') {
+    for (const file of prepared) {
+      await verifyHashes(root, file, manifest.files[file.path]!)
+    }
+  }
+
   const unrouted = options.unrouted ?? []
 
   return {
@@ -129,7 +137,7 @@ async function scanned(root: string): Promise<StaticManifest> {
 
   // One file at a time, as the build reads them: a tree of thousands would otherwise open them all at once.
   for (const file of files) {
-    entries[file.path] = (await readFileEntry(root, file.path, file.type)).entry
+    entries[file.path] = await readFileEntry(root, file.path, file.type)
   }
 
   return { version: 1, files: entries }
@@ -255,6 +263,18 @@ function staticPlugin(
       }
     }
 
+    // A file under a directory is answered by the directory's wildcard, which the router ranks below an exact route
+    // at the file's URL: that route would answer the file, under its own gate, and the wildcard another spelling of it.
+    for (const mount of mounts) {
+      for (const file of mount.routed) {
+        const url = mount.prefix + file.path
+
+        if (!routes.has(url) && instance.hasRoute({ method: 'GET', url })) {
+          throw new ErrStaticRouteConflict(url, describe(mount, file))
+        }
+      }
+    }
+
     instance.decorate(kStaticMounts, { mounts: mounts.map(({ root, files }) => ({ root, files })) })
 
     for (const [url, target] of routes) {
@@ -315,6 +335,8 @@ function routesOf(mounts: readonly PreparedMount[], router: RouterFlags): Map<st
     return router.ignoreTrailingSlash && cased.length > 1 ? cased.replace(/\/$/, '') : cased
   }
   const claimed = new Map<string, { mount: PreparedMount; file: PreparedFile }>()
+  // Each directory route's URL as first spelled, by its URL as the router matches it.
+  const directories = new Map<string, string>()
   const claim = (url: string, mount: PreparedMount, file: PreparedFile) => {
     const key = fold(url)
     const held = claimed.get(key)
@@ -336,7 +358,7 @@ function routesOf(mounts: readonly PreparedMount[], router: RouterFlags): Map<st
       if (slash === -1) {
         routes.set(mount.prefix + file.path, { kind: 'file', file, mount })
       } else {
-        directoryRoute(routes, mount, file, slash, router)
+        directoryRoute(routes, directories, mount, file, slash, router)
       }
 
       if (mount.index !== false && posix.basename(file.path) === mount.index) {
@@ -377,12 +399,17 @@ function routesOf(mounts: readonly PreparedMount[], router: RouterFlags): Map<st
 
 function directoryRoute(
   routes: Map<string, RouteTarget>,
+  directories: Map<string, string>,
   mount: PreparedMount,
   file: PreparedFile,
   slash: number,
   router: RouterFlags,
 ): void {
-  const url = `${mount.prefix}${file.path.slice(0, slash)}/*`
+  const spelled = `${mount.prefix}${file.path.slice(0, slash)}/*`
+  // A router that folds case matches `/Assets/*` and `/assets/*` as one route: the files of both share it.
+  const folded = router.caseSensitive ? spelled : spelled.toLowerCase()
+  const url = directories.get(folded) ?? spelled
+  directories.set(folded, url)
   const rest = file.path.slice(slash + 1)
   const route = routes.get(url)
 
@@ -425,7 +452,10 @@ function fileHandler(file: PreparedFile) {
 
 function directoryHandler(files: ReadonlyMap<string, PreparedFile>, router: RouterFlags) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const file = files.get(key((request.params as { '*': string })['*'], router))
+    // The router matches `%2F` as a character of one segment, then decodes it in the wildcard: read as `/`, it would
+    // reach a file by a URL another route answers. No name holds a `/` of its own, so it names nothing.
+    const encodedSlash = /%2f/i.test(request.url.split('?', 1)[0]!)
+    const file = encodedSlash ? undefined : files.get(key((request.params as { '*': string })['*'], router))
 
     if (file === undefined) {
       throw new ErrHTTPNotFound(`Route ${request.method}:${request.url} not found`)
@@ -450,6 +480,13 @@ function decide(file: PreparedFile, request: FastifyRequest): Promise<FileDecisi
 }
 
 function send(reply: FastifyReply, decision: FileDecision): FastifyReply {
+  // The handler timed out while the file opened: the reply went out without it, and nothing would close it.
+  if (reply.sent) {
+    decision.body?.destroy()
+
+    return reply
+  }
+
   writeHeaders(reply.code(decision.status), decision.headers)
 
   if (decision.cacheControl !== undefined) {

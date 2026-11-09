@@ -27,9 +27,10 @@ export interface StaticContext {
  * the router is sent all the same. Preconditions and ranges apply to a `GET` or a `HEAD` the handler left at `200`; a
  * status it set is kept, with the whole file.
  *
- * `path` is a path the manifest lists, or a request path: one leading `/` is dropped and each segment is
- * percent-decoded, and the result is looked up as it is. A path the manifest does not list, `..` included, is a
- * `404`. `root` picks the mount by the root its `.serve(...)` was given; without it, the first mount.
+ * `path` is the manifest's key as written, such as `'100%.txt'`, or, with a leading `/`, a URL path: the slash is
+ * dropped and each segment percent-decoded, so `'/100%25.txt'` names the same file. A decoded segment holding a `/`
+ * names nothing. A path the manifest does not list, `..` included, is a `404`. `root` picks the mount by the root its
+ * `.serve(...)` was given; without it, the first mount.
  *
  * @throws {@link ErrSendFileUnavailable} when no `staticFiles(...)` is installed, or no mount serves `root`
  * @throws `ErrHTTPNotFound` when the mount lists no such file
@@ -76,11 +77,20 @@ class FileResponder extends Responder {
   async respond(ctx: IContext): Promise<ActionResult> {
     const method = ctx.req.method
     const conditional = (method === 'GET' || method === 'HEAD') && ctx.statusCode === 200
+    // Read before the open: it aborts when the handler times out or the client leaves while the file opens.
+    const signal = ctx.signal
     const decision = await serveFile(
       this.file,
       { method, header: name => ctx.req.header(name) },
       { via: 'sendFile', conditional, log: this.log },
     )
+
+    // Nothing will send the file, so nothing would close it.
+    if (signal.aborted) {
+      decision.body?.destroy()
+
+      return undefined
+    }
 
     writeHeaders(ctx.status(conditional ? decision.status : ctx.statusCode), decision.headers)
 
@@ -89,18 +99,28 @@ class FileResponder extends Responder {
     }
 
     // Fastify answers a `HEAD` of a compiled route through the `GET`, and writes `Content-Length: 0` for an empty
-    // payload: an empty stream keeps the length the file has.
-    return decision.body ?? (method === 'HEAD' ? Readable.from([]) : undefined)
+    // payload: an empty stream keeps the length the file has. A `304` has no length to keep, and a stream would have
+    // the adapter label it `application/octet-stream`.
+    return (
+      decision.body ??
+      (method === 'HEAD' && decision.headers['content-length'] !== undefined ? Readable.from([]) : undefined)
+    )
   }
 }
 
-/** The manifest key `path` names: one leading `/` dropped, each segment percent-decoded. */
+/** The manifest key `path` names: itself, or for a URL path, the path without its leading `/`, each segment decoded. */
 function manifestKey(path: string): string | undefined {
+  if (!path.startsWith('/')) {
+    return path
+  }
+
   try {
-    return (path.startsWith('/') ? path.slice(1) : path)
+    const segments = path
+      .slice(1)
       .split('/')
       .map(segment => decodeURIComponent(segment))
-      .join('/')
+
+    return segments.some(segment => segment.includes('/')) ? undefined : segments.join('/')
   } catch {
     return undefined
   }

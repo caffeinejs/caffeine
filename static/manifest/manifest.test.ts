@@ -133,7 +133,18 @@ describe('readManifest', () => {
     [
       'a variant out of the root',
       { 'a.svg': { ...file, variants: { br: { hash: file.hash, path: '/etc/passwd', size: 1 } } } },
-      '"files.a.svg.variants.br.path" is not a relative path under the root',
+      '"files.a.svg.variants.br.path" is not "a.svg.br", the path the build writes it at',
+    ],
+    // A variant's bytes are sent as the file's: a hand-written manifest must not publish `.env` through one.
+    [
+      'a variant that points at a dotfile',
+      { 'a.svg': { ...file, variants: { gzip: { hash: file.hash, path: '.env', size: 1 } } } },
+      '"files.a.svg.variants.gzip.path" is not "a.svg.gz", the path the build writes it at',
+    ],
+    [
+      "a variant at another file's path",
+      { 'a.svg': { ...file, variants: { br: { hash: file.hash, path: 'b.svg.br', size: 1 } } } },
+      '"files.a.svg.variants.br.path" is not "a.svg.br", the path the build writes it at',
     ],
   ])('refuses %s, naming the field', async (_case, files, detail) => {
     expect(firstLine(await refusal(JSON.stringify({ version: 1, files })))).toBe(`Cannot serve "${root}": ${detail}`)

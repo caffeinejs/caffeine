@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process'
+import { mkdir, mkdtemp, open, readdir, readlink, realpath, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import {
@@ -13,8 +17,10 @@ import {
   type WebApplication,
 } from '@caffeinejs/http'
 import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
-import { afterEach, describe, expect, inject, it } from 'vitest'
+import { Millisecond } from '@caffeinejs/std/duration'
+import { afterEach, describe, expect, inject, it, vi } from 'vitest'
 
+import { buildStatic } from '../build/index.js'
 import { ErrSendFileUnavailable, sendFile, staticFiles, type StaticConfigurer } from '../index.js'
 
 const { fixtures, fixtures2: other, spa } = inject('fixtures')
@@ -119,13 +125,13 @@ describe('sendFile', () => {
     expect((await started.request('/pick')).status).toBe(200)
   })
 
-  // A path from a request is looked up in the manifest as it is decoded: nothing resolves `..` against a directory.
+  // A path with a leading "/" is a request path, looked up as it is decoded: nothing resolves `..` against a directory.
   it.each([
     ['/hello.txt', 200],
-    ['hello%2Etxt', 200],
+    ['/hello%2Etxt', 200],
     ['/../fixtures/hello.txt', 404],
-    ['%2E%2E/hello.txt', 404],
-    ['%E0%A4%A.txt', 404],
+    ['/%2E%2E/hello.txt', 404],
+    ['/%E0%A4%A.txt', 404],
     ['nope.txt', 404],
   ])('reads %s as a request path, answering %i', async (path, status) => {
     const started = await start(
@@ -189,6 +195,81 @@ describe('sendFile', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('content-length')).toBe('19')
     expect(await res.text()).toBe('')
+  })
+
+  // A 304 carries no body, and a HEAD of one must not tell a cache the file is now application/octet-stream.
+  it('answers a conditional HEAD with 304 and no stand-in Content-Type', async () => {
+    const started = await start(
+      s => s.serve(fixtures),
+      newRouter().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
+    )
+    const etag = (await started.request('/pick')).headers.get('etag')!
+
+    const res = await started.request('/pick', { method: 'HEAD', headers: { 'if-none-match': etag } })
+
+    expect(res.status).toBe(304)
+    expect(res.headers.get('content-type')).toBe(null)
+  })
+
+  // A name is the manifest's key as written; only a path with a leading "/" is a URL path to decode.
+  it('takes a relative path as the manifest key, and decodes a path with a leading slash', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'caffeine-send-'))
+
+    try {
+      await mkdir(join(root, 'a'))
+      await writeFile(join(root, '100%.txt'), 'percent')
+      await writeFile(join(root, 'a/b.txt'), 'nested')
+      await writeFile(join(root, 'a%2Fb.txt'), 'literal')
+      await buildStatic({ root })
+      const started = await start(
+        s => s.serve(root),
+        newRouter().get('/pick/*', ctx => sendFile(ctx, ctx.req.param('*')!)),
+      )
+      const text = async (path: string) => {
+        const res = await started.request(`/pick/${encodeURIComponent(path)}`)
+        return res.status === 200 ? await res.text() : res.status
+      }
+
+      expect(await text('100%.txt')).toBe('percent')
+      expect(await text('a%2Fb.txt')).toBe('literal')
+      expect(await text('/100%25.txt')).toBe('percent')
+      expect(await text('/a/b.txt')).toBe('nested')
+      // Decoding must not turn one segment into two and reach a file the path does not name.
+      expect(await text('/a%2Fb.txt')).toBe(404)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The 503 goes out while the open still waits, so nothing reads the descriptor it then gets: left open, every timed
+  // out request would hold one until the process exits. A FIFO keeps the open waiting until a writer comes.
+  it.skipIf(process.platform !== 'linux')('closes a file it opened after the handler timed out', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'caffeine-send-'))
+
+    try {
+      await writeFile(join(root, 'slow.txt'), 'slow')
+      await buildStatic({ root })
+      app = createWebApplication({})
+        .server(() => ({ factory: { handlerTimeout: 30 * Millisecond } }))
+        .with(staticFiles(s => s.serve(root, { unrouted: ['**'] }))) as WebApplication
+      app.mount(newRouter().get('/pick', ctx => sendFile(ctx, 'slow.txt')))
+      await app.bootstrap()
+      const fifo = join(await realpath(root), 'slow.txt')
+      await rm(fifo)
+      execFileSync('mkfifo', [fifo])
+
+      expect((await app.request('/pick')).status).toBe(503)
+
+      // The writer's open completes the server's, and is then the only descriptor left on the FIFO.
+      const writer = await open(fifo, 'w')
+      try {
+        await vi.waitFor(async () => expect(await descriptorsOn(fifo)).toBe(1))
+      } finally {
+        await writer.close()
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   // Thrown inside the compiled handler, so a controller's own handler sees the refusal.
@@ -260,3 +341,11 @@ describe('sendFile', () => {
     expect((thrown as Error).message.split('\n')[0]).toBe(`Cannot send a file from "${other}": no mount serves it`)
   })
 })
+
+/** How many of this process's descriptors are open on `path`. */
+async function descriptorsOn(path: string): Promise<number> {
+  const fds = await readdir('/proc/self/fd')
+  const targets = await Promise.all(fds.map(fd => readlink(`/proc/self/fd/${fd}`).catch(() => '')))
+
+  return targets.filter(target => target === path).length
+}

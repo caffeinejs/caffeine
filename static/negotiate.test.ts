@@ -40,12 +40,14 @@ describe('selectEncoding', () => {
     expect(selectEncoding(header, [])).toBe(selected)
   })
 
-  // A long header is cut, so parsing stays linear: what is cut off can lose a preference, never add one.
-  it('reads the first 32 entries and ignores the rest', () => {
+  // Parsing stays linear. A header past 32 entries is not read at all: an entry left unread could refuse the coding
+  // the rest would pick, so identity goes out, as for a client that sent no header.
+  it('reads up to 32 entries, and answers identity to a longer header', () => {
     const filler = Array.from({ length: 31 }, (_, i) => `x-${i}`)
 
     expect(selectEncoding([...filler, 'br'].join(', '), ['br', 'gzip'])).toBe('br')
+    expect(selectEncoding([...filler.slice(1), 'identity;q=0', 'br'].join(', '), ['br', 'gzip'])).toBe('br')
+    expect(selectEncoding(['*', ...filler, 'br;q=0'].join(', '), ['br', 'gzip'])).toBe('identity')
     expect(selectEncoding([...filler, 'deflate', 'br'].join(', '), ['br', 'gzip'])).toBe('identity')
-    expect(selectEncoding([...filler, 'identity;q=0', 'br'].join(', '), ['br', 'gzip'])).toBe(undefined)
   })
 })

@@ -1,12 +1,18 @@
 import { createHash } from 'node:crypto'
 import { constants, type Dirent } from 'node:fs'
-import { open, readdir } from 'node:fs/promises'
+import { open, readdir, stat } from 'node:fs/promises'
 import { join, posix, relative, sep } from 'node:path'
 
 import { Second } from '@caffeinejs/std/duration'
 
 import { contentTypeOf } from '../content_type.js'
-import { MANIFEST_FILE, nameProblem, type ManifestFile } from '../manifest/manifest.js'
+import {
+  MANIFEST_FILE,
+  nameProblem,
+  readManifest,
+  type ManifestFile,
+  type ManifestVariant,
+} from '../manifest/manifest.js'
 import { ErrStaticBuild } from './errors.js'
 
 /** What the scan reads besides the fixed rules. */
@@ -39,12 +45,6 @@ export interface ScanResult {
   readonly skipped: readonly SkippedFile[]
 }
 
-/** A file's identity bytes and the manifest entry they make, before any variant. */
-export interface ReadFile {
-  readonly bytes: Buffer
-  readonly entry: ManifestFile
-}
-
 const VARIANT_SUFFIXES = ['.br', '.gz']
 
 /**
@@ -52,7 +52,8 @@ const VARIANT_SUFFIXES = ['.br', '.gz']
  *
  * Fixed rules first: a symlink or anything else that is not a regular file is skipped; a path with a segment starting
  * with `.` is skipped, but under a leading `.well-known/`; the manifest is skipped; `x.br` and `x.gz` are skipped as
- * variants of an earlier build when `x` is on disk, and kept as files of their own otherwise. Then the names: one
+ * variants of an earlier build when `x` is on disk, or when the manifest already at the root lists them as variants
+ * and they still hold the bytes it records; otherwise they are files of their own. Then the names: one
  * holding a character the router or a URL reads as syntax, a control character, or not in Unicode NFC fails the scan.
  * Then `exclude`. Then the type: a file nothing types fails the scan. Every file a rule drops is in `skipped`.
  *
@@ -73,6 +74,7 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
     .map(entry => ({ entry, path: relative(root, join(entry.parentPath, entry.name)).split(sep).join('/') }))
     .toSorted((a, b) => (a.path < b.path ? -1 : 1))
   const regular = new Set(listed.filter(({ entry }) => entry.isFile()).map(({ path }) => path))
+  const earlier = await earlierVariants(root)
 
   const files: ScannedFile[] = []
   const skipped: SkippedFile[] = []
@@ -80,7 +82,7 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
   const untyped: string[] = []
 
   for (const { entry, path } of listed) {
-    const reason = fixedRule(entry, path, regular)
+    const reason = fixedRule(entry, path, regular) ?? (await orphanRule(root, path, earlier))
 
     if (reason !== undefined) {
       skipped.push({ path, reason })
@@ -121,35 +123,61 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
 }
 
 /**
- * Reads the file at `path` under `root` and describes it: size, SHA-256, `lastModified` floored to the second, and
- * `type`. The file is opened without following a symlink.
+ * Describes the file at `path` under `root` as a manifest entry with no variant: size, SHA-256, `lastModified`
+ * floored to the second, and `type`. The file is read as a stream, so its size is not bounded by a buffer's.
  */
-export async function readFileEntry(root: string, path: string, type: string): Promise<ReadFile> {
+export async function readFileEntry(root: string, path: string, type: string): Promise<ManifestFile> {
+  const absolute = join(root, path)
+  const { mtimeMs } = await stat(absolute)
+  const { hash, size } = await hashFile(absolute)
+
+  return { hash, lastModified: isoSecond(mtimeMs), size, type, variants: {} }
+}
+
+/** Base64 SHA-256 and size of the file at `path`, read as a stream and opened without following a symlink. */
+export async function hashFile(path: string): Promise<{ hash: string; size: number }> {
+  const hash = createHash('sha256')
+  let size = 0
+
   // Undefined where a platform has no `O_NOFOLLOW`, which `|` reads as 0.
-  const handle = await open(join(root, path), constants.O_RDONLY | constants.O_NOFOLLOW)
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
 
+  // The stream closes the handle when it ends or fails.
+  for await (const chunk of handle.createReadStream()) {
+    hash.update(chunk as Buffer)
+    size += (chunk as Buffer).byteLength
+  }
+
+  return { hash: hash.digest('base64'), size }
+}
+
+/** The variants the manifest already at `root` lists, by path; none when there is no manifest, or it cannot be read. */
+async function earlierVariants(root: string): Promise<ReadonlyMap<string, ManifestVariant>> {
   try {
-    const stats = await handle.stat()
-    const bytes = await handle.readFile()
+    const { files } = await readManifest(root)
 
-    return {
-      bytes,
-      entry: {
-        hash: sha256(bytes),
-        lastModified: isoSecond(stats.mtimeMs),
-        size: bytes.byteLength,
-        type,
-        variants: {},
-      },
-    }
-  } finally {
-    await handle.close()
+    return new Map(Object.values(files).flatMap(file => Object.values(file.variants).map(v => [v.path, v] as const)))
+  } catch {
+    return new Map()
   }
 }
 
-/** Base64 SHA-256 of `bytes`. */
-export function sha256(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('base64')
+// A variant an earlier build wrote whose file has since gone: still the build's own while it holds the bytes the
+// manifest records, and never a file of the site.
+async function orphanRule(
+  root: string,
+  path: string,
+  earlier: ReadonlyMap<string, ManifestVariant>,
+): Promise<SkipReason | undefined> {
+  const variant = earlier.get(path)
+
+  if (variant === undefined) {
+    return undefined
+  }
+
+  const { hash, size } = await hashFile(join(root, path))
+
+  return hash === variant.hash && size === variant.size ? 'variant' : undefined
 }
 
 function fixedRule(entry: Dirent, path: string, regular: ReadonlySet<string>): SkipReason | undefined {

@@ -1,5 +1,6 @@
-import { rename, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { randomBytes } from 'node:crypto'
+import { rename, rm, writeFile } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 
 import type { Duration } from '@caffeinejs/std/duration'
 
@@ -10,9 +11,10 @@ import {
   type ManifestFile,
   type ManifestVariant,
   type StaticManifest,
+  variantPath,
 } from '../manifest/manifest.js'
-import { readFileEntry, scan, sha256, type SkippedFile } from '../scan/scan.js'
-import { KEPT_RATIO, SMALLEST_COMPRESSED, compress } from './_compress.js'
+import { readFileEntry, scan, type SkippedFile } from '../scan/scan.js'
+import { KEPT_RATIO, SMALLEST_COMPRESSED, compressFile } from './_compress.js'
 
 /** {@link buildStatic}'s options. */
 export interface BuildOptions {
@@ -50,9 +52,10 @@ const ENCODINGS: readonly Encoding[] = ['br', 'gzip']
  *
  * Run it at the end of the front-end build. A file is compressed when its type is compressible and it holds at
  * least 1 KiB, and a variant is kept when it is at most 95% of the file's size. Dotfiles but `.well-known/`,
- * symlinks and the variants of an earlier build are left out. Two builds of one tree write the same bytes. Every
- * file and the manifest are written under a temporary name and renamed, so a failed build leaves no half-written
- * one.
+ * symlinks and the variants of an earlier build are left out, and the variants of a file deleted since are removed.
+ * Two builds of one tree write the same bytes. Files are read and compressed as streams, so a file's size is not
+ * bounded by memory. Every file and the manifest are written under a hidden temporary name and renamed, so a failed
+ * build leaves no half-written one, and nothing the next build reads.
  *
  * @throws {@link ErrStaticBuild} for a file nothing types, a name the router would read as syntax, or a root that
  * cannot be read
@@ -71,41 +74,75 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
   let variants = 0
   let bytes = 0
 
-  // One file at a time, so memory holds one file and its variants.
+  // One file at a time, so the build holds one file's chunks at once.
   for (const file of files) {
-    const { bytes: identity, entry } = await readFileEntry(root, file.path, file.type)
+    const entry = await readFileEntry(root, file.path, file.type)
     const written: Partial<Record<Encoding, ManifestVariant>> = {}
 
-    if (file.compressible && identity.byteLength >= SMALLEST_COMPRESSED) {
+    if (file.compressible && entry.size >= SMALLEST_COMPRESSED) {
       for (const encoding of ENCODINGS) {
-        const variant = await compress(identity, encoding)
+        const path = variantPath(file.path, encoding)
+        const variant = await writeAtomically(
+          join(root, path),
+          temporary => compressFile(join(root, file.path), temporary, encoding, entry.size),
+          ({ size }) => size <= entry.size * KEPT_RATIO,
+        )
 
-        if (variant.byteLength <= identity.byteLength * KEPT_RATIO) {
-          const path = `${file.path}${encoding === 'br' ? '.br' : '.gz'}`
-          await writeAtomically(join(root, path), variant)
-          written[encoding] = { hash: sha256(variant), path, size: variant.byteLength }
-          saved[encoding] += identity.byteLength - variant.byteLength
+        if (variant !== undefined) {
+          written[encoding] = { ...variant, path }
+          saved[encoding] += entry.size - variant.size
           variants++
         }
       }
     }
 
     entries[file.path] = { ...entry, variants: written }
-    bytes += identity.byteLength
+    bytes += entry.size
   }
 
   const manifest: StaticManifest = { files: entries, version: MANIFEST_VERSION }
-  await writeAtomically(join(root, MANIFEST_FILE), `${JSON.stringify(sorted(manifest), null, 2)}\n`)
+  await writeAtomically(join(root, MANIFEST_FILE), temporary =>
+    writeFile(temporary, `${JSON.stringify(sorted(manifest), null, 2)}\n`, { flag: 'wx' }),
+  )
+
+  // The variants of a file deleted since the last build: the scan skipped them, and nothing lists them now.
+  const listed = new Set(Object.values(entries).flatMap(entry => Object.values(entry.variants).map(v => v.path)))
+
+  for (const { path, reason } of skipped) {
+    if (reason === 'variant' && !listed.has(path)) {
+      await rm(join(root, path), { force: true })
+    }
+  }
 
   return { files: files.length, variants, bytes, saved, skipped, duration: performance.now() - started }
 }
 
-/** Writes `data` under a temporary name beside `path`, then renames it into place. */
-async function writeAtomically(path: string, data: string | Buffer): Promise<void> {
-  const temporary = `${path}.${process.pid}.tmp`
+/**
+ * Has `write` write a new hidden file beside `path`, then renames it into place when `keep` takes what it wrote, and
+ * removes it otherwise, or when anything throws. Hidden, so a temporary a killed build leaves is a dotfile the next
+ * scan skips.
+ */
+async function writeAtomically<T>(
+  path: string,
+  write: (temporary: string) => Promise<T>,
+  keep: (written: T) => boolean = () => true,
+): Promise<T | undefined> {
+  const temporary = join(dirname(path), `.${basename(path)}.${randomBytes(6).toString('hex')}.tmp`)
 
-  await writeFile(temporary, data)
-  await rename(temporary, path)
+  try {
+    const written = await write(temporary)
+
+    if (keep(written)) {
+      await rename(temporary, path)
+      return written
+    }
+  } catch (err) {
+    await rm(temporary, { force: true })
+    throw err
+  }
+
+  await rm(temporary, { force: true })
+  return undefined
 }
 
 /** A copy of `value` whose object keys are in sorted order at every depth, so the JSON is the same every build. */

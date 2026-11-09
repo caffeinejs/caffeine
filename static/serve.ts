@@ -24,6 +24,7 @@ import {
   type ManifestVariant,
 } from './manifest/manifest.js'
 import { selectEncoding } from './negotiate.js'
+import { hashFile } from './scan/scan.js'
 
 /** What a mount decides about every file it serves, computed once when the mount is built. */
 export interface FilePolicy {
@@ -356,6 +357,35 @@ function checked(disk: RootOnDisk, file: string, size: number): string {
   }
 
   return absolute
+}
+
+/**
+ * Hashes each representation of `file` and compares it with what the manifest says.
+ *
+ * {@link prepareFile} checks sizes alone, which bytes replaced at the same length pass. The ETag is the manifest's
+ * hash, so such a file would be served under the tag of the bytes it replaced.
+ *
+ * @throws {@link ErrStaticManifest} naming the first file whose bytes changed after the build
+ */
+export async function verifyHashes(root: string, file: PreparedFile, entry: ManifestFile): Promise<void> {
+  const expected = [
+    { path: file.path, absolute: file.identity.path, hash: entry.hash },
+    ...file.variants.map(({ encoding, path }) => {
+      const variant = entry.variants[encoding as Encoding]!
+
+      return { path: variant.path, absolute: path, hash: variant.hash }
+    }),
+  ]
+
+  for (const { path, absolute, hash } of expected) {
+    if ((await hashFile(absolute)).hash !== hash) {
+      throw new ErrStaticManifest(
+        root,
+        `"${path}" changed after the build, its bytes no longer match the manifest's hash`,
+        ...REBUILD_SOLUTIONS,
+      )
+    }
+  }
 }
 
 /** Writes `Vary` into `headers`: what `headers(file)` asked for, merged with `Accept-Encoding` for a file with variants. */

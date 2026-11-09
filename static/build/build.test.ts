@@ -1,4 +1,5 @@
-import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -93,6 +94,83 @@ describe('buildStatic', () => {
     expect(await snapshot(root)).toEqual(first)
     expect(report.skipped.filter(({ reason }) => reason === 'variant')).toHaveLength(6)
     expect(report.skipped.filter(({ reason }) => reason === 'manifest')).toHaveLength(1)
+  })
+
+  // A deleted file's variants are the build's own: a rebuild must neither fail on them nor publish them as files.
+  it('drops the variants of a file deleted since the last build', async () => {
+    await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+    await buildStatic({ root })
+    await rm(join(root, 'manual.txt'))
+
+    const report = await buildStatic({ root })
+    const { files } = await readManifest(root)
+
+    expect(Object.keys(files).filter(path => path.startsWith('manual'))).toEqual([])
+    expect((await readdir(root)).filter(name => name.startsWith('manual'))).toEqual([])
+    expect(report.files).toBe(4)
+  })
+
+  it('drops an orphaned gzip variant left alone, which would otherwise be served as a .gz file', async () => {
+    await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+    await buildStatic({ root })
+    await rm(join(root, 'manual.txt'))
+    await rm(join(root, 'manual.txt.br'))
+
+    await buildStatic({ root })
+
+    expect(Object.keys((await readManifest(root)).files).filter(path => path.startsWith('manual'))).toEqual([])
+  })
+
+  // Only the bytes the build wrote are its own: a file put at a former variant's path is the site's, and is served.
+  it('keeps a file written over an orphaned variant', async () => {
+    await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+    await buildStatic({ root })
+    await rm(join(root, 'manual.txt'))
+    await rm(join(root, 'manual.txt.br'))
+    await writeFile(join(root, 'manual.txt.gz'), 'an archive of its own')
+
+    await buildStatic({ root })
+
+    expect(Object.keys((await readManifest(root)).files).filter(path => path.startsWith('manual'))).toEqual([
+      'manual.txt.gz',
+    ])
+    expect(await readFile(join(root, 'manual.txt.gz'), 'utf8')).toBe('an archive of its own')
+  })
+
+  // A build that fails mid-write must leave nothing the next build reads as a file of the site.
+  it('leaves no temporary behind when a write fails, so the next build succeeds', async () => {
+    await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+    // A directory where the variant goes: the rename onto it fails.
+    await mkdir(join(root, 'manual.txt.br'))
+
+    await expect(buildStatic({ root })).rejects.toThrow()
+    await rm(join(root, 'manual.txt.br'), { recursive: true })
+
+    await buildStatic({ root })
+    expect((await readdir(root)).filter(name => name.startsWith('manual')).toSorted()).toEqual([
+      'manual.txt',
+      'manual.txt.br',
+      'manual.txt.gz',
+    ])
+  })
+
+  // Node reads no file past 2 GiB into one buffer; one large video must not stop the whole build. Sparse, so it
+  // takes no disk.
+  it('lists a file of 2 GiB, hashing it as it is read', { timeout: 60_000 }, async () => {
+    const video = join(root, 'video.mp4')
+    await writeFile(video, '')
+    await truncate(video, 2 ** 31)
+
+    await buildStatic({ root })
+    const file = (await readManifest(root)).files['video.mp4']!
+
+    expect(file.size).toBe(2 ** 31)
+    expect(file.hash).toBe(
+      createHash('sha256')
+        .update(Buffer.alloc(2 ** 30))
+        .update(Buffer.alloc(2 ** 30))
+        .digest('base64'),
+    )
   })
 
   it('refuses a tree with a file nothing types and writes no manifest', async () => {

@@ -14,6 +14,11 @@ export const MANIFEST_FILE = 'static.manifest.json'
 
 const ENCODINGS: readonly string[] = ['br', 'gzip'] satisfies readonly Encoding[]
 
+/** Where the build writes `path`'s variant in `encoding`, and the one path a manifest may list it at. */
+export function variantPath(path: string, encoding: Encoding): string {
+  return `${path}${encoding === 'br' ? '.br' : '.gz'}`
+}
+
 /** A compressed copy of a file, written beside it by the build. */
 export interface ManifestVariant {
   /** Base64 SHA-256 of the variant's own bytes. */
@@ -175,8 +180,11 @@ function checkFile(path: string, file: unknown, shape: (detail: string) => ErrSt
 
     checkFields(vat, variant, shape)
 
-    if (typeof variant.path !== 'string' || !isRelativePath(variant.path)) {
-      throw shape(`"${vat}.path" is not a relative path under the root`)
+    // The build writes each variant beside its file: any other path would send bytes the file's rules never checked.
+    const expected = variantPath(path, encoding as Encoding)
+
+    if (variant.path !== expected) {
+      throw shape(`"${vat}.path" is not "${expected}", the path the build writes it at`)
     }
   }
 }

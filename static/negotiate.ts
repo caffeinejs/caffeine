@@ -1,6 +1,9 @@
 import type { Encoding } from './manifest/manifest.js'
 
-/** The most `Accept-Encoding` entries read; the rest are ignored, which can lose a preference but adds none. */
+/**
+ * The most `Accept-Encoding` entries read. A longer header is not read at all: an entry past the limit could refuse
+ * the coding the others pick.
+ */
 const MOST_ENTRIES = 32
 
 // RFC 9110 §12.4.2: a qvalue is 0 to 1 with at most three decimals.
@@ -14,7 +17,8 @@ const QVALUE = /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/
  * largest. Tokens compare without regard to case and `x-gzip` is `gzip`. An entry whose `q` is no qvalue is ignored,
  * the first entry for a token wins, and `q=0` excludes. `*` rates every coding the header does not list, identity
  * included. Identity, unless the header rates it, is acceptable and preferred least. No header, or an empty one, gets
- * identity: a client that sends nothing may not decode. Among the codings rated highest the smallest wins.
+ * identity: a client that sends nothing may not decode, and so does a header of more than 32 entries, which is not
+ * read. Among the codings rated highest the smallest wins.
  */
 export function selectEncoding(
   header: string | undefined,
@@ -24,7 +28,14 @@ export function selectEncoding(
     return 'identity'
   }
 
-  const rated = ratings(header)
+  // Split no further than one entry past the limit, so the work stays bounded however long the header.
+  const entries = header.split(',', MOST_ENTRIES + 1)
+
+  if (entries.length > MOST_ENTRIES) {
+    return 'identity'
+  }
+
+  const rated = ratings(entries)
   const star = rated.get('*')
   let best: Encoding | undefined
   let bestQ = 0
@@ -53,11 +64,11 @@ export function selectEncoding(
   return best
 }
 
-/** The rating of each token the header lists, the first entry for a token winning. */
-function ratings(header: string): Map<string, number> {
+/** The rating of each token the header's entries list, the first entry for a token winning. */
+function ratings(entries: readonly string[]): Map<string, number> {
   const rated = new Map<string, number>()
 
-  for (const entry of header.split(',', MOST_ENTRIES)) {
+  for (const entry of entries) {
     const [name = '', ...params] = entry.split(';')
     const token = normalize(name.trim().toLowerCase())
 

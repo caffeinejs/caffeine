@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
+import { mkdir, mkdtemp, open, readdir, readlink, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 
@@ -125,6 +126,52 @@ describe('staticFiles', () => {
     expect(await (await app.request('/ASSETS/app.JS')).text()).toBe('assets/App.js')
   })
 
+  // Two directories that differ by case are one route to a router that folds case, and each file still its own URL.
+  it('serves files under directories that differ by case as one route, when the router folds it', async () => {
+    const root = await tree('dirs', ['Assets/a.js', 'assets/b.js'])
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
+      .with(staticFiles(s => s.serve(root))) as WebApplication
+    await app.bootstrap()
+
+    expect(await (await app.request('/assets/a.js')).text()).toBe('Assets/a.js')
+    expect(await (await app.request('/ASSETS/B.JS')).text()).toBe('assets/b.js')
+  })
+
+  // The router keeps "%2F" as one segment's character while matching, then decodes it in the wildcard: read as "/", it
+  // would reach a file by a URL that another route, gated differently, answers.
+  it('answers 404 for an encoded slash under a directory', async () => {
+    const root = await tree('nested', ['assets/private/report.txt'])
+    await start(s => s.serve(root, { anonymous: true })).bootstrap()
+
+    expect((await app!.request('/assets/private/report.txt')).status).toBe(200)
+    expect((await app!.request('/assets/private%2Freport.txt')).status).toBe(404)
+    expect((await app!.request('/assets/private%2freport.txt')).status).toBe(404)
+  })
+
+  // The 503 goes out while the open still waits, so nothing reads the descriptor it then gets: left open, every timed
+  // out request would hold one until the process exits. A FIFO keeps the open waiting until a writer comes.
+  it.skipIf(process.platform !== 'linux')('closes a file it opened after the handler timed out', async () => {
+    const root = await tree('slow', ['slow.txt'])
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { handlerTimeout: 30 * Millisecond } }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    await app.bootstrap()
+    const fifo = join(await realpath(root), 'slow.txt')
+    await rm(fifo)
+    execFileSync('mkfifo', [fifo])
+
+    expect((await app.request('/slow.txt')).status).toBe(503)
+
+    // The writer's open completes the server's, and is then the only descriptor left on the FIFO.
+    const writer = await open(fifo, 'w')
+    try {
+      await vi.waitFor(async () => expect(await descriptorsOn(fifo)).toBe(1))
+    } finally {
+      await writer.close()
+    }
+  })
+
   // The router takes the longest prefix, so neither mount hides the other, whichever is declared first.
   it.each([
     ['outer first', true],
@@ -248,6 +295,27 @@ describe('staticFiles', () => {
     expect(firstLine(err)).toBe(`Cannot serve "${root}": static.manifest.json is missing`)
   })
 
+  // The ETag is the manifest's hash: bytes replaced at the same length after the build would be served under the old
+  // one, and a cache holding the old bytes would revalidate them as current.
+  it.each([
+    ['the file', 'app.js'],
+    ['a variant', 'app.js.br'],
+  ])('fails start-up on %s replaced at the same length after the build', async (_case, replaced) => {
+    const root = join(dir, 'replaced')
+    await mkdir(root)
+    await writeFile(join(root, 'app.js'), 'console.log("a")\n'.repeat(100))
+    await buildStatic({ root })
+    const { size } = await stat(join(root, replaced))
+    await writeFile(join(root, replaced), 'x'.repeat(size))
+
+    const err = await refusal(s => s.serve(root))
+
+    expect(err).toBeInstanceOf(ErrStaticManifest)
+    expect(firstLine(err)).toBe(
+      `Cannot serve "${root}": "${replaced}" changed after the build, its bytes no longer match the manifest's hash`,
+    )
+  })
+
   describe('in scan mode', () => {
     it('serves a snapshot of the root taken at start-up', async () => {
       const root = await tree('dev', ['index.html'], false)
@@ -332,6 +400,22 @@ describe('staticFiles', () => {
       expect(err).toBeInstanceOf(ErrStaticRouteConflict)
     })
 
+    // The mount's wildcard would otherwise answer the file by another spelling, under the mount's gate, not the route's.
+    it('from a route registered before the mount at the URL of a file under a directory', async () => {
+      const root = await tree('nested', ['assets/private/report.txt', 'assets/app.js'])
+      const plugin: FastifyPluginAsync = async instance => {
+        instance.get('/assets/private/report.txt', async () => 'protected')
+      }
+      const earlier: HTTPPluginFactory = () => plugin
+
+      const err = await refusal(s => s.serve(root, { anonymous: true }), [earlier])
+
+      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+      expect(firstLine(err)).toBe(
+        `Cannot register "/assets/private/report.txt": "${name(root, 'assets/private/report.txt')}" answers a route registered before it`,
+      )
+    })
+
     it('from a route registered before the mount', async () => {
       const plugin: FastifyPluginAsync = async instance => {
         instance.get('/hello.txt', async () => 'earlier')
@@ -355,3 +439,11 @@ describe('staticFiles', () => {
     expect(firstLine(err as Error)).toBe('Cannot register plugin "@caffeinejs/static": it is already registered')
   })
 })
+
+/** How many of this process's descriptors are open on `path`. */
+async function descriptorsOn(path: string): Promise<number> {
+  const fds = await readdir('/proc/self/fd')
+  const targets = await Promise.all(fds.map(fd => readlink(`/proc/self/fd/${fd}`).catch(() => '')))
+
+  return targets.filter(target => target === path).length
+}
