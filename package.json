@@ -78,7 +78,7 @@
     "@fast-check/vitest": "^0.5.0",
     "@redis/client": "^6.2.1",
     "@swc/core": "^1.16.21",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.0.5",
     "fast-check": "^4.10.2",
     "globby": "^16.2.4",
