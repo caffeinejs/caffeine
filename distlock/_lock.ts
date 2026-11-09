@@ -19,6 +19,9 @@ export interface LockHost extends DistLock {
 
   // Releases a lease that arrived after nobody wanted it any more.
   giveBack(lease: LockLease): void
+
+  // Wakes the host's callers waiting on a key whose release just landed.
+  released(key: string): void
 }
 
 // The longest delay `setTimeout` honours; a longer deadline is reached in steps of at most this.
@@ -464,6 +467,8 @@ export class HeldLock implements Lock {
       )
       throw error
     }
+
+    this.#host.released(this.key)
 
     const fields = { key: this.key, leaseID: this.leaseID, heldMs: held }
     if (unreported) {

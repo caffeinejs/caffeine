@@ -205,6 +205,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   readonly log: Logger
 
   readonly #renewing = new Set<HeldLock>()
+  readonly #waiters = new Map<string, Set<() => void>>()
   #events: LockEvents | undefined
 
   constructor(backend: Backend, options: DistLockOptions, log: Logger) {
@@ -451,7 +452,44 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
         return undefined
       }
 
-      await sleep(Math.min(backoff(tally.attempts), deadline - now), signal)
+      await this.#pause(key, Math.min(backoff(tally.attempts), deadline - now), signal)
+    }
+  }
+
+  /**
+   * Wakes this service's callers waiting on `key`, so they attempt now rather than at the end of their pause.
+   * Called once a release of the key has landed on the backend.
+   */
+  released(key: string): void {
+    const waiters = this.#waiters.get(key)
+    if (waiters === undefined) {
+      return
+    }
+
+    this.#waiters.delete(key)
+    for (const wake of waiters) {
+      wake()
+    }
+  }
+
+  // A retry pause that a local release of the same key ends early.
+  async #pause(key: string, ms: number, signal: AbortSignal | undefined): Promise<void> {
+    const woken = Promise.withResolvers<void>()
+    let waiters = this.#waiters.get(key)
+    if (waiters === undefined) {
+      waiters = new Set()
+      this.#waiters.set(key, waiters)
+    }
+
+    const wake = woken.resolve
+    waiters.add(wake)
+    try {
+      await sleep(ms, signal, woken.promise)
+    } finally {
+      waiters.delete(wake)
+      if (waiters.size === 0 && this.#waiters.get(key) === waiters) {
+        this.#waiters.delete(key)
+      }
     }
   }
 
@@ -728,7 +766,8 @@ function settleHold(ctx: Writable<WithLockContext> | undefined, lock: HeldLock):
   }
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+// Resolves after `ms`, or as soon as `woken` resolves; rejects with the reason when `signal` aborts first.
+function sleep(ms: number, signal?: AbortSignal, woken?: Promise<void>): Promise<void> {
   if (ms <= 0) {
     return Promise.resolve()
   }
@@ -739,24 +778,20 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       return
     }
 
-    let onAbort: (() => void) | undefined
-
-    const timer = setTimeout(() => {
-      if (onAbort !== undefined) {
-        signal?.removeEventListener('abort', onAbort)
-      }
-
+    const done = (): void => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
       resolve()
-    }, ms)
-    timer.unref?.()
-
-    if (signal !== undefined) {
-      onAbort = () => {
-        clearTimeout(timer)
-        reject(signal.reason)
-      }
-
-      signal.addEventListener('abort', onAbort, { once: true })
     }
+
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      reject(signal?.reason)
+    }
+
+    const timer = setTimeout(done, ms)
+    timer.unref?.()
+    signal?.addEventListener('abort', onAbort, { once: true })
+    woken?.then(done, done)
   })
 }
