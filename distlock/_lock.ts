@@ -306,26 +306,7 @@ export class HeldLock implements Lock {
           ),
       )
     } catch (error) {
-      // One warning per lease for a renewal failing: the retries after it are the same incident.
-      const fields = { err: error, key: this.key, leaseID: this.leaseID, operation: 'extend' }
-      if (renewal && this.#renewalFailed) {
-        this.#host.log.debug(fields, 'lock backend failed')
-      } else {
-        this.#host.log.warn(fields, 'lock backend failed')
-      }
-
-      if (renewal) {
-        this.#renewalFailed = true
-        // Decided here, before a late answer can arrive, so the answer to a renewal that gives up is given back.
-        this.#givingUp = this.#lease.expiresAt - Date.now() <= storeTimeout
-      }
-
-      if (ctx !== undefined) {
-        ctx.outcome = 'error'
-      }
-
-      // The lease is left as it was. An explicit extend lets its caller decide; a renewal retries while the lease
-      // has time, and marks it lost once this has settled when it does not.
+      this.#extendFailed(error, renewal, ctx)
       throw error
     }
 
@@ -371,6 +352,30 @@ export class HeldLock implements Lock {
   // extend would keep the key under a token nobody holds, except a lease under the token the lock still holds. A
   // `once` window left standing keeps its answer, so the window is not freed under the next caller. A renewal that
   // gave up gives it back too: it marks the lease lost, possibly only after this runs.
+  // Records an extension that failed. The lease is left as it was: an explicit extend lets its caller decide; a
+  // renewal retries while the lease has time, and marks it lost once the channel has settled when it does not.
+  #extendFailed(error: unknown, renewal: boolean, ctx: Writable<ExtendContext> | undefined): void {
+    const { storeTimeout } = this.#host.options
+
+    // One warning per lease for a renewal failing: the retries after it are the same incident.
+    const fields = { err: error, key: this.key, leaseID: this.leaseID, operation: 'extend' }
+    if (renewal && this.#renewalFailed) {
+      this.#host.log.debug(fields, 'lock backend failed')
+    } else {
+      this.#host.log.warn(fields, 'lock backend failed')
+    }
+
+    if (renewal) {
+      this.#renewalFailed = true
+      // Decided here, before a late answer can arrive, so the answer to a renewal that gives up is given back.
+      this.#givingUp = this.#lease.expiresAt - Date.now() <= storeTimeout
+    }
+
+    if (ctx !== undefined) {
+      ctx.outcome = 'error'
+    }
+  }
+
   #adoptLate(late: LockLease | undefined, sent: LockLease, renewal: boolean): void {
     if (late === undefined) {
       return
