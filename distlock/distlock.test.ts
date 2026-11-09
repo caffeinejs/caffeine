@@ -489,11 +489,12 @@ describe('distributed lock against a backend that does not answer', () => {
     lock.events.on('lost', message => losses.push(message))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
-    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    // Short enough that the first renewal to time out leaves no time for another: it gives the lease up.
+    const held = await lock.acquire('orders:rebuild', { ttl: 12 * Second, renew: true })
     backend.late = ['extend']
     fault(inner)
     // The renewal leaves at a third of the lease and is abandoned at storeTimeout.
-    await vi.advanceTimersByTimeAsync(15 * Second)
+    await vi.advanceTimersByTimeAsync(9 * Second)
     expect(held.lost).toBe(true)
 
     backend.late = []
