@@ -1,6 +1,7 @@
 export {
   DIST_LOCK_CHANNELS,
   type AcquireContext,
+  type AcquireFailures,
   type AcquireMode,
   type AcquireOutcome,
   type ContendedMessage,

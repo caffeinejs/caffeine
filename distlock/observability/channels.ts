@@ -55,6 +55,12 @@ export interface TracedFailure {
   readonly error?: unknown
 }
 
+/** How many attempts of one acquisition the backend failed, by kind. */
+export interface AcquireFailures {
+  readonly timeout: number
+  readonly other: number
+}
+
 export interface AcquireContext extends LockEventBase, TracedFailure {
   readonly mode: AcquireMode
   readonly ttl: Duration
@@ -68,6 +74,12 @@ export interface AcquireContext extends LockEventBase, TracedFailure {
   /** Absent in `start`; set by the time the call settles. */
   readonly outcome?: AcquireOutcome
   readonly attempts?: number
+  /**
+   * The attempts the backend failed, by kind: `timeout` did not answer within its deadline, `other` rejected. An
+   * attempt the caller's signal cut short is in neither. Set by the time the call settles, whatever its outcome:
+   * an acquisition that retried past a timeout counts it here and still ends `acquired`.
+   */
+  readonly failures?: AcquireFailures
   /** How long the call spent acquiring, from its first attempt to its outcome. */
   readonly waited?: Duration
   /** Present when `outcome` is `acquired`. */
