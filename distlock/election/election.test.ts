@@ -334,4 +334,143 @@ describe('distlock campaign', () => {
     expect(campaign.isLeader).toBe(true)
     await campaign.stop()
   })
+
+  // A campaign started under a signal that already fired, such as a shutdown one, must not take the key even once.
+  it('never campaigns when its signal had already aborted', async () => {
+    const memory = new MemoryLockBackend()
+    const { lock } = await newReplica(memory)
+    fake()
+
+    const campaign = lock.campaign('scheduler', { signal: AbortSignal.abort() })
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    await campaign.stop()
+
+    expect(campaign.lock).toBeUndefined()
+    expect(await memory.tryAcquire('scheduler', 1 * Second)).toBeDefined()
+  })
+
+  // `await using` is how a scoped job campaigns: leaving the scope has to give leadership up, like stop().
+  it('stops and releases leadership when disposed at the end of an await using scope', async () => {
+    const memory = new MemoryLockBackend()
+    const { lock } = await newReplica(memory)
+    fake()
+
+    {
+      await using campaign = lock.campaign('scheduler')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(campaign.isLeader).toBe(true)
+    }
+
+    expect(await memory.tryAcquire('scheduler', 1 * Second)).toBeDefined()
+  })
+
+  // A listener that stops the campaign as it is elected has decided before onElected could start work it would
+  // then have to abandon.
+  it('steps down without running onElected when an elected listener stops the campaign', async () => {
+    const memory = new MemoryLockBackend()
+    const { lock } = await newReplica(memory)
+    const published: Array<ElectionMessage['event']> = []
+    let ran = 0
+    fake()
+
+    const campaign = lock.campaign('scheduler', { onElected: () => void (ran += 1) })
+    lock.events.on('election', message => {
+      published.push(message.event)
+      if (message.event === 'elected') {
+        void campaign.stop()
+      }
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    await campaign.stop()
+
+    expect(ran).toBe(0)
+    expect(published).toEqual(['elected', 'stepped-down'])
+    expect(await memory.tryAcquire('scheduler', 1 * Second)).toBeDefined()
+  })
+
+  // A hook that throws on every loss is one bug, not one incident per loss; and the campaign must outlive it.
+  it('warns once when onLost throws, and keeps campaigning', async () => {
+    const backend = new FaultyBackend()
+    const log = new RecordingLogger()
+    const { lock } = await newReplica(backend, d => d.logger(log))
+    fake()
+
+    const campaign = lock.campaign('scheduler', {
+      ttl: 3 * Second,
+      onLost: () => {
+        throw new Error('hook broke')
+      },
+    })
+    for (let round = 0; round < 2; round++) {
+      await vi.advanceTimersByTimeAsync(0)
+      expect(campaign.isLeader).toBe(true)
+      backend.stolen = true
+      await vi.advanceTimersByTimeAsync(1 * Second)
+      backend.stolen = false
+      await vi.advanceTimersByTimeAsync(3 * Second)
+    }
+
+    expect(campaign.isLeader).toBe(true)
+    expect(log.at('warn').filter(record => record.msg === 'lock campaign onLost failed')).toHaveLength(1)
+    expect(log.at('debug').filter(record => record.msg === 'lock campaign onLost failed')).toHaveLength(1)
+    await campaign.stop()
+  })
+
+  // A lease lost to a failing backend may still sit on the store under this token: handing it back, token-checked,
+  // spares the next campaigner the rest of the lease once the store answers again.
+  it('hands the key back when its lease is lost to a backend failure', async () => {
+    const backend = new FaultyBackend()
+    const lost: LostReason[] = []
+    const { lock } = await newReplica(backend)
+    fake()
+
+    const campaign = lock.campaign('scheduler', { ttl: 3 * Second, onLost: reason => void lost.push(reason) })
+    await vi.advanceTimersByTimeAsync(0)
+    const held = campaign.lock!
+    backend.failExtend = true
+    await vi.advanceTimersByTimeAsync(3 * Second)
+
+    expect(lost[0]).toBe('error')
+    expect(backend.released.map(lease => lease.token)).toContain(held.token)
+    await campaign.stop()
+  })
+
+  // The lock service already warned about the failed release; stop() must still end the campaign, not reject, and
+  // the lease lapses on its own.
+  it('stops and steps down even when the backend fails its release', async () => {
+    const backend = new FaultyBackend()
+    const published: Array<ElectionMessage['event']> = []
+    const { lock } = await newReplica(backend)
+    lock.events.on('election', message => published.push(message.event))
+    fake()
+
+    const campaign = lock.campaign('scheduler')
+    await vi.advanceTimersByTimeAsync(0)
+    backend.failRelease = true
+
+    await expect(campaign.stop()).resolves.toBeUndefined()
+    expect(campaign.isLeader).toBe(false)
+    expect(published).toEqual(['elected', 'stepped-down'])
+  })
+
+  it('keeps campaigning when the hand-back after a lost lease fails', async () => {
+    const backend = new FaultyBackend()
+    const { lock } = await newReplica(backend)
+    fake()
+
+    const lost: LostReason[] = []
+    const campaign = lock.campaign('scheduler', { ttl: 3 * Second, onLost: reason => void lost.push(reason) })
+    await vi.advanceTimersByTimeAsync(0)
+    backend.failExtend = true
+    backend.failRelease = true
+    await vi.advanceTimersByTimeAsync(3 * Second)
+    expect(lost[0]).toBe('error')
+
+    backend.failExtend = false
+    backend.failRelease = false
+    await vi.advanceTimersByTimeAsync(3 * Second)
+
+    expect(campaign.isLeader).toBe(true)
+    await campaign.stop()
+  })
 })
