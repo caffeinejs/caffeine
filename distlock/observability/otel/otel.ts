@@ -200,8 +200,12 @@ export function instrumentDistLock(options: DistLockInstrumentationOptions = {})
       acquireDuration.record((ctx.waited ?? 0) / Second, attributes)
       acquireAttempts.record(ctx.attempts ?? 0, attributes)
 
-      if (ctx.outcome === 'error') {
-        backendErrors.add(1, { 'distlock.operation': 'acquire', ...errorKind(ctx.error), ...label(ctx.key) })
+      // Every attempt the backend failed, not only the last: retries that end acquired would otherwise hide them.
+      for (const kind of ['timeout', 'other'] as const) {
+        const failed = ctx.failures?.[kind] ?? 0
+        if (failed > 0) {
+          backendErrors.add(failed, { 'distlock.operation': 'acquire', 'distlock.error': kind, ...label(ctx.key) })
+        }
       }
     })
 

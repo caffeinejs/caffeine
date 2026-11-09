@@ -12,12 +12,9 @@ import { CaffeineDistLock } from './distlock.js'
 import { ErrDistLockConfiguration } from './errors.js'
 import { kDistLock } from './keys.js'
 import type { LockEventMap } from './observability/channels.js'
-import { DEFAULT_DIST_LOCK_OPTIONS, type DistLockConfig, type DistLockOptions } from './options.js'
+import { DEFAULT_DIST_LOCK_OPTIONS, MAX_TIMER_DELAY, type DistLockConfig, type DistLockOptions } from './options.js'
 
 type Listener = (...args: unknown[]) => void
-
-// The longest delay `setTimeout` honours.
-const MAX_TIMER_DELAY: Duration = 2 ** 31 - 1
 
 /**
  * Fluent configuration for the distributed lock service.
@@ -217,7 +214,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
       )
     }
 
-    // A timer takes at most 2^31 - 1 ms; Node turns anything larger into 1 ms, which would time every call out.
+    // Checked here as well as by the service, so a bad value fails while the feature configures.
     if (!(options.storeTimeout > 0 && options.storeTimeout <= MAX_TIMER_DELAY)) {
       throw new ErrDistLockConfiguration(
         errMessage(

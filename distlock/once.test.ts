@@ -204,6 +204,50 @@ describe('once', () => {
   })
 
   // Two applications, one shared backend: the cross-replica claim reduced to a single process.
+  // The action ended while a renewal was out, and the window stays. That renewal answering late must not hand the
+  // key back, or a second caller would run the action again inside the window the first one opened.
+  it.each([
+    { name: 'the action returned', action: () => 'report', options: {} },
+    {
+      name: 'the action threw and the caller kept the key',
+      action: () => {
+        throw new Error('report failed')
+      },
+      options: { releaseOnError: false },
+    },
+  ])('keeps the window shut when a renewal answers late after $name', async ({ action, options }) => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const finish = gate()
+
+    const first = lock
+      .once(
+        'nightly-report',
+        async () => {
+          await finish.wait
+          return action()
+        },
+        // Short enough that the renewal timing out leaves no time for another: it gives the lease up.
+        { ttl: 12 * Second, renew: true, ...options },
+      )
+      .catch(() => undefined)
+    backend.late = ['extend']
+    // The first renewal leaves at a third of the lease, and the action ends while it is out.
+    await vi.advanceTimersByTimeAsync(4 * Second)
+    finish.open()
+    await first
+    // Past storeTimeout: the renewal is abandoned.
+    await vi.advanceTimersByTimeAsync(5 * Second)
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(backend.released).toEqual([])
+    expect(await lock.once('nightly-report', () => 'again', { ttl: 30 * Second })).toEqual({ executed: false })
+  })
+
   it('runs the action on exactly one of two applications sharing a backend', async () => {
     const backend = new MemoryLockBackend()
     const one = await newLock(backend)
