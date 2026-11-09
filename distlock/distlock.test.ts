@@ -1,7 +1,7 @@
 import { createApplication } from '@caffeinejs/application'
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Millisecond, Minute, Second, type Duration } from '@caffeinejs/std/duration'
+import { Day, Millisecond, Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
@@ -734,6 +734,20 @@ describe('lock signal', () => {
 
     expect(lossOf(held).reason).toBe('expired')
     expect([backend.extends, backend.releases]).toEqual([0, 0])
+  })
+
+  // `setTimeout` turns a delay past 2^31 - 1 ms (about 24.8 days) into 1 ms. Armed in one step, a month-long
+  // lease would be reported lost the moment it was taken.
+  it('keeps a lease longer than the longest timer until it actually lapses', async () => {
+    const lock = await newLock()
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Day })
+    await vi.advanceTimersByTimeAsync(25 * Day)
+    expect(held.signal.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(5 * Day)
+    expect(lossOf(held).reason).toBe('expired')
   })
 
   it('aborts lock.signal with ErrLockLost(taken) when a renewal finds the key gone', async () => {
