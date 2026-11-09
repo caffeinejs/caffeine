@@ -1,15 +1,17 @@
 import { createApplication } from '@caffeinejs/application'
+import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Minute, Second, type Duration } from '@caffeinejs/std/duration'
+import { Day, Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
 import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
-import type { DistLock } from './distlock.js'
-import { ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
+import { CaffeineDistLock, type DistLock } from './distlock.js'
+import { ErrDistLockConfiguration, ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
 import { kDistLock } from './keys.js'
 import { RecordingLogger } from './log.testkit.js'
+import { DEFAULT_DIST_LOCK_OPTIONS } from './options.js'
 import { DistributedLock } from './plugin.js'
 
 /**
@@ -399,6 +401,128 @@ describe('distributed lock against a backend that does not answer', () => {
     expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
   })
 
+  // The backend may have cut the lease to the shorter ttl before the call gave up on it. Until the answer says how
+  // long the lease runs, a caller checking `lost` must not carry on as the holder: another replica may have the key.
+  it('reads as lost while an extend that timed out has not answered, since it may have shortened the lease', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    backend.late = ['extend']
+    const extending = held.extend(2 * Second).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await extending).toBeInstanceOf(ErrLockBackendTimeout)
+
+    expect(held.lost).toBe(true)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+  })
+
+  it('reads as held again once the extend that timed out answers with the lease', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    backend.late = ['extend']
+    const extending = held.extend(1 * Minute).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await extending
+    expect(held.lost).toBe(true)
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(held.lost).toBe(false)
+  })
+
+  // A backend may apply two extends under one token in either order. When one answers late after the other
+  // succeeded, nothing says which landed last, so the lock goes by the expiry that ends sooner.
+  it.each([
+    { name: 'the late one is shorter', late: 10 * Second, next: 10 * Minute },
+    { name: 'the late one is longer', late: 10 * Minute, next: 10 * Second },
+  ])('keeps the earlier expiry of two extends under one token when $name', async ({ late, next }) => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    const sentLate = Date.now()
+    backend.late = ['extend']
+    const stale = held.extend(late).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await stale
+
+    backend.late = []
+    const sentNext = Date.now()
+    expect(await held.extend(next)).toBe(true)
+    expect(held.lost).toBe(true)
+
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(held.expiresAt).toBe(Math.min(sentLate + late, sentNext + next))
+    expect(held.lost).toBe(false)
+  })
+
+  // The renewal that timed out already reported the loss. Whatever it answers afterwards is the same incident: a
+  // second loss would double the alert, and a lease it never got has nothing to give back.
+  it.each([
+    {
+      name: 'fails',
+      fault: (inner: FaultyBackend) => {
+        inner.failExtend = true
+      },
+    },
+    {
+      name: 'says the key was taken',
+      fault: (inner: FaultyBackend) => {
+        inner.stolen = true
+      },
+    },
+  ])('reports one loss when a renewal that timed out later $name', async ({ fault }) => {
+    const inner = new FaultyBackend()
+    const backend = new FaultyBackend(inner)
+    const lock = await newLock(backend)
+    const losses: unknown[] = []
+    lock.events.on('lost', message => losses.push(message))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    // Short enough that the first renewal to time out leaves no time for another: it gives the lease up.
+    const held = await lock.acquire('orders:rebuild', { ttl: 12 * Second, renew: true })
+    backend.late = ['extend']
+    fault(inner)
+    // The renewal leaves at a third of the lease and is abandoned at storeTimeout.
+    await vi.advanceTimersByTimeAsync(9 * Second)
+    expect(held.lost).toBe(true)
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(losses).toEqual([expect.objectContaining({ reason: 'error', renewal: true })])
+    expect(backend.released).toEqual([])
+  })
+
+  // An abort listener ahead of the lock's own may stop propagation; the caller still aborted, so the acquisition
+  // must not hand over a key, and a lease that lands anyway goes back.
+  it("rejects with the caller's reason when an earlier abort listener stops propagation, and gives back the late lease", async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    const controller = new AbortController()
+    controller.signal.addEventListener('abort', event => event.stopImmediatePropagation())
+    backend.late = ['acquire']
+
+    const attempt = lock.tryAcquire('orders:rebuild', { signal: controller.signal }).catch((e: unknown) => e)
+    controller.abort(new Error('caller gave up'))
+    backend.late = []
+    backend.answerLate()
+
+    expect(await attempt).toEqual(new Error('caller gave up'))
+    await vi.waitFor(() => expect(backend.released.map(lease => lease.key)).toEqual(['orders:rebuild']))
+  })
+
   // The timeout already warned about the incident; what the backend says after it is a consequence, not a second
   // one, and a warning per late answer would double every alert.
   it('logs a late extend failure at debug, after the one warning its timeout gave', async () => {
@@ -471,7 +595,7 @@ describe('distributed lock against a backend that does not answer', () => {
 
   // A late answer saying the key is gone carries no lease: there is nothing to give back, and the lock it belongs
   // to keeps its key.
-  it('gives nothing back when an extend answers late that the key was taken', async () => {
+  it('gives nothing back, and reads as lost, when an extend answers late that the key was taken', async () => {
     const backend = new FaultyBackend()
     const lock = await newLock(backend)
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
@@ -488,6 +612,7 @@ describe('distributed lock against a backend that does not answer', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(backend.released).toEqual([])
+    expect(held.lost).toBe(true)
     expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
   })
 
@@ -567,6 +692,19 @@ describe('distributed lock against a backend that does not answer', () => {
     expect(error.timeout).toBe(1 * Second)
     expect(error.message).toContain('Raise ttl, such as { ttl: 60 * Second }')
     expect(error.message).not.toContain('Raise storeTimeout')
+  })
+
+  // The builder refuses it while the feature configures; a service built without the builder needs the same
+  // guard, or Node turns the delay into 1 ms and every release times out claiming it waited the whole span.
+  it('refuses a store timeout longer than a timer can wait when constructed directly', () => {
+    expect(
+      () =>
+        new CaffeineDistLock(
+          new MemoryLockBackend(),
+          { ...DEFAULT_DIST_LOCK_OPTIONS, storeTimeout: 30 * Day },
+          newNoopLogger(),
+        ),
+    ).toThrow(ErrDistLockConfiguration)
   })
 
   it('refuses an empty key with ErrInvalidLockKey before touching the backend', async () => {

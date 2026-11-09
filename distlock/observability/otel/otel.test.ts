@@ -302,6 +302,32 @@ describe('instrumentDistLock store timeouts', () => {
       }),
     ])
   })
+  // A stall the retry outlasted is still a stall: counting only how the acquisition ended would hide it behind the
+  // success.
+  it('counts an attempt that timed out even when a retry then acquired the key', async () => {
+    const otel = instrument()
+    const backend = new FaultyBackend()
+    backend.hang.add('acquire')
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const acquiring = lock.acquire('a', { wait: 10 * Second })
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    backend.hang.delete('acquire')
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    await acquiring
+
+    expect(await otel.points('distlock.backend.errors')).toEqual([
+      expect.objectContaining({
+        attributes: { 'distlock.operation': 'acquire', 'distlock.error': 'timeout' },
+        value: 1,
+      }),
+    ])
+    expect(await otel.points('distlock.acquire.attempts')).toEqual([
+      expect.objectContaining({ attributes: { 'distlock.outcome': 'acquired', 'distlock.mode': 'wait' } }),
+    ])
+  })
+
   // A release that never lands leaves the key taken until its lease lapses: the store is the one to look at.
   it('counts a release the store did not answer as a backend error on release', async () => {
     const otel = instrument()
