@@ -125,6 +125,25 @@ describe('boundedCall', () => {
 
   // With nobody to tell, a late failure is dropped: an unhandled rejection would crash a process run with the
   // default `--unhandled-rejections=throw`.
+  // A backend that blocks the event loop past the deadline answers before the timer gets to fire. The answer is
+  // late all the same: a lease in it must go to onLate, not to a caller who would hold it past its deadline.
+  it('treats an answer that arrives past the deadline as late while the timer has yet to fire', async () => {
+    vi.useFakeTimers({ toFake: ['performance'] })
+    const late: string[] = []
+
+    const bounded = boundedCall(
+      { ...call, timeout: 10 },
+      () => {
+        vi.advanceTimersByTime(20)
+        return Promise.resolve('lease')
+      },
+      value => late.push(value),
+    ).catch((e: unknown) => e)
+
+    expect(await bounded).toBeInstanceOf(ErrLockBackendTimeout)
+    expect(late).toEqual(['lease'])
+  })
+
   it('drops a late rejection when no onLateError is given, without an unhandled rejection', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const { promise, reject } = Promise.withResolvers<string>()
