@@ -56,7 +56,8 @@ export const OpenAPIConfigSchema = $t.Object({
   ),
   errors: $t.Optional(
     $t.Object({
-      validation: $t.Optional($t.Number()),
+      bodyValidation: $t.Optional($t.Number()),
+      parameterValidation: $t.Optional($t.Number()),
       unauthorized: $t.Optional($t.Number()),
       forbidden: $t.Optional($t.Number()),
     }),

@@ -1,33 +1,13 @@
-import type { IRoute } from '@caffeinejs/http'
+import { hasFileSchema } from '@caffeinejs/application/schema'
+import { mediaTypeEssence, ProblemSchema, statusPhrase, type IRoute } from '@caffeinejs/http'
 
 import type { ResponseDetail } from '../decorators/detail.js'
 import type { OpenAPIOptions } from '../options.js'
-import type { HeaderObject, ResponseObject } from '../spec/spec.js'
+import type { HeaderObject, MediaTypeObject, ResponseObject, SchemaObject } from '../spec/spec.js'
 import type { ComponentRegistry } from './components.js'
 
-/** Standard reason phrases, used when nobody wrote a description. */
-const REASONS: Record<string, string> = {
-  200: 'OK',
-  201: 'Created',
-  202: 'Accepted',
-  204: 'No Content',
-  301: 'Moved Permanently',
-  302: 'Found',
-  304: 'Not Modified',
-  400: 'Bad Request',
-  401: 'Unauthorized',
-  403: 'Forbidden',
-  404: 'Not Found',
-  405: 'Method Not Allowed',
-  409: 'Conflict',
-  410: 'Gone',
-  415: 'Unsupported Media Type',
-  422: 'Unprocessable Entity',
-  429: 'Too Many Requests',
-  500: 'Internal Server Error',
-  502: 'Bad Gateway',
-  503: 'Service Unavailable',
-  504: 'Gateway Timeout',
+/** What a range is called, used when nobody wrote a description. A numeric status takes its reason phrase. */
+const RANGES: Record<string, string> = {
   '1XX': 'Informational',
   '2XX': 'Success',
   '3XX': 'Redirection',
@@ -44,7 +24,8 @@ const REASONS: Record<string, string> = {
  * schema — where the declaration also drives Fastify's serialization, so it earns its keep twice.
  *
  * Two additions come from route metadata that is unambiguous rather than from a schema, and both are opt-out:
- * the validation failure Ajv produces whenever a request slot has a schema, and the 401/403 pair on a route
+ * the validation failure the error handler answers whenever a request slot has a schema, one status for the body
+ * and another for the parameters, and the 401/403 pair on a route
  * the authorization pipeline protects. Anything declared explicitly always wins over an inferred entry.
  */
 export function deriveResponses(
@@ -52,6 +33,7 @@ export function deriveResponses(
   options: OpenAPIOptions,
   registry: ComponentRegistry,
   context: string,
+  problemMediaTypes: readonly string[],
   groupResponses: Record<number | string, ResponseDetail> | undefined,
   operationResponses: Record<number | string, ResponseDetail> | undefined,
 ): Record<string, ResponseObject> {
@@ -63,7 +45,7 @@ export function deriveResponses(
   const headers = deriveHeaders(route)
 
   responses.set(successStatus, {
-    description: REASONS[successStatus] ?? 'Success',
+    description: reasonOf(successStatus) ?? 'Success',
     ...(headers === undefined ? {} : { headers }),
     ...(successStatus === '204' ? {} : { content: emptyContent(successTypes) }),
   })
@@ -75,7 +57,7 @@ export function deriveResponses(
     const existing = responses.get(key)
 
     responses.set(key, {
-      description: existing?.description ?? REASONS[key] ?? 'Response',
+      description: existing?.description ?? reasonOf(key) ?? 'Response',
       ...(existing?.headers === undefined ? {} : { headers: existing.headers }),
       ...(key === '204'
         ? {}
@@ -87,14 +69,20 @@ export function deriveResponses(
     })
   }
 
-  // 3. Inferred, never overwriting anything declared.
-  if (options.infer.validation && hasRequestSchema(route)) {
-    addInferred(responses, String(options.errors.validation), options, registry, context)
+  // 3. Inferred, never overwriting anything declared. A failed body and failed parameters answer apart, and a file body
+  // is streamed, never validated.
+  const body = route.schema?.body
+  if (options.infer.validation && body !== undefined && !hasFileSchema(body)) {
+    addInferred(responses, String(options.errors.bodyValidation), options, registry, context, problemMediaTypes)
+  }
+
+  if (options.infer.validation && hasParameterSchema(route)) {
+    addInferred(responses, String(options.errors.parameterValidation), options, registry, context, problemMediaTypes)
   }
 
   if (options.infer.auth && route.authorization.hasProtection) {
-    addInferred(responses, String(options.errors.unauthorized), options, registry, context)
-    addInferred(responses, String(options.errors.forbidden), options, registry, context)
+    addInferred(responses, String(options.errors.unauthorized), options, registry, context, problemMediaTypes)
+    addInferred(responses, String(options.errors.forbidden), options, registry, context, problemMediaTypes)
   }
 
   // 4. Authored detail, merged over everything. Controller-wide first, then the operation's own.
@@ -110,20 +98,32 @@ function addInferred(
   options: OpenAPIOptions,
   registry: ComponentRegistry,
   context: string,
+  problemMediaTypes: readonly string[],
 ): void {
   if (responses.has(status)) {
     return
   }
 
-  const schema =
-    options.errorSchema === undefined
-      ? undefined
-      : registry.register(options.errorSchema, 'output', `${context} response.${status}`)
+  const schema = registry.register(options.errorSchema ?? ProblemSchema, 'output', `${context} response.${status}`)
 
   responses.set(status, {
-    description: REASONS[status] ?? 'Error',
-    content: { 'application/json': schema === undefined ? {} : { schema } },
+    description: reasonOf(status) ?? 'Error',
+    content: Object.fromEntries(problemMediaTypes.map(mediaType => [mediaType, problemContent(mediaType, schema)])),
   })
+}
+
+// The server picks the format from `Accept`, so the document lists every one. The two JSON formats are the problem
+// itself, Markdown is text, and a format the application added has a shape only its serializer knows.
+function problemContent(mediaType: string, schema: SchemaObject): MediaTypeObject {
+  switch (mediaTypeEssence(mediaType)) {
+    case 'application/json':
+    case 'application/problem+json':
+      return { schema }
+    case 'text/markdown':
+      return { schema: { type: 'string' } }
+    default:
+      return {}
+  }
 }
 
 function applyDetail(
@@ -137,7 +137,7 @@ function applyDetail(
     responses.set(key, {
       ...existing,
       ...authored,
-      description: authored.description ?? existing?.description ?? REASONS[key] ?? 'Response',
+      description: authored.description ?? existing?.description ?? reasonOf(key) ?? 'Response',
       ...(authored.content === undefined
         ? existing?.content === undefined
           ? {}
@@ -200,23 +200,23 @@ function deriveHeaders(route: IRoute<unknown>): Record<string, HeaderObject> | u
   return Object.keys(headers).length === 0 ? undefined : headers
 }
 
+// The standard name of a status or a range, for a response nobody described.
+function reasonOf(status: string): string | undefined {
+  return /^\d+$/.test(status) ? statusPhrase(Number(status)) : RANGES[status]
+}
+
 /** Fastify accepts `4xx`; the specification writes it `4XX`. */
 function normalizeStatus(status: string): string {
   return /^[1-5]xx$/i.test(status) ? status.toUpperCase() : status
 }
 
-function hasRequestSchema(route: IRoute<unknown>): boolean {
+function hasParameterSchema(route: IRoute<unknown>): boolean {
   const schema = route.schema
   if (schema === undefined) {
     return false
   }
 
-  return (
-    schema.params !== undefined ||
-    schema.querystring !== undefined ||
-    schema.headers !== undefined ||
-    schema.body !== undefined
-  )
+  return schema.params !== undefined || schema.querystring !== undefined || schema.headers !== undefined
 }
 
 // Numeric statuses ascending, then the wildcard ranges, then `default` — the order a reader expects.

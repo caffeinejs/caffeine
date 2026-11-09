@@ -30,7 +30,7 @@ export function compileRouteSchema(
     const authored = schema[slot]
     if (authored !== undefined) {
       // A file body is streamed, not parsed: `request.body` is never populated, so a validator built from it
-      // would answer 400 to every valid upload. The slot is documentation for OpenAPI, not a validator.
+      // would answer 422 to every valid upload. The slot is documentation for OpenAPI, not a validator.
       if (slot === 'body' && hasFileSchema(authored)) {
         continue
       }
@@ -61,7 +61,7 @@ export function compileRouteSchema(
  * - `headers` is forced open. Requests always carry headers nobody declares (`host`, `user-agent`, `content-type`),
  *   and a closed schema would delete them from `request.headers`. Correctness, not taste.
  * - `body` is closed, so fields the client invented never reach the handler. That is mass-assignment protection,
- *   and it strips silently rather than answering 400.
+ *   and it strips silently rather than answering 422.
  * - `querystring` and `params` stay as authored. Closing the query string would quietly discard parameters read
  *   through `ctx.req.query()` or by a plugin.
  * - `response` stays as authored; fast-json-stringify emits only declared properties regardless.

@@ -1,8 +1,8 @@
 import { $t } from '@caffeinejs/application/schema'
 import type { Container } from '@caffeinejs/di'
-import { Router } from '@caffeinejs/http'
+import { ProblemSchema, Router } from '@caffeinejs/http'
 
-import { ErrorSchema, toolRoutes, type ToolRouter } from '../tool.js'
+import { toolRoutes, type ToolRouter } from '../tool.js'
 import { BindingSchema, DependencyGraphSchema, InternalQuerySchema } from './di.schema.js'
 import { DITool } from './di.tool.js'
 
@@ -15,7 +15,7 @@ const bindings = di
 
 const binding = di
   .get('/bindings/:id')
-  .schema({ response: { 200: BindingSchema, 404: ErrorSchema } })
+  .schema({ response: { 200: BindingSchema, 404: ProblemSchema } })
   .handler((ctx, { tool }) => tool.binding(ctx.req.param().id))
 
 const bindingGraph = di

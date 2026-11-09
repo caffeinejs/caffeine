@@ -29,11 +29,13 @@ export interface InferenceOptions {
 
 /** The status codes the generator uses for the responses it infers. */
 export interface ErrorStatusOptions {
+  /** Answered when a request body fails its schema: `422` by default, as the error handler answers. */
+  bodyValidation: number
   /**
-   * Answered when request validation fails. Fastify's default is `400`; an application whose error handler
-   * maps body failures elsewhere (the petstore answers `422`) sets it here so the document matches reality.
+   * Answered when path parameters, the query string or headers fail their schema: `400` by default, as the error
+   * handler answers. A route that validates a body and parameters lists both.
    */
-  validation: number
+  parameterValidation: number
   /** Answered when authentication is required and absent or rejected. */
   unauthorized: number
   /** Answered when an authenticated caller fails the route's policy. */
@@ -93,7 +95,7 @@ export interface OpenAPIOptions {
 
   infer: InferenceOptions
   errors: ErrorStatusOptions
-  /** The body of an inferred error response. */
+  /** The body of an inferred error response, in place of the RFC 9457 problem the server renders. */
   errorSchema: AnySchema | undefined
 
   /** Structurally deduplicate repeated anonymous schemas into `components.schemas`. Off by default. */
@@ -197,7 +199,7 @@ export function defaultOpenAPIOptions(name: string = DEFAULT_DOCUMENT_NAME): Ope
     secure: undefined,
     secureExplicit: false,
     infer: { validation: true, auth: true },
-    errors: { validation: 400, unauthorized: 401, forbidden: 403 },
+    errors: { bodyValidation: 422, parameterValidation: 400, unauthorized: 401, forbidden: 403 },
     errorSchema: undefined,
     dedupeComponents: false,
     source: undefined,
