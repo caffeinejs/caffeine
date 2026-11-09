@@ -77,6 +77,8 @@ export class FaultyBackend implements Backend {
     }
 
     const answer = call()
+    // Held back until answerLate, so a rejection must not count as unhandled meanwhile.
+    answer.catch(() => undefined)
     return new Promise<T>((resolve, reject) => {
       this.#pending.push(() => answer.then(resolve, reject))
     })
