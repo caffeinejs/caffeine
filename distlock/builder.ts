@@ -1,6 +1,7 @@
 import type { EventEmitter } from 'node:events'
 
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/application'
+import { HealthIndicator } from '@caffeinejs/application/health'
 import { logToken, newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { isValidKey, Scopes, type ContainerOps, type InjectionToken } from '@caffeinejs/di'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
@@ -9,6 +10,7 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { Backend } from './backend.js'
 import { CaffeineDistLock } from './distlock.js'
 import { ErrDistLockConfiguration } from './errors.js'
+import { DistLockHealth } from './health.js'
 import { kDistLock } from './keys.js'
 import type { LockEventMap } from './observability/channels.js'
 import { DEFAULT_DIST_LOCK_OPTIONS, type DistLockConfig, type DistLockOptions } from './options.js'
@@ -37,6 +39,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
   #retryJitter: number | undefined
   #storeTimeout: Duration | undefined
   #logger: Logger | false | undefined
+  #health = false
   readonly #listeners: Array<[event: keyof LockEventMap, listener: Listener]> = []
 
   /**
@@ -119,6 +122,17 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
+  /**
+   * Adds the lock backend to the application's readiness check, as `distlock`. Off by default.
+   *
+   * It never fails readiness: the backend is shared by every replica, so an outage leaves each one taking traffic.
+   * Each probe is an ordinary acquisition, so it shows in the lock's events, logs and metrics like any other.
+   */
+  health(enabled = true): this {
+    this.#health = enabled
+    return this
+  }
+
   protected override configure(kit: FeatureConfigureKit<C>): void {
     const backend = this.#backend
     if (backend === undefined) {
@@ -191,6 +205,15 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
         .lifetime(Scopes.SINGLETON)
         .internal(),
     )
+
+    if (this.#health) {
+      kit.container.bind(DistLockHealth, t =>
+        t
+          .toFactory(ctx => new DistLockHealth(ctx.container.get(kDistLock)))
+          .lifetime(Scopes.SINGLETON)
+          .extends(HealthIndicator),
+      )
+    }
   }
 }
 

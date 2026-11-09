@@ -9,6 +9,7 @@ export {
   ErrLockBackendTimeout,
   ErrLockNotAcquired,
 } from './errors.js'
+export { DistLockHealth } from './health.js'
 export { kDistLock, kDistLockBackend } from './keys.js'
 export { DEFAULT_DIST_LOCK_OPTIONS, type DistLockConfig, type DistLockOptions } from './options.js'
 export { DistributedLock, type DistLockConfigurer } from './plugin.js'
