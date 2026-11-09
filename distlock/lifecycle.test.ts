@@ -8,7 +8,7 @@ import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLockBuilder } from './builder.js'
 import type { DistLock, Lock } from './distlock.js'
-import { ErrLockLost } from './errors.js'
+import { ErrLockLost, ErrLockReleased } from './errors.js'
 import { kDistLock } from './keys.js'
 import { RecordingLogger } from './log.testkit.js'
 import type { LostMessage } from './observability/channels.js'
@@ -321,6 +321,27 @@ describe('distlock shutdown', () => {
     expect(log.at('warn').map(r => [r.msg, r.fields])).toEqual([
       ['lock service closed with locks still held', { count: 2 }],
     ])
+  })
+
+  // A holder that lets go of its other keys when one aborts has released them itself: shutdown must neither abort
+  // those again nor count them as left behind.
+  it('ends and counts only the leases still held when shutdown reaches them', async () => {
+    const log = new RecordingLogger()
+    const { lock, close } = await newApp(new MemoryLockBackend(), d => d.logger(log).drainTimeout(0))
+    const lost: LostMessage[] = []
+    lock.events.on('lost', message => lost.push(message))
+
+    const first = await lock.acquire('a', { ttl: 1 * Minute })
+    const second = await lock.acquire('b', { ttl: 1 * Minute })
+    first.signal.addEventListener('abort', () => void second.release())
+
+    await close()
+
+    expect(lost.map(m => [m.key, m.reason])).toEqual([['a', 'shutdown']])
+    expect(log.at('warn').map(r => [r.msg, r.fields])).toEqual([
+      ['lock service closed with locks still held', { count: 1 }],
+    ])
+    expect(second.signal.reason).toBeInstanceOf(ErrLockReleased)
   })
 })
 
