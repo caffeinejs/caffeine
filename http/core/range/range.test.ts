@@ -84,4 +84,26 @@ describe('multipartByteRanges lays several ranges out as one multipart/byterange
 
     expect(await body.text()).toBe(expected)
   })
+
+  // Node's Blob.slice takes 32-bit offsets and aborts the whole process on a larger one, where an error could be
+  // caught. The Blob is built of one MiB repeated, which allocates nothing more.
+  it('throws a RangeError for a Blob range ending past the last byte a Blob can be cut at', async () => {
+    const mib = new NodeBlob([new Uint8Array(1024 * 1024)])
+    const large = new NodeBlob(Array.from({ length: 4097 }, () => mib))
+    const last = 2 ** 32 - 2
+
+    const body = multipartByteRanges(large, [[last, last]], 'application/octet-stream', 'b0')
+    expect(await body.text()).toContain(`Content-Range: bytes ${last}-${last}/${large.size}`)
+    expect(() =>
+      multipartByteRanges(
+        large,
+        [
+          [0, 0],
+          [last, last + 1],
+        ],
+        'application/octet-stream',
+        'b0',
+      ),
+    ).toThrow(RangeError)
+  })
 })

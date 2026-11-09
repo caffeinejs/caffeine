@@ -84,6 +84,9 @@ routes
     Attachment(new Blob([BODY], { type: PDF }), { name: 'report.pdf', etag: ETAG, lastModified: MODIFIED }),
   )
 routes.get('/bytes').handler(() => Attachment(BODY, { name: 'report.pdf', etag: ETAG, lastModified: MODIFIED }))
+routes
+  .get('/strong-date')
+  .handler(() => Attachment(BODY, { name: 'report.pdf', lastModified: MODIFIED, lastModifiedStrong: true }))
 routes.get('/array-buffer').handler(() => Attachment(BODY.slice().buffer, { name: 'report.pdf' }))
 routes.get('/stream').handler(() => Attachment(streamOf(BODY), { name: 'live.bin', etag: ETAG }))
 // A stream as a file opens one, so whether each was closed can be seen: a 304 reads none of it.
@@ -650,10 +653,12 @@ describe('Attachment() resumes only the body the client already holds part of (I
     ['a different ETag: the content changed', '/files/bytes', '"report-v2"', 200],
     ['a weak ETag, which never proves the bytes are the same', '/files/bytes', 'W/"report-v1"', 200],
     ['any ETag, when the content has only a weak one', '/files/weak', 'W/"report-v1"', 200],
-    ['the Last-Modified date', '/files/bytes', MODIFIED.toUTCString(), 206],
-    ['a date a second earlier', '/files/bytes', new Date(MODIFIED.getTime() - 1000).toUTCString(), 200],
-    ['a date a second later', '/files/bytes', new Date(MODIFIED.getTime() + 1000).toUTCString(), 200],
-    ['a date that does not parse', '/files/bytes', 'yesterday', 200],
+    // Content can change twice within the second Last-Modified names, so only a date declared strong resumes.
+    ['the Last-Modified date, not declared strong', '/files/bytes', MODIFIED.toUTCString(), 200],
+    ['the Last-Modified date, declared strong', '/files/strong-date', MODIFIED.toUTCString(), 206],
+    ['a date a second earlier', '/files/strong-date', new Date(MODIFIED.getTime() - 1000).toUTCString(), 200],
+    ['a date a second later', '/files/strong-date', new Date(MODIFIED.getTime() + 1000).toUTCString(), 200],
+    ['a date that does not parse', '/files/strong-date', 'yesterday', 200],
     ['any validator, when the content has none', '/files/array-buffer', ETAG, 200],
     ['a date, when the content has no Last-Modified', '/files/array-buffer', MODIFIED.toUTCString(), 200],
   ])('given %s', async (_validator, path, ifRange, status) => {
@@ -665,13 +670,13 @@ describe('Attachment() resumes only the body the client already holds part of (I
   })
 
   it.each([
-    ['the same strong ETag', ETAG, 206],
-    ['the Last-Modified date', MODIFIED.toUTCString(), 206],
-    ['a different ETag', '"report-v2"', 200],
-    ['a weak ETag', 'W/"report-v1"', 200],
-    ['another date', new Date(MODIFIED.getTime() + 1000).toUTCString(), 200],
-  ])('serves several ranges together, or none, given %s', async (_validator, ifRange, status) => {
-    const res = await app.request('/files/bytes', { headers: { range: 'bytes=10-19,30-39', 'if-range': ifRange } })
+    ['the same strong ETag', '/files/bytes', ETAG, 206],
+    ['a strong Last-Modified date', '/files/strong-date', MODIFIED.toUTCString(), 206],
+    ['a different ETag', '/files/bytes', '"report-v2"', 200],
+    ['a weak ETag', '/files/bytes', 'W/"report-v1"', 200],
+    ['another date', '/files/strong-date', new Date(MODIFIED.getTime() + 1000).toUTCString(), 200],
+  ])('serves several ranges together, or none, given %s', async (_validator, path, ifRange, status) => {
+    const res = await app.request(path, { headers: { range: 'bytes=10-19,30-39', 'if-range': ifRange } })
 
     await expectRangeAnswer(
       res,
@@ -815,8 +820,8 @@ describe('Attachment() answers a client that already holds the content with 304 
       expect(in2026.status).toBe(200)
       await expectPatternedBody(in2026, 0, SIZE)
 
-      // In 2049 it is not: it is 2099, after.
-      vi.setSystemTime(new Date('2049-06-01T00:00:00Z'))
+      // On 1 December 2049, 1 October 2099 is less than 50 years ahead: it is 2099, after.
+      vi.setSystemTime(new Date('2049-12-01T00:00:00Z'))
       expect((await app.request('/files/bytes', { headers })).status).toBe(304)
     } finally {
       vi.useRealTimers()

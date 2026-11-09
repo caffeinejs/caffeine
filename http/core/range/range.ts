@@ -1,5 +1,10 @@
 import { Blob as NodeBlob } from 'node:buffer'
 
+import { errMessage } from '@caffeinejs/std/err'
+
+// The largest offset Node's `Blob.slice` takes: past it, Node aborts the process instead of throwing.
+const LARGEST_SLICEABLE = 2 ** 32 - 1
+
 // The most ranges one request is served, as Spring caps them: past it, the body goes out whole (RFC 9110 §14.2: a
 // server MAY ignore Range).
 const MOST_RANGES = 100
@@ -99,6 +104,9 @@ function rangeOf(spec: string, size: number): readonly [number, number] | 'unsat
  * the close delimiter ends the body. A `Blob`'s parts are slices of it, read as the answer is sent; bytes are copied
  * once, into the `Blob` that holds the answer. `type` and `boundary` are written as given, so neither may hold a line
  * break.
+ *
+ * @throws {@link RangeError} for a range of a `Blob` ending at byte `2 ** 32 - 1` or later: Node cannot cut a part out
+ * of a `Blob` past 4 GiB, and aborts the process when asked to.
  */
 export function multipartByteRanges(
   body: NodeBlob | Uint8Array<ArrayBuffer>,
@@ -110,6 +118,14 @@ export function multipartByteRanges(
   const parts: Array<string | NodeBlob | Uint8Array<ArrayBuffer>> = []
 
   for (const [start, end] of ranges) {
+    if (body instanceof NodeBlob && end + 1 > LARGEST_SLICEABLE) {
+      throw new RangeError(
+        errMessage(`Cannot slice bytes ${start}-${end} of a Blob: Node takes offsets up to ${LARGEST_SLICEABLE} only`)
+          .solutions('Send a Blob past 4 GiB whole, without ranges, as Attachment() does')
+          .build(),
+      )
+    }
+
     parts.push(
       `--${boundary}\r\nContent-Type: ${type}\r\nContent-Range: bytes ${start}-${end}/${size}\r\n\r\n`,
       body instanceof NodeBlob ? body.slice(start, end + 1) : body.subarray(start, end + 1),
