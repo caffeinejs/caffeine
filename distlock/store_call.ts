@@ -1,3 +1,5 @@
+import { addAbortListener } from 'node:events'
+
 import type { Duration } from '@caffeinejs/std/duration'
 
 import { ErrLockBackendTimeout } from './errors.js'
@@ -29,6 +31,9 @@ export interface StoreCall {
  * stopped waiting is handed to `onLate`, so a lease acquired too late can be given back. A late rejection goes to
  * `onLateError`; without it, it is swallowed. Never an unhandled rejection. Nothing outlives the call: the timer
  * and the listeners go when it settles.
+ *
+ * The deadline is read off a monotonic clock as well as kept by a timer: an answer that arrives once it passed is
+ * late even when the timer has yet to fire, as it is when the call itself blocked the event loop past it.
  */
 export function boundedCall<T>(
   spec: StoreCall,
@@ -43,22 +48,23 @@ export function boundedCall<T>(
 
   const controller = new AbortController()
   const { signal } = controller
-  const timer = setTimeout(
-    () => controller.abort(new ErrLockBackendTimeout(spec.operation, spec.key, spec.timeout, spec.bound)),
-    spec.timeout,
-  )
+  const deadline = performance.now() + spec.timeout
+  const timeOut = () => controller.abort(new ErrLockBackendTimeout(spec.operation, spec.key, spec.timeout, spec.bound))
+  const timer = setTimeout(timeOut, spec.timeout)
   // Never the last thing keeping a process alive.
   timer.unref?.()
 
-  const onCallerAbort = () => controller.abort(callerSignal!.reason)
-  callerSignal?.addEventListener('abort', onCallerAbort, { once: true })
+  // Not `addEventListener`: another listener on the caller's signal calling `stopImmediatePropagation()` would
+  // keep this one from running, and the call would go on after its caller aborted.
+  const callerAbort =
+    callerSignal === undefined ? undefined : addAbortListener(callerSignal, () => controller.abort(callerSignal.reason))
 
   return new Promise<T>((resolve, reject) => {
     let pending: Promise<T> | undefined
 
     function settle(): void {
       clearTimeout(timer)
-      callerSignal?.removeEventListener('abort', onCallerAbort)
+      callerAbort?.[Symbol.dispose]()
       signal.removeEventListener('abort', onAbort)
     }
 
@@ -81,16 +87,25 @@ export function boundedCall<T>(
       return
     }
 
+    // Past the deadline, the answer is late whether or not the timer has fired: aborting hands it to the late
+    // hooks through `onAbort`, as the timer would have.
+    function overdue(): boolean {
+      if (!signal.aborted && performance.now() >= deadline) {
+        timeOut()
+      }
+      return signal.aborted
+    }
+
     pending.then(
       value => {
-        if (signal.aborted) {
+        if (overdue()) {
           return
         }
         settle()
         resolve(value)
       },
       (error: unknown) => {
-        if (signal.aborted) {
+        if (overdue()) {
           return
         }
         settle()
