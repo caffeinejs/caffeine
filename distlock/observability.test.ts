@@ -6,7 +6,7 @@ import { Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend } from './backend.js'
-import { FaultyBackend } from './backend.testkit.js'
+import { FaultyBackend, RenumberingBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLockBuilder } from './builder.js'
 import type { DistLock } from './distlock.js'
@@ -354,6 +354,20 @@ describe('distlock diagnostics channels', () => {
     const released = ended<ReleaseContext>(published, 'release').map(ctx => ctx.leaseID)
     expect(released).not.toContain(executed!.leaseID)
     expect(released).toHaveLength(1)
+  })
+
+  // A renumbered lease is the backend breaking its contract, not the key changing hands: dashboards must count it
+  // as a backend error, or a broken adapter hides among ordinary contention.
+  it('reports an extend whose fencing token changed as an error, and the loss it causes as an error', async () => {
+    const backend = new RenumberingBackend()
+    const { lock } = await newApp(backend)
+    const published = record(lock)
+
+    const held = await lock.acquire('a', { ttl: 1 * Minute })
+    await held.extend().catch(() => undefined)
+
+    expect(ended<ExtendContext>(published, 'extend')[0]).toMatchObject({ renewal: false, outcome: 'error' })
+    expect(messages<LostMessage>(published, 'lost')[0]).toMatchObject({ reason: 'error', renewal: false })
   })
 
   it('reports an explicit extend the backend refused as a lost lease', async () => {
