@@ -1,0 +1,70 @@
+# Everything the application reads, validated against the schema in src/app.config.ts. A profile file beside this
+# one, application-<profile>.yaml, is layered over it when CAFFEINE_PROFILES names the profile. A list, such as
+# `dsps`, is replaced whole by a profile that sets it.
+
+# What the server listens on. Handed to `.server(...)` as the listen options, so the keys are Fastify's.
+server:
+  host: 127.0.0.1
+  port: 9500
+
+# trace, debug, info, warn, error or fatal.
+log:
+  level: info
+
+exchange:
+  # false calls every DSP with no policy at all, the baseline the load test compares against: the `bare` profile.
+  resilience: true
+
+# The DSPs every auction calls, as `make example:ad-exchange` publishes them from Docker. `qps` is the rate a DSP
+# agreed to take; above it, the exchange skips that DSP rather than send what it would drop.
+dsps:
+  - id: dsp-alpha
+    url: http://127.0.0.1:8101
+  - id: dsp-bravo
+    url: http://127.0.0.1:8102
+  - id: dsp-charlie
+    url: http://127.0.0.1:8103
+  - id: dsp-delta
+    url: http://127.0.0.1:8104
+  - id: dsp-echo
+    url: http://127.0.0.1:8105
+    qps: 500
+  - id: dsp-dead
+    url: http://127.0.0.1:8106
+  - id: dsp-slow
+    url: http://127.0.0.1:8107
+  - id: dsp-flaky
+    url: http://127.0.0.1:8108
+
+resilience:
+  # The options every DSP's policies start from. Each DSP is a preset named after its id, which src/app.ts defines;
+  # `presets.<id>` below can change one DSP's options.
+  defaults:
+    circuitBreaker:
+      slidingWindow:
+        type: count
+        size: 500
+      minimumNumberOfCalls: 100
+      failureRateThreshold: 50
+      waitDurationInOpenState: 5s
+      permittedNumberOfCallsInHalfOpenState: 5
+    rateLimiter:
+      limitRefreshPeriod: 1s
+    # The auction deadline. Each DSP is told it as `tmax`, and an answer later than this is not waited for.
+    timeLimiter:
+      timeoutDuration: 80ms
+    # The bids one DSP may have in flight. Its bid client opens as many connections, and no bid waits for one.
+    bulkhead:
+      maxConcurrentCalls: 64
+
+  presets:
+    # Win notices, sent to the winning DSP after the answer: billing depends on them, and nobody waits for them.
+    win-notice:
+      retry:
+        maxAttempts: 4
+        backoff:
+          type: exponential
+          initialDelay: 50ms
+          maxDelay: 1s
+      timeLimiter:
+        timeoutDuration: 500ms

@@ -1,0 +1,31 @@
+{
+  "name": "@caffeinejs/example-ad-exchange",
+  "description": "Ad exchange that fans bid requests out to eight DSPs, three of them faulty, and stays fast with resilience policies",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run generate && tsc",
+    "generate": "caffeine generate modules",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "load": "tsx load/load.ts"
+  },
+  "dependencies": {
+    "@caffeinejs/application": "0.0.0",
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/fetchy": "0.0.0",
+    "@caffeinejs/fetchy-undici": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/resilience": "0.0.0",
+    "@caffeinejs/std": "0.0.0",
+    "fastify": "^5.12.5",
+    "pino": "^10.3.1"
+  },
+  "devDependencies": {
+    "@caffeinejs/cli": "0.0.0",
+    "@types/autocannon": "^7.12.7",
+    "@types/node": "^26.6.4",
+    "autocannon": "^8.0.0",
+    "tsx": "^4.23.15"
+  }
+}
