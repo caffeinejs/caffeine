@@ -64,4 +64,14 @@ describe('RedisLockBackend', () => {
 
     expect(await new RedisLockBackend(client).extend({ key: 'k', token: 't', expiresAt: 0 }, TTL)).toBeUndefined()
   })
+
+  // A release the lock service gave up on is given back later with the same token; one that still went out now
+  // could land after that and race it.
+  it('sends no release once the signal has aborted', async () => {
+    const client = stubClient()
+    const lease = { key: 'k', token: 't', expiresAt: Date.now() + TTL }
+
+    await expect(new RedisLockBackend(client).release(lease, AbortSignal.abort())).rejects.toThrow()
+    expect(client.eval).not.toHaveBeenCalled()
+  })
 })

@@ -12,6 +12,7 @@ export class FaultyBackend implements Backend {
   stolen = false
   failAcquire = false
   failExtend = false
+  failRelease = false
 
   /** Operations whose calls never settle, and never take effect. */
   readonly hang = new Set<StoreOperation>()
@@ -49,6 +50,10 @@ export class FaultyBackend implements Backend {
   }
 
   release(lease: LockLease): Promise<void> {
+    if (this.failRelease) {
+      return Promise.reject(new Error('backend down'))
+    }
+
     return this.#run('release', () => {
       this.released.push(lease)
       return this.#inner.release(lease)
