@@ -14,6 +14,7 @@ import {
 } from '@opentelemetry/api'
 
 import type { DistLock } from '../../distlock.js'
+import { ErrLockBackendTimeout } from '../../errors.js'
 import {
   DIST_LOCK_CHANNELS,
   type AcquireContext,
@@ -63,12 +64,13 @@ export interface DistLockInstrumentationOptions {
  * Spans: `distlock.acquire`, `distlock.withLock`, `distlock.once`, `distlock.extend` and `distlock.release`,
  * children of whatever span was active when the call was made. A background renewal is a root span linked to
  * that span instead, since it runs long after the call that took the lock may have ended. A timeout, a backend
- * failure, a lost lease and a critical section that outran its lease set the span status to `ERROR`; an aborted
- * acquisition does not.
+ * failure, a lease that arrived already expired, a lost lease and a critical section that outran its lease set the
+ * span status to `ERROR`; an aborted acquisition does not.
  *
  * Metrics: `distlock.acquire.duration` and `distlock.acquire.attempts` (histograms, by outcome and mode),
  * `distlock.hold.duration` (histogram, by whether the lease lapsed), and the counters `distlock.contended`,
- * `distlock.lease.lost`, `distlock.backend.errors` and `distlock.once`.
+ * `distlock.lease.lost`, `distlock.backend.errors` (by operation, and `distlock.error`: `timeout` for a call that
+ * outlived `storeTimeout`, `other` otherwise) and `distlock.once`.
  *
  * A handler that throws is reported to `diag.error` and never reaches the lock or the process.
  */
@@ -188,13 +190,13 @@ export function instrumentDistLock(options: DistLockInstrumentationOptions = {})
       acquireAttempts.record(ctx.attempts ?? 0, attributes)
 
       if (ctx.outcome === 'error') {
-        backendErrors.add(1, { 'distlock.operation': 'acquire', ...label(ctx.key) })
+        backendErrors.add(1, { 'distlock.operation': 'acquire', ...errorKind(ctx.error), ...label(ctx.key) })
       }
     })
 
     on<ExtendContext>(`tracing:${DIST_LOCK_CHANNELS.extend}:asyncEnd`, ctx => {
       if (ctx.outcome === 'error') {
-        backendErrors.add(1, { 'distlock.operation': 'extend', ...label(ctx.key) })
+        backendErrors.add(1, { 'distlock.operation': 'extend', ...errorKind(ctx.error), ...label(ctx.key) })
       }
     })
 
@@ -204,7 +206,7 @@ export function instrumentDistLock(options: DistLockInstrumentationOptions = {})
       }
 
       if (ctx.error !== undefined) {
-        backendErrors.add(1, { 'distlock.operation': 'release', ...label(ctx.key) })
+        backendErrors.add(1, { 'distlock.operation': 'release', ...errorKind(ctx.error), ...label(ctx.key) })
       }
     })
 
@@ -279,11 +281,16 @@ function endAttributes(operation: TracedOperation, ctx: LockEventBase): Attribut
 }
 
 // Why the span failed, or `undefined` when it did not. An aborted acquisition is the caller changing its mind.
+// A backend that stopped answering is told apart from one that answered with a failure.
+function errorKind(error: unknown): Attributes {
+  return { 'distlock.error': error instanceof ErrLockBackendTimeout ? 'timeout' : 'other' }
+}
+
 function failureOf(operation: TracedOperation, ctx: LockEventBase): string | undefined {
   switch (operation) {
     case 'acquire': {
       const outcome = (ctx as AcquireContext).outcome
-      return outcome === 'timeout' || outcome === 'error' ? outcome : undefined
+      return outcome === 'timeout' || outcome === 'error' || outcome === 'expired' ? outcome : undefined
     }
     case 'extend': {
       const outcome = (ctx as ExtendContext).outcome

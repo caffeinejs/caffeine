@@ -3,7 +3,7 @@ import type { EventEmitter } from 'node:events'
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/application'
 import { logToken, newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { isValidKey, Scopes, type ContainerOps, type InjectionToken } from '@caffeinejs/di'
-import type { Duration } from '@caffeinejs/std/duration'
+import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { Backend } from './backend.js'
@@ -14,6 +14,9 @@ import type { LockEventMap } from './observability/channels.js'
 import { DEFAULT_DIST_LOCK_OPTIONS, type DistLockConfig, type DistLockOptions } from './options.js'
 
 type Listener = (...args: unknown[]) => void
+
+// The longest delay `setTimeout` honours.
+const MAX_TIMER_DELAY: Duration = 2 ** 31 - 1
 
 /**
  * Fluent configuration for the distributed lock service.
@@ -32,6 +35,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
   #wait: Duration | undefined
   #retryDelay: Duration | undefined
   #retryJitter: number | undefined
+  #storeTimeout: Duration | undefined
   #logger: Logger | false | undefined
   readonly #listeners: Array<[event: keyof LockEventMap, listener: Listener]> = []
 
@@ -67,6 +71,17 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
   /** The fraction of the retry delay added at random to each pause, between `0` and `1`. */
   retryJitter(fraction: number): this {
     this.#retryJitter = fraction
+    return this
+  }
+
+  /**
+   * How long one backend call may take before the caller stops waiting for it. Defaults to `5 * Second`.
+   *
+   * It must be above zero: there is no unbounded setting, since a backend that stops answering would then hang
+   * every caller and shutdown with it.
+   */
+  storeTimeout(timeout: Duration): this {
+    this.#storeTimeout = timeout
     return this
   }
 
@@ -123,6 +138,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
       wait: this.#wait ?? this.#config?.wait ?? DEFAULT_DIST_LOCK_OPTIONS.wait,
       retryDelay: this.#retryDelay ?? this.#config?.retryDelay ?? DEFAULT_DIST_LOCK_OPTIONS.retryDelay,
       retryJitter: this.#retryJitter ?? this.#config?.retryJitter ?? DEFAULT_DIST_LOCK_OPTIONS.retryJitter,
+      storeTimeout: this.#storeTimeout ?? this.#config?.storeTimeout ?? DEFAULT_DIST_LOCK_OPTIONS.storeTimeout,
     }
 
     // The schema bounds what the tree may carry; the fluent setter has nothing in front of it.
@@ -130,6 +146,21 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
       throw new ErrDistLockConfiguration(
         errMessage(`Cannot install distributed locking: retry jitter "${options.retryJitter}" is outside 0..1`)
           .solutions('Pass a fraction of the retry delay, for example .retryJitter(0.5)')
+          .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
+          .build(),
+      )
+    }
+
+    // A timer takes at most 2^31 - 1 ms; Node turns anything larger into 1 ms, which would time every call out.
+    if (!(options.storeTimeout > 0 && options.storeTimeout <= MAX_TIMER_DELAY)) {
+      throw new ErrDistLockConfiguration(
+        errMessage(
+          `Cannot install distributed locking: store timeout "${formatDuration(options.storeTimeout)}" is not above zero and at most ${formatDuration(MAX_TIMER_DELAY)}`,
+        )
+          .solutions(
+            `Pass a bound above zero and at most ${formatDuration(MAX_TIMER_DELAY)}, such as .storeTimeout(5 * Second)`,
+            'Or set storeTimeout in the configuration tree, such as "5s"',
+          )
           .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
           .build(),
       )

@@ -19,7 +19,11 @@ interface Held {
 export class MemoryLockBackend implements Backend {
   readonly #held = new Map<string, Held>()
 
-  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+  tryAcquire(key: string, ttl: Duration, signal?: AbortSignal): Promise<LockLease | undefined> {
+    if (signal?.aborted === true) {
+      return Promise.reject(signal.reason)
+    }
+
     if (this.#live(key) !== undefined) {
       return Promise.resolve(undefined)
     }
@@ -30,7 +34,11 @@ export class MemoryLockBackend implements Backend {
     return Promise.resolve(lease)
   }
 
-  extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+  extend(lease: LockLease, ttl: Duration, signal?: AbortSignal): Promise<LockLease | undefined> {
+    if (signal?.aborted === true) {
+      return Promise.reject(signal.reason)
+    }
+
     const held = this.#live(lease.key)
     if (held === undefined || held.token !== lease.token) {
       return Promise.resolve(undefined)
@@ -41,7 +49,11 @@ export class MemoryLockBackend implements Backend {
     return Promise.resolve({ key: lease.key, token: lease.token, expiresAt: held.expiresAt })
   }
 
-  release(lease: LockLease): Promise<void> {
+  release(lease: LockLease, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted === true) {
+      return Promise.reject(signal.reason)
+    }
+
     const held = this.#live(lease.key)
     if (held !== undefined && held.token === lease.token) {
       this.#held.delete(lease.key)

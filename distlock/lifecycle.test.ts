@@ -1,9 +1,10 @@
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Minute, type Duration } from '@caffeinejs/std/duration'
-import { afterEach, describe, expect, it } from 'vitest'
+import { Minute, Second, type Duration } from '@caffeinejs/std/duration'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
+import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLock } from './distlock.js'
 import { kDistLock } from './keys.js'
@@ -43,9 +44,36 @@ class CountingBackend implements Backend {
   }
 }
 
+/** Hands out a new token on every extend, as {@link Backend.extend} allows. */
+class RotatingBackend implements Backend {
+  readonly inner = new MemoryLockBackend()
+
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    return this.inner.tryAcquire(key, ttl)
+  }
+
+  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    if ((await this.inner.extend(lease, ttl)) === undefined) {
+      return undefined
+    }
+
+    await this.inner.release(lease)
+    return this.inner.tryAcquire(lease.key, ttl)
+  }
+
+  release(lease: LockLease): Promise<void> {
+    return this.inner.release(lease)
+  }
+}
+
 const opened: Array<() => Promise<unknown>> = []
 
 afterEach(async () => {
+  if (vi.isFakeTimers()) {
+    await vi.runOnlyPendingTimersAsync()
+  }
+  vi.useRealTimers()
+
   for (const close of opened.splice(0)) {
     await close().catch(() => undefined)
   }
@@ -104,5 +132,85 @@ describe('distlock lifecycle', () => {
     await close()
 
     expect(await backend.tryAcquire('nightly-report', 1_000)).toBeUndefined()
+  })
+
+  // `release()` waits for a renewal on the wire so its write cannot outlive the release; a renewal the backend
+  // never answers must not turn that wait into forever.
+  it('does not let release wait forever on a renewal the backend never answers', async () => {
+    const backend = new FaultyBackend()
+    const { lock } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    backend.hang.add('extend')
+    // The first renewal leaves at a third of the lease and never comes back.
+    await vi.advanceTimersByTimeAsync(10 * Second)
+
+    let settled = false
+    const releasing = held.release()
+    void releasing.finally(() => (settled = true)).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(2 * 5 * Second)
+
+    expect(settled).toBe(true)
+    expect(backend.released.map(lease => lease.token)).toEqual([held.token])
+  })
+
+  it('closes the application within storeTimeout when a renewal is stuck', async () => {
+    const backend = new FaultyBackend()
+    const { lock, close } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    backend.hang.add('extend')
+    await vi.advanceTimersByTimeAsync(10 * Second)
+
+    let settled = false
+    void close()
+      .finally(() => (settled = true))
+      .catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+
+    expect(settled).toBe(true)
+  })
+
+  // The release went out with the token the lock knew; the renewal that rotated it answered too late for the
+  // release to use. Unless the late lease is given back, the key stays taken under a token nobody holds.
+  it('gives back a renewal that lands after the lock was released, so a backend that rotates the token on extend leaves the key free', async () => {
+    const rotating = new RotatingBackend()
+    const backend = new FaultyBackend(rotating)
+    const { lock } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    backend.late = ['extend']
+    await vi.advanceTimersByTimeAsync(10 * Second)
+
+    const releasing = held.release()
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await releasing
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(await rotating.inner.tryAcquire('orders:rebuild', 1 * Minute)).toBeDefined()
+  })
+
+  it('releases with the token a renewal rotated', async () => {
+    const backend = new RotatingBackend()
+    const { lock } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    const first: LockLease = { key: held.key, token: held.token, expiresAt: held.expiresAt }
+    await vi.advanceTimersByTimeAsync(10 * Second)
+    expect(held.token).not.toBe(first.token)
+
+    await held.release()
+    const successor = await backend.inner.tryAcquire('orders:rebuild', 1 * Minute)
+    expect(successor).toBeDefined()
+
+    await backend.release(first)
+    expect(await backend.inner.tryAcquire('orders:rebuild', 1 * Minute)).toBeUndefined()
   })
 })

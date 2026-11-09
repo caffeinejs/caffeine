@@ -10,7 +10,7 @@ import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLockBuilder } from './builder.js'
 import type { DistLock } from './distlock.js'
-import { ErrLockNotAcquired } from './errors.js'
+import { ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
 import { kDistLock } from './keys.js'
 import { RecordingLogger } from './log.testkit.js'
 import {
@@ -190,6 +190,43 @@ describe('distlock diagnostics channels', () => {
     expect(ended<AcquireContext>(published, 'acquire')[1]!.outcome).toBe('error')
     expect(log.at('warn').map(r => r.msg)).toEqual(['lock backend failed'])
     expect(log.at('warn')[0]!.fields.err).toBeInstanceOf(Error)
+  })
+
+  it('reports a timed-out backend call as an acquire error carrying ErrLockBackendTimeout', async () => {
+    const backend = new FaultyBackend()
+    backend.hang.add('acquire')
+    const { lock } = await newApp(backend)
+    const published = record(lock)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const attempt = lock.tryAcquire('a').catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await attempt
+
+    const [ctx] = ended<AcquireContext>(published, 'acquire')
+    expect(ctx!.outcome).toBe('error')
+    expect(ctx!.error).toBeInstanceOf(ErrLockBackendTimeout)
+  })
+
+  // Telemetry has to tell a key somebody else holds apart from a lease that died on the way here.
+  it('reports a lease that arrived expired with outcome expired', async () => {
+    const inner = new MemoryLockBackend()
+    const backend: Backend = {
+      tryAcquire: async (key, ttl) => {
+        const lease = await inner.tryAcquire(key, ttl)
+        return lease === undefined ? undefined : { ...lease, expiresAt: Date.now() - 1 }
+      },
+      extend: (lease, ttl) => inner.extend(lease, ttl),
+      release: lease => inner.release(lease),
+    }
+    const { lock, log } = await newApp(backend)
+    const published = record(lock)
+
+    expect(await lock.tryAcquire('a')).toBeUndefined()
+
+    expect(ended<AcquireContext>(published, 'acquire').map(ctx => ctx.outcome)).toEqual(['expired'])
+    expect(messages(published, 'contended')).toEqual([])
+    expect(log.at('warn').map(r => r.msg)).toEqual(['lock lease expired in transit'])
   })
 
   // The failure a lock exists to prevent: work still running after the key was free for someone else to take.

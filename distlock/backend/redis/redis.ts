@@ -28,6 +28,10 @@ const RELEASE = `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call
  *
  * It is a single-instance lock. A server that fails over to a replica which had not yet received a key can
  * hand that key to a second holder while the first still believes it holds it.
+ *
+ * The signal each call takes is checked before the command goes out, never handed to the client: a command
+ * already sent may have landed, and the lock service gives back whatever lease it returns late. Give the client
+ * a command timeout of its own, so a command the service stopped waiting for does not hold the connection.
  */
 export class RedisLockBackend implements Backend {
   readonly #client: RedisLockClient
@@ -55,7 +59,9 @@ export class RedisLockBackend implements Backend {
     return { key, token, expiresAt: start + px }
   }
 
-  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+  async extend(lease: LockLease, ttl: Duration, signal?: AbortSignal): Promise<LockLease | undefined> {
+    signal?.throwIfAborted()
+
     const px = Math.ceil(ttl)
     const start = Date.now()
     const reply = await this.#client.eval(EXTEND, { keys: [lease.key], arguments: [lease.token, String(px)] })
@@ -66,7 +72,9 @@ export class RedisLockBackend implements Backend {
     return { key: lease.key, token: lease.token, expiresAt: start + px }
   }
 
-  async release(lease: LockLease): Promise<void> {
+  async release(lease: LockLease, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted()
+
     await this.#client.eval(RELEASE, { keys: [lease.key], arguments: [lease.token] })
   }
 }

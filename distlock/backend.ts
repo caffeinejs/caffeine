@@ -34,6 +34,13 @@ export interface LockLease {
  * plus a compare-and-delete and a compare-and-expire script; a quorum implementation does its rounds, its
  * minority cleanup and its drift arithmetic inside {@link tryAcquire} and reports the outcome through
  * {@link LockLease.expiresAt}.
+ *
+ * The lock service bounds every call with `storeTimeout` and hands it a signal that aborts at that deadline or
+ * when the caller gives up. A backend may ignore the signal. One that honours it rejects with `signal.reason`
+ * only while the operation has not taken effect and will not; once a write may have landed, it resolves with
+ * what it got. Either way the service stops waiting at the deadline and releases any lease a call returns after
+ * it. The service cannot see a client's own timeouts, so bound the client too: an abandoned call keeps its
+ * connection until the client gives up.
  */
 export interface Backend {
   /** One attempt, no waiting: the lease, or `undefined` when the key is already held. */
@@ -52,8 +59,8 @@ export interface Backend {
    * The returned lease supersedes the one passed in. A backend may rotate the token here; the holder carries
    * the new one from then on, release included.
    */
-  extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined>
+  extend(lease: LockLease, ttl: Duration, signal?: AbortSignal): Promise<LockLease | undefined>
 
   /** Releases the key only while the lease's token still matches. */
-  release(lease: LockLease): Promise<void>
+  release(lease: LockLease, signal?: AbortSignal): Promise<void>
 }

@@ -11,7 +11,7 @@ import type { Backend, LockLease } from './backend.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLockBuilder } from './builder.js'
 import type { DistLock } from './distlock.js'
-import { ErrDistLockConfiguration } from './errors.js'
+import { ErrDistLockConfiguration, ErrLockBackendTimeout } from './errors.js'
 import { kDistLock, kDistLockBackend } from './keys.js'
 import { DistributedLock } from './plugin.js'
 
@@ -38,6 +38,21 @@ class SpyBackend implements Backend {
   }
 }
 
+/** Never answers an attempt, so the store timeout is what ends it. */
+class HangingBackend implements Backend {
+  tryAcquire(): Promise<LockLease | undefined> {
+    return new Promise(() => undefined)
+  }
+
+  extend(): Promise<LockLease | undefined> {
+    return new Promise(() => undefined)
+  }
+
+  release(): Promise<void> {
+    return new Promise(() => undefined)
+  }
+}
+
 const opened: Array<() => Promise<unknown>> = []
 
 afterEach(async () => {
@@ -59,6 +74,7 @@ interface DistLockTree {
   wait?: string
   retryDelay?: string
   retryJitter?: number
+  storeTimeout?: string
 }
 
 /** Boots an application whose configuration tree carries the given distlock slice. */
@@ -185,6 +201,46 @@ describe('distlock configuration', () => {
 
     await expect(booting).rejects.toThrow(ErrConfigValidation)
     await expect(booting).rejects.toThrow('app.distlock.ttl')
+  })
+
+  // The bound is only observable through what a backend that never answers produces: the error names it.
+  it('reads the store timeout out of the configuration tree', async () => {
+    const lock = await newLock(new HangingBackend(), { storeTimeout: '30ms' })
+
+    const error = await lock.tryAcquire('k').catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ErrLockBackendTimeout)
+    expect((error as ErrLockBackendTimeout).timeout).toBe(30)
+  })
+
+  it('lets a fluent store timeout win', async () => {
+    const lock = await newLock(new HangingBackend(), { storeTimeout: '1m' }, d => d.storeTimeout(20))
+
+    const error = await lock.tryAcquire('k').catch((e: unknown) => e)
+
+    expect((error as ErrLockBackendTimeout).timeout).toBe(20)
+  })
+
+  // Zero must not mean "no bound": a backend that stops answering would hang every caller and shutdown with it.
+  it('refuses a store timeout of zero', async () => {
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).storeTimeout(0)),
+    )
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+  })
+
+  // Node fires a timer longer than 2^31 - 1 ms after 1 ms, which would time out every backend call.
+  it('refuses a store timeout above 2^31 - 1 ms', async () => {
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).storeTimeout(2 ** 31)),
+    )
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
   })
 
   // The schema is internal to the package for now; the feature never reads it.

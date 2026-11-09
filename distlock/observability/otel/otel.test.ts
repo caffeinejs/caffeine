@@ -2,7 +2,7 @@ import { tracingChannel } from 'node:diagnostics_channel'
 
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Minute } from '@caffeinejs/std/duration'
+import { Minute, Second } from '@caffeinejs/std/duration'
 import {
   context,
   diag,
@@ -276,7 +276,30 @@ describe('instrumentDistLock metrics', () => {
       expect.objectContaining({ attributes: { 'distlock.reason': 'error', 'distlock.renewal': true }, value: 1 }),
     ])
     expect(await otel.points('distlock.backend.errors')).toEqual([
-      expect.objectContaining({ attributes: { 'distlock.operation': 'extend' }, value: 1 }),
+      expect.objectContaining({ attributes: { 'distlock.operation': 'extend', 'distlock.error': 'other' }, value: 1 }),
+    ])
+  })
+})
+
+describe('instrumentDistLock store timeouts', () => {
+  // A store that stopped answering and one that answered with an error are different incidents: one points at
+  // the network or a paused server, the other at the request.
+  it('counts a store timeout as a backend error labelled timeout', async () => {
+    const otel = instrument()
+    const backend = new FaultyBackend()
+    backend.hang.add('acquire')
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const attempt = lock.tryAcquire('a').catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await attempt
+
+    expect(await otel.points('distlock.backend.errors')).toEqual([
+      expect.objectContaining({
+        attributes: { 'distlock.operation': 'acquire', 'distlock.error': 'timeout' },
+        value: 1,
+      }),
     ])
   })
 })

@@ -2,7 +2,14 @@ export type { Backend, LockLease } from './backend.js'
 export type { DistLockBuilder } from './builder.js'
 export { CaffeineDistLock } from './distlock.js'
 export type { AcquireOptions, DistLock, Lock, OnceOptions, OnceResult } from './distlock.js'
-export { ErrDistLock, ErrDistLockConfiguration, ErrLockNotAcquired } from './errors.js'
+export {
+  ErrDistLock,
+  ErrDistLockConfiguration,
+  ErrInvalidLockKey,
+  ErrLockBackendTimeout,
+  ErrLockNotAcquired,
+} from './errors.js'
 export { kDistLock, kDistLockBackend } from './keys.js'
 export { DEFAULT_DIST_LOCK_OPTIONS, type DistLockConfig, type DistLockOptions } from './options.js'
 export { DistributedLock, type DistLockConfigurer } from './plugin.js'
+export type { StoreOperation, StoreTimeoutBound } from './store_call.js'

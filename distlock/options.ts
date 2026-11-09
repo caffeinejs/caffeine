@@ -18,6 +18,15 @@ export interface DistLockOptions {
    * jitter they all attempt again on the same tick.
    */
   retryJitter: number
+
+  /**
+   * How long one backend call may take before the caller stops waiting for it.
+   *
+   * An acquisition waits at most `min(storeTimeout, ttl)` and an extension at most what is left of the lease, so
+   * an answer that could only carry a lease already gone is never waited for. A lease that arrives after the
+   * caller gave up is released with its own token.
+   */
+  storeTimeout: Duration
 }
 
 export const DEFAULT_DIST_LOCK_OPTIONS: DistLockOptions = {
@@ -25,6 +34,7 @@ export const DEFAULT_DIST_LOCK_OPTIONS: DistLockOptions = {
   wait: 5 * Second,
   retryDelay: 100 * Millisecond,
   retryJitter: 0.5,
+  storeTimeout: 5 * Second,
 }
 
 /**
@@ -39,4 +49,5 @@ export interface DistLockConfig {
   wait?: Duration
   retryDelay?: Duration
   retryJitter?: number
+  storeTimeout?: Duration
 }

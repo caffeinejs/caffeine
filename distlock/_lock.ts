@@ -6,6 +6,7 @@ import type { Backend, LockLease } from './backend.js'
 import type { DistLock, Lock } from './distlock.js'
 import type { ExtendContext, ReleaseContext, WithLockContext } from './observability/channels.js'
 import type { DistLockOptions } from './options.js'
+import { boundedCall } from './store_call.js'
 
 // What a lock needs from the service that handed it out. Declared here, over a type-only import, so the two
 // modules share no runtime dependency. It extends `DistLock` because every context a lock publishes names the
@@ -14,6 +15,9 @@ export interface LockHost extends DistLock {
   readonly backend: Backend
   readonly options: DistLockOptions
   readonly log: Logger
+
+  // Releases a lease that arrived after nobody wanted it any more.
+  giveBack(lease: LockLease): void
 }
 
 // Process-wide rather than per service, so a lease ID is unique across every lock service in the process.
@@ -188,10 +192,31 @@ export class HeldLock implements Lock {
   // Every state change an extension makes happens here, before the promise settles, so a subscriber reading the
   // lock at `asyncEnd` sees it as it now is. The one exception is the loss a failed renewal causes: `#renew`
   // marks that after the channel has settled, so the loss is published after the failure.
+  //
+  // Waits at most what is left of the lease, or `storeTimeout` when that is shorter: an answer arriving after the
+  // lease lapsed could only extend one already gone.
   async #extendLease(ttl: Duration, renewal: boolean, ctx: Writable<ExtendContext> | undefined): Promise<boolean> {
+    const { storeTimeout } = this.#host.options
+    const remaining = Math.max(1, this.#lease.expiresAt - Date.now())
+    const sent = this.#lease
+
     let next: LockLease | undefined
     try {
-      next = await this.#host.backend.extend(this.#lease, ttl)
+      next = await boundedCall(
+        {
+          operation: 'extend',
+          key: this.key,
+          timeout: Math.min(storeTimeout, remaining),
+          bound: storeTimeout <= remaining ? 'storeTimeout' : 'ttl',
+        },
+        signal => this.#host.backend.extend(sent, ttl, signal),
+        late => this.#adoptLate(late, sent, renewal),
+        (error: unknown) =>
+          this.#host.log.debug(
+            { err: error, key: this.key, leaseID: this.leaseID, operation: 'extend' },
+            'lock backend failed late',
+          ),
+      )
     } catch (error) {
       this.#host.log.warn(
         { err: error, key: this.key, leaseID: this.leaseID, operation: 'extend' },
@@ -237,6 +262,23 @@ export class HeldLock implements Lock {
     return true
   }
 
+  // An extension that answered after the lock stopped waiting for it. A lock still held, whose lease nothing has
+  // replaced since, carries it from here on. Anything else gives it back, or a backend that rotates the token on
+  // extend would keep the key under a token nobody holds. A renewal that timed out always gives it back: it marks
+  // the lease lost, possibly only after this runs.
+  #adoptLate(late: LockLease | undefined, sent: LockLease, renewal: boolean): void {
+    if (late === undefined) {
+      return
+    }
+
+    if (renewal || this.#released || this.#taken || this.#lease !== sent) {
+      this.#host.giveBack(late)
+      return
+    }
+
+    this.#lease = late
+  }
+
   #lose(reason: 'taken' | 'error', renewal: boolean): void {
     this.#taken = true
     this.stopRenewal()
@@ -266,7 +308,17 @@ export class HeldLock implements Lock {
       // Sent even when the lease looks lapsed by the local clock: the backend compares tokens, so it is the
       // one that decides, and a release that arrives late is a no-op rather than a key taken from its new
       // holder.
-      await this.#host.backend.release(this.#lease)
+      const lease = this.#lease
+      await boundedCall(
+        { operation: 'release', key: this.key, timeout: this.#host.options.storeTimeout, bound: 'storeTimeout' },
+        signal => this.#host.backend.release(lease, signal),
+        undefined,
+        (error: unknown) =>
+          this.#host.log.debug(
+            { err: error, key: this.key, leaseID: this.leaseID, operation: 'release' },
+            'lock backend failed late',
+          ),
+      )
     } catch (error) {
       this.#host.log.warn(
         { err: error, key: this.key, leaseID: this.leaseID, operation: 'release' },

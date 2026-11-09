@@ -26,10 +26,12 @@ export const DIST_LOCK_CHANNELS = {
 export type AcquireMode = 'try' | 'wait' | 'once'
 
 /**
- * How an acquisition ended. `held` is a single attempt that found the key taken; `timeout` is `acquire` spending
- * its whole `wait` budget; `aborted` is the caller's signal, which is not a backend failure.
+ * How an acquisition ended. `held` is a single attempt that found the key taken; `expired` is a single attempt
+ * whose lease arrived already lapsed, and was given back; `timeout` is `acquire` spending its whole `wait`
+ * budget; `aborted` is the caller's signal, which is not a backend failure. A backend call that outlived
+ * `storeTimeout` is `error`, with `error` an `ErrLockBackendTimeout`.
  */
-export type AcquireOutcome = 'acquired' | 'held' | 'timeout' | 'aborted' | 'error'
+export type AcquireOutcome = 'acquired' | 'held' | 'expired' | 'timeout' | 'aborted' | 'error'
 
 /** How an extension ended. `lost` means the backend no longer holds the key under this lease's token. */
 export type ExtendOutcome = 'extended' | 'lost' | 'error'

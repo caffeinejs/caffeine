@@ -5,7 +5,7 @@ import type { Duration } from '@caffeinejs/std/duration'
 import { acquireChannel, onceChannel, publishContended, traced, withLockChannel, type Writable } from './_channels.js'
 import { HeldLock } from './_lock.js'
 import { type Backend, type LockLease } from './backend.js'
-import { ErrLockNotAcquired } from './errors.js'
+import { ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
 import type {
   AcquireContext,
   AcquireMode,
@@ -16,6 +16,7 @@ import type {
 } from './observability/channels.js'
 import { LockEvents } from './observability/events.js'
 import { type DistLockOptions } from './options.js'
+import { boundedCall, type StoreCall } from './store_call.js'
 
 /** A lease this process currently holds. */
 export interface Lock {
@@ -101,17 +102,31 @@ export interface DistLock {
    */
   readonly events: LockEvents
 
-  /** One attempt. `undefined` when the key is held by someone else. */
+  /**
+   * One attempt. `undefined` when the key is held by someone else, or when the lease the backend handed out had
+   * already lapsed by the time it arrived.
+   *
+   * @throws ErrLockBackendTimeout when the backend did not answer within `min(storeTimeout, ttl)`.
+   * @throws ErrInvalidLockKey when the key is empty or not a string.
+   */
   tryAcquire(key: string, options?: AcquireOptions): Promise<Lock | undefined>
 
   /**
-   * Retries until the key is taken.
+   * Retries until the key is taken. One attempt can outlast `wait` by up to `min(storeTimeout, ttl)`. A backend
+   * that did not answer in time is retried while `wait` remains; any other backend error rejects at once.
    *
-   * @throws ErrLockNotAcquired when the `wait` budget runs out, and whatever `signal` aborted with when it aborts.
+   * @throws ErrLockNotAcquired when the `wait` budget runs out on contention, ErrLockBackendTimeout when it runs
+   * out with the last attempt unanswered, and whatever `signal` aborted with when it aborts.
+   * @throws ErrInvalidLockKey when the key is empty or not a string.
    */
   acquire(key: string, options?: AcquireOptions): Promise<Lock>
 
-  /** Acquires the key, runs the action, and releases in a `finally` — on success and on throw alike. */
+  /**
+   * Acquires the key, runs the action, and releases in a `finally` — on success and on throw alike.
+   *
+   * A release that fails after the action returned is logged, not thrown: the result stands and the lease lapses
+   * at `expiresAt`.
+   */
   withLock<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options?: AcquireOptions): Promise<T>
 
   /**
@@ -176,7 +191,28 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     this.#events?.removeAllListeners()
   }
 
+  /**
+   * Releases a lease the backend handed over after its caller stopped waiting, or after its holder let go, so the
+   * key does not stay taken for a whole lease with nobody holding it. The backend compares tokens, so this never
+   * frees a key another holder has since taken.
+   */
+  giveBack(lease: LockLease): void {
+    const call: StoreCall = {
+      operation: 'release',
+      key: lease.key,
+      timeout: this.options.storeTimeout,
+      bound: 'storeTimeout',
+    }
+
+    boundedCall(call, signal => this.backend.release(lease, signal)).then(
+      () => this.log.debug({ key: lease.key }, 'lock lease given back'),
+      // Whatever made the lease late or unwanted was already warned about; the lease lapses at its ttl.
+      (error: unknown) => this.log.debug({ err: error, key: lease.key }, 'lock lease give-back failed'),
+    )
+  }
+
   async tryAcquire(key: string, options: AcquireOptions = {}): Promise<Lock | undefined> {
+    checkKey(key)
     const ttl = options.ttl ?? this.options.ttl
 
     return traced(
@@ -187,10 +223,12 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   }
 
   async acquire(key: string, options: AcquireOptions = {}): Promise<Lock> {
+    checkKey(key)
     return this.#acquireTraced(key, options)
   }
 
   async withLock<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options: AcquireOptions = {}): Promise<T> {
+    checkKey(key)
     return traced(
       withLockChannel,
       (): Writable<WithLockContext> => ({ service: this, key }),
@@ -199,6 +237,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   }
 
   async once<T>(key: string, fn: () => T | Promise<T>, options: OnceOptions = {}): Promise<OnceResult<T>> {
+    checkKey(key)
     const ttl = options.ttl ?? this.options.ttl
 
     return traced(
@@ -228,16 +267,16 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   ): Promise<HeldLock | undefined> {
     const started = Date.now()
 
-    let lease: LockLease | undefined
+    let lease: LockLease | Miss
     try {
-      lease = await this.#attempt(key, ttl, signal, 1)
+      lease = await this.#attempt(key, ttl, signal, { attempts: 1, failed: false, expired: false })
     } catch (error) {
       this.#settleAcquire(ctx, key, signal?.aborted === true ? 'aborted' : 'error', 1, started)
       throw error
     }
 
-    if (lease === undefined) {
-      this.#settleAcquire(ctx, key, 'held', 1, started)
+    if (typeof lease === 'string') {
+      this.#settleAcquire(ctx, key, lease, 1, started)
       return undefined
     }
 
@@ -257,7 +296,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     const retryDelay = options.retryDelay ?? this.options.retryDelay
     const started = Date.now()
     const deadline = started + wait
-    const tally = { attempts: 0 }
+    const tally: Tally = { attempts: 0, failed: false, expired: false }
 
     let lease: LockLease | undefined
     try {
@@ -279,26 +318,40 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   }
 
   // Attempts until the key is taken or the deadline passes, which is `undefined`. Counts into `tally` so a
-  // caller that sees it throw still knows how many attempts were made.
+  // caller that sees it throw still knows how many attempts were made. An attempt the backend did not answer in
+  // time is retried like a contended one; when the deadline passes on one, its timeout is what the caller gets.
   async #retry(
     key: string,
     ttl: Duration,
     deadline: number,
     retryDelay: Duration,
     signal: AbortSignal | undefined,
-    tally: { attempts: number },
+    tally: Tally,
   ): Promise<LockLease | undefined> {
     for (;;) {
       signal?.throwIfAborted()
 
       tally.attempts += 1
-      const lease = await this.#attempt(key, ttl, signal, tally.attempts)
-      if (lease !== undefined) {
-        return lease
+      let timedOut: ErrLockBackendTimeout | undefined
+      try {
+        const lease = await this.#attempt(key, ttl, signal, tally)
+        if (typeof lease !== 'string') {
+          return lease
+        }
+      } catch (error) {
+        if (!(error instanceof ErrLockBackendTimeout) || signal?.aborted === true) {
+          throw error
+        }
+
+        timedOut = error
       }
 
       const now = Date.now()
       if (now >= deadline) {
+        if (timedOut !== undefined) {
+          throw timedOut
+        }
+
         return undefined
       }
 
@@ -306,20 +359,42 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     }
   }
 
-  // The one place the backend is asked for a key.
-  async #attempt(
-    key: string,
-    ttl: Duration,
-    signal: AbortSignal | undefined,
-    attempt: number,
-  ): Promise<LockLease | undefined> {
+  // The one place the backend is asked for a key. Waits at most `min(storeTimeout, ttl)`: an answer arriving
+  // after `ttl` could only carry a lease already gone. A lease that arrives after the caller stopped waiting, or
+  // already lapsed, is given back and never reaches the caller.
+  async #attempt(key: string, ttl: Duration, signal: AbortSignal | undefined, tally: Tally): Promise<LockLease | Miss> {
+    const { storeTimeout } = this.options
+    const attempt = tally.attempts
+
     let lease: LockLease | undefined
     try {
-      lease = await this.backend.tryAcquire(key, ttl, signal)
+      lease = await boundedCall(
+        {
+          operation: 'acquire',
+          key,
+          timeout: Math.min(storeTimeout, ttl),
+          bound: storeTimeout <= ttl ? 'storeTimeout' : 'ttl',
+          signal,
+        },
+        bounded => this.backend.tryAcquire(key, ttl, bounded),
+        late => {
+          if (late !== undefined) {
+            this.giveBack(late)
+          }
+        },
+        (error: unknown) => this.log.debug({ err: error, key, operation: 'acquire' }, 'lock backend failed late'),
+      )
     } catch (error) {
-      // A backend that gave up because the caller aborted did nothing wrong.
+      // A backend that gave up because the caller aborted did nothing wrong. One incident per call: the attempts
+      // after the first that failed are its consequences.
       if (signal?.aborted !== true) {
-        this.log.warn({ err: error, key, operation: 'acquire' }, 'lock backend failed')
+        const fields = { err: error, key, operation: 'acquire' }
+        if (tally.failed) {
+          this.log.debug(fields, 'lock backend failed')
+        } else {
+          this.log.warn(fields, 'lock backend failed')
+        }
+        tally.failed = true
       }
 
       throw error
@@ -328,6 +403,19 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     if (lease === undefined) {
       this.log.trace({ key, attempt }, 'lock contended')
       publishContended(() => ({ service: this, key, attempt }))
+      return 'held'
+    }
+
+    if (lease.expiresAt <= Date.now()) {
+      const fields = { key, ttlMs: ttl, expiresAt: lease.expiresAt }
+      if (tally.expired) {
+        this.log.debug(fields, 'lock lease expired in transit')
+      } else {
+        this.log.warn(fields, 'lock lease expired in transit')
+      }
+      tally.expired = true
+      this.giveBack(lease)
+      return 'expired'
     }
 
     return lease
@@ -357,7 +445,9 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     }
 
     settleHold(ctx, lock)
-    await lock.release()
+    // The action's result is what the caller asked for. A release that fails was logged as a backend failure, and
+    // the lease it could not hand back lapses at `expiresAt`.
+    await lock.release().catch(() => undefined)
 
     return result
   }
@@ -480,6 +570,23 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     } else {
       this.log.debug(fields, 'lock once settled')
     }
+  }
+}
+
+// An attempt that did not take the key: found held, or handed a lease that had already lapsed.
+type Miss = 'held' | 'expired'
+
+// What one `acquire` call has done so far: its attempts, and whether a backend failure or a lease that arrived
+// expired was already warned about.
+interface Tally {
+  attempts: number
+  failed: boolean
+  expired: boolean
+}
+
+function checkKey(key: unknown): void {
+  if (typeof key !== 'string' || key === '') {
+    throw new ErrInvalidLockKey(key)
   }
 }
 
