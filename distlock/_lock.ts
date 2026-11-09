@@ -434,8 +434,8 @@ export class HeldLock implements Lock {
       return
     }
 
-    if (held) {
-      if (this.#lease === sent) {
+    if (held && (this.#lease === sent || late.token === this.#lease.token)) {
+      if (this.#lease === sent || late.expiresAt < this.#lease.expiresAt) {
         this.#lease = late
         if (renewal) {
           this.#renewalFailed = false
@@ -443,18 +443,8 @@ export class HeldLock implements Lock {
         if (!this.#detached) {
           this.#armDeadline()
         }
-        return
       }
-
-      if (late.token === this.#lease.token) {
-        if (late.expiresAt < this.#lease.expiresAt) {
-          this.#lease = late
-          if (!this.#detached) {
-            this.#armDeadline()
-          }
-        }
-        return
-      }
+      return
     }
 
     this.#host.giveBack(late)
