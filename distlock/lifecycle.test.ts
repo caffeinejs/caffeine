@@ -325,6 +325,19 @@ describe('distlock shutdown', () => {
 })
 
 describe('distlock lifecycle', () => {
+  // `await using` and an explicit release in the same scope both release: the second must not send a release that
+  // could land after another replica took the key, nor hold up a shutdown waiting for it.
+  it('sends one release to the backend when a lock is released twice', async () => {
+    const backend = new FaultyBackend()
+    const { lock } = await newApp(backend)
+
+    const held = await lock.acquire('a', { ttl: 1 * Minute })
+    await held.release()
+    await held.release()
+
+    expect(backend.released.map(lease => lease.key)).toEqual(['a'])
+  })
+
   // An unref'd timer cannot hold the process open, but one left behind still fires a loss nobody can act on.
   it('lets no deadline timer keep the process alive after the lock is released', async () => {
     const { lock } = await newApp(new MemoryLockBackend())
