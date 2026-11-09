@@ -13,6 +13,9 @@ export class FaultyBackend implements Backend {
   failAcquire = false
   failExtend = false
 
+  /** Hands out leases whose fencing token is `0`, which breaks the contract. */
+  badFencing = false
+
   /** Operations whose calls never settle, and never take effect. */
   readonly hang = new Set<StoreOperation>()
 
@@ -37,7 +40,10 @@ export class FaultyBackend implements Backend {
       return Promise.reject(new Error('backend down'))
     }
 
-    return this.#run('acquire', () => this.#inner.tryAcquire(key, ttl))
+    return this.#run('acquire', async () => {
+      const lease = await this.#inner.tryAcquire(key, ttl)
+      return this.badFencing && lease !== undefined ? { ...lease, fencingToken: 0 } : lease
+    })
   }
 
   extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {

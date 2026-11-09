@@ -1,10 +1,11 @@
 import type { Logger } from '@caffeinejs/application/logger'
 import type { Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { extendChannel, publishLost, releaseChannel, traced, type Writable } from './_channels.js'
 import type { Backend, LockLease } from './backend.js'
 import type { DistLock, Lock } from './distlock.js'
-import { ErrLockLost, ErrLockReleased } from './errors.js'
+import { ErrLockBackendContract, ErrLockLost, ErrLockReleased } from './errors.js'
 import type { ExtendContext, LostReason, ReleaseContext, WithLockContext } from './observability/channels.js'
 import type { DistLockOptions } from './options.js'
 import { boundedCall } from './store_call.js'
@@ -23,6 +24,37 @@ export interface LockHost extends DistLock {
 
 // The longest delay `setTimeout` honours; a longer deadline is reached in steps of at most this.
 const MAX_TIMER_DELAY = 2 ** 31 - 1
+
+// What is wrong with a lease's fencing token, if anything: not a positive safe integer, or, for an extension,
+// not the token of the lease it extended. A fencing token numbers an acquisition, not a renewal.
+export function fencingViolation(lease: LockLease, extended?: LockLease): ErrLockBackendContract | undefined {
+  const token = lease.fencingToken
+  if (!Number.isSafeInteger(token) || token <= 0) {
+    return new ErrLockBackendContract(
+      lease.key,
+      errMessage(
+        `Cannot accept a lease for "${lease.key}" from the lock backend: fencing token "${String(token)}" is not a positive safe integer`,
+      )
+        .solutions('Issue a strictly increasing positive integer per key from Backend.tryAcquire')
+        .reference('@caffeinejs/distlock', ErrLockBackendContract)
+        .build(),
+    )
+  }
+
+  if (extended !== undefined && token !== extended.fencingToken) {
+    return new ErrLockBackendContract(
+      lease.key,
+      errMessage(
+        `Cannot accept an extended lease for "${lease.key}": extend changed the fencing token from "${extended.fencingToken}" to "${token}"`,
+      )
+        .solutions('Return the fencing token of the lease passed to Backend.extend')
+        .reference('@caffeinejs/distlock', ErrLockBackendContract)
+        .build(),
+    )
+  }
+
+  return undefined
+}
 
 // Process-wide rather than per service, so a lease ID is unique across every lock service in the process.
 let nextLeaseID = 0
@@ -83,6 +115,10 @@ export class HeldLock implements Lock {
 
   get expiresAt(): number {
     return this.#lease.expiresAt
+  }
+
+  get fencingToken(): number {
+    return this.#lease.fencingToken
   }
 
   get lost(): boolean {
@@ -329,6 +365,30 @@ export class HeldLock implements Lock {
       throw error
     }
 
+    // A backend that changed the token breaks fencing for every write after this one: the lease is given back
+    // and the lock lost rather than carried on under a number the resource cannot trust.
+    const violation = next === undefined ? undefined : fencingViolation(next, sent)
+    if (violation !== undefined) {
+      this.#host.log.warn(
+        { err: violation, key: this.key, leaseID: this.leaseID, operation: 'extend' },
+        'lock backend failed',
+      )
+      this.#host.giveBack(next!)
+
+      if (ctx !== undefined) {
+        ctx.outcome = 'error'
+      }
+
+      if (renewal) {
+        // Not retried: `#renew` marks the lease lost once the channel has settled.
+        this.#givingUp = true
+      } else {
+        this.#lose('error', false)
+      }
+
+      throw violation
+    }
+
     if (next === undefined) {
       if (ctx !== undefined) {
         ctx.outcome = 'lost'
@@ -377,6 +437,18 @@ export class HeldLock implements Lock {
     }
 
     if (!(renewal && this.#givingUp) && !this.#released && !this.#taken) {
+      const violation = this.#lease === sent ? fencingViolation(late, sent) : undefined
+      if (violation !== undefined) {
+        // Refused as an on-time answer is: the lease cannot be trusted, so it is given back and the lock lost.
+        this.#host.log.warn(
+          { err: violation, key: this.key, leaseID: this.leaseID, operation: 'extend' },
+          'lock backend failed late',
+        )
+        this.#host.giveBack(late)
+        this.#lose('error', renewal)
+        return
+      }
+
       if (this.#lease === sent) {
         this.#lease = late
         if (renewal) {

@@ -6,6 +6,7 @@ export {
   ErrDistLock,
   ErrDistLockConfiguration,
   ErrInvalidLockKey,
+  ErrLockBackendContract,
   ErrLockBackendTimeout,
   ErrLockLost,
   ErrLockNotAcquired,

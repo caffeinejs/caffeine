@@ -13,6 +13,18 @@ export interface LockLease {
   readonly token: string
 
   /**
+   * A positive safe integer greater than every token this backend issued for the key before, as long as its clock
+   * does not step back and its state is not restored from an older copy. {@link Backend.extend} keeps it: it
+   * numbers an acquisition, not a renewal.
+   *
+   * The token is what a protected resource checks: it stores the highest token it has seen and refuses a write
+   * carrying a lower one, so a holder that resumed after its lease was taken over cannot overwrite its successor.
+   * The ownership token protects the lock record; this protects the data. The included backends issue
+   * `max(last token for the key + 1, their clock in microseconds)`, so tokens are large and never start at 1.
+   */
+  readonly fencingToken: number
+
+  /**
    * Epoch milliseconds after which the holder must treat the lease as gone.
    *
    * The backend computes it, not the caller. One that spends real time acquiring — a quorum round across

@@ -6,7 +6,19 @@ import type { Backend, LockLease } from '../../backend.js'
 
 interface Held {
   token: string
+  fencingToken: number
   expiresAt: number
+}
+
+// Shared by every instance in the process, so a token stays greater than every one issued before even when the
+// key's state is gone: after an expiry, a release, or a new backend instance.
+let lastFence = 0
+
+// Greater than the last token issued, and never below the clock in microseconds, so tokens keep increasing across
+// state the backend no longer has.
+function nextFence(): number {
+  lastFence = Math.max(lastFence + 1, Date.now() * 1000)
+  return lastFence
 }
 
 /**
@@ -28,8 +40,8 @@ export class MemoryLockBackend implements Backend {
       return Promise.resolve(undefined)
     }
 
-    const lease = { key, token: randomUUID(), expiresAt: Date.now() + ttl }
-    this.#held.set(key, { token: lease.token, expiresAt: lease.expiresAt })
+    const lease = { key, token: randomUUID(), fencingToken: nextFence(), expiresAt: Date.now() + ttl }
+    this.#held.set(key, { token: lease.token, fencingToken: lease.fencingToken, expiresAt: lease.expiresAt })
 
     return Promise.resolve(lease)
   }
@@ -46,7 +58,12 @@ export class MemoryLockBackend implements Backend {
 
     held.expiresAt = Date.now() + ttl
 
-    return Promise.resolve({ key: lease.key, token: lease.token, expiresAt: held.expiresAt })
+    return Promise.resolve({
+      key: lease.key,
+      token: lease.token,
+      fencingToken: held.fencingToken,
+      expiresAt: held.expiresAt,
+    })
   }
 
   release(lease: LockLease, signal?: AbortSignal): Promise<void> {

@@ -134,3 +134,17 @@ export class ErrLockReleased extends ErrDistLock {
     this.key = key
   }
 }
+
+/**
+ * Thrown when a backend returned a lease that breaks the `Backend` contract: a fencing token that is not a positive
+ * safe integer, or an `extend` that changed it. The lease is given back before this is thrown.
+ */
+export class ErrLockBackendContract extends ErrDistLock {
+  readonly key: string
+
+  constructor(key: string, message: string) {
+    super(message, 'ERR_LOCK_BACKEND_CONTRACT')
+    this.name = 'ErrLockBackendContract'
+    this.key = key
+  }
+}

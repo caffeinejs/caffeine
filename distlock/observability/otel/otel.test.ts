@@ -137,6 +137,7 @@ describe('instrumentDistLock spans', () => {
     expect(release.parentSpanContext?.spanId).toBe(withLock.spanContext().spanId)
 
     expect(acquire.attributes).toMatchObject({ 'distlock.outcome': 'acquired', 'distlock.mode': 'wait' })
+    expect(Number.isSafeInteger(acquire.attributes['distlock.fencing_token'])).toBe(true)
     expect(release.attributes['distlock.lease_id']).toBe(acquire.attributes['distlock.lease_id'])
     expect(release.attributes['distlock.lapsed']).toBe(false)
   })

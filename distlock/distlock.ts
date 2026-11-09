@@ -3,7 +3,7 @@ import { type OnDestroy } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
 
 import { acquireChannel, onceChannel, publishContended, traced, withLockChannel, type Writable } from './_channels.js'
-import { HeldLock } from './_lock.js'
+import { fencingViolation, HeldLock } from './_lock.js'
 import { type Backend, type LockLease } from './backend.js'
 import { ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
 import type {
@@ -25,6 +25,14 @@ export interface Lock {
 
   /** Identifies this lease in every event it produces, from acquisition to release. */
   readonly leaseID: number
+
+  /**
+   * Greater than every token this backend issued for the key before, as long as its clock does not step back and
+   * its state is not restored from an older copy. A resource that wants stale-writer protection stores the highest
+   * token it has seen and refuses lower ones: a holder that resumed after its lease was taken over then cannot
+   * overwrite its successor. Renewals keep it.
+   */
+  readonly fencingToken: number
 
   /** Epoch milliseconds the lease is good until, as the backend reported it. */
   readonly expiresAt: number
@@ -394,6 +402,13 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
         },
         (error: unknown) => this.log.debug({ err: error, key, operation: 'acquire' }, 'lock backend failed late'),
       )
+
+      // A lease whose token the resource cannot trust never reaches the caller.
+      const violation = lease === undefined ? undefined : fencingViolation(lease)
+      if (violation !== undefined) {
+        this.giveBack(lease!)
+        throw violation
+      }
     } catch (error) {
       // A backend that gave up because the caller aborted did nothing wrong. One incident per call: the attempts
       // after the first that failed are its consequences.
@@ -544,6 +559,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
       if (lock !== undefined) {
         ctx.leaseID = lock.leaseID
         ctx.expiresAt = lock.expiresAt
+        ctx.fencingToken = lock.fencingToken
       }
     }
 

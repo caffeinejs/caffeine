@@ -259,6 +259,7 @@ function endAttributes(operation: TracedOperation, ctx: LockEventBase): Attribut
         'distlock.outcome': acquire.outcome,
         'distlock.attempts': acquire.attempts,
         'distlock.lease_id': acquire.leaseID,
+        'distlock.fencing_token': acquire.fencingToken,
       })
     }
     case 'withLock': {

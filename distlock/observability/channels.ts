@@ -73,6 +73,8 @@ export interface AcquireContext extends LockEventBase, TracedFailure {
   /** Present when `outcome` is `acquired`. */
   readonly leaseID?: number
   readonly expiresAt?: number
+  /** The acquired lease's fencing token, present when `outcome` is `acquired`. */
+  readonly fencingToken?: number
 }
 
 export interface WithLockContext extends LockEventBase, TracedFailure {

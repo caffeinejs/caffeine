@@ -26,10 +26,13 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics'
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
-import { createClient, SocketClosedUnexpectedlyError } from '@redis/client'
+import { createClient, createCluster, SocketClosedUnexpectedlyError } from '@redis/client'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
+import { startWorkers, type Worker } from './internal/distlock/cluster.js'
+import { resourceKeys } from './internal/distlock/fenced_resource.js'
 import { relayedClient, type RelayedClient } from './internal/distlock/outage.js'
+import type { WorkerReply } from './internal/distlock/worker.js'
 import { reachable } from './internal/redis/index.js'
 import { required } from './internal/strict.js'
 
@@ -341,6 +344,108 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
       })
     })
 
+    // A fencing token is what a resource uses to turn away a holder whose lease lapsed, so it only protects anything
+    // while every later acquisition of a key carries a greater one, whichever client takes it.
+    describe('fencing tokens', () => {
+      const ACQUISITIONS = 200
+
+      it(`issues strictly increasing fencing tokens to ${ACQUISITIONS} acquisitions of one key spread over every client`, async () => {
+        const k = key('fence-mono')
+        const tokens: number[] = []
+
+        await Promise.all(
+          locks.map(async (lock, client) => {
+            for (let round = client; round < ACQUISITIONS; round += CLIENTS) {
+              // Recorded inside the section, so the array is in acquisition order.
+              await lock.withLock(k, held => void tokens.push(held.fencingToken), { wait: 30 * Second, retryDelay: 5 })
+            }
+          }),
+        )
+
+        expect(tokens).toHaveLength(ACQUISITIONS)
+        for (let i = 1; i < tokens.length; i++) {
+          expect(tokens[i]).toBeGreaterThan(tokens[i - 1])
+        }
+      })
+
+      it('issues a greater token after the fence key was deleted', async () => {
+        const k = key('fence-deleted')
+        const first = await locks[0].acquire(k)
+        await first.release()
+
+        expect(await admin.del(`{${k}}:fence`)).toBe(1)
+        const second = await locks[1].acquire(k)
+        await second.release()
+
+        expect(second.fencingToken).toBeGreaterThan(first.fencingToken)
+      })
+
+      describe('across processes', () => {
+        let workers: Worker[] = []
+
+        beforeEach(async () => {
+          workers = await startWorkers(2, url)
+        })
+
+        afterEach(async () => {
+          await Promise.all(workers.map(worker => worker.close()))
+        })
+
+        it('rejects a write from a holder that resumed after its lease was taken over', async () => {
+          const [a, b] = workers
+          const k = key('fence-stale')
+          const ttl = 500 * Millisecond
+          const { value } = resourceKeys(k)
+
+          const heldByA = await a.request({ op: 'tryAcquire', key: k, ttl, renew: false })
+          expect(heldByA.acquired).toBe(true)
+          expect((await a.request({ op: 'write', key: k, value: 'a1' })).accepted).toBe(true)
+
+          a.pause()
+          let heldByB: WorkerReply = { id: 0 }
+          await waitFor(async () => {
+            heldByB = await b.request({ op: 'tryAcquire', key: k, ttl: 10 * Second, renew: false })
+            return heldByB.acquired === true
+          }, 5 * Second)
+          expect((await b.request({ op: 'write', key: k, value: 'b1' })).accepted).toBe(true)
+          a.resume()
+
+          expect((await a.request({ op: 'write', key: k, value: 'a2' })).accepted).toBe(false)
+          expect(await admin.get(value)).toBe('b1')
+          expect(heldByB.fencingToken).toBeGreaterThan(heldByA.fencingToken!)
+          expect(await a.request({ op: 'status', key: k })).toMatchObject({
+            lost: true,
+            signalReason: { code: 'ERR_LOCK_LOST', reason: 'expired' },
+          })
+          await b.request({ op: 'release', key: k })
+        })
+
+        it("keeps a renewing holder's writes accepted across a pause shorter than its lease", async () => {
+          const [a, b] = workers
+          const k = key('fence-renewing')
+          // A pause far shorter than the lease, so a busy machine cannot stretch it past the lease.
+          const ttl = 10 * Second
+          const pause = 2 * Second
+
+          expect((await a.request({ op: 'tryAcquire', key: k, ttl, renew: true })).acquired).toBe(true)
+          expect((await a.request({ op: 'write', key: k, value: 'a1' })).accepted).toBe(true)
+
+          a.pause()
+          // Probed through the pause: the key the paused holder renewed before stopping is still its own.
+          const deadline = performance.now() + pause
+          while (performance.now() < deadline) {
+            expect((await b.request({ op: 'tryAcquire', key: k, ttl, renew: false })).acquired).toBe(false)
+            await sleep(50)
+          }
+          a.resume()
+
+          expect((await a.request({ op: 'write', key: k, value: 'a2' })).accepted).toBe(true)
+          expect(await a.request({ op: 'status', key: k })).toMatchObject({ lost: false })
+          await a.request({ op: 'release', key: k })
+        })
+      })
+    })
+
     // One row is enough: the instrumentation reads the core's channels, not the server.
     if (name === 'Redis') {
       describe('with OpenTelemetry', () => {
@@ -522,5 +627,39 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
         await next.release()
       })
     })
+  })
+})
+
+// One-node clusters still answer CROSSSLOT, so they prove the script that numbers a lease names keys of one slot.
+const CLUSTERS = [
+  { name: 'Redis cluster', url: process.env.REDIS_CLUSTER_URL ?? 'redis://127.0.0.1:6381' },
+  { name: 'Valkey cluster', url: process.env.VALKEY_CLUSTER_URL ?? 'redis://127.0.0.1:6382' },
+]
+
+const clusterTargets = await Promise.all(
+  CLUSTERS.map(async server => ({ ...server, up: required(server.name, await reachable(server.url)) })),
+)
+
+describe.each(clusterTargets)('distlock over $name', ({ name, url, up }) => {
+  it.skipIf(!up)("keeps fencing tokens in the lock key's slot on a one-node cluster, hash tag or not", async () => {
+    const cluster = createCluster({ rootNodes: [{ url }] })
+    await cluster.connect()
+    const lock = newLock(cluster)
+    // A key with a hash tag of its own keeps it: wrapped again, its fence key would hash elsewhere.
+    const keys = [`caffeine:distlock:e2e:${RUN}:${name}:fence-cluster`, `{${RUN}}:${name}:fence-cluster-tagged`]
+
+    try {
+      for (const k of keys) {
+        const first = await lock.acquire(k)
+        await first.release()
+        const second = await lock.acquire(k)
+        await second.release()
+
+        expect(second.fencingToken).toBeGreaterThan(first.fencingToken)
+      }
+    } finally {
+      await lock.onDestroy()
+      await cluster.close()
+    }
   })
 })

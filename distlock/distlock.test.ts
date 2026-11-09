@@ -7,7 +7,14 @@ import type { Backend, LockLease } from './backend.js'
 import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLock, Lock } from './distlock.js'
-import { ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockLost, ErrLockNotAcquired, ErrLockReleased } from './errors.js'
+import {
+  ErrInvalidLockKey,
+  ErrLockBackendContract,
+  ErrLockBackendTimeout,
+  ErrLockLost,
+  ErrLockNotAcquired,
+  ErrLockReleased,
+} from './errors.js'
 import { kDistLock } from './keys.js'
 import { RecordingLogger } from './log.testkit.js'
 import type { LostMessage } from './observability/channels.js'
@@ -118,6 +125,24 @@ class TakenAtExpiryBackend implements Backend {
 
   release(lease: LockLease): Promise<void> {
     return this.#inner.release(lease)
+  }
+}
+
+/** Answers every extend with the next fencing token, which breaks the contract. */
+class RenumberingBackend implements Backend {
+  readonly inner = new MemoryLockBackend()
+
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    return this.inner.tryAcquire(key, ttl)
+  }
+
+  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    const extended = await this.inner.extend(lease, ttl)
+    return extended === undefined ? undefined : { ...extended, fencingToken: extended.fencingToken + 1 }
+  }
+
+  release(lease: LockLease): Promise<void> {
+    return this.inner.release(lease)
   }
 }
 
@@ -708,5 +733,81 @@ describe('lock signal', () => {
     expect(aborted).toBe(false)
     expect(lost).toEqual([])
     expect(await lock.tryAcquire('yearly-report')).toBeUndefined()
+  })
+})
+
+// A fencing token is what a resource uses to turn away a holder whose lease lapsed. A token the resource cannot
+// order, or one that changes under the holder, would let a stale write through, so it never reaches the caller.
+describe('fencing tokens', () => {
+  it('exposes the token the backend issued, greater on every acquisition of the key', async () => {
+    const lock = await newLock()
+
+    const first = await lock.acquire('orders:rebuild')
+    await first.release()
+    const second = await lock.acquire('orders:rebuild')
+
+    expect(Number.isSafeInteger(first.fencingToken)).toBe(true)
+    expect(first.fencingToken).toBeGreaterThan(0)
+    expect(second.fencingToken).toBeGreaterThan(first.fencingToken)
+    await second.release()
+  })
+
+  it('refuses a lease whose fencing token is not a positive integer, and gives the key back', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    backend.badFencing = true
+
+    const refused = lock.tryAcquire('orders:rebuild')
+
+    await expect(refused).rejects.toBeInstanceOf(ErrLockBackendContract)
+    await expect(refused).rejects.toMatchObject({ code: 'ERR_LOCK_BACKEND_CONTRACT', key: 'orders:rebuild' })
+    backend.badFencing = false
+    expect(await lock.tryAcquire('orders:rebuild')).not.toBeUndefined()
+  })
+
+  it('refuses an extend that changed the fencing token, aborts the lock and gives the key back', async () => {
+    const backend = new RenumberingBackend()
+    const lock = await newLock(backend)
+    const held = await lock.acquire('orders:rebuild')
+
+    await expect(held.extend(1 * Minute)).rejects.toBeInstanceOf(ErrLockBackendContract)
+
+    expect(held.signal.aborted).toBe(true)
+    expect((held.signal.reason as ErrLockLost).reason).toBe('error')
+    expect(await backend.inner.tryAcquire('orders:rebuild', 1 * Minute)).not.toBeUndefined()
+  })
+
+  it('loses the lock when a renewal changed the fencing token, and gives the key back', async () => {
+    const backend = new RenumberingBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 3 * Second, renew: true })
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    expect((held.signal.reason as ErrLockLost).reason).toBe('error')
+    expect(await backend.inner.tryAcquire('orders:rebuild', 1 * Minute)).not.toBeUndefined()
+  })
+
+  // A late answer is the same answer: one that renumbers the lease is refused as an on-time one is, never adopted
+  // and never silently dropped.
+  it('loses the lock when an extend that answered late changed the fencing token, and gives the key back', async () => {
+    const renumbering = new RenumberingBackend()
+    const backend = new FaultyBackend(renumbering)
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    backend.late = ['extend']
+    const extending = held.extend(10 * Minute).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await extending).toBeInstanceOf(ErrLockBackendTimeout)
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect((held.signal.reason as ErrLockLost).reason).toBe('error')
+    expect(await renumbering.inner.tryAcquire('orders:rebuild', 1 * Minute)).not.toBeUndefined()
   })
 })

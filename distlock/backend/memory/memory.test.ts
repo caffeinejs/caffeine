@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { Minute, Second } from '@caffeinejs/std/duration'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryLockBackend } from './index.js'
 
@@ -77,5 +78,52 @@ describe('MemoryLockBackend', () => {
 
     await backend.release(extended!)
     expect(await backend.tryAcquire('k', 1_000)).toBeDefined()
+  })
+})
+
+// A resource that remembers the highest token it has seen turns away a holder whose lease lapsed; that only works
+// while every later acquisition of the key carries a greater token.
+describe('MemoryLockBackend fencing tokens', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('issues a greater token on every acquisition of a key, across release and expiry', async () => {
+    const backend = new MemoryLockBackend()
+
+    const first = (await backend.tryAcquire('k', 1 * Second))!
+    await backend.release(first)
+    const second = (await backend.tryAcquire('k', 1 * Second))!
+    vi.advanceTimersByTime(2 * Second)
+    const third = (await backend.tryAcquire('k', 1 * Second))!
+
+    expect(Number.isSafeInteger(first.fencingToken)).toBe(true)
+    expect(first.fencingToken).toBeGreaterThan(0)
+    expect(second.fencingToken).toBeGreaterThan(first.fencingToken)
+    expect(third.fencingToken).toBeGreaterThan(second.fencingToken)
+  })
+
+  it('keeps the fencing token across extend', async () => {
+    const backend = new MemoryLockBackend()
+    const lease = (await backend.tryAcquire('k', 1 * Second))!
+
+    const extended = await backend.extend(lease, 1 * Minute)
+
+    expect(extended!.fencingToken).toBe(lease.fencingToken)
+  })
+
+  // A test or an application that builds a second backend in the same process must not hand out a token the
+  // first one already issued, even after the wall clock steps back.
+  it('keeps issuing greater tokens from a new instance after the clock steps back', async () => {
+    const first = (await new MemoryLockBackend().tryAcquire('k', 1 * Second))!
+    vi.setSystemTime(Date.now() - 1 * Minute)
+
+    const second = (await new MemoryLockBackend().tryAcquire('k', 1 * Second))!
+
+    expect(second.fencingToken).toBeGreaterThan(first.fencingToken)
   })
 })

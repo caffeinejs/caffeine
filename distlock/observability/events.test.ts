@@ -72,7 +72,13 @@ describe('DistLock.events', () => {
     const held = await lock.acquire('a')
 
     expect(seen).toHaveLength(1)
-    expect(seen[0]).toMatchObject({ service: lock, key: 'a', outcome: 'acquired', leaseID: held.leaseID })
+    expect(seen[0]).toMatchObject({
+      service: lock,
+      key: 'a',
+      outcome: 'acquired',
+      leaseID: held.leaseID,
+      fencingToken: held.fencingToken,
+    })
   })
 
   // A listener reacting to a lost or lapsed lease has to be able to act before the holder carries on.

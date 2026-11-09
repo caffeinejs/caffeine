@@ -58,7 +58,9 @@ class RotatingBackend implements Backend {
     }
 
     await this.inner.release(lease)
-    return this.inner.tryAcquire(lease.key, ttl)
+    const rotated = await this.inner.tryAcquire(lease.key, ttl)
+    // A new token string, but the same fencing token: extend keeps it.
+    return rotated === undefined ? undefined : { ...rotated, fencingToken: lease.fencingToken }
   }
 
   release(lease: LockLease): Promise<void> {
@@ -215,7 +217,12 @@ describe('distlock lifecycle', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
     const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
-    const first: LockLease = { key: held.key, token: held.token, expiresAt: held.expiresAt }
+    const first: LockLease = {
+      key: held.key,
+      token: held.token,
+      fencingToken: held.fencingToken,
+      expiresAt: held.expiresAt,
+    }
     await vi.advanceTimersByTimeAsync(10 * Second)
     expect(held.token).not.toBe(first.token)
 
