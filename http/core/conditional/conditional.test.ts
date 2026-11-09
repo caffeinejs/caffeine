@@ -87,6 +87,11 @@ describe('preconditionFailed refuses a client whose If-Match or If-Unmodified-Si
     expect(preconditionFailed(' , "v0" ,\t, "v1" , ', undefined, { etag: STRONG })).toBe(false)
   })
 
+  // Empty elements are a well-formed list, but one naming no tag, so nothing in it can match.
+  it('fails for a list of empty elements alone', () => {
+    expect(preconditionFailed(' , ,', undefined, { etag: STRONG })).toBe(true)
+  })
+
   // A value that is no list of entity tags names no tag, though one may be written inside it.
   it('fails for a malformed list, even one holding the current tag', () => {
     for (const value of ['junk"v1"', '"v1"junk', '"v0" "v1"', '"v1", junk', 'W/ "v1"', '"v1", "v 2"']) {
@@ -132,6 +137,10 @@ describe('notModified answers a client that holds the content already', () => {
 
   it('reads a list with whitespace around its commas, empty elements and a comma inside a tag', () => {
     expect(notModified(' , "a,b" ,\t, W/"v1" , ', undefined, { etag: STRONG })).toBe(true)
+  })
+
+  it('does not match a list of empty elements alone', () => {
+    expect(notModified(' , ,', undefined, { etag: STRONG })).toBe(false)
   })
 
   // A value that is no list of entity tags names no tag, though one may be written inside it.
