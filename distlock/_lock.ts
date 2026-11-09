@@ -4,6 +4,7 @@ import type { Duration } from '@caffeinejs/std/duration'
 import { extendChannel, publishLost, releaseChannel, traced, type Writable } from './_channels.js'
 import type { Backend, LockLease } from './backend.js'
 import type { DistLock, Lock } from './distlock.js'
+import { ErrLockBackendTimeout } from './errors.js'
 import type { ExtendContext, ReleaseContext, WithLockContext } from './observability/channels.js'
 import type { DistLockOptions } from './options.js'
 import { boundedCall } from './store_call.js'
@@ -42,6 +43,12 @@ export class HeldLock implements Lock {
   #released = false
   #taken = false
   #stopped = false
+  // Renewal was stopped by whoever holds the key and means to leave it standing: `once` keeping its window, or
+  // shutdown. Not set when renewal stops because the lease was lost.
+  #kept = false
+  // Explicit extends that timed out and have not answered. Each may have shortened the lease already, so until it
+  // answers, the lease this lock knows is not one it can vouch for.
+  #unsettled = 0
   #timer: ReturnType<typeof setTimeout> | undefined
   #renewal: Promise<void> | undefined
 
@@ -69,7 +76,7 @@ export class HeldLock implements Lock {
   }
 
   get lost(): boolean {
-    return this.#released || this.#taken || Date.now() >= this.#lease.expiresAt
+    return this.#released || this.#taken || this.#unsettled > 0 || Date.now() >= this.#lease.expiresAt
   }
 
   // Whether the lease is gone for a reason nobody has reported yet: it lapsed by the clock, with no renewal
@@ -98,7 +105,7 @@ export class HeldLock implements Lock {
     }
 
     this.#released = true
-    this.stopRenewal()
+    this.#halt()
 
     // A renewal already on the wire has to land first, or its write outlives the release and the key stays
     // taken for another lease. Reading the lease afterwards is what makes that safe: it is the one the
@@ -124,6 +131,11 @@ export class HeldLock implements Lock {
   // Stops renewing without touching the key. What shutdown calls, and what `once` calls when it leaves the
   // window standing.
   stopRenewal(): void {
+    this.#kept = true
+    this.#halt()
+  }
+
+  #halt(): void {
     this.#stopped = true
 
     if (this.#timer !== undefined) {
@@ -199,6 +211,9 @@ export class HeldLock implements Lock {
     const { storeTimeout } = this.#host.options
     const remaining = Math.max(1, this.#lease.expiresAt - Date.now())
     const sent = this.#lease
+    // Whether the backend answered after this call stopped waiting, and whether this call counted itself in
+    // `#unsettled`. The late answer and the catch below can run in either order.
+    const call = { answered: false, abandoned: false }
 
     let next: LockLease | undefined
     try {
@@ -210,14 +225,31 @@ export class HeldLock implements Lock {
           bound: storeTimeout <= remaining ? 'storeTimeout' : 'ttl',
         },
         signal => this.#host.backend.extend(sent, ttl, signal),
-        late => this.#adoptLate(late, sent, renewal),
-        (error: unknown) =>
+        late => {
+          this.#answered(call)
+          this.#adoptLate(late, sent, renewal)
+        },
+        (error: unknown) => {
+          this.#answered(call)
           this.#host.log.debug(
             { err: error, key: this.key, leaseID: this.leaseID, operation: 'extend' },
             'lock backend failed late',
-          ),
+          )
+
+          // Whether the extension took effect is unknown for good, so the lease is no longer one to rely on.
+          if (!renewal && !this.#released && !this.#taken) {
+            this.#lose('error', false)
+          }
+        },
       )
     } catch (error) {
+      // The backend may have applied an extension it did not answer in time, and a shorter ttl shortens the lease:
+      // until the answer arrives, the lock reads as lost. A renewal that timed out is marked lost outright.
+      if (!renewal && error instanceof ErrLockBackendTimeout && !call.answered) {
+        call.abandoned = true
+        this.#unsettled += 1
+      }
+
       this.#host.log.warn(
         { err: error, key: this.key, leaseID: this.leaseID, operation: 'extend' },
         'lock backend failed',
@@ -227,8 +259,7 @@ export class HeldLock implements Lock {
         ctx.outcome = 'error'
       }
 
-      // The lease is left as it was. An explicit extend lets its caller decide; a renewal marks it lost once
-      // this has settled.
+      // An explicit extend lets its caller decide; a renewal marks the lease lost once this has settled.
       throw error
     }
 
@@ -262,24 +293,51 @@ export class HeldLock implements Lock {
     return true
   }
 
-  // An extension that answered after the lock stopped waiting for it. A lock still held, whose lease nothing has
-  // replaced since, carries it from here on. Anything else gives it back, or a backend that rotates the token on
-  // extend would keep the key under a token nobody holds, except a lease under the token the lock still holds. A renewal that timed out always gives it back: it marks
-  // the lease lost, possibly only after this runs.
+  #answered(call: { answered: boolean; abandoned: boolean }): void {
+    call.answered = true
+    if (call.abandoned) {
+      this.#unsettled -= 1
+    }
+  }
+
+  // An extension that answered after the lock stopped waiting for it.
+  //
+  // A renewal that timed out marks the lease lost, possibly only after this runs, so its lease is given back,
+  // unless the holder stopped renewal to leave the key standing: freeing it would reopen a `once` window early.
+  //
+  // An explicit extend on a lock still held carries the late lease from here on when nothing replaced the one it
+  // was sent with. When a newer answer did and the token is the same, the backend may have applied the two in
+  // either order, so the earlier expiry is the one the lock can rely on. Anything else gives the lease back, or a
+  // backend that rotates the token on extend would keep the key under a token nobody holds.
   #adoptLate(late: LockLease | undefined, sent: LockLease, renewal: boolean): void {
+    const held = !this.#released && !this.#taken
+
     if (late === undefined) {
+      // The backend refused the token: the key was taken while the caller was not looking.
+      if (!renewal && held) {
+        this.#lose('taken', false)
+      }
       return
     }
 
-    if (!renewal && !this.#released && !this.#taken) {
+    if (renewal) {
+      // A lock released after shutdown stopped it gives nothing back either way: the service is disposed.
+      if (!this.#kept) {
+        this.#host.giveBack(late)
+      }
+      return
+    }
+
+    if (held) {
       if (this.#lease === sent) {
         this.#lease = late
         return
       }
 
-      // A newer answer superseded this one. Under the same token, giving it back would free the key this lock
-      // still holds.
       if (late.token === this.#lease.token) {
+        if (late.expiresAt < this.#lease.expiresAt) {
+          this.#lease = late
+        }
         return
       }
     }
@@ -289,7 +347,7 @@ export class HeldLock implements Lock {
 
   #lose(reason: 'taken' | 'error', renewal: boolean): void {
     this.#taken = true
-    this.stopRenewal()
+    this.#halt()
 
     // A backend failure was already logged as a warning; the loss it caused is the same incident.
     const fields = { key: this.key, leaseID: this.leaseID, reason, renewal }
