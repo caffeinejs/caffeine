@@ -101,4 +101,49 @@ describe('boundedCall', () => {
 
     expect(errors).toEqual([boom])
   })
+
+  // A caller can give up from inside the call itself, as a backend that aborts on a broken connection does. The
+  // lease it still returns must reach someone who can give it back, or the key stays taken for a whole lease.
+  it('hands the answer of a call the caller abandoned during the call itself to onLate', async () => {
+    const controller = new AbortController()
+    const reason = new Error('caller went away')
+    const late: string[] = []
+
+    const bounded = boundedCall(
+      { ...call, signal: controller.signal },
+      () => {
+        controller.abort(reason)
+        return Promise.resolve('lease')
+      },
+      value => late.push(value),
+    )
+
+    await expect(bounded).rejects.toBe(reason)
+    await Promise.resolve()
+    expect(late).toEqual(['lease'])
+  })
+
+  // With nobody to tell, a late failure is dropped: an unhandled rejection would crash a process run with the
+  // default `--unhandled-rejections=throw`.
+  it('drops a late rejection when no onLateError is given, without an unhandled rejection', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { promise, reject } = Promise.withResolvers<string>()
+    const unhandled: unknown[] = []
+    const onUnhandled = (error: unknown) => unhandled.push(error)
+    process.on('unhandledRejection', onUnhandled)
+
+    try {
+      const bounded = boundedCall(call, () => promise).catch((e: unknown) => e)
+      await vi.advanceTimersByTimeAsync(5 * Second)
+      expect(await bounded).toBeInstanceOf(ErrLockBackendTimeout)
+
+      reject(new Error('boom'))
+      await vi.advanceTimersByTimeAsync(0)
+      await new Promise(resolve => setImmediate(resolve))
+
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
 })
