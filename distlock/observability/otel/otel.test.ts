@@ -181,7 +181,9 @@ describe('instrumentDistLock spans', () => {
     // still finds its lease.
     vi.useFakeTimers({ toFake: ['Date'] })
 
-    await context.with(trace.setSpan(context.active(), request), () => lock.acquire('a', { ttl: 60, renew: true }))
+    const held = await context.with(trace.setSpan(context.active(), request), () =>
+      lock.acquire('a', { ttl: 60, renew: true }),
+    )
     request.end()
     await until(() => otel.spans().some(span => span.name === 'distlock.extend'))
 
@@ -189,6 +191,9 @@ describe('instrumentDistLock spans', () => {
     expect(renewal.parentSpanContext).toBeUndefined()
     expect(renewal.links.map(link => link.context.spanId)).toEqual([request.spanContext().spanId])
     expect(renewal.attributes).toMatchObject({ 'distlock.renewal': true, 'distlock.outcome': 'extended' })
+    // Closing the application stops renewal but leaves the lease to lapse: released here, its expiry cannot land
+    // in a later test's metrics.
+    await held.release()
   })
 
   it('marks a lost lease as an error', async () => {
