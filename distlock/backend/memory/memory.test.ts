@@ -79,6 +79,24 @@ describe('MemoryLockBackend', () => {
     await backend.release(extended!)
     expect(await backend.tryAcquire('k', 1_000)).toBeDefined()
   })
+
+  // The lock service aborts a call it stopped waiting for. An aborted call that still wrote would hand out, keep
+  // or free a key behind its caller's back.
+  it("rejects with the signal's reason and changes nothing once the signal has aborted", async () => {
+    const backend = new MemoryLockBackend()
+    const reason = new Error('caller went away')
+    const aborted = AbortSignal.abort(reason)
+
+    await expect(backend.tryAcquire('free', 1_000, aborted)).rejects.toBe(reason)
+    expect(await backend.tryAcquire('free', 1_000)).not.toBeUndefined()
+
+    const lease = (await backend.tryAcquire('k', 1_000))!
+    await expect(backend.extend(lease, 60_000, aborted)).rejects.toBe(reason)
+    await expect(backend.release(lease, aborted)).rejects.toBe(reason)
+
+    expect(await backend.tryAcquire('k', 1_000)).toBeUndefined()
+    expect((await backend.extend(lease, 1_000))!.expiresAt).toBeLessThan(lease.expiresAt + 60_000)
+  })
 })
 
 // A resource that remembers the highest token it has seen turns away a holder whose lease lapsed; that only works

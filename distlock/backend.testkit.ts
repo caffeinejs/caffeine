@@ -12,6 +12,7 @@ export class FaultyBackend implements Backend {
   stolen = false
   failAcquire = false
   failExtend = false
+  failRelease = false
 
   /** Hands out leases whose fencing token is `0`, which breaks the contract. */
   badFencing = false
@@ -55,6 +56,10 @@ export class FaultyBackend implements Backend {
   }
 
   release(lease: LockLease): Promise<void> {
+    if (this.failRelease) {
+      return Promise.reject(new Error('backend down'))
+    }
+
     return this.#run('release', () => {
       this.released.push(lease)
       return this.#inner.release(lease)
