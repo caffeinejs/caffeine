@@ -478,8 +478,10 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
   skips the store and reaches the handler, and a part is never stored. With `Cache-Control: only-if-cached`, which
   forbids reaching the handler, a `Range` gets the stored whole body, or `504` when none is stored, and a
   precondition gets `504`.
-- `If-Range` resumes only the same content: it must match `etag` exactly, or `lastModified` to the second. A weak
-  `etag` never resumes. Otherwise the whole current body goes out, so a client never splices two versions together.
+- `If-Range` resumes only the same content: it must match `etag` exactly, or `lastModified` to the second when
+  `lastModifiedStrong: true` says the content cannot change twice within one second. A weak `etag`, or a date without
+  that flag, never resumes. Otherwise the whole current body goes out, so a client never splices two versions
+  together.
 - An `etag` is quoted, `'"v42"'`. An unquoted one, or a `lastModified` that is not a valid date, throws
   `ErrConfiguration`: either would be a validator no client can match. So does a `type` holding a control
   character, which no header value may.
