@@ -43,6 +43,9 @@ export default defineConfig({
         ),
       ),
       '@caffeinejs/resilience': fileURLToPath(new URL('../../resilience/index.ts', import.meta.url)),
+      '@caffeinejs/distlock/observability/otel': fileURLToPath(
+        new URL('../../distlock/observability/otel/index.ts', import.meta.url),
+      ),
       '@caffeinejs/distlock/backend/redis': fileURLToPath(
         new URL('../../distlock/backend/redis/index.ts', import.meta.url),
       ),

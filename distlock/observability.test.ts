@@ -229,6 +229,27 @@ describe('distlock diagnostics channels', () => {
     expect(log.at('warn').map(r => r.msg)).toEqual(['lock lease expired in transit'])
   })
 
+  // With renewal off, the lease lapsing is the holder's own policy: reported, but not an incident.
+  it('reports an expired lease as lost with reason expired, at debug when renewal was off', async () => {
+    const { lock, log } = await newApp()
+    const published = record(lock)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('a', { ttl: 1 * Second })
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    expect(messages<LostMessage>(published, 'lost')).toEqual([
+      expect.objectContaining({ leaseID: held.leaseID, reason: 'expired', renewal: false }),
+    ])
+    expect(log.at('warn')).toEqual([])
+    expect(
+      log
+        .at('debug')
+        .filter(r => r.msg === 'lock lease lost')
+        .map(r => r.fields.reason),
+    ).toEqual(['expired'])
+  })
+
   // The failure a lock exists to prevent: work still running after the key was free for someone else to take.
   it('flags a critical section that outran its lease, and warns about it once', async () => {
     const { lock, log } = await newApp()
@@ -360,7 +381,8 @@ describe('distlock diagnostics channels', () => {
 
     expect(ended<OnceContext>(published, 'once')[0]).toMatchObject({ outcome: 'executed', lapsed: true })
     expect(ended(published, 'release')).toEqual([])
-    expect(messages(published, 'lost')).toEqual([])
+    // The lease lapsed while the action still held it, so the deadline reported it; the window after it did not.
+    expect(messages<LostMessage>(published, 'lost').map(m => m.reason)).toEqual(['expired'])
     expect(log.at('warn').map(r => r.msg)).toEqual(['lock once outlived its lease'])
   })
 

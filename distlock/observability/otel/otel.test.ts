@@ -304,6 +304,31 @@ describe('instrumentDistLock store timeouts', () => {
   })
 })
 
+describe('instrumentDistLock lost leases', () => {
+  it('labels a lost lease with its reason, expired included', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    // Kept to this service: leases other tests left behind lapse on their own clock.
+    const otel = instrument({ service: lock })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    await lock.acquire('a', { ttl: 1 * Second })
+    await lock.acquire('b', { ttl: 3 * Second, renew: true })
+    backend.stolen = true
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    const points = await otel.points('distlock.lease.lost')
+    expect(
+      points
+        .map(point => [point.attributes['distlock.reason'], point.attributes['distlock.renewal'], point.value])
+        .sort(),
+    ).toEqual([
+      ['expired', false, 1],
+      ['taken', true, 1],
+    ])
+  })
+})
+
 describe('instrumentDistLock scope', () => {
   it('instruments only the given lock service', async () => {
     const first = await newLock()

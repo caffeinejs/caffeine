@@ -1,6 +1,7 @@
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
+import type { LostReason } from './observability/channels.js'
 import type { StoreOperation, StoreTimeoutBound } from './store_call.js'
 
 /** Base error for the distributed lock integration. */
@@ -86,5 +87,50 @@ export class ErrLockBackendTimeout extends ErrDistLock {
     this.operation = operation
     this.key = key
     this.timeout = timeout
+  }
+}
+
+const LOST_BECAUSE: Record<LostReason, string> = {
+  taken: 'another holder took the key',
+  expired: 'the lease expired',
+  error: 'a renewal could not reach the backend',
+}
+
+/**
+ * What `lock.signal` aborts with when the lease is gone without its holder releasing it. `reason` says how.
+ *
+ * Stop the work bound to the signal: the key may already belong to another holder.
+ */
+export class ErrLockLost extends ErrDistLock {
+  readonly key: string
+  readonly reason: LostReason
+
+  constructor(key: string, reason: LostReason) {
+    const message = errMessage(`Cannot keep the lock on "${key}": ${LOST_BECAUSE[reason]}`)
+    message.solutions('Stop the work bound to lock.signal and retry it under a new lock')
+    if (reason === 'expired') {
+      message.solutions('Turn renewal on for work that outlives the lease, such as { renew: true }')
+    }
+
+    super(message.reference('@caffeinejs/distlock', ErrLockLost).build(), 'ERR_LOCK_LOST')
+    this.name = 'ErrLockLost'
+    this.key = key
+    this.reason = reason
+  }
+}
+
+/** What `lock.signal` aborts with once its holder released the lock. */
+export class ErrLockReleased extends ErrDistLock {
+  readonly key: string
+
+  constructor(key: string) {
+    super(
+      errMessage(`Cannot use the lock on "${key}": it was released`)
+        .reference('@caffeinejs/distlock', ErrLockReleased)
+        .build(),
+      'ERR_LOCK_RELEASED',
+    )
+    this.name = 'ErrLockReleased'
+    this.key = key
   }
 }

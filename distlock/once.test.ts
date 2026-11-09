@@ -1,9 +1,10 @@
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Minute, type Duration } from '@caffeinejs/std/duration'
+import { Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
+import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLock } from './distlock.js'
 import { kDistLock } from './keys.js'
@@ -214,5 +215,29 @@ describe('once', () => {
     ])
 
     expect(results.filter(r => r.executed)).toHaveLength(1)
+  })
+
+  // The window outlives the action; an extend the action started must not free it when it answers afterwards.
+  it('keeps the window when an extend the action started answers after it returned', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    backend.late = ['extend']
+
+    await lock.once(
+      'nightly-report',
+      held => {
+        void held.extend(1 * Minute).catch(() => undefined)
+        return 'done'
+      },
+      { ttl: 30 * Second },
+    )
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(backend.released).toEqual([])
+    expect(await lock.tryAcquire('nightly-report')).toBeUndefined()
   })
 })

@@ -33,6 +33,16 @@ export interface Lock {
   get lost(): boolean
 
   /**
+   * Aborts when the lease is gone: taken by another holder, expired by the clock, lost to a backend failure, or
+   * released. `signal.reason` is an {@link ErrLockLost} or an {@link ErrLockReleased}. A `once` lock whose action returned has
+   * left its holder's hands: the window lapsing aborts nothing and publishes no `lost`.
+   *
+   * Cancellation is cooperative: pass the signal to the I/O the critical section does, such as `fetch` or a
+   * database query, so the work stops with the lease.
+   */
+  readonly signal: AbortSignal
+
+  /**
    * Extends the lease by `ttl`, or by the lock service's default when omitted.
    *
    * `false` means the lease was already lost, so whatever the critical section is doing is no longer
@@ -136,7 +146,7 @@ export interface DistLock {
    * The key is **not** released when the action succeeds: what is left of the lease is the window, which is
    * what keeps a later caller out as well as a concurrent one.
    */
-  once<T>(key: string, fn: () => T | Promise<T>, options?: OnceOptions): Promise<OnceResult<T>>
+  once<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options?: OnceOptions): Promise<OnceResult<T>>
 }
 
 /**
@@ -236,7 +246,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     )
   }
 
-  async once<T>(key: string, fn: () => T | Promise<T>, options: OnceOptions = {}): Promise<OnceResult<T>> {
+  async once<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options: OnceOptions = {}): Promise<OnceResult<T>> {
     checkKey(key)
     const ttl = options.ttl ?? this.options.ttl
 
@@ -454,7 +464,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
 
   async #once<T>(
     key: string,
-    fn: () => T | Promise<T>,
+    fn: (lock: Lock) => T | Promise<T>,
     ttl: Duration,
     options: OnceOptions,
     ctx: Writable<OnceContext> | undefined,
@@ -478,15 +488,15 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
 
     let result: T
     try {
-      result = await fn()
+      result = await fn(lock)
     } catch (error) {
       const lapsed = lock.lost
       const keep = options.releaseOnError === false
       // A release reports a lapse of its own; only a key left standing needs this call to say so.
-      const warn = keep && lock.lapsedUnreported
+      const warn = keep && lock.claimLapseWarning()
 
       if (keep) {
-        lock.stopRenewal()
+        lock.detach()
       } else {
         await lock.release().catch(() => undefined)
       }
@@ -496,11 +506,11 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     }
 
     const lapsed = lock.lost
-    const warn = lock.lapsedUnreported
+    const warn = lock.claimLapseWarning()
 
     // Deliberately not released: what is left of the lease is the window, and it is what keeps the next
-    // caller out as much as the concurrent one.
-    lock.stopRenewal()
+    // caller out as much as the concurrent one. It has left the holder's hands, so its lapsing aborts nothing.
+    lock.detach()
     this.#settleOnce(ctx, key, 'executed', lock, lapsed, warn)
 
     return { executed: true, result }

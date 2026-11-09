@@ -12,11 +12,20 @@ import {
   DistributedLock,
   kDistLock,
   kDistLockBackend,
+  ErrLockLost,
   type Lock,
 } from '@caffeinejs/distlock'
 import { RedisLockBackend, type RedisLockClient } from '@caffeinejs/distlock/backend/redis'
-import type { AcquireOutcome } from '@caffeinejs/distlock/observability'
+import type { AcquireOutcome, LostMessage } from '@caffeinejs/distlock/observability'
+import { instrumentDistLock } from '@caffeinejs/distlock/observability/otel'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
+import {
+  AggregationTemporality,
+  InMemoryMetricExporter,
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics'
+import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { createClient, SocketClosedUnexpectedlyError } from '@redis/client'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
@@ -332,6 +341,52 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
       })
     })
 
+    // One row is enough: the instrumentation reads the core's channels, not the server.
+    if (name === 'Redis') {
+      describe('with OpenTelemetry', () => {
+        it('records an acquire, withLock and release span per section, and one lost counter per lost lease', async () => {
+          const spans = new InMemorySpanExporter()
+          const tracerProvider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(spans)] })
+          const reader = new PeriodicExportingMetricReader({
+            exporter: new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE),
+            exportIntervalMillis: 3_600_000,
+          })
+          const meterProvider = new MeterProvider({ readers: [reader] })
+          const lock = locks[0]
+          const stop = instrumentDistLock({ tracerProvider, meterProvider, service: lock })
+
+          try {
+            const sections = 3
+            for (let i = 0; i < sections; i++) {
+              await lock.withLock(key(`otel-${i}`), () => i)
+            }
+
+            const lapsing = await lock.acquire(key('otel-lost'), { ttl: 200 * Millisecond })
+            await waitFor(() => lapsing.signal.aborted, 2 * Second)
+            await lapsing.release()
+
+            const names = spans.getFinishedSpans().map(span => span.name)
+            expect(names.filter(n => n === 'distlock.withLock')).toHaveLength(sections)
+            expect(names.filter(n => n === 'distlock.acquire')).toHaveLength(sections + 1)
+            expect(names.filter(n => n === 'distlock.release')).toHaveLength(sections + 1)
+
+            const { resourceMetrics } = await reader.collect()
+            const lostPoints = resourceMetrics.scopeMetrics
+              .flatMap(scope => scope.metrics)
+              .filter(metric => metric.descriptor.name === 'distlock.lease.lost')
+              .flatMap(metric => metric.dataPoints as Array<{ attributes: Record<string, unknown>; value: unknown }>)
+            expect(lostPoints.map(point => [point.attributes['distlock.reason'], point.value])).toEqual([
+              ['expired', 1],
+            ])
+          } finally {
+            stop()
+            await tracerProvider.shutdown()
+            await meterProvider.shutdown()
+          }
+        })
+      })
+    }
+
     // The relay holds replies back, drops connections or refuses new ones, so the server itself is never touched.
     describe('through an outage', () => {
       const STORE_TIMEOUT = 300 * Millisecond
@@ -417,6 +472,28 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
         expect(await admin.get(k)).toBe(holder.token)
 
         await holder.release()
+      })
+
+      it('loses a renewing lease when the server stops answering for longer than the lease, and says so once', async () => {
+        const k = key('hang-renew')
+        const lost: LostMessage[] = []
+        lock.events.on('lost', message => lost.push(message))
+
+        const holder = await lock.acquire(k, { ttl: 1 * Second, renew: true })
+        relayed.proxy.hold()
+        await waitFor(() => holder.signal.aborted, 3 * Second)
+
+        expect(holder.signal.reason).toBeInstanceOf(ErrLockLost)
+        expect((holder.signal.reason as ErrLockLost).reason).toBe('error')
+        // Nothing marks "no second report": wait past the lease, when the deadline and any late renewal over the
+        // real relay would have reported one.
+        await sleep(1 * Second)
+
+        relayed.proxy.release()
+        await holder.release()
+
+        expect(lost.map(message => message.leaseID)).toEqual([holder.leaseID])
+        expect(await admin.get(k)).not.toBe(holder.token)
       })
 
       it('fails acquisition fast while the server refuses connections, and recovers', async () => {

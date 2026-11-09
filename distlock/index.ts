@@ -7,9 +7,12 @@ export {
   ErrDistLockConfiguration,
   ErrInvalidLockKey,
   ErrLockBackendTimeout,
+  ErrLockLost,
   ErrLockNotAcquired,
+  ErrLockReleased,
 } from './errors.js'
 export { kDistLock, kDistLockBackend } from './keys.js'
 export { DEFAULT_DIST_LOCK_OPTIONS, type DistLockConfig, type DistLockOptions } from './options.js'
+export type { LostReason } from './observability/channels.js'
 export { DistributedLock, type DistLockConfigurer } from './plugin.js'
 export type { StoreOperation, StoreTimeoutBound } from './store_call.js'

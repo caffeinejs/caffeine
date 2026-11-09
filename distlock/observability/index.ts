@@ -9,6 +9,7 @@ export {
   type LockEventBase,
   type LockEventMap,
   type LostMessage,
+  type LostReason,
   type OnceContext,
   type OnceOutcome,
   type ReleaseContext,

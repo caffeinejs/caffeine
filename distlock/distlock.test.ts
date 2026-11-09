@@ -6,10 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Backend, LockLease } from './backend.js'
 import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
-import type { DistLock } from './distlock.js'
-import { ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
+import type { DistLock, Lock } from './distlock.js'
+import { ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockLost, ErrLockNotAcquired, ErrLockReleased } from './errors.js'
 import { kDistLock } from './keys.js'
 import { RecordingLogger } from './log.testkit.js'
+import type { LostMessage } from './observability/channels.js'
 import { DistributedLock } from './plugin.js'
 
 /**
@@ -68,6 +69,51 @@ class FirstAttemptHangsBackend implements Backend {
 
   extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
     return this.#inner.extend(lease, ttl)
+  }
+
+  release(lease: LockLease): Promise<void> {
+    return this.#inner.release(lease)
+  }
+}
+
+/** Counts the extends and releases that reach the backend, and fails the first `failures` extends. */
+class CountingBackend implements Backend {
+  extends = 0
+  releases = 0
+  failures = 0
+
+  readonly #inner = new MemoryLockBackend()
+
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    return this.#inner.tryAcquire(key, ttl)
+  }
+
+  extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    this.extends += 1
+    if (this.failures > 0) {
+      this.failures -= 1
+      return Promise.reject(new Error('backend down'))
+    }
+
+    return this.#inner.extend(lease, ttl)
+  }
+
+  release(lease: LockLease): Promise<void> {
+    this.releases += 1
+    return this.#inner.release(lease)
+  }
+}
+
+/** Answers every renewal with "taken" exactly when the lease lapses, so the clock and the renewal notice together. */
+class TakenAtExpiryBackend implements Backend {
+  readonly #inner = new MemoryLockBackend()
+
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    return this.#inner.tryAcquire(key, ttl)
+  }
+
+  extend(lease: LockLease): Promise<LockLease | undefined> {
+    return new Promise(resolve => setTimeout(() => resolve(undefined), lease.expiresAt - Date.now()))
   }
 
   release(lease: LockLease): Promise<void> {
@@ -431,5 +477,236 @@ describe('distributed lock against a backend that does not answer', () => {
     expect(log.at('warn').map(record => [record.msg, record.fields.operation])).toEqual([
       ['lock backend failed', 'release'],
     ])
+  })
+})
+
+describe('lock signal', () => {
+  const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+  function lossOf(lock: Lock): ErrLockLost {
+    expect(lock.signal.aborted).toBe(true)
+    expect(lock.signal.reason).toBeInstanceOf(ErrLockLost)
+    expect((lock.signal.reason as ErrLockLost).code).toBe('ERR_LOCK_LOST')
+    return lock.signal.reason as ErrLockLost
+  }
+
+  // Loss has to stop work, not wait to be read: the deadline aborts the signal on its own.
+  it('aborts lock.signal with ErrLockLost(expired) when the lease lapses with renewal off, without any backend call', async () => {
+    const backend = new CountingBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 1 * Second })
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    expect(lossOf(held).reason).toBe('expired')
+    expect([backend.extends, backend.releases]).toEqual([0, 0])
+  })
+
+  it('aborts lock.signal with ErrLockLost(taken) when a renewal finds the key gone', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 3 * Second, renew: true })
+    backend.stolen = true
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    expect(lossOf(held).reason).toBe('taken')
+  })
+
+  // One failed round trip to the store is not a lost lease while the lease still has time to be renewed.
+  it('keeps renewing through a transient backend failure while the lease still has time, and aborts with error once it does not', async () => {
+    const backend = new CountingBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const transient = await lock.acquire('orders:transient', { ttl: 30 * Second, renew: true })
+    backend.failures = 1
+    await vi.advanceTimersByTimeAsync(30 * Second)
+
+    expect(transient.lost).toBe(false)
+    expect(transient.signal.aborted).toBe(false)
+    await transient.release()
+
+    const persistent = await lock.acquire('orders:persistent', { ttl: 30 * Second, renew: true })
+    backend.failures = Number.POSITIVE_INFINITY
+    // The lease has 5s, storeTimeout, left at 25s: the retries stop there, before it expires at 30s.
+    await vi.advanceTimersByTimeAsync(26 * Second)
+
+    expect(lossOf(persistent).reason).toBe('error')
+    expect(Date.now()).toBeLessThan(persistent.expiresAt)
+  })
+
+  it('aborts lock.signal with ErrLockReleased after release, and keeps a loss reason over a later release', async () => {
+    const lock = await newLock()
+    fake()
+
+    const released = await lock.acquire('orders:released', { ttl: 1 * Minute })
+    await released.release()
+
+    expect(released.signal.reason).toBeInstanceOf(ErrLockReleased)
+    expect((released.signal.reason as ErrLockReleased).code).toBe('ERR_LOCK_RELEASED')
+
+    const lapsed = await lock.acquire('orders:lapsed', { ttl: 1 * Second })
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    await lapsed.release()
+
+    expect(lossOf(lapsed).reason).toBe('expired')
+  })
+
+  it('publishes exactly one lost message per lease when the clock and a renewal both notice', async () => {
+    const lock = await newLock(new TakenAtExpiryBackend())
+    const lost: LostMessage[] = []
+    lock.events.on('lost', message => lost.push(message))
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 3 * Second, renew: true })
+    await vi.advanceTimersByTimeAsync(5 * Second)
+
+    expect(held.signal.aborted).toBe(true)
+    expect(lost.length).toBe(1)
+  })
+
+  it("hands once's action the lock, so it can watch the window", async () => {
+    const lock = await newLock()
+    let seen: Lock | undefined
+
+    const result = await lock.once('nightly-report', held => {
+      seen = held
+      return held.signal.aborted
+    })
+
+    expect(result).toEqual({ executed: true, result: false })
+    expect(seen?.key).toBe('nightly-report')
+    expect(seen?.signal).toBeInstanceOf(AbortSignal)
+    // The window it left standing is the lease it was handed.
+    expect(await lock.tryAcquire('nightly-report')).toBeUndefined()
+  })
+
+  // One warning per incident: retries of the same failure are its consequences, a later failure is a new one.
+  it('warns once for a renewal that keeps failing, and again after one succeeded in between', async () => {
+    const backend = new CountingBackend()
+    const log = new RecordingLogger()
+    const lock = await newLock(backend, log)
+    fake()
+
+    await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    backend.failures = 2
+    await vi.advanceTimersByTimeAsync(11 * Second)
+    backend.failures = 1
+    await vi.advanceTimersByTimeAsync(10 * Second)
+
+    const failed = (level: 'warn' | 'debug') =>
+      log.at(level).filter(record => record.msg === 'lock backend failed' && record.fields.operation === 'extend')
+    expect(failed('warn')).toHaveLength(2)
+    expect(failed('debug')).toHaveLength(1)
+  })
+
+  // A renewal the lock stopped waiting for still moved the key's expiry; while nothing replaced the lease, the
+  // lock carries the answer.
+  it('adopts a timed-out renewal that answers late while the lease is unchanged', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    const acquired = Date.now()
+    backend.late = ['extend']
+    // The renewal leaves at 10s and is given up on at 15s; the answer lands before the retry leaves.
+    await vi.advanceTimersByTimeAsync(15 * Second)
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(held.expiresAt).toBe(acquired + 10 * Second + 30 * Second)
+    expect(backend.released).toEqual([])
+    expect(held.signal.aborted).toBe(false)
+  })
+
+  it('gives back the late answer of a renewal that gave up', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 12 * Second, renew: true })
+    backend.late = ['extend']
+    // Sent at 4s with 8s left, given up on at 9s with 3s left: under storeTimeout, so no retry.
+    await vi.advanceTimersByTimeAsync(9 * Second)
+    expect(lossOf(held).reason).toBe('error')
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(backend.released.map(lease => lease.key)).toEqual(['orders:rebuild'])
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+  })
+
+  it('re-arms the deadline after an explicit extend', async () => {
+    const lock = await newLock()
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 1 * Second })
+    expect(await held.extend(5 * Second)).toBe(true)
+    await vi.advanceTimersByTimeAsync(2 * Second)
+
+    expect(held.signal.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(3 * Second)
+
+    expect(lossOf(held).reason).toBe('expired')
+  })
+
+  // The window is not the holder's any more: its lapsing is the design, not a loss.
+  it('publishes nothing when a once window lapses after its action returned', async () => {
+    const lock = await newLock()
+    const lost: LostMessage[] = []
+    lock.events.on('lost', message => lost.push(message))
+    fake()
+
+    let seen: Lock | undefined
+    await lock.once('nightly-report', held => void (seen = held), { ttl: 1 * Second })
+    await vi.advanceTimersByTimeAsync(2 * Second)
+
+    expect(seen?.signal.aborted).toBe(false)
+    expect(lost).toEqual([])
+  })
+
+  it('still warns once when a once action outlives its lease', async () => {
+    const log = new RecordingLogger()
+    const lock = await newLock(new MemoryLockBackend(), log)
+    fake()
+
+    const { promise: finished, resolve: finish } = Promise.withResolvers<void>()
+    const running = lock.once('nightly-report', () => finished, { ttl: 1 * Second })
+    await vi.advanceTimersByTimeAsync(2 * Second)
+    finish()
+    await running
+
+    expect(log.at('warn').map(record => record.msg)).toEqual(['lock once outlived its lease'])
+  })
+
+  // `setTimeout` fires a delay above 2^31 - 1 ms after 1 ms; a long window must not be reported lost at once.
+  it('keeps a once window with a ttl beyond 24.8 days standing', async () => {
+    const lock = await newLock()
+    const lost: LostMessage[] = []
+    lock.events.on('lost', message => lost.push(message))
+    fake()
+
+    let aborted: boolean | undefined
+    await lock.once(
+      'yearly-report',
+      async held => {
+        await vi.advanceTimersByTimeAsync(1 * Second)
+        aborted = held.signal.aborted
+      },
+      { ttl: 30 * 24 * 60 * Minute },
+    )
+    await vi.advanceTimersByTimeAsync(25 * 24 * 60 * Minute)
+
+    expect(aborted).toBe(false)
+    expect(lost).toEqual([])
+    expect(await lock.tryAcquire('yearly-report')).toBeUndefined()
   })
 })

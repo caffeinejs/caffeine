@@ -95,6 +95,19 @@ function sleep(ms: number): Promise<void> {
 }
 
 describe('distlock lifecycle', () => {
+  // An unref'd timer cannot hold the process open, but one left behind still fires a loss nobody can act on.
+  it('lets no deadline timer keep the process alive after the lock is released', async () => {
+    const { lock } = await newApp(new MemoryLockBackend())
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 1 * Minute })
+    expect(vi.getTimerCount()).toBe(1)
+
+    await held.release()
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   // A renewal timer that keeps firing after the container is disposed is a leak that also keeps writing to a
   // backend the application no longer owns. The close lands while a renewal is in flight, which is the case
   // clearing the pending timer cannot reach: that renewal has already left, and it is the one that would
