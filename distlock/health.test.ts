@@ -70,6 +70,22 @@ describe('distlock health', () => {
     expect(result.outcomes).toMatchObject([{ name: 'distlock', status: 'degraded', detail: 'backend down' }])
   })
 
+  // Some clients reject with a bare string or object; the probe still has to say what the store answered.
+  it('reports degraded with what the backend rejected with when it is not an Error', async () => {
+    class StringRejectingBackend extends FaultyBackend {
+      override tryAcquire(): Promise<undefined> {
+        return Promise.reject('ECONNREFUSED 127.0.0.1:6379\nretrying')
+      }
+    }
+    const app = await started(new StringRejectingBackend())
+
+    const result = await app.health.readiness()
+
+    expect(result.outcomes).toMatchObject([
+      { name: 'distlock', status: 'degraded', detail: 'ECONNREFUSED 127.0.0.1:6379' },
+    ])
+  })
+
   // A hung store must not hold the probe, nor fail it: the answer comes within storeTimeout either way.
   it('reports degraded when the backend does not answer within storeTimeout', async () => {
     const backend = new FaultyBackend()
