@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://vlatte.dev/schemas/http.schema.json
+# dsp-charlie. Steady, choosier: bids 6 auctions of 10.
+id: bid
+request:
+  method: POST
+  path: /bid
+delay:
+  type: lognormal
+  median: 25ms
+  sigma: 0.4
+  maxValue: 75ms
+response_random:
+  responses:
+    - &bid
+      status: 200
+      header:
+        content-type: application/json
+      body: >-
+        {"id": {{ (fromJSON .Request.Body.String).id | toJSON }},
+        "price": {{ printf "%.2f" (randomFloat 0.6 2.4) }},
+        "adm": "<img src=\"https://charlie.ads.test/creative.png\">"}
+      template:
+        enabled: true
+    - *bid
+    - *bid
+    - &pass
+      status: 204
+    - *pass
+---
+# The win notice: the exchange tells the winner what it pays.
+id: win
+request:
+  method: POST
+  path: /win
+response:
+  status: 200

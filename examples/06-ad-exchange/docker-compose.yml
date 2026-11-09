@@ -1,0 +1,101 @@
+# Eight DSPs on VLatte, each serving the mock files of its directory under dsps/, and the exchange that calls them.
+# Every DSP answers bid requests on 810N and its admin API on 820N, in the order of `dsps` in the configuration.
+x-dsp: &dsp
+  image: ghcr.io/caffeine-projects/vlatte:v1.1.0@sha256:97e2680f8e34e592b8d96bc02152d9693aa24397dab59ae01df9a6769087be04
+  # No journal: under load it would write every bid request to disk.
+  command: ['--journal=false']
+
+services:
+  dsp-alpha:
+    <<: *dsp
+    volumes:
+      - ./dsps/alpha:/vlatte/testdata/vlatte/_mocks:ro
+    ports:
+      - '8101:8080'
+      - '8201:8081'
+
+  dsp-bravo:
+    <<: *dsp
+    volumes:
+      - ./dsps/bravo:/vlatte/testdata/vlatte/_mocks:ro
+    ports:
+      - '8102:8080'
+      - '8202:8081'
+
+  dsp-charlie:
+    <<: *dsp
+    volumes:
+      - ./dsps/charlie:/vlatte/testdata/vlatte/_mocks:ro
+    ports:
+      - '8103:8080'
+      - '8203:8081'
+
+  dsp-delta:
+    <<: *dsp
+    volumes:
+      - ./dsps/delta:/vlatte/testdata/vlatte/_mocks:ro
+    ports:
+      - '8104:8080'
+      - '8204:8081'
+
+  dsp-echo:
+    <<: *dsp
+    volumes:
+      - ./dsps/echo:/vlatte/testdata/vlatte/_mocks:ro
+    ports:
+      - '8105:8080'
+      - '8205:8081'
+
+  dsp-dead:
+    <<: *dsp
+    volumes:
+      - ./dsps/dead:/vlatte/testdata/vlatte/_mocks:ro
+    ports:
+      - '8106:8080'
+      - '8206:8081'
+
+  dsp-slow:
+    <<: *dsp
+    volumes:
+      - ./dsps/slow:/vlatte/testdata/vlatte/_mocks:ro
+    ports:
+      - '8107:8080'
+      - '8207:8081'
+
+  dsp-flaky:
+    <<: *dsp
+    volumes:
+      - ./dsps/flaky:/vlatte/testdata/vlatte/_mocks:ro
+    ports:
+      - '8108:8080'
+      - '8208:8081'
+
+  exchange:
+    # Docker's built-in init (tini) becomes PID 1: it forwards SIGTERM to node and reaps zombies.
+    init: true
+    build:
+      context: ../..
+      dockerfile: examples/06-ad-exchange/Dockerfile
+    depends_on:
+      dsp-alpha:
+        condition: service_healthy
+      dsp-bravo:
+        condition: service_healthy
+      dsp-charlie:
+        condition: service_healthy
+      dsp-delta:
+        condition: service_healthy
+      dsp-echo:
+        condition: service_healthy
+      dsp-dead:
+        condition: service_healthy
+      dsp-slow:
+        condition: service_healthy
+      dsp-flaky:
+        condition: service_healthy
+    environment:
+      # Layers config/application-docker.yaml over config/application.yaml. Add `bare` for the run without resilience:
+      #   CAFFEINE_PROFILES=docker,bare docker compose up
+      CAFFEINE_PROFILES: ${CAFFEINE_PROFILES:-docker}
+    ports:
+      - '9500:9500'
