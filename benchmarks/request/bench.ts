@@ -15,6 +15,7 @@ const servers: ServerConfig[] = [
   { name: 'hono', port: 3021, ...built('hono', 'hono.js') },
   { name: 'nestjs (fastify)', port: 3022, ...built('nestjs', 'nestjs.js') },
   { name: 'nestjs (express)', port: 3028, ...built('nestjs-express', 'nestjs.js') },
+  { name: 'nestjs (node)', port: 3019, ...built('nestjs-node', 'nestjs.js') },
   { name: 'nestjs (fastify, request scoped)', port: 3029, ...built('nestjs-request-scope', 'nestjs.js') },
   { name: 'express', port: 3027, ...built('express', 'express.js') },
   { name: 'caffeine', port: 3023, ...built('caffeine', 'caffeine.js') },
