@@ -228,12 +228,13 @@ describe('once', () => {
           await finish.wait
           return action()
         },
-        { ttl: 30 * Second, renew: true, ...options },
+        // Short enough that the renewal timing out leaves no time for another: it gives the lease up.
+        { ttl: 12 * Second, renew: true, ...options },
       )
       .catch(() => undefined)
     backend.late = ['extend']
     // The first renewal leaves at a third of the lease, and the action ends while it is out.
-    await vi.advanceTimersByTimeAsync(10 * Second)
+    await vi.advanceTimersByTimeAsync(4 * Second)
     finish.open()
     await first
     // Past storeTimeout: the renewal is abandoned.
