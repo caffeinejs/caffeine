@@ -91,7 +91,7 @@ describe('RedisLockBackend', () => {
   // could land after that and race it.
   it('sends no release once the signal has aborted', async () => {
     const client = stubClient()
-    const lease = { key: 'k', token: 't', expiresAt: Date.now() + TTL }
+    const lease = { key: 'k', token: 't', expiresAt: Date.now() + TTL, fencingToken: 1 }
 
     await expect(new RedisLockBackend(client).release(lease, AbortSignal.abort())).rejects.toThrow()
     expect(client.eval).not.toHaveBeenCalled()
