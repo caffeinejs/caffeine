@@ -13,6 +13,7 @@ import {
   kDistLock,
   kDistLockBackend,
   ErrLockLost,
+  type DistLockOptions,
   type Lock,
 } from '@caffeinejs/distlock'
 import { RedisLockBackend, type RedisLockClient } from '@caffeinejs/distlock/backend/redis'
@@ -61,10 +62,10 @@ async function connected(url: string): Promise<Client> {
   return client
 }
 
-function newLock(client: RedisLockClient, storeTimeout = DEFAULT_DIST_LOCK_OPTIONS.storeTimeout): CaffeineDistLock {
+function newLock(client: RedisLockClient, options: Partial<DistLockOptions> = {}): CaffeineDistLock {
   return new CaffeineDistLock(
     new RedisLockBackend(client),
-    { ...DEFAULT_DIST_LOCK_OPTIONS, storeTimeout },
+    { ...DEFAULT_DIST_LOCK_OPTIONS, ...options },
     newNoopLogger(),
   )
 }
@@ -388,15 +389,78 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
       })
     }
 
+    describe('on a rolling restart', () => {
+      const REPLICAS = 3
+      let replicas: CaffeineDistLock[]
+
+      beforeEach(() => {
+        replicas = clients.slice(0, REPLICAS).map(client => newLock(client, { drainTimeout: 200 * Millisecond }))
+      })
+
+      afterEach(async () => {
+        await Promise.all(replicas.map(replica => replica.onDestroy()))
+      })
+
+      // Measured from close resolving: the next replica must not wait out a 30 s lease the closed one let go of.
+      async function handedOver(keys: string[]): Promise<void> {
+        await replicas[0].onDestroy()
+
+        const started = performance.now()
+        for (const k of keys) {
+          const next = await replicas[1].acquire(k, { ttl: 10 * Second, wait: 1 * Second })
+          await next.release()
+        }
+        expect(performance.now() - started).toBeLessThan(1 * Second)
+      }
+
+      it('hands keys over within 1 s on a rolling restart when holders release on abort', async () => {
+        const keys = replicas.map((_, i) => key(`roll:${i}`))
+
+        for (const [i, replica] of replicas.entries()) {
+          const held = await replica.acquire(keys[i], { ttl: 30 * Second, renew: true })
+          held.signal.addEventListener('abort', () => void held.release())
+        }
+
+        await handedOver([keys[0]])
+        // The replicas still running keep theirs.
+        expect(await replicas[1].tryAcquire(keys[2])).toBeUndefined()
+      })
+
+      it('hands keys over within 1 s on a rolling restart when withLock sections observe their signal', async () => {
+        const keys = replicas.map((_, i) => key(`roll-section:${i}`))
+        const entered = replicas.map(() => Promise.withResolvers<void>())
+        const sections = replicas.map((replica, i) =>
+          replica
+            .withLock(
+              keys[i],
+              l => {
+                entered[i].resolve()
+                return new Promise((_, reject) => l.signal.addEventListener('abort', () => reject(l.signal.reason)))
+              },
+              { ttl: 30 * Second },
+            )
+            .catch((error: unknown) => error),
+        )
+        await Promise.all(entered.map(e => e.promise))
+
+        await handedOver([keys[0]])
+
+        const ended = await sections[0]
+        expect(ended).toBeInstanceOf(ErrLockLost)
+        expect((ended as ErrLockLost).reason).toBe('shutdown')
+      })
+    })
+
     // The relay holds replies back, drops connections or refuses new ones, so the server itself is never touched.
     describe('through an outage', () => {
       const STORE_TIMEOUT = 300 * Millisecond
+      const DRAIN_TIMEOUT = 300 * Millisecond
       let relayed: RelayedClient
       let lock: CaffeineDistLock
 
       beforeEach(async () => {
         relayed = await relayedClient(url)
-        lock = newLock(relayed.client, STORE_TIMEOUT)
+        lock = newLock(relayed.client, { storeTimeout: STORE_TIMEOUT, drainTimeout: DRAIN_TIMEOUT })
       })
 
       afterEach(async () => {
@@ -449,6 +513,30 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
 
         expect(result).toBe('done')
         expect(performance.now() - sectionStarted).toBeLessThan(STORE_TIMEOUT + 500)
+      })
+
+      it('does not let close hang on a server that stopped answering', async () => {
+        const held = await lock.acquire(key('hang-close'), { ttl: 10 * Second, renew: true })
+        held.signal.addEventListener('abort', () => void held.release().catch(() => undefined))
+        const entered = Promise.withResolvers<void>()
+        const section = lock
+          .withLock(
+            key('hang-close-section'),
+            l => {
+              entered.resolve()
+              return new Promise((_, reject) => l.signal.addEventListener('abort', () => reject(l.signal.reason)))
+            },
+            { ttl: 10 * Second },
+          )
+          .catch(() => undefined)
+        await entered.promise
+
+        relayed.proxy.hold()
+        const started = performance.now()
+        await lock.onDestroy()
+
+        expect(performance.now() - started).toBeLessThan(DRAIN_TIMEOUT + 2 * STORE_TIMEOUT + 500)
+        await section
       })
 
       it('recovers renewal after the connection drops and the client reconnects', async () => {

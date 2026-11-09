@@ -301,6 +301,28 @@ describe('distlock configuration', () => {
     await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
   })
 
+  // A negative wait would fire at once like zero, hiding a sign error as "abort immediately".
+  it('refuses a negative drain timeout', async () => {
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).drainTimeout(-1)),
+    )
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+  })
+
+  // Node fires a timer longer than 2^31 - 1 ms after 1 ms, which would abort every action at once on close.
+  it('refuses a drain timeout above 2^31 - 1 ms', async () => {
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).drainTimeout(2 ** 31)),
+    )
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+  })
+
   // The schema is internal to the package for now; the feature never reads it.
   it('does not export the config schema from the package barrel', async () => {
     const barrel: Record<string, unknown> = await import('./index.js')

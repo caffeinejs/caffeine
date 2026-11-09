@@ -39,6 +39,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
   #retryJitter: number | undefined
   #backoff: Backoff | undefined
   #storeTimeout: Duration | undefined
+  #drainTimeout: Duration | undefined
   #logger: Logger | false | undefined
   readonly #listeners: Array<[event: keyof LockEventMap, listener: Listener]> = []
 
@@ -111,6 +112,15 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   /**
+   * How long closing the application waits for running `withLock`, `tryWithLock` and `once` actions before it
+   * aborts the locks still held. Defaults to `5 * Second`; `0` aborts at once.
+   */
+  drainTimeout(timeout: Duration): this {
+    this.#drainTimeout = timeout
+    return this
+  }
+
+  /**
    * The logger the lock service writes its own records to, or `false` to write none.
    *
    * Left unset, it is the application logger's child named `distlock`. The records are one per lock operation:
@@ -165,6 +175,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
       maxRetryDelay: this.#maxRetryDelay ?? this.#config?.maxRetryDelay ?? DEFAULT_DIST_LOCK_OPTIONS.maxRetryDelay,
       retryJitter: this.#retryJitter ?? this.#config?.retryJitter ?? DEFAULT_DIST_LOCK_OPTIONS.retryJitter,
       storeTimeout: this.#storeTimeout ?? this.#config?.storeTimeout ?? DEFAULT_DIST_LOCK_OPTIONS.storeTimeout,
+      drainTimeout: this.#drainTimeout ?? this.#config?.drainTimeout ?? DEFAULT_DIST_LOCK_OPTIONS.drainTimeout,
       backoff: this.#backoff,
     }
 
@@ -215,6 +226,20 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
           .solutions(
             `Pass a bound above zero and at most ${formatDuration(MAX_TIMER_DELAY)}, such as .storeTimeout(5 * Second)`,
             'Or set storeTimeout in the configuration tree, such as "5s"',
+          )
+          .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
+          .build(),
+      )
+    }
+
+    if (!(options.drainTimeout >= 0 && options.drainTimeout <= MAX_TIMER_DELAY)) {
+      throw new ErrDistLockConfiguration(
+        errMessage(
+          `Cannot install distributed locking: drain timeout "${formatDuration(options.drainTimeout)}" is not at least 0 and at most ${formatDuration(MAX_TIMER_DELAY)}`,
+        )
+          .solutions(
+            `Pass a drain timeout of at least 0 and at most ${formatDuration(MAX_TIMER_DELAY)}, such as .drainTimeout(5 * Second)`,
+            'Or pass .drainTimeout(0) to abort held locks as soon as the application closes',
           )
           .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
           .build(),

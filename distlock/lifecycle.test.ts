@@ -6,8 +6,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Backend, LockLease } from './backend.js'
 import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
-import type { DistLock } from './distlock.js'
+import type { DistLockBuilder } from './builder.js'
+import type { DistLock, Lock } from './distlock.js'
+import { ErrLockLost } from './errors.js'
 import { kDistLock } from './keys.js'
+import { RecordingLogger } from './log.testkit.js'
+import type { LostMessage } from './observability/channels.js'
 import { DistributedLock } from './plugin.js'
 
 /**
@@ -79,9 +83,15 @@ afterEach(async () => {
   }
 })
 
-async function newApp(backend: Backend): Promise<{ lock: DistLock; close: () => Promise<void> }> {
+async function newApp(
+  backend: Backend,
+  configure?: (d: DistLockBuilder) => void,
+): Promise<{ lock: DistLock; close: () => Promise<void> }> {
   const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
-    DistributedLock(d => d.backend(backend)),
+    DistributedLock(d => {
+      d.backend(backend)
+      configure?.(d)
+    }),
   )
 
   await app.bootstrap()
@@ -93,6 +103,224 @@ async function newApp(backend: Backend): Promise<{ lock: DistLock; close: () => 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
+
+/** A promise the test resolves when it chooses, standing in for an action still running. */
+function latch(): { promise: Promise<void>; open: () => void } {
+  let open!: () => void
+  const promise = new Promise<void>(resolve => (open = resolve))
+  return { promise, open }
+}
+
+/** Starts `close()`, and reports whether it has resolved yet. */
+function closing(close: () => Promise<void>): { readonly done: boolean; promise: Promise<void> } {
+  const state = { done: false, promise: close() }
+  void state.promise.finally(() => (state.done = true)).catch(() => undefined)
+  return state
+}
+
+describe('distlock shutdown', () => {
+  // A replica restarting mid-job should let the job finish, and keep it covered while it does, before the key
+  // goes to anyone else.
+  it('waits for a withLock action to finish, up to drainTimeout, renewing it meanwhile, and releases its key once', async () => {
+    const memory = new MemoryLockBackend()
+    const backend = new FaultyBackend(memory)
+    const { lock, close } = await newApp(backend, d => d.drainTimeout(5 * Second))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const job = latch()
+    let held: Lock | undefined
+    const running = lock.withLock(
+      'orders:rebuild',
+      async l => {
+        held = l
+        await job.promise
+        return 'rebuilt'
+      },
+      { ttl: 3 * Second },
+    )
+    await vi.advanceTimersByTimeAsync(0)
+
+    const shutdown = closing(close)
+    // Past the lease the action started with: only renewal keeps it.
+    await vi.advanceTimersByTimeAsync(4 * Second)
+
+    expect(shutdown.done).toBe(false)
+    expect(held?.signal.aborted).toBe(false)
+    expect(await memory.tryAcquire('orders:rebuild', 1 * Minute)).toBeUndefined()
+
+    job.open()
+    await shutdown.promise
+
+    expect(await running).toBe('rebuilt')
+    expect(backend.released.map(lease => lease.key)).toEqual(['orders:rebuild'])
+    expect(await memory.tryAcquire('orders:rebuild', 1 * Minute)).toBeDefined()
+  })
+
+  // An action that ignores its signal may still be writing: the key must not go to another replica before the
+  // lease would have lapsed anyway.
+  it('aborts a withLock action still running after drainTimeout with ErrLockLost(shutdown), and leaves its key held until it lapses', async () => {
+    const memory = new MemoryLockBackend()
+    const { lock, close } = await newApp(memory, d => d.drainTimeout(1 * Second))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    let held: Lock | undefined
+    void lock
+      .withLock(
+        'orders:rebuild',
+        l => {
+          held = l
+          return new Promise(() => undefined)
+        },
+        { ttl: 30 * Second },
+      )
+      .catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(0)
+
+    const shutdown = closing(close)
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    expect(held?.signal.aborted).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(shutdown.done).toBe(true)
+
+    const reason: unknown = held?.signal.reason
+    expect(reason).toBeInstanceOf(ErrLockLost)
+    expect((reason as ErrLockLost).reason).toBe('shutdown')
+    expect(await memory.tryAcquire('orders:rebuild', 1 * Second)).toBeUndefined()
+
+    await vi.advanceTimersByTimeAsync(held!.expiresAt - Date.now())
+    expect(await memory.tryAcquire('orders:rebuild', 1 * Second)).toBeDefined()
+  })
+
+  // The rolling-restart case: the next replica gets the key as soon as this one stops using it, not a lease later.
+  it('hands a key over when its holder releases on abort', async () => {
+    const memory = new MemoryLockBackend()
+    const { lock, close } = await newApp(memory)
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    held.signal.addEventListener('abort', () => void held.release())
+
+    await close()
+
+    expect(await memory.tryAcquire('orders:rebuild', 1 * Second)).toBeDefined()
+  })
+
+  // A release still on the wire when close resolves is a write the application no longer owns.
+  it('waits for a release its holder started on abort before close resolves', async () => {
+    const backend = new FaultyBackend()
+    const { lock, close } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    backend.late = ['release']
+    held.signal.addEventListener('abort', () => void held.release())
+
+    const shutdown = closing(close)
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    expect(backend.released.map(lease => lease.key)).toEqual(['orders:rebuild'])
+    expect(shutdown.done).toBe(false)
+
+    backend.answerLate()
+    await shutdown.promise
+  })
+
+  // A window left standing is out of the holder's hands: shutdown has nothing to abort, and must not report it lost.
+  it('does not report a once window lost when the application closes after its action returned', async () => {
+    const { lock, close } = await newApp(new MemoryLockBackend())
+    const lost: LostMessage[] = []
+    lock.events.on('lost', message => lost.push(message))
+
+    await lock.once('nightly-report', () => 'done', { ttl: 1 * Minute })
+    await close()
+
+    expect(lost).toEqual([])
+  })
+
+  it('closes within drainTimeout + storeTimeout when the backend never answers', async () => {
+    const backend = new FaultyBackend()
+    const { lock, close } = await newApp(backend, d => d.drainTimeout(2 * Second).storeTimeout(1 * Second))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    // One action that stops on abort and has to release, one that never stops, and a renewal on the wire.
+    void lock
+      .withLock('a', l => new Promise((_, reject) => l.signal.addEventListener('abort', () => reject(l.signal.reason))))
+      .catch(() => undefined)
+    void lock.withLock('b', () => new Promise(() => undefined)).catch(() => undefined)
+    await lock.acquire('c', { ttl: 3 * Second, renew: true })
+    await vi.advanceTimersByTimeAsync(0)
+    for (const operation of ['acquire', 'extend', 'release'] as const) {
+      backend.hang.add(operation)
+    }
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    const shutdown = closing(close)
+    await vi.advanceTimersByTimeAsync(2 * Second + 1 * Second)
+
+    expect(shutdown.done).toBe(true)
+  })
+
+  // A lease taken once the abort has passed would otherwise renew after close, through a backend being torn down.
+  it('ends a lock acquired after the abort with ErrLockLost(shutdown), rather than renewing it past close', async () => {
+    const { lock, close } = await newApp(new MemoryLockBackend(), d => d.drainTimeout(0))
+
+    await close()
+    const late = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+
+    const reason: unknown = late.signal.reason
+    expect(reason).toBeInstanceOf(ErrLockLost)
+    expect((reason as ErrLockLost).reason).toBe('shutdown')
+  })
+
+  // A holder that stops and releases when told to has not outrun its lease: dashboards must not count every
+  // deploy as a critical section that lapsed.
+  it('does not report a section released on a shutdown abort as lapsed', async () => {
+    const { lock, close } = await newApp(new MemoryLockBackend(), d => d.drainTimeout(0))
+    const lapsed: Array<[string, boolean | undefined]> = []
+    lock.events.on('withLock', ctx => lapsed.push(['withLock', ctx.lapsed]))
+    lock.events.on('release', ctx => lapsed.push(['release', ctx.lapsed]))
+
+    const started = latch()
+    const section = lock
+      .withLock('orders:rebuild', l => {
+        started.open()
+        return new Promise((_, reject) => l.signal.addEventListener('abort', () => reject(l.signal.reason)))
+      })
+      .catch(() => undefined)
+    await started.promise
+
+    await close()
+    await section
+
+    expect(lapsed).toEqual([
+      ['release', false],
+      ['withLock', false],
+    ])
+  })
+
+  // Operators get one line for the shutdown; dashboards get one loss per lease.
+  it('publishes one lost message per key ended by shutdown, and one warning for all of them', async () => {
+    const log = new RecordingLogger()
+    const { lock, close } = await newApp(new MemoryLockBackend(), d => d.logger(log).drainTimeout(0))
+    const lost: LostMessage[] = []
+    lock.events.on('lost', message => lost.push(message))
+
+    await lock.acquire('a', { ttl: 1 * Minute })
+    await lock.acquire('b', { ttl: 1 * Minute, renew: true })
+    const released = await lock.acquire('c', { ttl: 1 * Minute })
+    await released.release()
+
+    await close()
+
+    expect(lost.map(m => [m.key, m.reason]).sort()).toEqual([
+      ['a', 'shutdown'],
+      ['b', 'shutdown'],
+    ])
+    expect(log.at('warn').map(r => [r.msg, r.fields])).toEqual([
+      ['lock service closed with locks still held', { count: 2 }],
+    ])
+  })
+})
 
 describe('distlock lifecycle', () => {
   // An unref'd timer cannot hold the process open, but one left behind still fires a loss nobody can act on.

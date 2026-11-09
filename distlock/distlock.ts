@@ -204,7 +204,13 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   readonly options: DistLockOptions
   readonly log: Logger
 
-  readonly #renewing = new Set<HeldLock>()
+  // Every lock in a holder's hands, every backend call a lock has in flight, and every running `withLock`,
+  // `tryWithLock` and `once`: what closing the service drains, aborts and waits for.
+  readonly #held = new Set<HeldLock>()
+  readonly #inFlight = new Set<Promise<unknown>>()
+  readonly #actions = new Set<Promise<unknown>>()
+  // Set once closing has aborted the locks it found, so a lease taken after that is ended as it arrives.
+  #aborted = false
   #events: LockEvents | undefined
 
   constructor(backend: Backend, options: DistLockOptions, log: Logger) {
@@ -219,26 +225,55 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   }
 
   /**
-   * Stops every renewal timer when the container is disposed, and waits for the renewals already in flight.
+   * Drains, then aborts, the locks this service holds when the container is disposed.
    *
-   * Once this resolves nothing here writes to the backend again, which is what makes disposal a point an
-   * adapter can be torn down after. The listeners on {@link events} are removed last, so they still hear
-   * about those renewals.
+   * It waits up to `drainTimeout` for running `withLock`, `tryWithLock` and `once` actions to finish, renewing
+   * their leases meanwhile. Every lock still held after that loses its lease with `ErrLockLost` reason `shutdown`
+   * on its signal, and it waits up to `storeTimeout` more for the releases that follow and the backend calls
+   * already on the wire. A key it did not see released is left to lapse at its expiry, so no other replica takes
+   * it while an action that ignored the abort can still write. A `once` window is left standing.
    *
-   * Held keys are left alone: `withLock` releases on its own path, and a `once` window has to outlive the
-   * process that opened it or the next replica up would redo the work.
+   * Never rejects. The listeners on {@link events} are removed last, so they still hear about every loss.
    */
   async onDestroy(): Promise<void> {
-    const locks = [...this.#renewing]
-    this.#renewing.clear()
+    const { drainTimeout, storeTimeout } = this.options
 
-    for (const lock of locks) {
-      lock.stopRenewal()
+    // Renewal keeps running, so no lease lapses under an action this is waiting for.
+    if (drainTimeout > 0) {
+      await settleWithin([...this.#actions], drainTimeout)
     }
 
-    await Promise.all(locks.map(lock => lock.settled()))
+    this.#aborted = true
+    const locks = [...this.#held]
+    let ended = 0
+    for (const lock of locks) {
+      if (lock.endForShutdown()) {
+        ended += 1
+      }
+    }
+    if (ended > 0) {
+      this.log.warn({ count: ended }, 'lock service closed with locks still held')
+    }
+
+    // A holder that observed its signal has started its release by now, and it joined the in-flight set.
+    const deadline = Date.now() + storeTimeout
+    let pending = [...this.#actions, ...this.#inFlight]
+    while (pending.length > 0 && Date.now() < deadline) {
+      if (!(await settleWithin(pending, deadline - Date.now()))) {
+        break
+      }
+      pending = [...this.#actions, ...this.#inFlight]
+    }
 
     this.#events?.removeAllListeners()
+  }
+
+  track<T>(call: Promise<T>): Promise<T> {
+    this.#inFlight.add(call)
+    const done = () => this.#inFlight.delete(call)
+    call.then(done, done)
+
+    return call
   }
 
   /**
@@ -254,7 +289,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
       bound: 'storeTimeout',
     }
 
-    boundedCall(call, signal => this.backend.release(lease, signal)).then(
+    this.track(boundedCall(call, signal => this.backend.release(lease, signal))).then(
       () => this.log.debug({ key: lease.key }, 'lock lease given back'),
       // Whatever made the lease late or unwanted was already warned about; the lease lapses at its ttl.
       (error: unknown) => this.log.debug({ err: error, key: lease.key }, 'lock lease give-back failed'),
@@ -280,10 +315,12 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   async withLock<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options: AcquireOptions = {}): Promise<T> {
     checkKey(key)
     const backoff = this.#backoff(key, options)
-    const run = await traced(
-      withLockChannel,
-      (): Writable<WithLockContext> => ({ service: this, key }),
-      ctx => this.#withLock(key, fn, options, backoff, ctx),
+    const run = await this.#action(
+      traced(
+        withLockChannel,
+        (): Writable<WithLockContext> => ({ service: this, key }),
+        ctx => this.#withLock(key, fn, options, backoff, ctx),
+      ),
     )
 
     // Waiting never skips: the acquisition throws when it gives up.
@@ -296,10 +333,12 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     options: TryWithLockOptions = {},
   ): Promise<RunResult<T>> {
     checkKey(key)
-    return traced(
-      withLockChannel,
-      (): Writable<WithLockContext> => ({ service: this, key }),
-      ctx => this.#withLock(key, fn, options, undefined, ctx),
+    return this.#action(
+      traced(
+        withLockChannel,
+        (): Writable<WithLockContext> => ({ service: this, key }),
+        ctx => this.#withLock(key, fn, options, undefined, ctx),
+      ),
     )
   }
 
@@ -307,11 +346,31 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     checkKey(key)
     const ttl = options.ttl ?? this.options.ttl
 
-    return traced(
-      onceChannel,
-      (): Writable<OnceContext> => ({ service: this, key, ttl }),
-      ctx => this.#once(key, fn, ttl, options, ctx),
+    return this.#action(
+      traced(
+        onceChannel,
+        (): Writable<OnceContext> => ({ service: this, key, ttl }),
+        ctx => this.#once(key, fn, ttl, options, ctx),
+      ),
     )
+  }
+
+  // A lease taken after closing aborted the locks it found would renew past close: it is ended as it arrives, and
+  // its holder releases it on its own path as any other.
+  #endIfClosed(lock: HeldLock): void {
+    if (this.#aborted && lock.endForShutdown()) {
+      this.log.warn({ key: lock.key, leaseID: lock.leaseID }, 'lock acquired after the lock service closed')
+    }
+  }
+
+  // Counts a running `withLock`, `tryWithLock` or `once`, release included, until it settles, so closing the
+  // service can drain it.
+  #action<T>(run: Promise<T>): Promise<T> {
+    this.#actions.add(run)
+    const done = () => this.#actions.delete(run)
+    run.then(done, done)
+
+    return run
   }
 
   #acquireTraced(key: string, options: AcquireOptions, backoff: Backoff, parent?: WithLockContext): Promise<HeldLock> {
@@ -376,8 +435,9 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
       return undefined
     }
 
-    const lock = new HeldLock(this, lease, ttl, renew ? this.#renewing : undefined)
+    const lock = new HeldLock(this, lease, ttl, renew, this.#held)
     this.#settleAcquire(ctx, key, 'acquired', 1, started, lock)
+    this.#endIfClosed(lock)
 
     return lock
   }
@@ -407,8 +467,9 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
       throw new ErrLockNotAcquired(key, wait)
     }
 
-    const lock = new HeldLock(this, lease, ttl, options.renew === true ? this.#renewing : undefined)
+    const lock = new HeldLock(this, lease, ttl, options.renew === true, this.#held)
     this.#settleAcquire(ctx, key, 'acquired', tally.attempts, started, lock)
+    this.#endIfClosed(lock)
 
     return lock
   }
@@ -602,7 +663,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     try {
       result = await fn(lock)
     } catch (error) {
-      const lapsed = lock.lost
+      const lapsed = lock.lapsed
       const keep = options.releaseOnError === false
       // A release reports a lapse of its own; only a key left standing needs this call to say so.
       const warn = keep && lock.claimLapseWarning()
@@ -617,7 +678,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
       throw error
     }
 
-    const lapsed = lock.lost
+    const lapsed = lock.lapsed
     const warn = lock.claimLapseWarning()
 
     // Deliberately not released: what is left of the lease is the window, and it is what keeps the next
@@ -724,7 +785,23 @@ function checkKey(key: unknown): void {
 function settleHold(ctx: Writable<WithLockContext> | undefined, lock: HeldLock): void {
   if (ctx !== undefined) {
     ctx.held = Date.now() - lock.acquiredAt
-    ctx.lapsed = lock.lost
+    ctx.lapsed = lock.lapsed
+  }
+}
+
+// Waits for every promise to settle, or for `ms` to pass, whichever comes first. Says whether they all settled.
+async function settleWithin(pending: ReadonlyArray<Promise<unknown>>, ms: Duration): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const elapsed = new Promise<false>(resolve => {
+    timer = setTimeout(() => resolve(false), ms)
+    // Never the last thing keeping a process alive.
+    timer.unref?.()
+  })
+
+  try {
+    return await Promise.race([Promise.allSettled(pending).then(() => true), elapsed])
+  } finally {
+    clearTimeout(timer)
   }
 }
 

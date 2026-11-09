@@ -41,6 +41,16 @@ export interface DistLockOptions {
    * caller gave up is released with its own token.
    */
   storeTimeout: Duration
+
+  /**
+   * How long closing the service waits for running `withLock`, `tryWithLock` and `once` actions to finish before
+   * it aborts every lock still held with `ErrLockLost` reason `shutdown`. `0` aborts at once.
+   *
+   * Renewal keeps running while it waits. After the abort it waits up to `storeTimeout` more for the releases
+   * that follow, and leaves any key it did not see released to lapse, so closing takes at most
+   * `drainTimeout + storeTimeout`.
+   */
+  drainTimeout: Duration
 }
 
 export const DEFAULT_DIST_LOCK_OPTIONS: DistLockOptions = {
@@ -50,6 +60,7 @@ export const DEFAULT_DIST_LOCK_OPTIONS: DistLockOptions = {
   maxRetryDelay: 1 * Second,
   retryJitter: 0.5,
   storeTimeout: 5 * Second,
+  drainTimeout: 5 * Second,
 }
 
 /**
@@ -66,4 +77,5 @@ export interface DistLockConfig {
   maxRetryDelay?: Duration
   retryJitter?: number
   storeTimeout?: Duration
+  drainTimeout?: Duration
 }
