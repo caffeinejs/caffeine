@@ -21,7 +21,7 @@ describe('httpDate reads the three forms of an HTTP-date (RFC 9110 §5.6.7)', ()
   it('reads the obsolete RFC 850 form', () => {
     vi.useFakeTimers({ toFake: ['Date'], now: Date.UTC(2026, 0, 1) })
 
-    expect(httpDate('Sunday, 06-Nov-26 08:49:37 GMT')).toBe(Date.UTC(2026, 10, 6, 8, 49, 37))
+    expect(httpDate('Friday, 06-Nov-26 08:49:37 GMT')).toBe(Date.UTC(2026, 10, 6, 8, 49, 37))
   })
 
   // A two-digit year that puts the date more than 50 years ahead of the moment it is read is taken from the century
@@ -42,7 +42,7 @@ describe('httpDate reads the three forms of an HTTP-date (RFC 9110 §5.6.7)', ()
 
   it('reads the asctime form, whose single-digit day is padded with a space', () => {
     expect(httpDate('Sun Nov  6 08:49:37 1994')).toBe(Date.UTC(1994, 10, 6, 8, 49, 37))
-    expect(httpDate('Sun Nov 16 08:49:37 1994')).toBe(Date.UTC(1994, 10, 16, 8, 49, 37))
+    expect(httpDate('Wed Nov 16 08:49:37 1994')).toBe(Date.UTC(1994, 10, 16, 8, 49, 37))
   })
 
   // `Date.parse` takes each of these for a date; a field carrying one that is no HTTP-date is ignored instead.
@@ -50,6 +50,17 @@ describe('httpDate reads the three forms of an HTTP-date (RFC 9110 §5.6.7)', ()
     for (const value of ['2026', '12/31', '1994-11-06T08:49:37Z', 'Sun, 06 Nov 1994 08:49:37 UTC', '']) {
       expect(httpDate(value), value).toBe(undefined)
     }
+  })
+
+  // RFC 5322 §3.3, which RFC 9110 §5.6.7 follows: the day of the week is the one the date falls on. A date naming
+  // another is invalid, and a conditional request ignores an invalid date (§13.1.3).
+  it('reads nothing from a date whose day of the week is not the one it falls on', () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.UTC(2026, 0, 1) })
+
+    expect(httpDate('Fri, 15 Jan 2026 10:00:00 GMT')).toBe(undefined)
+    expect(httpDate('Friday, 15-Jan-26 10:00:00 GMT')).toBe(undefined)
+    expect(httpDate('Fri Jan 15 10:00:00 2026')).toBe(undefined)
+    expect(notModified(undefined, 'Fri, 15 Jan 2026 10:00:00 GMT', { lastModified: CHANGED })).toBe(false)
   })
 
   it('reads nothing from a day the month does not have, or a time past the day', () => {
@@ -63,6 +74,12 @@ describe('httpDate reads the three forms of an HTTP-date (RFC 9110 §5.6.7)', ()
 describe('preconditionFailed refuses a client whose If-Match or If-Unmodified-Since no longer holds', () => {
   it('holds for If-Match: *, whatever the content', () => {
     expect(preconditionFailed(' * ', undefined, {})).toBe(false)
+    expect(preconditionFailed('\t*\t', undefined, {})).toBe(false)
+  })
+
+  // HTTP pads a field value with space and tab only (RFC 9110 §5.6.3); a no-break space is part of the value.
+  it('fails for a * padded with anything but space and tab', () => {
+    expect(preconditionFailed('\u00a0*', undefined, { etag: STRONG })).toBe(true)
   })
 
   it('holds when a listed tag matches strongly, a comma inside a tag splitting nothing', () => {
@@ -120,6 +137,11 @@ describe('preconditionFailed refuses a client whose If-Match or If-Unmodified-Si
 describe('notModified answers a client that holds the content already', () => {
   it('matches If-None-Match: * against any content', () => {
     expect(notModified('*', undefined, {})).toBe(true)
+    expect(notModified(' \t* ', undefined, {})).toBe(true)
+  })
+
+  it('does not match a * padded with anything but space and tab', () => {
+    expect(notModified('\u00a0*', undefined, { etag: STRONG })).toBe(false)
   })
 
   // A cache revalidating holds a representation it may have stored under either tag.

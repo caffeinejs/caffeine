@@ -810,18 +810,21 @@ describe('Attachment() answers a client that already holds the content with 304 
   // RFC 9110 §5.6.7: a two-digit year more than 50 years ahead is the most recent past year with those digits, so one
   // stamp names another year as the calendar moves on. The clock is fixed here, never left to the day the suite runs.
   it('reads a two-digit year against the year the request arrives in', async () => {
-    const headers = { 'if-modified-since': 'Friday, 01-Oct-99 12:34:56 GMT' }
     vi.useFakeTimers({ toFake: ['Date'] })
 
     try {
-      // In 2026, 99 is more than 50 years ahead: it is 1999, before the content last changed.
+      // In 2026, 99 is more than 50 years ahead: it is 1999, a Friday, before the content last changed.
       vi.setSystemTime(new Date('2026-10-21T00:00:00Z'))
-      const in2026 = await app.request('/files/bytes', { headers })
+      const in2026 = await app.request('/files/bytes', {
+        headers: { 'if-modified-since': 'Friday, 01-Oct-99 12:34:56 GMT' },
+      })
       expect(in2026.status).toBe(200)
       await expectPatternedBody(in2026, 0, SIZE)
 
       // On 1 December 2049, 1 October 2099 is less than 50 years ahead: it is 2099, after.
       vi.setSystemTime(new Date('2049-12-01T00:00:00Z'))
+      // 1 October 2099 is a Thursday.
+      const headers = { 'if-modified-since': 'Thursday, 01-Oct-99 12:34:56 GMT' }
       expect((await app.request('/files/bytes', { headers })).status).toBe(304)
     } finally {
       vi.useRealTimers()
