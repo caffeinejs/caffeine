@@ -450,26 +450,8 @@ export class HeldLock implements Lock {
     }
 
     if (!(renewal && this.#givingUp) && !this.#released && !this.#taken) {
-      const violation = this.#lease === sent ? fencingViolation(late, sent) : undefined
-      if (violation !== undefined) {
-        // Refused as an on-time answer is: the lease cannot be trusted, so it is given back and the lock lost.
-        this.#host.log.warn(
-          { err: violation, key: this.key, leaseID: this.leaseID, operation: 'extend' },
-          'lock backend failed late',
-        )
-        this.#host.giveBack(late)
-        this.#lose('error', renewal)
-        return
-      }
-
       if (this.#lease === sent) {
-        this.#lease = late
-        if (renewal) {
-          this.#renewalFailed = false
-        }
-        if (!this.#detached) {
-          this.#armDeadline()
-        }
+        this.#adoptCurrent(late, sent, renewal)
         return
       }
 
@@ -481,6 +463,29 @@ export class HeldLock implements Lock {
     }
 
     this.#host.giveBack(late)
+  }
+
+  // A late answer to the extension the lock is still on. Refused as an on-time answer is when it renumbered the
+  // lease: the lease cannot be trusted, so it is given back and the lock lost.
+  #adoptCurrent(late: LockLease, sent: LockLease, renewal: boolean): void {
+    const violation = fencingViolation(late, sent)
+    if (violation !== undefined) {
+      this.#host.log.warn(
+        { err: violation, key: this.key, leaseID: this.leaseID, operation: 'extend' },
+        'lock backend failed late',
+      )
+      this.#host.giveBack(late)
+      this.#lose('error', renewal)
+      return
+    }
+
+    this.#lease = late
+    if (renewal) {
+      this.#renewalFailed = false
+    }
+    if (!this.#detached) {
+      this.#armDeadline()
+    }
   }
 
   // The one loss a lease can have: whichever of the deadline, a renewal or shutdown notices first reports it, and
