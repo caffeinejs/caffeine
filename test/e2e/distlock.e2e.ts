@@ -327,7 +327,8 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
                 await sleep(10)
                 sections.push({ client, enter, exit: performance.now() })
               },
-              { wait: 30 * Second, retryDelay: 5 },
+              // The default backoff: every waiter still gets through inside the budget.
+              { wait: 30 * Second },
             ),
           ),
         )

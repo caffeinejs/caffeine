@@ -12,6 +12,9 @@
     },
     {
       "path": "../application/tsconfig.build.json"
+    },
+    {
+      "path": "../resilience/tsconfig.build.json"
     }
   ],
   "exclude": [

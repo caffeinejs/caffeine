@@ -1,11 +1,13 @@
 import type { Logger } from '@caffeinejs/application/logger'
 import { type OnDestroy } from '@caffeinejs/di'
-import type { Duration } from '@caffeinejs/std/duration'
+import { exponential, type Backoff } from '@caffeinejs/resilience'
+import { formatDuration, type Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { acquireChannel, onceChannel, publishContended, traced, withLockChannel, type Writable } from './_channels.js'
 import { HeldLock } from './_lock.js'
 import { type Backend, type LockLease } from './backend.js'
-import { ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
+import { ErrDistLockConfiguration, ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
 import type {
   AcquireContext,
   AcquireMode,
@@ -56,7 +58,10 @@ export interface Lock {
   [Symbol.asyncDispose](): Promise<void>
 }
 
-/** How a single acquisition behaves. Each member falls back to the value the feature was configured with. */
+/**
+ * How a single acquisition behaves. Each member but `renew` falls back to the value the feature was configured
+ * with; `renew` depends on the method.
+ */
 export interface AcquireOptions {
   /** How long the lease is good for. */
   ttl?: Duration
@@ -64,14 +69,35 @@ export interface AcquireOptions {
   /** How long `acquire` keeps retrying before it gives up. `0` makes it a single attempt. */
   wait?: Duration
 
-  /** How long to pause between attempts, before jitter. */
+  /**
+   * The pause after the first attempt, before jitter. Each later pause doubles it, up to `maxRetryDelay`, which
+   * also caps this one.
+   */
   retryDelay?: Duration
 
-  /** Renews the lease in the background for as long as the lock is held. Off by default. */
+  /** The longest pause between two attempts, before jitter. */
+  maxRetryDelay?: Duration
+
+  /**
+   * The pause after each attempt, by attempt number from 1. Replaces `retryDelay`, `maxRetryDelay`, the service's
+   * `retryJitter` and the service's `backoff` for this call.
+   */
+  backoff?: Backoff
+
+  /**
+   * Renews the lease in the background while the lock is held. On by default in `withLock` and `tryWithLock`,
+   * whose scope ends it; off by default for `acquire` and `tryAcquire`, where a forgotten lease would renew for as
+   * long as the process lives.
+   *
+   * A renewing action that never settles holds the key while the process lives: bound its own I/O.
+   */
   renew?: boolean
 
   signal?: AbortSignal
 }
+
+/** How one {@link DistLock.tryWithLock} call behaves: one attempt, so nothing about waiting applies. */
+export type TryWithLockOptions = Omit<AcquireOptions, 'wait' | 'retryDelay' | 'maxRetryDelay' | 'backoff'>
 
 /** How one {@link DistLock.once} call behaves. */
 export interface OnceOptions {
@@ -93,8 +119,8 @@ export interface OnceOptions {
   signal?: AbortSignal
 }
 
-/** What {@link DistLock.once} reports: whether this caller is the one that ran the action. */
-export type OnceResult<T> =
+/** What {@link DistLock.tryWithLock} and {@link DistLock.once} report: whether this caller ran the action. */
+export type RunResult<T> =
   | { readonly executed: true; readonly result: T }
   | { readonly executed: false; readonly result?: undefined }
 
@@ -122,22 +148,36 @@ export interface DistLock {
   tryAcquire(key: string, options?: AcquireOptions): Promise<Lock | undefined>
 
   /**
-   * Retries until the key is taken. One attempt can outlast `wait` by up to `min(storeTimeout, ttl)`. A backend
-   * that did not answer in time is retried while `wait` remains; any other backend error rejects at once.
+   * Retries with exponential backoff until the key is taken. One attempt can outlast `wait` by up to
+   * `min(storeTimeout, ttl)`. A backend that did not answer in time is retried while `wait` remains; any other
+   * backend error rejects at once.
    *
    * @throws ErrLockNotAcquired when the `wait` budget runs out on contention, ErrLockBackendTimeout when it runs
    * out with the last attempt unanswered, and whatever `signal` aborted with when it aborts.
    * @throws ErrInvalidLockKey when the key is empty or not a string.
+   * @throws ErrDistLockConfiguration when a retry option is out of range, before any attempt.
    */
   acquire(key: string, options?: AcquireOptions): Promise<Lock>
 
   /**
-   * Acquires the key, runs the action, and releases in a `finally` — on success and on throw alike.
+   * Acquires the key, runs the action, and releases in a `finally` — on success and on throw alike. The lease is
+   * renewed while the action runs, unless `renew` is `false`.
    *
    * A release that fails after the action returned is logged, not thrown: the result stands and the lease lapses
    * at `expiresAt`.
+   *
+   * @throws ErrDistLockConfiguration when a retry option is out of range, before any attempt.
    */
   withLock<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options?: AcquireOptions): Promise<T>
+
+  /**
+   * Runs the action under the key when it is free, and reports `executed: false` without waiting when another
+   * holder has it. Renews and releases like {@link withLock}.
+   *
+   * @throws ErrLockBackendTimeout when the backend did not answer within `min(storeTimeout, ttl)`.
+   * @throws ErrInvalidLockKey when the key is empty or not a string.
+   */
+  tryWithLock<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options?: TryWithLockOptions): Promise<RunResult<T>>
 
   /**
    * Runs the action at most once per window across every replica, and returns immediately when somebody else
@@ -146,7 +186,7 @@ export interface DistLock {
    * The key is **not** released when the action succeeds: what is left of the lease is the window, which is
    * what keeps a later caller out as well as a concurrent one.
    */
-  once<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options?: OnceOptions): Promise<OnceResult<T>>
+  once<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options?: OnceOptions): Promise<RunResult<T>>
 }
 
 /**
@@ -234,19 +274,36 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
 
   async acquire(key: string, options: AcquireOptions = {}): Promise<Lock> {
     checkKey(key)
-    return this.#acquireTraced(key, options)
+    return this.#acquireTraced(key, options, this.#backoff(key, options))
   }
 
   async withLock<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options: AcquireOptions = {}): Promise<T> {
     checkKey(key)
+    const backoff = this.#backoff(key, options)
+    const run = await traced(
+      withLockChannel,
+      (): Writable<WithLockContext> => ({ service: this, key }),
+      ctx => this.#withLock(key, fn, options, backoff, ctx),
+    )
+
+    // Waiting never skips: the acquisition throws when it gives up.
+    return run.result as T
+  }
+
+  async tryWithLock<T>(
+    key: string,
+    fn: (lock: Lock) => T | Promise<T>,
+    options: TryWithLockOptions = {},
+  ): Promise<RunResult<T>> {
+    checkKey(key)
     return traced(
       withLockChannel,
       (): Writable<WithLockContext> => ({ service: this, key }),
-      ctx => this.#withLock(key, fn, options, ctx),
+      ctx => this.#withLock(key, fn, options, undefined, ctx),
     )
   }
 
-  async once<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options: OnceOptions = {}): Promise<OnceResult<T>> {
+  async once<T>(key: string, fn: (lock: Lock) => T | Promise<T>, options: OnceOptions = {}): Promise<RunResult<T>> {
     checkKey(key)
     const ttl = options.ttl ?? this.options.ttl
 
@@ -257,15 +314,44 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     )
   }
 
-  #acquireTraced(key: string, options: AcquireOptions, parent?: WithLockContext): Promise<HeldLock> {
+  #acquireTraced(key: string, options: AcquireOptions, backoff: Backoff, parent?: WithLockContext): Promise<HeldLock> {
     const ttl = options.ttl ?? this.options.ttl
     const wait = options.wait ?? this.options.wait
 
     return traced(
       acquireChannel,
       () => this.#acquireContext(key, 'wait', ttl, wait, parent),
-      ctx => this.#acquire(key, ttl, wait, options, ctx),
+      ctx => this.#acquire(key, ttl, wait, backoff, options, ctx),
     )
+  }
+
+  // A call's own `backoff` wins. A call that names `retryDelay` or `maxRetryDelay` gets the exponential schedule
+  // with those, and only a call that names none of them gets the service's `backoff`. Built once per call, before
+  // anything is traced, so a bad value is the caller's error and not an acquisition that failed.
+  #backoff(key: string, options: AcquireOptions): Backoff {
+    if (options.backoff !== undefined) {
+      return options.backoff
+    }
+
+    if (options.retryDelay === undefined && options.maxRetryDelay === undefined && this.options.backoff !== undefined) {
+      return this.options.backoff
+    }
+
+    const initialDelay = options.retryDelay ?? this.options.retryDelay
+    const maxDelay = options.maxRetryDelay ?? this.options.maxRetryDelay
+    const jitter = this.options.retryJitter
+    if (!(Number.isFinite(initialDelay) && initialDelay >= 0)) {
+      throw invalidRetry(key, `retryDelay "${formatDuration(initialDelay)}" is not a finite Duration of at least 0`)
+    }
+    if (!(maxDelay >= 0)) {
+      throw invalidRetry(key, `maxRetryDelay "${formatDuration(maxDelay)}" is not a Duration of at least 0`)
+    }
+    // Only a service constructed by hand can get here with it: the builder refuses it.
+    if (!(jitter >= 0 && jitter < 1)) {
+      throw invalidRetry(key, `retryJitter "${jitter}" is not at least 0 and below 1`)
+    }
+
+    return exponential({ initialDelay, multiplier: 2, maxDelay, jitter })
   }
 
   async #tryAcquire(
@@ -300,17 +386,17 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     key: string,
     ttl: Duration,
     wait: Duration,
+    backoff: Backoff,
     options: AcquireOptions,
     ctx: Writable<AcquireContext> | undefined,
   ): Promise<HeldLock> {
-    const retryDelay = options.retryDelay ?? this.options.retryDelay
     const started = Date.now()
     const deadline = started + wait
     const tally: Tally = { attempts: 0, failed: false, expired: false }
 
     let lease: LockLease | undefined
     try {
-      lease = await this.#retry(key, ttl, deadline, retryDelay, options.signal, tally)
+      lease = await this.#retry(key, ttl, deadline, backoff, options.signal, tally)
     } catch (error) {
       this.#settleAcquire(ctx, key, options.signal?.aborted === true ? 'aborted' : 'error', tally.attempts, started)
       throw error
@@ -334,7 +420,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     key: string,
     ttl: Duration,
     deadline: number,
-    retryDelay: Duration,
+    backoff: Backoff,
     signal: AbortSignal | undefined,
     tally: Tally,
   ): Promise<LockLease | undefined> {
@@ -365,7 +451,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
         return undefined
       }
 
-      await sleep(Math.min(jittered(retryDelay, this.options.retryJitter), deadline - now), signal)
+      await sleep(Math.min(backoff(tally.attempts), deadline - now), signal)
     }
   }
 
@@ -431,16 +517,32 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     return lease
   }
 
+  // The one body of `withLock` and `tryWithLock`: `backoff` is how the former waits, and its absence makes the one
+  // attempt of the latter. Either renews by default, since the scope of the action ends the lease.
   async #withLock<T>(
     key: string,
     fn: (lock: Lock) => T | Promise<T>,
     options: AcquireOptions,
+    backoff: Backoff | undefined,
     ctx: Writable<WithLockContext> | undefined,
-  ): Promise<T> {
-    const lock = await this.#acquireTraced(key, options, ctx)
+  ): Promise<RunResult<T>> {
+    const renewing = { ...options, renew: options.renew ?? true }
+    const lock =
+      backoff === undefined
+        ? await this.#tryAcquireTraced(key, renewing, ctx)
+        : await this.#acquireTraced(key, renewing, backoff, ctx)
+
+    if (lock === undefined) {
+      if (ctx !== undefined) {
+        ctx.outcome = 'skipped'
+      }
+      return { executed: false }
+    }
+
     lock.within = ctx
     if (ctx !== undefined) {
       ctx.leaseID = lock.leaseID
+      ctx.outcome = 'executed'
     }
 
     let result: T
@@ -459,7 +561,17 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     // the lease it could not hand back lapses at `expiresAt`.
     await lock.release().catch(() => undefined)
 
-    return result
+    return { executed: true, result }
+  }
+
+  #tryAcquireTraced(key: string, options: AcquireOptions, parent: WithLockContext | undefined) {
+    const ttl = options.ttl ?? this.options.ttl
+
+    return traced(
+      acquireChannel,
+      () => this.#acquireContext(key, 'try', ttl, 0, parent),
+      ctx => this.#tryAcquire(key, ttl, options.renew === true, options.signal, ctx),
+    )
   }
 
   async #once<T>(
@@ -468,7 +580,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     ttl: Duration,
     options: OnceOptions,
     ctx: Writable<OnceContext> | undefined,
-  ): Promise<OnceResult<T>> {
+  ): Promise<RunResult<T>> {
     let lock: HeldLock | undefined
     try {
       lock = await traced(
@@ -594,6 +706,15 @@ interface Tally {
   expired: boolean
 }
 
+function invalidRetry(key: string, reason: string): ErrDistLockConfiguration {
+  return new ErrDistLockConfiguration(
+    errMessage(`Cannot acquire "${key}": ${reason}`)
+      .solutions('Pass retry options in range, such as { retryDelay: 50 * Millisecond, maxRetryDelay: 1 * Second }')
+      .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
+      .build(),
+  )
+}
+
 function checkKey(key: unknown): void {
   if (typeof key !== 'string' || key === '') {
     throw new ErrInvalidLockKey(key)
@@ -605,10 +726,6 @@ function settleHold(ctx: Writable<WithLockContext> | undefined, lock: HeldLock):
     ctx.held = Date.now() - lock.acquiredAt
     ctx.lapsed = lock.lost
   }
-}
-
-function jittered(delayMs: number, jitter: number): number {
-  return jitter <= 0 ? delayMs : delayMs + Math.random() * delayMs * jitter
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {

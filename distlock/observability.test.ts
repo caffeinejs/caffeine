@@ -255,11 +255,28 @@ describe('distlock diagnostics channels', () => {
     const { lock, log } = await newApp()
     const published = record(lock)
 
-    await lock.withLock('a', () => sleep(40), { ttl: 20 })
+    // Without renewal: a renewing section keeps its lease however long it runs.
+    await lock.withLock('a', () => sleep(40), { ttl: 20, renew: false })
 
     expect(ended<WithLockContext>(published, 'withLock')[0]!.lapsed).toBe(true)
     expect(ended<ReleaseContext>(published, 'release')[0]!.lapsed).toBe(true)
     expect(log.at('warn').map(r => r.msg)).toEqual(['lock released after its lease lapsed'])
+  })
+
+  // A skip is the policy working, not a failure: a dashboard counting them must not see an error or a release.
+  it('reports a skipped tryWithLock with outcome skipped and no release', async () => {
+    const { lock } = await newApp()
+    const holder = await lock.acquire('a')
+    const published = record(lock)
+
+    expect(await lock.tryWithLock('a', () => 'ran')).toEqual({ executed: false })
+
+    const [withLock] = ended<WithLockContext>(published, 'withLock')
+    expect(withLock).toMatchObject({ key: 'a', outcome: 'skipped' })
+    expect(withLock!.error).toBeUndefined()
+    expect(ended<AcquireContext>(published, 'acquire')[0]).toMatchObject({ mode: 'try', outcome: 'held' })
+    expect(ended<ReleaseContext>(published, 'release')).toEqual([])
+    await holder.release()
   })
 
   it('does not flag a critical section that finished inside its lease', async () => {

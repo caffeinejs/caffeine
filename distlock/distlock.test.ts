@@ -1,16 +1,26 @@
 import { createApplication } from '@caffeinejs/application'
+import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Minute, Second, type Duration } from '@caffeinejs/std/duration'
+import { Millisecond, Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
 import { FaultyBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
-import type { DistLock, Lock } from './distlock.js'
-import { ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockLost, ErrLockNotAcquired, ErrLockReleased } from './errors.js'
+import type { DistLockBuilder } from './builder.js'
+import { CaffeineDistLock, type AcquireOptions, type DistLock, type Lock } from './distlock.js'
+import {
+  ErrDistLockConfiguration,
+  ErrInvalidLockKey,
+  ErrLockBackendTimeout,
+  ErrLockLost,
+  ErrLockNotAcquired,
+  ErrLockReleased,
+} from './errors.js'
 import { kDistLock } from './keys.js'
 import { RecordingLogger } from './log.testkit.js'
 import type { LostMessage } from './observability/channels.js'
+import { DEFAULT_DIST_LOCK_OPTIONS } from './options.js'
 import { DistributedLock } from './plugin.js'
 
 /**
@@ -121,6 +131,29 @@ class TakenAtExpiryBackend implements Backend {
   }
 }
 
+/** Records when each attempt reached the backend, so a test can read the pauses between them. */
+class TimedBackend implements Backend {
+  readonly attempts: number[] = []
+  readonly inner = new MemoryLockBackend()
+
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    this.attempts.push(Date.now())
+    return this.inner.tryAcquire(key, ttl)
+  }
+
+  extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    return this.inner.extend(lease, ttl)
+  }
+
+  release(lease: LockLease): Promise<void> {
+    return this.inner.release(lease)
+  }
+
+  pauses(): number[] {
+    return this.attempts.slice(1).map((at, i) => at - this.attempts[i])
+  }
+}
+
 let close: (() => Promise<unknown>) | undefined
 
 afterEach(async () => {
@@ -135,6 +168,17 @@ afterEach(async () => {
 async function newLock(backend: Backend = new MemoryLockBackend(), log?: RecordingLogger): Promise<DistLock> {
   const app = createApplication({ container: new CaffeineIoC({ decorators: false }), logger: log }).install(
     DistributedLock(d => d.backend(backend)),
+  )
+
+  await app.bootstrap()
+  close = () => app.close()
+
+  return app.container.get(kDistLock)
+}
+
+async function newTunedLock(backend: Backend, tune: (d: DistLockBuilder) => DistLockBuilder): Promise<DistLock> {
+  const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
+    DistributedLock(d => tune(d.backend(backend))),
   )
 
   await app.bootstrap()
@@ -708,5 +752,179 @@ describe('lock signal', () => {
     expect(aborted).toBe(false)
     expect(lost).toEqual([])
     expect(await lock.tryAcquire('yearly-report')).toBeUndefined()
+  })
+})
+
+// Under sustained contention a fixed pause either hammers the store or reacts slowly; doubling up to a cap does
+// neither. Jitter is off so the schedule can be read exactly.
+describe('acquisition backoff', () => {
+  const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+  async function contend(lock: DistLock, backend: TimedBackend, options: AcquireOptions = {}): Promise<number[]> {
+    await backend.inner.tryAcquire('orders:rebuild', 1 * Minute)
+    const acquiring = lock.acquire('orders:rebuild', { wait: 4 * Second, ...options }).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(4 * Second)
+    expect(await acquiring).toBeInstanceOf(ErrLockNotAcquired)
+    return backend.pauses()
+  }
+
+  it('grows the pause between attempts exponentially, capped at maxRetryDelay', async () => {
+    const backend = new TimedBackend()
+    const lock = await newTunedLock(backend, d => d.retryJitter(0))
+    fake()
+
+    const pauses = await contend(lock, backend)
+
+    expect(pauses.slice(0, 7)).toEqual([50, 100, 200, 400, 800, 1000, 1000])
+  })
+
+  it('lets a call bring its own backoff', async () => {
+    const backend = new TimedBackend()
+    const lock = await newTunedLock(backend, d => d.retryJitter(0))
+    fake()
+
+    const pauses = await contend(lock, backend, { backoff: attempt => attempt * 300 * Millisecond })
+
+    expect(pauses.slice(0, 4)).toEqual([300, 600, 900, 1200])
+  })
+
+  // A service-wide schedule is a default: a call that tunes the delays asked for the exponential one with them.
+  it("applies the service's backoff only to a call that names no retry option", async () => {
+    const backend = new TimedBackend()
+    const lock = await newTunedLock(backend, d => d.retryJitter(0).backoff(() => 700 * Millisecond))
+    fake()
+
+    const pauses = await contend(lock, backend, { retryDelay: 200 * Millisecond, maxRetryDelay: 400 * Millisecond })
+
+    expect(pauses.slice(0, 4)).toEqual([200, 400, 400, 400])
+  })
+
+  it("applies the service's backoff to a call that names no retry option", async () => {
+    const backend = new TimedBackend()
+    const lock = await newTunedLock(backend, d => d.retryJitter(0).backoff(() => 700 * Millisecond))
+    fake()
+
+    const pauses = await contend(lock, backend)
+
+    expect(pauses.slice(0, 3)).toEqual([700, 700, 700])
+  })
+
+  it("lets a call's backoff win over its own retry delays", async () => {
+    const backend = new TimedBackend()
+    const lock = await newTunedLock(backend, d => d.retryJitter(0))
+    fake()
+
+    const pauses = await contend(lock, backend, { retryDelay: 10 * Millisecond, backoff: () => 900 * Millisecond })
+
+    expect(pauses.slice(0, 3)).toEqual([900, 900, 900])
+  })
+
+  it('refuses a negative retry delay on a call with ErrDistLockConfiguration before any attempt', async () => {
+    const backend = new TimedBackend()
+    const lock = await newLock(backend)
+
+    const error = await lock.acquire('orders:rebuild', { retryDelay: -1 }).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ErrDistLockConfiguration)
+    expect(backend.attempts).toEqual([])
+  })
+
+  // The builder refuses it; a service constructed by hand has nothing in front of it but this.
+  it('refuses a retry jitter of 1 on a service constructed by hand with ErrDistLockConfiguration', async () => {
+    const backend = new TimedBackend()
+    const lock = new CaffeineDistLock(backend, { ...DEFAULT_DIST_LOCK_OPTIONS, retryJitter: 1 }, newNoopLogger())
+
+    await expect(lock.acquire('orders:rebuild')).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+    expect(backend.attempts).toEqual([])
+  })
+})
+
+describe('tryWithLock', () => {
+  it('runs the action when the key is free, and skips without waiting when it is held', async () => {
+    const backend = new TimedBackend()
+    const lock = await newLock(backend)
+
+    expect(await lock.tryWithLock('orders:rebuild', held => held.key)).toEqual({
+      executed: true,
+      result: 'orders:rebuild',
+    })
+
+    const holder = await lock.acquire('orders:rebuild')
+    backend.attempts.length = 0
+    let ran = false
+    expect(await lock.tryWithLock('orders:rebuild', () => (ran = true))).toEqual({ executed: false })
+    expect(ran).toBe(false)
+    expect(backend.attempts).toHaveLength(1)
+    await holder.release()
+  })
+
+  it('releases after tryWithLock whether the action returned or threw', async () => {
+    const lock = await newLock()
+
+    await lock.tryWithLock('orders:rebuild', () => 'done')
+    expect(await lock.tryAcquire('orders:rebuild')).not.toBeUndefined()
+
+    await expect(
+      lock.tryWithLock('orders:refund', () => {
+        throw new Error('boom')
+      }),
+    ).rejects.toThrow('boom')
+    expect(await lock.tryAcquire('orders:refund')).not.toBeUndefined()
+  })
+})
+
+// A section is bounded by its scope, so renewing it by default cannot leak; a manual lease has no scope, so it
+// renews only when asked.
+describe('renewal defaults', () => {
+  const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+  it('renews a withLock section by default, so work outliving ttl keeps the key', async () => {
+    const lock = await newLock()
+    fake()
+
+    let lost: boolean | undefined
+    const section = lock.withLock(
+      'orders:rebuild',
+      async held => {
+        await new Promise(resolve => setTimeout(resolve, 5 * Second))
+        lost = held.lost
+        expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
+      },
+      { ttl: 1 * Second },
+    )
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    await section
+
+    expect(lost).toBe(false)
+  })
+
+  it('renews a tryWithLock section by default', async () => {
+    const lock = await newLock()
+    fake()
+
+    let lost: boolean | undefined
+    const section = lock.tryWithLock(
+      'orders:rebuild',
+      async held => {
+        await new Promise(resolve => setTimeout(resolve, 5 * Second))
+        lost = held.lost
+      },
+      { ttl: 1 * Second },
+    )
+    await vi.advanceTimersByTimeAsync(5 * Second)
+
+    expect(await section).toEqual({ executed: true, result: undefined })
+    expect(lost).toBe(false)
+  })
+
+  it('does not renew a manual acquisition unless asked', async () => {
+    const lock = await newLock()
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 1 * Second })
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    expect(held.lost).toBe(true)
+    expect(await lock.tryAcquire('orders:rebuild')).not.toBeUndefined()
   })
 })

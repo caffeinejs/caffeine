@@ -3,6 +3,7 @@ import type { EventEmitter } from 'node:events'
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/application'
 import { logToken, newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { isValidKey, Scopes, type ContainerOps, type InjectionToken } from '@caffeinejs/di'
+import type { Backoff } from '@caffeinejs/resilience'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -34,7 +35,9 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
   #ttl: Duration | undefined
   #wait: Duration | undefined
   #retryDelay: Duration | undefined
+  #maxRetryDelay: Duration | undefined
   #retryJitter: number | undefined
+  #backoff: Backoff | undefined
   #storeTimeout: Duration | undefined
   #logger: Logger | false | undefined
   readonly #listeners: Array<[event: keyof LockEventMap, listener: Listener]> = []
@@ -62,15 +65,37 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  /** The pause between two acquisition attempts, before jitter. */
+  /**
+   * The pause after the first acquisition attempt, before jitter. Defaults to `50 * Millisecond`; each later pause
+   * doubles it, up to {@link maxRetryDelay}.
+   */
   retryDelay(delay: Duration): this {
     this.#retryDelay = delay
     return this
   }
 
-  /** The fraction of the retry delay added at random to each pause, between `0` and `1`. */
+  /** The longest pause between two acquisition attempts, before jitter. Defaults to `1 * Second`. */
+  maxRetryDelay(delay: Duration): this {
+    this.#maxRetryDelay = delay
+    return this
+  }
+
+  /**
+   * How far each pause is spread at random, in `[0, 1)`: a pause `d` lands in `[d·(1−j), d·(1+j)]`, cut at
+   * {@link maxRetryDelay}. Defaults to `0.5`.
+   */
   retryJitter(fraction: number): this {
     this.#retryJitter = fraction
+    return this
+  }
+
+  /**
+   * The pause after each acquisition attempt, by attempt number from 1, such as `exponential(...)` from
+   * `@caffeinejs/resilience`. Replaces {@link retryDelay}, {@link maxRetryDelay} and {@link retryJitter} for every
+   * call that names none of them itself.
+   */
+  backoff(backoff: Backoff): this {
+    this.#backoff = backoff
     return this
   }
 
@@ -137,15 +162,45 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
       ttl: this.#ttl ?? this.#config?.ttl ?? DEFAULT_DIST_LOCK_OPTIONS.ttl,
       wait: this.#wait ?? this.#config?.wait ?? DEFAULT_DIST_LOCK_OPTIONS.wait,
       retryDelay: this.#retryDelay ?? this.#config?.retryDelay ?? DEFAULT_DIST_LOCK_OPTIONS.retryDelay,
+      maxRetryDelay: this.#maxRetryDelay ?? this.#config?.maxRetryDelay ?? DEFAULT_DIST_LOCK_OPTIONS.maxRetryDelay,
       retryJitter: this.#retryJitter ?? this.#config?.retryJitter ?? DEFAULT_DIST_LOCK_OPTIONS.retryJitter,
       storeTimeout: this.#storeTimeout ?? this.#config?.storeTimeout ?? DEFAULT_DIST_LOCK_OPTIONS.storeTimeout,
+      backoff: this.#backoff,
     }
 
     // The schema bounds what the tree may carry; the fluent setter has nothing in front of it.
-    if (!(options.retryJitter >= 0 && options.retryJitter <= 1)) {
+    if (!(options.retryJitter >= 0 && options.retryJitter < 1)) {
       throw new ErrDistLockConfiguration(
-        errMessage(`Cannot install distributed locking: retry jitter "${options.retryJitter}" is outside 0..1`)
-          .solutions('Pass a fraction of the retry delay, for example .retryJitter(0.5)')
+        errMessage(
+          `Cannot install distributed locking: retry jitter "${options.retryJitter}" is not at least 0 and below 1`,
+        )
+          .solutions('Pass a fraction below 1, such as .retryJitter(0.5)', 'Or pass .retryJitter(0) to wait exactly')
+          .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
+          .build(),
+      )
+    }
+
+    // Checked here so the mistake surfaces at bootstrap, not on the first contended acquisition.
+    if (!(Number.isFinite(options.retryDelay) && options.retryDelay >= 0)) {
+      throw new ErrDistLockConfiguration(
+        errMessage(
+          `Cannot install distributed locking: retry delay "${formatDuration(options.retryDelay)}" is not a finite Duration of at least 0`,
+        )
+          .solutions('Pass a retry delay of at least 0, such as .retryDelay(50 * Millisecond)')
+          .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
+          .build(),
+      )
+    }
+
+    if (!(options.maxRetryDelay >= options.retryDelay)) {
+      throw new ErrDistLockConfiguration(
+        errMessage(
+          `Cannot install distributed locking: max retry delay "${formatDuration(options.maxRetryDelay)}" is below retry delay "${formatDuration(options.retryDelay)}"`,
+        )
+          .solutions(
+            `Raise maxRetryDelay to at least ${formatDuration(options.retryDelay)}, such as .maxRetryDelay(${options.retryDelay} * Millisecond)`,
+            'Or lower retryDelay below maxRetryDelay',
+          )
           .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
           .build(),
       )

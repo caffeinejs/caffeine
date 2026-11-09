@@ -8,7 +8,8 @@ import type { DistLock } from '../distlock.js'
  * `acquire`, `withLock`, `once`, `extend` and `release` are tracing channels: subscribe with
  * `tracingChannel(name)` and each call publishes `start`, `end`, `asyncStart` and `asyncEnd` around one context
  * object, with `error` before `asyncEnd` when the call rejects. `asyncEnd` is the one sub-event every call
- * reaches, and by then the context carries its outcome. `contended` and `lost` are plain channels.
+ * reaches, and by then the context carries its outcome. `tryWithLock` publishes on `withLock`. `contended` and
+ * `lost` are plain channels.
  *
  * Channels are process-wide, so every context names the lock service that published it in `service`.
  */
@@ -75,7 +76,13 @@ export interface AcquireContext extends LockEventBase, TracedFailure {
   readonly expiresAt?: number
 }
 
+/** One `withLock` or `tryWithLock` call. */
 export interface WithLockContext extends LockEventBase, TracedFailure {
+  /**
+   * `executed` once the key was taken and the action ran; `skipped` when `tryWithLock` found the key held. Absent
+   * when the acquisition threw.
+   */
+  readonly outcome?: 'executed' | 'skipped'
   /** Present once the key was taken. */
   readonly leaseID?: number
   /** How long the action ran with the key held, measured when it returned or threw. */
