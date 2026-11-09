@@ -4,6 +4,11 @@ name: Package
 # is built for. CI runs it on every change; the release runs it to build what it publishes.
 on:
   workflow_call:
+    inputs:
+      retention-days:
+        description: Days the packed tarballs are kept
+        type: number
+        default: 1
 
 permissions:
   contents: read
@@ -32,7 +37,7 @@ jobs:
       - name: Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: latest
+          bun-version-file: package.json
 
       - name: Install
         run: npm ci --ignore-scripts
@@ -53,6 +58,10 @@ jobs:
             fi
           done
 
+      # What the release runs to publish, with every publish rehearsed: the order, the dist-tag and each tarball.
+      - name: Rehearse publish
+        run: node tools/publish.mjs artifacts --dry-run
+
       - name: Upload
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -61,7 +70,7 @@ jobs:
             artifacts/*.tgz
             artifacts/packages.json
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ inputs.retention-days }}
 
   install:
     name: 'Install :: ${{ matrix.os }} :: Node ${{ matrix.node-version }} :: ${{ matrix.pm }}'

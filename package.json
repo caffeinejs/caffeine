@@ -13,6 +13,7 @@
     "url": "git+https://github.com/caffeinejs/caffeine.git"
   },
   "engines": {
+    "bun": "1.4.4",
     "node": ">=24"
   },
   "private": true,
@@ -83,6 +84,7 @@
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.0.5",
     "fast-check": "^4.10.2",
+    "git-cliff": "^2.14.2",
     "globby": "^16.2.4",
     "markdownlint-cli2": "^0.24.0",
     "oxfmt": "^0.75.0",
