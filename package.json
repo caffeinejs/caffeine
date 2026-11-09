@@ -77,7 +77,7 @@
   "devDependencies": {
     "@fast-check/vitest": "^0.5.0",
     "@redis/client": "^6.2.1",
-    "@swc/core": "^1.16.20",
+    "@swc/core": "^1.16.21",
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^5.0.5",
     "fast-check": "^4.10.2",
