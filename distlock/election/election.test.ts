@@ -343,7 +343,7 @@ describe('distlock campaign', () => {
 
     const campaign = lock.campaign('scheduler', { signal: AbortSignal.abort() })
     await vi.advanceTimersByTimeAsync(1 * Second)
-    await campaign.done
+    await campaign.stop()
 
     expect(campaign.lock).toBeUndefined()
     expect(await memory.tryAcquire('scheduler', 1 * Second)).toBeDefined()
@@ -380,7 +380,8 @@ describe('distlock campaign', () => {
         void campaign.stop()
       }
     })
-    await campaign.done
+    await vi.advanceTimersByTimeAsync(0)
+    await campaign.stop()
 
     expect(ran).toBe(0)
     expect(published).toEqual(['elected', 'stepped-down'])
