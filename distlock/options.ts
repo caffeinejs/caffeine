@@ -43,6 +43,10 @@ export interface DistLockOptions {
   storeTimeout: Duration
 }
 
+// The longest delay `setTimeout` honours. Node turns anything larger into 1 ms, which would time every backend call
+// out at once.
+export const MAX_TIMER_DELAY: Duration = 2 ** 31 - 1
+
 export const DEFAULT_DIST_LOCK_OPTIONS: DistLockOptions = {
   ttl: 30 * Second,
   wait: 5 * Second,

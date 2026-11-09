@@ -17,7 +17,7 @@ import type {
   WithLockContext,
 } from './observability/channels.js'
 import { LockEvents } from './observability/events.js'
-import { type DistLockOptions } from './options.js'
+import { MAX_TIMER_DELAY, type DistLockOptions } from './options.js'
 import { boundedCall, type StoreCall } from './store_call.js'
 
 /** A lease this process currently holds. */
@@ -31,7 +31,12 @@ export interface Lock {
   /** Epoch milliseconds the lease is good until, as the backend reported it. */
   readonly expiresAt: number
 
-  /** Whether the lease is gone — its validity has passed, it was released, or a renewal found it taken. */
+  /**
+   * Whether the lease is gone — its validity has passed, it was released, or a renewal found it taken.
+   *
+   * Also `true` while an `extend` that timed out has not answered: the backend may have applied it, and a shorter
+   * `ttl` shortens the lease, so the lease is not one to act on until the answer says how long it now runs.
+   */
   get lost(): boolean
 
   /**
@@ -198,6 +203,9 @@ export interface DistLock {
  *
  * Waiting, retrying, backoff and jitter all happen here rather than in the backend, which only ever makes one
  * attempt.
+ *
+ * @throws ErrDistLockConfiguration when `options.storeTimeout` is not above zero or is longer than a timer can
+ * wait.
  */
 export class CaffeineDistLock implements DistLock, OnDestroy {
   readonly backend: Backend
@@ -206,8 +214,22 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
 
   readonly #renewing = new Set<HeldLock>()
   #events: LockEvents | undefined
+  #disposed = false
 
   constructor(backend: Backend, options: DistLockOptions, log: Logger) {
+    if (!(options.storeTimeout > 0 && options.storeTimeout <= MAX_TIMER_DELAY)) {
+      throw new ErrDistLockConfiguration(
+        errMessage(
+          `Cannot construct the lock service: store timeout "${formatDuration(options.storeTimeout)}" is not above zero and at most ${formatDuration(MAX_TIMER_DELAY)}`,
+        )
+          .solutions(
+            `Pass a storeTimeout above zero and at most ${formatDuration(MAX_TIMER_DELAY)}, such as 5 * Second`,
+          )
+          .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
+          .build(),
+      )
+    }
+
     this.backend = backend
     this.options = options
     this.log = log
@@ -222,13 +244,16 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
    * Stops every renewal timer when the container is disposed, and waits for the renewals already in flight.
    *
    * Once this resolves nothing here writes to the backend again, which is what makes disposal a point an
-   * adapter can be torn down after. The listeners on {@link events} are removed last, so they still hear
-   * about those renewals.
+   * adapter can be torn down after. A renewal stuck past `storeTimeout` is not waited for, and an answer it
+   * sends later is dropped rather than given back. A command the backend already sent may still complete there
+   * unless the backend can cancel or drain it. The listeners on {@link events} are removed last, so they still
+   * hear about those renewals.
    *
    * Held keys are left alone: `withLock` releases on its own path, and a `once` window has to outlive the
    * process that opened it or the next replica up would redo the work.
    */
   async onDestroy(): Promise<void> {
+    this.#disposed = true
     const locks = [...this.#renewing]
     this.#renewing.clear()
 
@@ -245,8 +270,16 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
    * Releases a lease the backend handed over after its caller stopped waiting, or after its holder let go, so the
    * key does not stay taken for a whole lease with nobody holding it. The backend compares tokens, so this never
    * frees a key another holder has since taken.
+   *
+   * Once the service is disposed this sends nothing: the backend may already be torn down, and the lease lapses
+   * at its ttl.
    */
   giveBack(lease: LockLease): void {
+    if (this.#disposed) {
+      this.log.debug({ key: lease.key }, 'lock lease not given back after shutdown')
+      return
+    }
+
     const call: StoreCall = {
       operation: 'release',
       key: lease.key,
@@ -362,22 +395,24 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     ctx: Writable<AcquireContext> | undefined,
   ): Promise<HeldLock | undefined> {
     const started = Date.now()
+    const tally = newTally()
+    tally.attempts = 1
 
     let lease: LockLease | Miss
     try {
-      lease = await this.#attempt(key, ttl, signal, { attempts: 1, failed: false, expired: false })
+      lease = await this.#attempt(key, ttl, signal, tally)
     } catch (error) {
-      this.#settleAcquire(ctx, key, signal?.aborted === true ? 'aborted' : 'error', 1, started)
+      this.#settleAcquire(ctx, key, signal?.aborted === true ? 'aborted' : 'error', tally, started)
       throw error
     }
 
     if (typeof lease === 'string') {
-      this.#settleAcquire(ctx, key, lease, 1, started)
+      this.#settleAcquire(ctx, key, lease, tally, started)
       return undefined
     }
 
     const lock = new HeldLock(this, lease, ttl, renew ? this.#renewing : undefined)
-    this.#settleAcquire(ctx, key, 'acquired', 1, started, lock)
+    this.#settleAcquire(ctx, key, 'acquired', tally, started, lock)
 
     return lock
   }
@@ -392,23 +427,23 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   ): Promise<HeldLock> {
     const started = Date.now()
     const deadline = started + wait
-    const tally: Tally = { attempts: 0, failed: false, expired: false }
+    const tally = newTally()
 
     let lease: LockLease | undefined
     try {
       lease = await this.#retry(key, ttl, deadline, backoff, options.signal, tally)
     } catch (error) {
-      this.#settleAcquire(ctx, key, options.signal?.aborted === true ? 'aborted' : 'error', tally.attempts, started)
+      this.#settleAcquire(ctx, key, options.signal?.aborted === true ? 'aborted' : 'error', tally, started)
       throw error
     }
 
     if (lease === undefined) {
-      this.#settleAcquire(ctx, key, 'timeout', tally.attempts, started)
+      this.#settleAcquire(ctx, key, 'timeout', tally, started)
       throw new ErrLockNotAcquired(key, wait)
     }
 
     const lock = new HeldLock(this, lease, ttl, options.renew === true ? this.#renewing : undefined)
-    this.#settleAcquire(ctx, key, 'acquired', tally.attempts, started, lock)
+    this.#settleAcquire(ctx, key, 'acquired', tally, started, lock)
 
     return lock
   }
@@ -491,6 +526,12 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
           this.log.warn(fields, 'lock backend failed')
         }
         tally.failed = true
+
+        if (error instanceof ErrLockBackendTimeout) {
+          tally.failures.timeout += 1
+        } else {
+          tally.failures.other += 1
+        }
       }
 
       throw error
@@ -642,15 +683,17 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     ctx: Writable<AcquireContext> | undefined,
     key: string,
     outcome: AcquireOutcome,
-    attempts: number,
+    tally: Tally,
     started: number,
     lock?: HeldLock,
   ): void {
     const waited = Date.now() - started
+    const { attempts } = tally
 
     if (ctx !== undefined) {
       ctx.outcome = outcome
       ctx.attempts = attempts
+      ctx.failures = { ...tally.failures }
       ctx.waited = waited
 
       if (lock !== undefined) {
@@ -698,10 +741,11 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
 // An attempt that did not take the key: found held, or handed a lease that had already lapsed.
 type Miss = 'held' | 'expired'
 
-// What one `acquire` call has done so far: its attempts, and whether a backend failure or a lease that arrived
-// expired was already warned about.
+// What one `acquire` call has done so far: its attempts, the ones the backend failed by kind, and whether a backend
+// failure or a lease that arrived expired was already warned about.
 interface Tally {
   attempts: number
+  failures: { timeout: number; other: number }
   failed: boolean
   expired: boolean
 }
@@ -713,6 +757,10 @@ function invalidRetry(key: string, reason: string): ErrDistLockConfiguration {
       .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
       .build(),
   )
+}
+
+function newTally(): Tally {
+  return { attempts: 0, failures: { timeout: 0, other: 0 }, failed: false, expired: false }
 }
 
 function checkKey(key: unknown): void {
