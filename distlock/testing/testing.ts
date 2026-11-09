@@ -149,7 +149,7 @@ export const lockBackendContract: readonly BackendContractCase[] = [
 
     check(
       name,
-      extended !== undefined && extended.fencingToken === lease.fencingToken,
+      extended?.fencingToken === lease.fencingToken,
       () => `extend turned fencing token ${lease.fencingToken} into ${JSON.stringify(extended?.fencingToken)}`,
     )
   }),
