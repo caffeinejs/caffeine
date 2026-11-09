@@ -149,12 +149,11 @@ export class DistLockAOPBuilder implements Feature {
       )
     }
 
+    // Only a binding with a class is found by annotation, so `binding.type` is always set here.
     const classes = new Set<AnyClass>()
     for (const annotation of ANNOTATIONS) {
       for (const { binding } of kit.container.getBindingsByAnnotation(annotation)) {
-        if (binding.type !== undefined) {
-          classes.add(binding.type as AnyClass)
-        }
+        classes.add(binding.type as AnyClass)
       }
     }
     for (const cls of classes) {
@@ -164,9 +163,6 @@ export class DistLockAOPBuilder implements Feature {
     // Every replica campaigns from start-up, so a leader is elected before the first call rather than by it.
     const aspect = kit.container.get(DistLockAspect)
     for (const { binding } of kit.container.getBindingsByAnnotation(LeaderOnly)) {
-      if (binding.type === undefined) {
-        continue
-      }
       for (const { key, options } of reflect.members(binding.type as AnyClass, LeaderOnly).values()) {
         aspect.campaign(key, options)
       }
