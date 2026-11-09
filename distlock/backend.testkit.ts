@@ -88,3 +88,21 @@ export class FaultyBackend implements Backend {
     })
   }
 }
+
+/** Answers every extend with the next fencing token, which breaks the contract. */
+export class RenumberingBackend implements Backend {
+  readonly inner = new MemoryLockBackend()
+
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    return this.inner.tryAcquire(key, ttl)
+  }
+
+  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    const extended = await this.inner.extend(lease, ttl)
+    return extended === undefined ? undefined : { ...extended, fencingToken: extended.fencingToken + 1 }
+  }
+
+  release(lease: LockLease): Promise<void> {
+    return this.inner.release(lease)
+  }
+}
