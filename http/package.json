@@ -28,6 +28,10 @@
       "types": "./dist/core/bff/index.d.ts",
       "default": "./dist/core/bff/index.js"
     },
+    "./conditional": {
+      "types": "./dist/core/conditional/index.d.ts",
+      "default": "./dist/core/conditional/index.js"
+    },
     "./constraints": {
       "types": "./dist/core/constraints/index.d.ts",
       "default": "./dist/core/constraints/index.js"
@@ -71,6 +75,10 @@
     "./middleware": {
       "types": "./dist/core/middleware/index.d.ts",
       "default": "./dist/core/middleware/index.js"
+    },
+    "./range": {
+      "types": "./dist/core/range/index.d.ts",
+      "default": "./dist/core/range/index.js"
     },
     "./routing": {
       "types": "./dist/core/routing/index.d.ts",
