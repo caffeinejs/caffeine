@@ -136,6 +136,10 @@ export class RouteChain<
     return this
   }
 
+  /**
+   * Answers the request 503 once `timeout` passes without an answer, timed from the request's arrival, so it covers
+   * its hooks and its body. The request's signal aborts with the timeout as its reason.
+   */
   timeout(timeout: Duration): this {
     this.#state.builder.timeout(timeout)
     return this

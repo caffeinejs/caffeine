@@ -16,6 +16,7 @@ import type { Context } from '../context.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../error/error.js'
 import { attachGuardHook } from '../guards/guards.js'
 import { answer } from '../response.js'
+import { requestSignal } from './lifetime.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
 import { type AdapterRouteOptions } from './route_options.js'
 import { compileRouteSchema } from './schema/schema.js'
@@ -74,9 +75,13 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         // resolved per request, a plain function — and hands back the function to install.
         const handle = route.dispatch(compilers) as (req: REQ, res: unknown) => unknown
 
-        // Only a timed route reads `req.signal` below: on any other, the read would create a controller per request.
-        // Fastify creates no timer for a `handlerTimeout` of 0, so that server is not timed either.
+        // Only a timed route reads the request's signal below: on any other, the read would create a controller per
+        // request. A `handlerTimeout` of 0 is no timeout, as Fastify reads it.
         const timed = route.timeout !== undefined || (handlerTimeout !== undefined && handlerTimeout > 0)
+        if (route.timeout !== undefined && !(Number.isFinite(route.timeout) && route.timeout > 0)) {
+          // The refusal Fastify made when it timed routes itself.
+          throw new errorCodes.FST_ERR_ROUTE_HANDLER_TIMEOUT_OPTION_NOT_INT(route.timeout)
+        }
         const answered = timed ? answeredOrTimedOut : answeredThroughContext
 
         // Route Config
@@ -137,8 +142,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
           // Compiled here, once, so Fastify's Ajv owns request validation with zero schema work per request.
           schema: compileRouteSchema(route.schema, `${route.method.join('|')} ${url}`),
           bodyLimit: route.bodyLimit,
-          // Fastify takes whole milliseconds.
-          handlerTimeout: route.timeout === undefined ? undefined : Math.ceil(route.timeout),
+          // No `handlerTimeout`: the adapter times the route itself (`lifetime.ts`), from `config.$caffeine`.
           config,
           ...options,
           handler: function (req, res) {
@@ -169,7 +173,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
                 r => answer(res, req.httpContext, r, answered),
                 (err: unknown) => {
                   // A rejection after the timeout is the late result too: the 503 is what answers the request.
-                  if (timed && req.signal.aborted && isHandlerTimeout(req.signal.reason)) {
+                  if (timed && isHandlerTimeout(requestSignal(req))) {
                     req.log.error({ err }, 'Handler rejected after its timeout; the 503 stands')
                     return res
                   }
@@ -260,14 +264,14 @@ function answeredThroughContext(ctx: Context): boolean {
   return ctx.sent
 }
 
-/** As {@link answeredThroughContext}, or by Fastify's 503 for a handler that outlived its timeout. */
+/** As {@link answeredThroughContext}, or by the timeout's 503 for a handler that outlived it. */
 function answeredOrTimedOut(ctx: Context): boolean {
-  return ctx.sent || (ctx.signal.aborted && isHandlerTimeout(ctx.signal.reason))
+  return ctx.sent || isHandlerTimeout(ctx.signal)
 }
 
-/** Whether a request signal was aborted by Fastify's handler timeout, rather than by the client leaving. */
-function isHandlerTimeout(reason: unknown): boolean {
-  return (reason as { code?: unknown } | null)?.code === 'FST_ERR_HANDLER_TIMEOUT'
+/** Whether a request signal was aborted by its handler timeout, rather than by the client leaving. */
+function isHandlerTimeout(signal: AbortSignal): boolean {
+  return signal.aborted && (signal.reason as { code?: unknown } | null)?.code === 'FST_ERR_HANDLER_TIMEOUT'
 }
 
 /** Joins a router base path and a route path, trimming a trailing slash (but never to empty). */

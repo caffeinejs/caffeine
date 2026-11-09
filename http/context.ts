@@ -71,6 +71,10 @@ export interface IContext<
 
   get statusCode(): number
 
+  /**
+   * Aborted when the client leaves before its answer is finished, or when the route's timeout passes first, with
+   * that timeout as its reason. A request that has been read in full is not a client leaving.
+   */
   get signal(): AbortSignal
 
   /**

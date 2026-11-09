@@ -12,6 +12,7 @@ import type { Logger } from '@caffeinejs/application/logger'
 import { Container, Scopes } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 import Fastify, {
+  errorCodes,
   LogController,
   type FastifyHttpOptions,
   type FastifyInstance,
@@ -56,6 +57,7 @@ import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
 import { routeRecordsOf } from './routing/inventory.js'
+import { installRequestLifetime } from './routing/lifetime.js'
 import { installNotFoundHandler } from './routing/not_found.js'
 import { compileArgs, compileHandler } from './routing/parameters.js'
 import type { CaffeineRouteConfig } from './routing/route_config.js'
@@ -241,7 +243,10 @@ export class Adapter implements IAdapter<AdapterTypes> {
     const { factory = {}, listener } = input.server
     // Fastify's HTTP/1 overload whatever `factory` asks for: the instance is one type whichever server it builds.
     const fastify = Fastify(
-      withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath) as FastifyHttpOptions<Server>,
+      withBasePath(
+        withApplicationLogger(withoutHandlerTimeout(factory), input.context.logger),
+        input.basePath,
+      ) as FastifyHttpOptions<Server>,
     )
 
     // Node's `close()` waits on what it does not end itself, so the adapter keeps what the server has open. An HTTP/1
@@ -279,13 +284,25 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // Every route that registers, with the context it registered on, for the gate check once they all have.
     const registered: RegisteredRoute[] = []
 
-    // Ahead of `customize` below — this and the `onReady` hook after it are the only things that are: Fastify runs
-    // `onRoute` synchronously as a route is declared, so a raw route written in a customizer would otherwise
-    // register unstamped and the gate would read it as a URL nothing matched. `??=` throughout — a compiled route
-    // and an `authenticationExempt()` one arrive carrying their own.
+    // Ahead of everything else, `customize` included, so its hook is the first a request runs: the timeout covers
+    // every other hook and the body, as Fastify's own covered them.
+    const timeRoute = installRequestLifetime(fastify, serverTimeoutOf(factory))
+
+    // Ahead of `customize` below — this, the request lifetime above and the `onReady` hook after it are the only
+    // things that are. Fastify runs `onRoute` synchronously as a route is declared, so a raw route written in a
+    // customizer would otherwise register unstamped and the gate would read it as a URL nothing matched. `??=`
+    // throughout — a compiled route and an `authenticationExempt()` one arrive carrying their own.
     fastify.addHook('onRoute', function (route) {
       const config = (route.config ??= {})
       config.$caffeine ??= { skipAuthentication: false }
+
+      // Timed here rather than by Fastify, whose timer stops once a request's body is read: a compiled route's
+      // `.timeout()`, or the `handlerTimeout` a raw route set, which Fastify has already checked.
+      const timeout = config.$caffeine.compiled?.route.timeout ?? route.handlerTimeout
+      route.handlerTimeout = undefined
+      if (timeout !== undefined) {
+        timeRoute(config.$caffeine, timeout)
+      }
 
       registered.push({ route, url: route.url, method: route.method, context: this })
     })
@@ -625,6 +642,29 @@ function withApplicationLogger(factory: FactoryOptions, logger: Logger): Factory
     loggerInstance: logger,
     logController: factory.logController ?? new LogController({ disableRequestLogging: true }),
   }
+}
+
+/**
+ * The server's `handlerTimeout`, refused as Fastify refuses it when it is not a whole number of milliseconds. The
+ * adapter times requests itself (`routing/lifetime.ts`), since Fastify's timer stops once a request's body is read.
+ */
+function serverTimeoutOf(factory: FactoryOptions): number | undefined {
+  const timeout = factory.handlerTimeout
+  if (timeout !== undefined && !Number.isInteger(Number(timeout))) {
+    throw new errorCodes.FST_ERR_INIT_OPTS_INVALID(JSON.stringify(['must be integer']))
+  }
+
+  return timeout === undefined ? undefined : Number(timeout)
+}
+
+/** Keeps `handlerTimeout` from Fastify: the adapter's own timer is the one that runs ({@link serverTimeoutOf}). */
+function withoutHandlerTimeout(factory: FactoryOptions): FactoryOptions {
+  if (factory.handlerTimeout === undefined) {
+    return factory
+  }
+
+  const { handlerTimeout: _, ...rest } = factory
+  return rest
 }
 
 /**

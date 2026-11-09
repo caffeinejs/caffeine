@@ -194,3 +194,33 @@ describe('a route timeout that is not a whole number of milliseconds', () => {
     }
   })
 })
+
+// Fastify refused these when it timed routes itself; the adapter's own timer refuses them the same way, at start-up.
+describe('a route timeout that is not a positive number of milliseconds', () => {
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])('refuses %s at bootstrap', async timeout => {
+    const timed = new Router('/refused')
+    timed
+      .get('/answer')
+      .timeout(timeout)
+      .handler(() => 'ok')
+
+    const app = createWebApplication().mount(timed)
+    try {
+      await expect(app.bootstrap()).rejects.toMatchObject({ code: 'FST_ERR_ROUTE_HANDLER_TIMEOUT_OPTION_NOT_INT' })
+    } finally {
+      await app.close()
+    }
+  })
+})
+
+// Fastify refused these server timeouts when it read the option itself; the adapter refuses them the same way.
+describe('a server handlerTimeout that is not a whole number of milliseconds', () => {
+  it.each([1.5, Number.NaN, Number.POSITIVE_INFINITY])('refuses %s at bootstrap', async handlerTimeout => {
+    const app = createWebApplication().server(() => ({ factory: { handlerTimeout } }))
+    try {
+      await expect(app.bootstrap()).rejects.toMatchObject({ code: 'FST_ERR_INIT_OPTS_INVALID' })
+    } finally {
+      await app.close()
+    }
+  })
+})

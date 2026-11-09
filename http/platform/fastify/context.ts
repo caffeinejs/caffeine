@@ -18,6 +18,7 @@ import type { ContextPlatform, AdapterTypes } from './adapter.js'
 import { reopenCookieFlush, serverCookies } from './cookie/cookie.js'
 import { protocolOf } from './protocol.js'
 import { payloadOf } from './response.js'
+import { requestSignal } from './routing/lifetime.js'
 
 /** The {@link IContext} the Fastify adapter builds for every request, over Fastify's own request and reply. */
 export class Context<
@@ -106,7 +107,7 @@ export class Context<
   }
 
   get signal(): AbortSignal {
-    return this.#fastifyRequest.signal
+    return requestSignal(this.#fastifyRequest)
   }
 
   status(code: number): this {

@@ -72,9 +72,10 @@ export function addRouteHook<K extends RouteHookKey>(
  * `exposeHeadRoute`, `prefixTrailingSlash`.
  *
  * The omissions are the keys the adapter writes for itself: `method` and `url` come from the verb and the path,
- * `schema` from `.schema()`, `bodyLimit` from `.bodyLimit()`, `handlerTimeout` from `.timeout()`, and `config`
- * carries what the request handler reads to apply the route's status, content type, headers and authentication.
- * `handler` is written after these options are applied and could never take effect.
+ * `schema` from `.schema()`, `bodyLimit` from `.bodyLimit()`, the timeout (`handlerTimeout`) from `.timeout()`,
+ * which the adapter applies itself, and `config` carries what the request handler reads to apply the route's status,
+ * content type, headers and authentication. `handler` is written after these options are applied and could never
+ * take effect.
  */
 export type FSTOptions = Omit<
   AdapterRouteOptions,

@@ -1,3 +1,4 @@
+export { requestSignal } from './lifetime.js'
 export * from './new_router.js'
 export * from './not_found.js'
 export * from './picker.js'

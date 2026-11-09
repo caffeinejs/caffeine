@@ -424,6 +424,11 @@ export class Router<
     return this
   }
 
+  /**
+   * Times every route of this router that sets no timeout of its own: a request is answered 503 once `timeout`
+   * passes without an answer, timed from its arrival, so it covers its hooks and its body. The request's signal
+   * aborts with the timeout as its reason.
+   */
   timeout(timeout: Duration): this {
     this.#state.builder.timeout(timeout)
     return this
