@@ -434,4 +434,43 @@ describe('distlock campaign', () => {
     expect(backend.released.map(lease => lease.token)).toContain(held.token)
     await campaign.stop()
   })
+
+  // The lock service already warned about the failed release; stop() must still end the campaign, not reject, and
+  // the lease lapses on its own.
+  it('stops and steps down even when the backend fails its release', async () => {
+    const backend = new FaultyBackend()
+    const published: Array<ElectionMessage['event']> = []
+    const { lock } = await newReplica(backend)
+    lock.events.on('election', message => published.push(message.event))
+    fake()
+
+    const campaign = lock.campaign('scheduler')
+    await vi.advanceTimersByTimeAsync(0)
+    backend.failRelease = true
+
+    await expect(campaign.stop()).resolves.toBeUndefined()
+    expect(campaign.isLeader).toBe(false)
+    expect(published).toEqual(['elected', 'stepped-down'])
+  })
+
+  it('keeps campaigning when the hand-back after a lost lease fails', async () => {
+    const backend = new FaultyBackend()
+    const { lock } = await newReplica(backend)
+    fake()
+
+    const lost: LostReason[] = []
+    const campaign = lock.campaign('scheduler', { ttl: 3 * Second, onLost: reason => void lost.push(reason) })
+    await vi.advanceTimersByTimeAsync(0)
+    backend.failExtend = true
+    backend.failRelease = true
+    await vi.advanceTimersByTimeAsync(3 * Second)
+    expect(lost[0]).toBe('error')
+
+    backend.failExtend = false
+    backend.failRelease = false
+    await vi.advanceTimersByTimeAsync(3 * Second)
+
+    expect(campaign.isLeader).toBe(true)
+    await campaign.stop()
+  })
 })
