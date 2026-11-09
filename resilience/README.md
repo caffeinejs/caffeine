@@ -798,7 +798,7 @@ createWebApplication({ container, config })
   .errorHandling(e => e.globalHandlers(ResilienceErrorHandler))
 ```
 
-`ResilienceErrorHandler` answers with the default JSON envelope, its message the status phrase, so breaker and
+`ResilienceErrorHandler` answers with an RFC 9457 problem, its title and detail the status phrase, so breaker and
 dependency names never reach a client:
 
 | Error                  | Status | `Retry-After`                                |
