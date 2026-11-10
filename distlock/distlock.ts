@@ -28,7 +28,12 @@ export interface Lock {
   /** Identifies this lease in every event it produces, from acquisition to release. */
   readonly leaseID: number
 
-  /** Epoch milliseconds the lease is good until, as the backend reported it. */
+  /**
+   * Epoch milliseconds the lease is good until, as the backend reported it.
+   *
+   * When two extends were on the wire together, the backend may have applied them in either order, so this is the
+   * earlier of the expiries they reported.
+   */
   readonly expiresAt: number
 
   /**
@@ -455,6 +460,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     renew: boolean,
     signal: AbortSignal | undefined,
     ctx: Writable<AcquireContext> | undefined,
+    window = false,
   ): Promise<HeldLock | undefined> {
     const started = Date.now()
     const tally = newTally()
@@ -473,7 +479,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
       return undefined
     }
 
-    const lock = new HeldLock(this, lease, ttl, renew, this.#held)
+    const lock = new HeldLock(this, lease, ttl, renew, this.#held, window)
     this.#settleAcquire(ctx, key, 'acquired', tally, started, lock)
     this.#endIfClosed(lock)
 
@@ -515,6 +521,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   // Attempts until the key is taken or the deadline passes, which is `undefined`. Counts into `tally` so a
   // caller that sees it throw still knows how many attempts were made. An attempt the backend did not answer in
   // time is retried like a contended one; when the deadline passes on one, its timeout is what the caller gets.
+  // Closing the service ends the retries as the deadline does: a lease taken after that is ended as it arrives.
   async #retry(
     key: string,
     ttl: Duration,
@@ -523,11 +530,12 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     signal: AbortSignal | undefined,
     tally: Tally,
   ): Promise<LockLease | undefined> {
+    let timedOut: ErrLockBackendTimeout | undefined
     for (;;) {
       signal?.throwIfAborted()
 
       tally.attempts += 1
-      let timedOut: ErrLockBackendTimeout | undefined
+      timedOut = undefined
       try {
         const lease = await this.#attempt(key, ttl, signal, tally)
         if (typeof lease !== 'string') {
@@ -543,15 +551,20 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
 
       const now = Date.now()
       if (now >= deadline) {
-        if (timedOut !== undefined) {
-          throw timedOut
-        }
-
-        return undefined
+        break
       }
 
       await sleep(Math.min(backoff(tally.attempts), deadline - now), signal)
+      if (this.#aborted) {
+        break
+      }
     }
+
+    if (timedOut !== undefined) {
+      throw timedOut
+    }
+
+    return undefined
   }
 
   // The one place the backend is asked for a key. Waits at most `min(storeTimeout, ttl)`: an answer arriving
@@ -691,7 +704,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
       lock = await traced(
         acquireChannel,
         () => this.#acquireContext(key, 'once', ttl, 0, ctx),
-        actx => this.#tryAcquire(key, ttl, options.renew === true, options.signal, actx),
+        actx => this.#tryAcquire(key, ttl, options.renew === true, options.signal, actx, true),
       )
     } catch (error) {
       this.#settleOnce(ctx, key, 'failed')
