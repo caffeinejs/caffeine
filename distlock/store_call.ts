@@ -29,8 +29,9 @@ export interface StoreCall {
  * Rejects with {@link ErrLockBackendTimeout} when `timeout` elapses first, with `signal.reason` when the caller's
  * signal aborts first, and with whatever the call rejected with otherwise. A call that settles after the caller
  * stopped waiting is handed to `onLate`, so a lease acquired too late can be given back. A late rejection goes to
- * `onLateError`; without it, it is swallowed. Never an unhandled rejection. Nothing outlives the call: the timer
- * and the listeners go when it settles.
+ * `onLateError`, with `cancelled` set when it carries the reason the call was aborted with: the backend's word that
+ * the call did not take effect and will not. Without `onLateError` it is swallowed. Never an unhandled rejection.
+ * Nothing outlives the call: the timer and the listeners go when it settles.
  *
  * The deadline is read off a monotonic clock as well as kept by a timer: an answer that arrives once it passed is
  * late even when the timer has yet to fire, as it is when the call itself blocked the event loop past it.
@@ -39,7 +40,7 @@ export function boundedCall<T>(
   spec: StoreCall,
   call: (signal: AbortSignal) => Promise<T>,
   onLate?: (value: T) => void,
-  onLateError?: (error: unknown) => void,
+  onLateError?: (error: unknown, cancelled: boolean) => void,
 ): Promise<T> {
   const callerSignal = spec.signal
   if (callerSignal?.aborted === true) {
@@ -50,7 +51,8 @@ export function boundedCall<T>(
   const { signal } = controller
   const deadline = performance.now() + spec.timeout
   const timeOut = () => controller.abort(new ErrLockBackendTimeout(spec.operation, spec.key, spec.timeout, spec.bound))
-  const timer = setTimeout(timeOut, spec.timeout)
+  // Rounded up: Node truncates a fractional delay, and the timer would fire inside the deadline.
+  const timer = setTimeout(timeOut, Math.ceil(spec.timeout))
   // Never the last thing keeping a process alive.
   timer.unref?.()
 
@@ -58,6 +60,8 @@ export function boundedCall<T>(
   // keep this one from running, and the call would go on after its caller aborted.
   const callerAbort =
     callerSignal === undefined ? undefined : addAbortListener(callerSignal, () => controller.abort(callerSignal.reason))
+
+  const lateError = (error: unknown) => onLateError?.(error, error === signal.reason)
 
   return new Promise<T>((resolve, reject) => {
     let pending: Promise<T> | undefined
@@ -73,7 +77,7 @@ export function boundedCall<T>(
     function onAbort(): void {
       settle()
       reject(signal.reason)
-      pending?.then(onLate, onLateError ?? noop).catch(onLateError ?? noop)
+      pending?.then(onLate, lateError).catch(lateError)
     }
 
     signal.addEventListener('abort', onAbort, { once: true })
@@ -83,7 +87,7 @@ export function boundedCall<T>(
 
     // The backend may have aborted synchronously from inside `call`; its answer is then already late.
     if (signal.aborted) {
-      pending.then(onLate, onLateError ?? noop).catch(onLateError ?? noop)
+      pending.then(onLate, lateError).catch(lateError)
       return
     }
 
@@ -113,8 +117,4 @@ export function boundedCall<T>(
       },
     )
   })
-}
-
-function noop(): void {
-  return undefined
 }

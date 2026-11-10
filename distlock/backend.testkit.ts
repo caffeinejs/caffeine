@@ -84,3 +84,90 @@ export class FaultyBackend implements Backend {
     })
   }
 }
+
+/** Hands out a new token on every extend, as {@link Backend.extend} allows. */
+export class RotatingBackend implements Backend {
+  readonly inner = new MemoryLockBackend()
+
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    return this.inner.tryAcquire(key, ttl)
+  }
+
+  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    if ((await this.inner.extend(lease, ttl)) === undefined) {
+      return undefined
+    }
+
+    await this.inner.release(lease)
+    return this.inner.tryAcquire(lease.key, ttl)
+  }
+
+  release(lease: LockLease): Promise<void> {
+    return this.inner.release(lease)
+  }
+}
+
+/** One extend held by {@link StagedBackend}: when it reaches the inner backend and when its caller hears back are the test's to pick. */
+export interface StagedExtend {
+  /** Applies the extend to the inner backend. */
+  write(): Promise<void>
+
+  /** Hands the caller what the write returned. */
+  answer(): void
+}
+
+/**
+ * A backend whose extends land and answer only when a test says so, each on its own, so two extends can land in
+ * one order and answer in the other, as nothing in {@link Backend} rules out.
+ */
+export class StagedBackend implements Backend {
+  /** Every extend made, in the order the calls were made. */
+  readonly extends: StagedExtend[] = []
+
+  /**
+   * Whether an extend whose signal aborts before it was written rejects with the signal's reason and never
+   * lands, as a backend that cancels a command it had not sent yet does.
+   */
+  cancelsUnwritten = false
+
+  readonly inner: Backend
+
+  constructor(inner: Backend = new MemoryLockBackend()) {
+    this.inner = inner
+  }
+
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    return this.inner.tryAcquire(key, ttl)
+  }
+
+  extend(lease: LockLease, ttl: Duration, signal?: AbortSignal): Promise<LockLease | undefined> {
+    const { promise, resolve, reject } = Promise.withResolvers<LockLease | undefined>()
+    let written: Promise<LockLease | undefined> | undefined
+
+    signal?.addEventListener(
+      'abort',
+      () => {
+        if (this.cancelsUnwritten && written === undefined) {
+          reject(signal.reason)
+        }
+      },
+      { once: true },
+    )
+
+    this.extends.push({
+      write: async () => {
+        written = this.inner.extend(lease, ttl)
+        await written
+      },
+      answer: () => {
+        written!.then(resolve, reject)
+      },
+    })
+
+    return promise
+  }
+
+  release(lease: LockLease): Promise<void> {
+    return this.inner.release(lease)
+  }
+}

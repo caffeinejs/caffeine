@@ -144,6 +144,52 @@ describe('boundedCall', () => {
     expect(late).toEqual(['lease'])
   })
 
+  // Node truncates a fractional delay, so a timer armed with the bare timeout fires before it and drops an answer
+  // that arrived inside it.
+  it('waits the whole of a fractional timeout before giving up', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+    const { promise, resolve } = Promise.withResolvers<string>()
+
+    const bounded = boundedCall({ ...call, timeout: 2.9 }, () => promise).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(2)
+    resolve('lease')
+
+    expect(await bounded).toBe('lease')
+  })
+
+  // The backend rejecting with the very reason it was aborted with is its word that the call did not take effect
+  // and will not: the caller can settle what it held open for it.
+  it('tells onLateError a late rejection carrying the abort reason is a confirmed cancellation', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const errors: Array<[unknown, boolean]> = []
+    const failure = new Error('connection reset')
+    const { promise, reject } = Promise.withResolvers<string>()
+
+    const cancelled = boundedCall(
+      call,
+      signal =>
+        new Promise<string>((_, rejectCall) => signal.addEventListener('abort', () => rejectCall(signal.reason))),
+      undefined,
+      (error, wasCancelled) => errors.push([error, wasCancelled]),
+    ).catch((e: unknown) => e)
+    const failed = boundedCall(
+      call,
+      () => promise,
+      undefined,
+      (error, wasCancelled) => errors.push([error, wasCancelled]),
+    ).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    reject(failure)
+    await vi.advanceTimersByTimeAsync(0)
+
+    const reason = await cancelled
+    expect(await failed).toBeInstanceOf(ErrLockBackendTimeout)
+    expect(errors).toEqual([
+      [reason, true],
+      [failure, false],
+    ])
+  })
+
   it('drops a late rejection when no onLateError is given, without an unhandled rejection', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const { promise, reject } = Promise.withResolvers<string>()
