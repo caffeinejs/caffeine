@@ -58,6 +58,58 @@ export function recordRouterFlags(server: FastifyInstance, options: object): voi
   } satisfies RouterFlags)
 }
 
+/**
+ * Why the route `url` cannot register, when it declares a parameter named `*`: find-my-way gives the wildcard's value
+ * that name, so whoever reads `params['*']` could not tell the two apart. `::` is an escaped colon, and the regular
+ * expression a parameter may carry, in parentheses, is not read for parameters.
+ */
+export function starParameterRefusal(url: string): ErrConfiguration | undefined {
+  for (let i = 0; i < url.length; i++) {
+    if (url[i] !== ':') {
+      continue
+    }
+
+    if (url[i + 1] === ':') {
+      i++
+    } else if (url[i + 1] !== '*') {
+      // The name runs to the next separator; a regular expression may follow it at once.
+      let end = i + 1
+
+      while (end < url.length && !'/-.:('.includes(url[end]!)) {
+        end++
+      }
+
+      i = url[end] === '(' ? closingParenthesis(url, end) : end - 1
+    } else {
+      return new ErrConfiguration(
+        errMessage(`Cannot register "${url}": a parameter named "*" reads as a wildcard, whose value has that name`)
+          .solutions('Name the parameter, such as ":name"', 'Write a wildcard as "*", without ":"')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+  }
+
+  return undefined
+}
+
+/** The index of the `)` closing the `(` at `open`, nested ones and escaped ones aside, or the end of `url`. */
+function closingParenthesis(url: string, open: number): number {
+  let depth = 0
+
+  for (let i = open; i < url.length; i++) {
+    if (url[i] === '\\') {
+      i++
+    } else if (url[i] === '(') {
+      depth++
+    } else if (url[i] === ')' && --depth === 0) {
+      return i
+    }
+  }
+
+  return url.length
+}
+
 function notBuilt(action: string): ErrConfiguration {
   return new ErrConfiguration(
     errMessage(`Cannot ${action}: the server was not built by the Caffeine adapter`)

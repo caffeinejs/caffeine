@@ -21,6 +21,19 @@ await buildStatic({ root: 'site/dist' }) // the br and gzip variants, and the ma
 Start-up reads every file the manifest lists and checks its hash, so a file changed after the build fails the
 deployment instead of going out under the tag of the bytes it replaced.
 
+The build keeps its variants in `.static-variants/` under the root and reads every other file as one of the site.
+A tree that still holds `app.js.br` or `app.js.gz` beside `app.js`, as `@fastify/static`'s `preCompressed` wanted,
+fails the build on `.br`, which has no content type, and serves a stray `.gz` as an archive of its own. Build into an
+empty output directory, or remove each such copy whose file is beside it before `buildStatic` runs:
+
+```sh
+find site/dist -type f \( -name '*.br' -o -name '*.gz' \) \
+  -exec sh -c 'for f; do if [ -f "${f%.*}" ]; then rm -- "$f"; fi; done' sh {} +
+```
+
+That leaves an archive such as `backup.tar.gz` alone, but removes `notes.txt.gz` beside `notes.txt` too: keep an
+archive the site serves on purpose out of the command's reach, and list one it must not serve in `exclude`.
+
 ## The two rules
 
 **A path the application declared answers any client; a wildcard answers only a document request.** `/` and

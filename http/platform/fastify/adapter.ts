@@ -56,7 +56,7 @@ import { fetchInProcess } from './fetch.js'
 import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
-import { recordRouterFlags } from './router.js'
+import { recordRouterFlags, starParameterRefusal } from './router.js'
 import { routeRecordsOf } from './routing/inventory.js'
 import { installNotFoundHandler } from './routing/not_found.js'
 import { compileArgs, compileHandler } from './routing/parameters.js'
@@ -283,6 +283,12 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // Every route that registers, with the context it registered on, for the gate check once they all have.
     const registered: RegisteredRoute[] = []
 
+    // What `$route` refused while the route table was closing, or a route the `onRoute` hook refused: thrown by the
+    // `onReady` hook below, since thrown on the spot inside a callback-style plugin it would escape the boot as an
+    // uncaught exception.
+    let routeTable: 'open' | 'closing' | 'closed' = 'open'
+    let refusedRoute: ErrConfiguration | undefined
+
     // Ahead of `customize` below — this and the `onReady` hook after it are the only things that are: Fastify runs
     // `onRoute` synchronously as a route is declared, so a raw route written in a customizer would otherwise
     // register unstamped and the gate would read it as a URL nothing matched. `??=` throughout — a compiled route
@@ -291,13 +297,10 @@ export class Adapter implements IAdapter<AdapterTypes> {
       const config = (route.config ??= {})
       config.$caffeine ??= { skipAuthentication: false }
 
+      refusedRoute ??= starParameterRefusal(route.url)
+
       registered.push({ route, url: route.url, method: route.method, context: this })
     })
-
-    // What `$route` refused while the route table was closing: thrown by the `onReady` hook below, since thrown on
-    // the spot inside a callback-style plugin it would escape the boot as an uncaught exception.
-    let routeTable: 'open' | 'closing' | 'closed' = 'open'
-    let refusedRoute: ErrConfiguration | undefined
 
     // Also ahead of `customize`, so it is the first `onReady` hook to run: every route has registered and every
     // gate has stamped the ones it owns, and no plugin's own `onReady` work has started yet.

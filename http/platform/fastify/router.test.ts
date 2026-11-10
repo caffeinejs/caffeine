@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrConfiguration } from '../../core/error/common.js'
 import type { WebApplication } from '../../index.js'
-import { createWebApplication } from './index.js'
-import { routerFlagsOf } from './router.js'
+import { createWebApplication, newRouter } from './index.js'
+import { routerFlagsOf, starParameterRefusal } from './router.js'
 
 let app: WebApplication | undefined
 
@@ -55,4 +55,38 @@ describe('routerFlagsOf', () => {
       await server.close()
     }
   })
+})
+
+describe('a route with a parameter named *', () => {
+  async function bootstrapWith(url: string) {
+    app = createWebApplication().mount(newRouter().get(url, () => 'answer')) as WebApplication
+
+    return app.bootstrap().catch((err: unknown) => err)
+  }
+
+  // find-my-way gives such a parameter the wildcard's name: whoever reads params['*'] could not tell the two apart.
+  it('fails start-up, naming the route', async () => {
+    const err = await bootstrapWith('/assets/:*')
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect((err as Error).message.split('\n')[0]).toBe(
+      'Cannot register "/assets/:*": a parameter named "*" reads as a wildcard, whose value has that name',
+    )
+  })
+
+  it('fails start-up on one after another parameter in a segment', async () => {
+    expect(await bootstrapWith('/a/:x-:*')).toBeInstanceOf(ErrConfiguration)
+  })
+
+  it('leaves a wildcard and a named parameter alone', async () => {
+    expect(await bootstrapWith('/assets/:name/*')).toBe(undefined)
+  })
+
+  // An escaped colon is text, and a parameter's regular expression is the parameter's, whatever it holds.
+  it.each([['/a::*'], ['/files/:name(^[a-z]+:*$)'], ['/files/:name(^\\(:*\\)$)'], ['/files/:name(:*']])(
+    'reads no parameter named * in %s',
+    url => {
+      expect(starParameterRefusal(url)).toBe(undefined)
+    },
+  )
 })

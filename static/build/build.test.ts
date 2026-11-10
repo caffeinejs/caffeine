@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, truncate, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, truncate, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -157,6 +157,7 @@ describe('buildStatic', () => {
     await writeFile(join(root, 'manual.txt'), first)
     await buildStatic({ root })
     const previous = await readFile(join(root, MANIFEST_FILE))
+    const { atime, mtime } = await stat(join(root, 'manual.txt'))
     // Where the second input's gzip variant goes, a directory: the build stops there, its brotli variant written.
     const blocked = (await variantsOf(second)).gzip!.path
     await mkdir(join(root, blocked))
@@ -171,6 +172,8 @@ describe('buildStatic', () => {
 
     await rm(join(root, blocked), { recursive: true })
     await writeFile(join(root, 'manual.txt'), first)
+    // The input as it was, its time included: the manifest records the second it changed in.
+    await utimes(join(root, 'manual.txt'), atime, mtime)
     await buildStatic({ root })
     expect(await readFile(join(root, MANIFEST_FILE))).toEqual(previous)
 
@@ -236,6 +239,18 @@ describe('buildStatic', () => {
 
     await expect(buildStatic({ root })).rejects.toThrow(ErrStaticBuild)
     expect(await readFile(join(root, VARIANT_DIRECTORY), 'utf8')).toBe('notes of its own')
+  })
+
+  // A path is the site's text: written as a key, "__proto__" must stay a file, not set the manifest's prototype.
+  it('lists a typed file named __proto__ in the report and the manifest', async () => {
+    await writeFile(join(root, '__proto__'), 'proto')
+
+    const report = await buildStatic({ root, types: { ['__proto__']: 'text/plain' } })
+    const { files } = await readManifest(root)
+
+    expect(report.files).toBe(5)
+    expect(Object.hasOwn(files, '__proto__')).toBe(true)
+    expect(files['__proto__']!.size).toBe(5)
   })
 
   // Node reads no file past 2 GiB into one buffer; one large video must not stop the whole build. Sparse, so it

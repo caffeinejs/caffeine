@@ -375,6 +375,34 @@ describe('staticFiles', () => {
     )
   })
 
+  // The prefix is part of every URL the mount registers: ";" in it ends the path before any file's name.
+  it('fails start-up on a prefix with ";" in it, when ";" starts the query', async () => {
+    const root = await tree('nested', ['report.txt'])
+
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { useSemicolonDelimiter: true } }))
+      .with(staticFiles(s => s.serve(root, { prefix: '/site;v1', anonymous: true }))) as WebApplication
+    const err = await app.bootstrap().catch((err: unknown) => err)
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(firstLine(err as Error)).toBe(
+      `Cannot serve "${root}": the prefix "/site;v1/" holds ";", which useSemicolonDelimiter reads as the start of the query`,
+    )
+  })
+
+  // The router reads ":" and "*" in a prefix as a parameter and a wildcard: the files would answer URLs they do not have.
+  it.each([
+    ['/:lang', '":", which the router reads as a parameter'],
+    ['/docs*', '"*", which the router reads as a wildcard'],
+  ])('fails start-up on the prefix %s, which the router reads as syntax', async (prefix, why) => {
+    const root = await tree('nested', ['report.txt'])
+
+    const err = await refusal(s => s.serve(root, { prefix }))
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(firstLine(err)).toBe(`Cannot serve "${root}": the prefix "${prefix}/" holds ${why}`)
+  })
+
   // The router takes the longest prefix, so neither mount hides the other, whichever is declared first.
   it.each([
     ['outer first', true],
@@ -450,6 +478,16 @@ describe('staticFiles', () => {
     expect(res.headers.get('vary')).toBe('Cookie, Accept-Encoding')
   })
 
+  // A Fastify reply would drop the header without a word: the application must hear of it at start-up.
+  it('fails start-up on a header named __proto__ from headers(file)', async () => {
+    const err = await refusal(s => s.serve(spa, { headers: () => ({ ['__proto__']: 'kept' }) }))
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(firstLine(err)).toBe(
+      `Cannot serve "${spa}": headers(file) returned "__proto__" for "assets/app-eZr2sdaR.js", which a reply cannot send`,
+    )
+  })
+
   // A plugin such as @fastify/cors writes Vary: Origin first; replacing it lets a shared cache hand one origin's
   // Access-Control-Allow-Origin to another.
   it('keeps a Vary written before it, adding Accept-Encoding', async () => {
@@ -518,6 +556,20 @@ describe('staticFiles', () => {
     expect(firstLine(err)).toBe(
       `Cannot serve "${root}": "${replaced}" changed after the build, its bytes no longer match the manifest's hash`,
     )
+  })
+
+  // A path is the application's text: "__proto__" is a file like any other, in the manifest and on the router.
+  it('serves a file named __proto__', async () => {
+    const root = join(dir, 'proto')
+    await mkdir(root)
+    await writeFile(join(root, '__proto__'), 'proto')
+    await buildStatic({ root, types: { ['__proto__']: 'text/plain' } })
+    await start(s => s.serve(root, { anonymous: true })).bootstrap()
+
+    const res = await app!.request('/__proto__')
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('proto')
   })
 
   describe('in scan mode', () => {
@@ -733,6 +785,19 @@ describe('staticFiles', () => {
       expect(err).toBeInstanceOf(ErrStaticRouteConflict)
       expect(firstLine(err as Error)).toBe(
         `Cannot register "/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
+      )
+    })
+
+    // find-my-way reports a parameter named "*" as the wildcard's value: the check could not tell the two apart.
+    it('from a route with a parameter named * over a directory of files', async () => {
+      const root = await tree('nested', ['assets/report.txt'])
+      start(s => s.serve(root, { anonymous: true })).mount(newRouter().get('/assets/:*', () => 'protected'))
+
+      const err = await app!.bootstrap().catch((err: unknown) => err)
+
+      expect(err).toBeInstanceOf(ErrConfiguration)
+      expect(firstLine(err as Error)).toBe(
+        'Cannot register "/assets/:*": a parameter named "*" reads as a wildcard, whose value has that name',
       )
     })
 

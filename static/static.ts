@@ -16,7 +16,7 @@ import fp from 'fastify-plugin'
 import { StaticBuilder, kBuild } from './builder.js'
 import type { MountOptions, ResolvedMount } from './config.js'
 import { ErrStaticRouteConflict, ErrStaticScanInProduction } from './errors.js'
-import { readManifest, type ManifestFile, type StaticManifest } from './manifest/manifest.js'
+import { nameProblem, readManifest, type ManifestFile, type StaticManifest } from './manifest/manifest.js'
 import { readFileEntry, scan } from './scan/scan.js'
 import {
   prepareFile,
@@ -109,6 +109,7 @@ async function prepareMount({ root, options }: ResolvedMount, allowProduction: b
   }
 
   const policy = policyOf(root, options)
+  const prefix = prefixOf(root, options.prefix)
   const manifest = mode === 'scan' ? await scanned(root) : await readManifest(root)
   const disk = rootOnDisk(root)
   const files = new Map<string, PreparedFile>()
@@ -130,7 +131,7 @@ async function prepareMount({ root, options }: ResolvedMount, allowProduction: b
   return {
     root,
     files,
-    prefix: prefixOf(options.prefix),
+    prefix,
     anonymous: options.anonymous === true,
     index: options.index ?? 'index.html',
     mode,
@@ -141,7 +142,8 @@ async function prepareMount({ root, options }: ResolvedMount, allowProduction: b
 /** The manifest a scan of `root` makes, every file hashed and none with variants. */
 async function scanned(root: string): Promise<StaticManifest> {
   const { files } = await scan(root)
-  const entries: Record<string, ManifestFile> = {}
+  // Keyed by the site's paths, "__proto__" among them.
+  const entries: Record<string, ManifestFile> = Object.create(null)
 
   // One file at a time, as the build reads them: a tree of thousands would otherwise open them all at once.
   for (const file of files) {
@@ -217,6 +219,18 @@ function extraHeaders(
   for (const [name, value] of Object.entries(given)) {
     const key = name.toLowerCase()
 
+    // A Fastify reply keeps its headers in a plain object, where that name sets the prototype: it would never be sent.
+    if (key === '__proto__') {
+      throw new ErrConfiguration(
+        errMessage(
+          `Cannot serve "${root}": headers(file) returned "__proto__" for "${path}", which a reply cannot send`,
+        )
+          .solutions('Remove "__proto__" from what headers(file) returns')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
     if (COMPUTED.has(key)) {
       throw new ErrConfiguration(
         errMessage(`Cannot serve "${root}": headers(file) returned "${key}" for "${path}", which the server computes`)
@@ -236,11 +250,25 @@ function extraHeaders(
   return lowered
 }
 
-/** `'/'`, or the prefix with one leading and one trailing slash. */
-function prefixOf(prefix: string | undefined): string {
+/**
+ * `'/'`, or the prefix with one leading and one trailing slash, refused by the rules a file's name answers to: every
+ * URL the mount registers starts with it.
+ */
+function prefixOf(root: string, prefix: string | undefined): string {
   const trimmed = (prefix ?? '/').replace(/^\/+|\/+$/g, '')
+  const normalized = trimmed === '' ? '/' : `/${trimmed}/`
+  const problem = nameProblem(normalized)
 
-  return trimmed === '' ? '/' : `/${trimmed}/`
+  if (problem !== undefined) {
+    throw new ErrConfiguration(
+      errMessage(`Cannot serve "${root}": the prefix ${problem}`)
+        .solutions('Write the prefix without that character, in Unicode NFC, such as "/assets"')
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
+
+  return normalized
 }
 
 function isProduction(): boolean {
@@ -343,6 +371,18 @@ function pathOf(url: string, router: RouterFlags): string {
  */
 function assertNoSemicolon(mounts: readonly PreparedMount[]): void {
   for (const mount of mounts) {
+    // Every URL the mount registers starts with its prefix.
+    if (mount.prefix.includes(';') && mount.routed.length > 0) {
+      throw new ErrConfiguration(
+        errMessage(
+          `Cannot serve "${mount.root}": the prefix "${mount.prefix}" holds ";", which useSemicolonDelimiter reads as the start of the query`,
+        )
+          .solutions('Write the prefix without ";"', 'Turn useSemicolonDelimiter off')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
     const file = mount.routed.find(({ path }) => path.includes(';'))
 
     if (file !== undefined) {

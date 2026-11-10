@@ -84,7 +84,8 @@ export async function buildStatic(options: BuildOptions): Promise<BuildReport> {
   const root = resolve(options.root)
   const { files, skipped } = await scan(root, options)
   const store = await variantDirectory(root)
-  const entries: Record<string, ManifestFile> = {}
+  // Keyed by the site's paths, "__proto__" among them.
+  const entries: Record<string, ManifestFile> = Object.create(null)
   const saved: Record<Encoding, number> = { br: 0, gzip: 0 }
   let variants = 0
   let bytes = 0
