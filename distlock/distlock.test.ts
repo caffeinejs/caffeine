@@ -5,7 +5,7 @@ import { Day, Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
-import { FaultyBackend, RenumberingBackend } from './backend.testkit.js'
+import { FaultyBackend, RenumberingBackend, RotatingBackend, StagedBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import { CaffeineDistLock, type DistLock, type Lock } from './distlock.js'
 import {
@@ -517,6 +517,82 @@ describe('distributed lock against a backend that does not answer', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(held.expiresAt).toBe(Math.min(sentLate + late, sentNext + next))
+    expect(held.lost).toBe(false)
+  })
+
+  // Two extends under one token can land in one order and answer in the other. Here the shorter one lands last, so
+  // the key runs out after it. Whichever order the answers come in, the lock must read as lost by the time another
+  // replica can take the key.
+  it.each([
+    { name: 'the timed-out extend answers first', order: ['short', 'long'] as const },
+    { name: 'the on-time extend answers first', order: ['long', 'short'] as const },
+  ])('reads as lost when a shorter extend landed last and $name', async ({ order }) => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    const shortening = held.extend(2 * Second).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await shortening).toBeInstanceOf(ErrLockBackendTimeout)
+
+    const lengthening = held.extend(1 * Minute)
+    const [short, long] = backend.extends
+    await long!.write()
+    await short!.write()
+    for (const which of order) {
+      ;(which === 'short' ? short : long)!.answer()
+      await vi.advanceTimersByTimeAsync(0)
+    }
+    expect(await lengthening).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(2 * Second)
+    expect(await backend.inner.tryAcquire('orders:rebuild', 1 * Minute)).toBeDefined()
+    expect(held.lost).toBe(true)
+  })
+
+  // A backend that cancels a command it had not sent yet rejects with the reason it was handed: the extend never
+  // took effect, so the lease it was sent on still stands and renewal can go on.
+  it('keeps the lease when an extend that timed out is cancelled before it reached the backend', async () => {
+    const backend = new StagedBackend()
+    backend.cancelsUnwritten = true
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    const before = held.expiresAt
+    const extending = held.extend(1 * Minute).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await extending).toBeInstanceOf(ErrLockBackendTimeout)
+
+    expect(held.lost).toBe(false)
+    expect(held.expiresAt).toBe(before)
+  })
+
+  // A backend that rotates the token refuses a call carrying an old one. That refusal says the old token is gone,
+  // which a newer extend already knew: it is not news about the lease that extend moved the key to.
+  it('keeps the lease a rotating extend moved the key to when an older extend is refused late', async () => {
+    const backend = new StagedBackend(new RotatingBackend())
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    const first = held.token
+    const stale = held.extend(1 * Minute).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await stale).toBeInstanceOf(ErrLockBackendTimeout)
+
+    const rotating = held.extend(1 * Minute)
+    const [older, newer] = backend.extends
+    await newer!.write()
+    newer!.answer()
+    expect(await rotating).toBe(true)
+
+    await older!.write()
+    older!.answer()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(held.token).not.toBe(first)
     expect(held.lost).toBe(false)
   })
 
