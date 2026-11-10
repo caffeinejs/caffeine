@@ -144,6 +144,17 @@ describe('boundedCall', () => {
     expect(late).toEqual(['lease'])
   })
 
+  it('keeps the elapsed store deadline when a caller abort arrives before the overdue timer', async () => {
+    vi.useFakeTimers({ toFake: ['performance'] })
+    const controller = new AbortController()
+    const pending = Promise.withResolvers<string>()
+    const bounded = boundedCall({ ...call, timeout: 10, signal: controller.signal }, () => pending.promise)
+
+    vi.advanceTimersByTime(20)
+    controller.abort(new Error('caller stopped after the deadline'))
+    await expect(bounded).rejects.toBeInstanceOf(ErrLockBackendTimeout)
+  })
+
   // Node truncates a fractional delay, so a timer armed with the bare timeout fires before it and drops an answer
   // that arrived inside it.
   it('waits the whole of a fractional timeout before giving up', async () => {
