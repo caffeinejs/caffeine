@@ -90,12 +90,14 @@ describe('MemoryLockBackend', () => {
     await expect(backend.tryAcquire('free', 1_000, aborted)).rejects.toBe(reason)
     expect(await backend.tryAcquire('free', 1_000)).not.toBeUndefined()
 
-    const lease = (await backend.tryAcquire('k', 1_000))!
+    const lease = (await backend.tryAcquire('k', 30))!
     await expect(backend.extend(lease, 60_000, aborted)).rejects.toBe(reason)
     await expect(backend.release(lease, aborted)).rejects.toBe(reason)
 
     expect(await backend.tryAcquire('k', 1_000)).toBeUndefined()
-    expect((await backend.extend(lease, 1_000))!.expiresAt).toBeLessThan(lease.expiresAt + 60_000)
+    // Neither the aborted extend nor the aborted release touched the key: it lapses on its first ttl.
+    await sleep(40)
+    expect(await backend.tryAcquire('k', 1_000)).not.toBeUndefined()
   })
 })
 
