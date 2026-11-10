@@ -110,6 +110,7 @@ export interface Container extends AsyncDisposable {
   readonly refresher: Refresher
   readonly requestScopeManager: RequestScopeManager
   readonly contextStorage: ContextStorage
+  readonly hasContextStorage: boolean
   readonly ready: boolean
   readonly hasRequestScope: boolean
   readonly values: unknown
@@ -160,6 +161,8 @@ export interface Container extends AsyncDisposable {
   bindConfig<T = unknown>(values: T): this
 
   bindScopedConfig<T = unknown>(provider: Provider<T>): this
+
+  bindContextStorage(storage: ContextStorage): this
 
   rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 
@@ -217,6 +220,7 @@ export type ContainerOps = Pick<
   | 'scopedConfig'
   | 'hasScopedConfig'
   | 'contextStorage'
+  | 'hasContextStorage'
 >
 
 /**
@@ -236,6 +240,8 @@ export type ContainerBindingOps = Pick<
   | 'hasValues'
   | 'bindScopedConfig'
   | 'hasScopedConfig'
+  | 'bindContextStorage'
+  | 'hasContextStorage'
   | 'rebind'
   | 'aspect'
   | 'entries'

@@ -14,7 +14,7 @@ import {
   OverrideOps,
   ScopeCheckMode,
 } from './container_interface.js'
-import { ContextStorage, newDefaultContextStorage } from './context/context.js'
+import { type ContextStorage, newDefaultContextStorage } from './context/context.js'
 import { getBindingConfigurations, providedBindingConfigurations, hasInjectable } from './decorators/registrar/index.js'
 import {
   ErrDuplicateBinding,
@@ -26,6 +26,7 @@ import {
   ErrMultiplePrimary,
   ErrInvalidContainerState,
   ErrInjectableBase,
+  ErrNoContextStorage,
   ErrNoValuesProvider,
   ErrNotRefreshable,
 } from './errors.js'
@@ -119,6 +120,9 @@ export class CaffeineIoC implements Container {
   private _hasAsync = false
   private _values: unknown
   private _scopedConfig: Provider<unknown> | undefined
+  // The runtime's default, one per container; bindContextStorage() replaces it until the container compiles.
+  private readonly _defaultContextStorage: ContextStorage | undefined
+  private _contextStorage: ContextStorage | undefined
 
   /**
    * Creates a new container instance.
@@ -155,23 +159,12 @@ export class CaffeineIoC implements Container {
       this.bind(Keys.kRefresher, t => t.toValue(refresher).byPassPostProcessors().internal())
     }
 
-    // A default the application replaces by binding ContextStorage itself: the condition never sees this binding.
-    const storage = newDefaultContextStorage()
-    if (storage !== undefined) {
-      this.bind(ContextStorage, t =>
-        t
-          .toValue(storage)
-          .conditional(c => c.missing(ContextStorage))
-          .byPassPostProcessors()
-          .internal(),
-      )
-    }
+    this._defaultContextStorage = newDefaultContextStorage()
 
     if (this.scopes.has(Scopes.REQUEST)) {
       const requestScope = this.scopes.get(Scopes.REQUEST) as RequestScope
       const requestScopeManager: RequestScopeManager = {
         run: requestScope.run.bind(requestScope),
-        setStorage: requestScope.setStorage.bind(requestScope),
       }
 
       this.requestScopeManager = requestScopeManager
@@ -201,14 +194,26 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * The {@link ContextStorage} bound in the container: the one the application bound, or the default the runtime
-   * provides.
+   * The {@link ContextStorage} the request scope and the framework keep their frames in: the one bound with
+   * {@link bindContextStorage}, else the one the runtime made for this container. It cannot change once the container
+   * has compiled.
    *
-   * @throws {@link ErrInvalidContainerState} if the container is not initialized
-   * @throws {@link ErrNoResolutionForKey} if nothing binds {@link ContextStorage}, which only happens off Node
+   * @throws {@link ErrNoContextStorage} if the runtime made none and none was bound, which only happens off Node
    */
   get contextStorage(): ContextStorage {
-    return this.get(ContextStorage)
+    const storage = this._contextStorage ?? this._defaultContextStorage
+    if (storage === undefined) {
+      throw new ErrNoContextStorage()
+    }
+
+    return storage
+  }
+
+  /**
+   * Whether the container has a {@link ContextStorage}, so that reading {@link contextStorage} does not throw.
+   */
+  get hasContextStorage(): boolean {
+    return this._contextStorage !== undefined || this._defaultContextStorage !== undefined
   }
 
   /**
@@ -852,6 +857,35 @@ export class CaffeineIoC implements Container {
   }
 
   /**
+   * Replaces the {@link ContextStorage} the runtime made for this container. Every consumer reads the container's
+   * storage, so one bound here is the one the request scope, the framework and the application share.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container has already been compiled, because a request scope may
+   * already keep its frames in the previous storage
+   *
+   * @example
+   * ```ts
+   * di.bindContextStorage(new AsyncLocalStorage<ExecutionContext>())
+   * ```
+   */
+  bindContextStorage(storage: ContextStorage): this {
+    notNil(storage, 'Parameter storage must not be null or undefined')
+    this.assertNotDeciding('Cannot bind the context storage')
+
+    if (this._ready || this._compiled) {
+      throw new ErrInvalidContainerState(
+        errMessage('Cannot bind the context storage: container has already been compiled')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
+    }
+
+    this._contextStorage = storage
+
+    return this
+  }
+
+  /**
    * Replaces whatever answers to the given key with a new binding: the binding registered under it, however it was
    * made, and the bindings answering to it through a name or a base, which stay registered under their own keys.
    *
@@ -978,8 +1012,9 @@ export class CaffeineIoC implements Container {
   /**
    * Captures what the container was told to hold: the bindings declared with {@link bind}, {@link rebind} and
    * {@link aspect}, its modules, its profiles, whether it registers decorated bindings, the values bound with
-   * {@link bindConfig} and the provider bound with {@link bindScopedConfig}. The container's own bindings
-   * (`Keys.kRefresher`, `Keys.kRequestScopeManager`) are left out: every container binds its own.
+   * {@link bindConfig}, the provider bound with {@link bindScopedConfig} and the storage bound with
+   * {@link bindContextStorage}. The runtime's default storage and the container's own bindings (`Keys.kRefresher`,
+   * `Keys.kRequestScopeManager`) are left out: every container makes its own.
    *
    * Restored with {@link restore}, it gives the same bindings whether it was taken before or after {@link init}.
    * For testing purposes.
@@ -997,13 +1032,14 @@ export class CaffeineIoC implements Container {
       decorators: this._decorators,
       values: this._values,
       scopedConfig: this._scopedConfig,
+      contextStorage: this._contextStorage,
     })
   }
 
   /**
    * Adds what the snapshot holds to the container: its declarations, after the ones already made, its modules, its
-   * profiles, and its values and its scoped config when it carries them. The container registers decorated bindings
-   * when the snapshot's container did.
+   * profiles, and its values, its scoped config and its context storage when it carries them. The container registers
+   * decorated bindings when the snapshot's container did.
    *
    * @throws {@link ErrInvalidContainerState} if the container has started compiling
    */
@@ -1028,6 +1064,10 @@ export class CaffeineIoC implements Container {
 
     if (snap.scopedConfig !== undefined) {
       this._scopedConfig = snap.scopedConfig
+    }
+
+    if (snap.contextStorage !== undefined) {
+      this._contextStorage = snap.contextStorage
     }
   }
 

@@ -1,10 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ErrInvalidContainerState } from '../errors.js'
 import { CaffeineIoC, Scopes } from '../index.nodejs.js'
-import { contextKey, ContextStorage, ExecutionContext } from './context.js'
+import { contextKey, ExecutionContext } from './context.js'
 
 const kTenant = contextKey<string>('tenant')
 const kAttempt = contextKey<number>('attempt')
@@ -58,18 +58,24 @@ describe('container.contextStorage', () => {
     expect(first.contextStorage).not.toBe(second.contextStorage)
   })
 
-  it('refuses a read before init()', () => {
+  // A feature reads it while the container compiles, before init().
+  it('is readable before init(), and is the same once the container is ready', async () => {
     const di = new CaffeineIoC({ decorators: false })
+    const before = di.contextStorage
 
-    expect(() => di.contextStorage).toThrow(ErrInvalidContainerState)
+    await di.init()
+
+    expect(di.hasContextStorage).toBe(true)
+    expect(before).toBeInstanceOf(AsyncLocalStorage)
+    expect(di.contextStorage).toBe(before)
   })
 
   // An application or a test container providing its own storage must be the one every consumer shares.
-  it('is the storage the application binds, and the request scope keeps its frames there', async () => {
+  it('is the storage bound with bindContextStorage(), and the request scope keeps its frames there', async () => {
     const storage = new AsyncLocalStorage<ExecutionContext>()
     class Session {}
     const di = await container(c => {
-      c.bind(ContextStorage, t => t.toValue(storage))
+      c.bindContextStorage(storage)
       c.bind(Session, t => t.toSelf().lifetime(Scopes.REQUEST))
     })
 
@@ -80,5 +86,46 @@ describe('container.contextStorage', () => {
     }))
     expect(seen.framed).toBe(true)
     expect(seen.session).toBeInstanceOf(Session)
+  })
+
+  // Every consumer reads the storage once it is compiled: one replaced afterwards would leave them on two.
+  it('refuses a storage bound once the container has compiled', async () => {
+    const di = await container()
+    const storage = di.contextStorage
+
+    expect(() => di.bindContextStorage(new AsyncLocalStorage<ExecutionContext>())).toThrow(ErrInvalidContainerState)
+    expect(di.contextStorage).toBe(storage)
+  })
+
+  // A test container built from an application's snapshot shares the storage the application bound; one the runtime
+  // made stays with its own container.
+  it('is carried by a snapshot when bound, never when it is the default', () => {
+    const storage = new AsyncLocalStorage<ExecutionContext>()
+    const bound = new CaffeineIoC({ decorators: false }).bindContextStorage(storage)
+    const plain = new CaffeineIoC({ decorators: false })
+    const fromBound = new CaffeineIoC({ decorators: false })
+    const fromPlain = new CaffeineIoC({ decorators: false })
+
+    fromBound.restore(bound.snapshot())
+    fromPlain.restore(plain.snapshot())
+
+    expect(fromBound.contextStorage).toBe(storage)
+    expect(fromPlain.contextStorage).not.toBe(plain.contextStorage)
+  })
+
+  // Off Node the runtime makes none: the read names the fix instead of failing inside a consumer.
+  it('throws ErrNoContextStorage where the runtime makes none, until one is bound', async () => {
+    vi.resetModules()
+    const bare = await import('../index.js')
+    const di = new bare.CaffeineIoC({ decorators: false })
+
+    expect(di.hasContextStorage).toBe(false)
+    expect(() => di.contextStorage).toThrow(bare.ErrNoContextStorage)
+
+    const storage = new AsyncLocalStorage<ExecutionContext>()
+    di.bindContextStorage(storage)
+
+    expect(di.hasContextStorage).toBe(true)
+    expect(di.contextStorage).toBe(storage)
   })
 })

@@ -23,6 +23,12 @@ import type { ResilienceTransport } from './transport.js'
 
 type Member = string | symbol
 
+// A call of an annotated method: the frame it was made in, and how many attempts it has started.
+interface Call {
+  readonly frame: ExecutionContext
+  attempt: number
+}
+
 // The instance of each kind a method names.
 type Stage<K extends ResilienceKind> = ReturnType<ResilienceRegistry[K]>
 type Stages = { readonly [K in ResilienceKind]: Stage<K> | undefined }
@@ -100,8 +106,8 @@ export class ResilienceAspect implements MethodAspect {
   readonly #registry: ResilienceRegistry
   readonly #order: readonly ResilienceKind[]
   readonly #storage: ContextStorage | undefined
-  // How many attempts each call has started, kept only with a storage.
-  readonly #attempts = new WeakMap<JoinPoint, number>()
+  // Each call in flight, kept only with a storage.
+  readonly #calls = new WeakMap<JoinPoint, Call>()
   readonly #plans = new WeakMap<AnyClass, Plans>()
 
   /**
@@ -178,19 +184,19 @@ export class ResilienceAspect implements MethodAspect {
       return Promise.reject(error)
     }
 
+    // Read now, in the caller's continuation: a bulkhead or a rate limiter may run the attempt later, from another one.
+    const frame = this.#storage?.getStore()
     const i = signalIndex(jp.args)
     // Never `args[-1]`: reading a negative index leaves the fast element path and slows every call. A method given no
     // signal runs under the attempt it is called from, so a deadline set above still reaches the code below it.
-    const signal = (i === -1 ? this.#enclosing() : jp.args[i]) as AbortSignal | undefined
+    const signal = (i === -1 ? frame?.get(kResilienceAttempt)?.signal : jp.args[i]) as AbortSignal | undefined
     if (signal !== undefined && signal.aborted) {
       return Promise.reject(signal.reason)
     }
+    if (this.#storage !== undefined) {
+      this.#calls.set(jp, { frame: frame ?? ExecutionContext.ROOT, attempt: 0 })
+    }
     return plan({ signal, isClientError: plans.isClientError }, jp)
-  }
-
-  // The signal of the attempt the current code runs in, when the aspect stores attempts.
-  #enclosing(): AbortSignal | undefined {
-    return this.#storage?.getStore()?.get(kResilienceAttempt)?.signal
   }
 
   #plansOf(cls: AnyClass): Plans {
@@ -238,10 +244,11 @@ export class ResilienceAspect implements MethodAspect {
             (ctx, jp) => jp.proceed(...withSignal(jp.args as unknown[], ctx.signal, undefined)) as Promise<unknown>,
           )
         : lift<unknown, JoinPoint>((ctx, jp) => {
-            const attempt = (this.#attempts.get(jp) ?? 0) + 1
-            this.#attempts.set(jp, attempt)
+            // Set by around(), which every call goes through before its plan.
+            const call = this.#calls.get(jp)!
+            call.attempt++
             return storage.run(
-              (storage.getStore() ?? ExecutionContext.ROOT).with(kResilienceAttempt, new Attempt(ctx.signal, attempt)),
+              call.frame.with(kResilienceAttempt, new Attempt(ctx.signal, call.attempt)),
               () => jp.proceed(...withSignal(jp.args as unknown[], ctx.signal, undefined)) as Promise<unknown>,
             )
           })

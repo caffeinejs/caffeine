@@ -1,4 +1,5 @@
 import { Binding } from './binding.js'
+import type { ContextStorage } from './context/context.js'
 import { InjectionToken } from './key.js'
 import type { Module, ModuleFn } from './module.js'
 import type { Provider } from './provider.js'
@@ -25,12 +26,13 @@ export interface SnapshotState {
   readonly decorators: boolean
   readonly values?: unknown
   readonly scopedConfig?: Provider<unknown>
+  readonly contextStorage?: ContextStorage
 }
 
 /**
  * What a {@link Container} was told to hold: the bindings declared by hand, its modules, its profiles, whether it
- * registers decorated bindings, the values bound with `bindConfig()` and the provider bound with
- * `bindScopedConfig()`.
+ * registers decorated bindings, the values bound with `bindConfig()`, the provider bound with `bindScopedConfig()` and
+ * the storage bound with `bindContextStorage()`.
  *
  * It is not the registry. Restored into another container, the declarations are replayed and that container
  * registers the decorated bindings, runs the modules and decides profiles and conditions itself, when it compiles.
@@ -79,6 +81,13 @@ export class Snapshot {
    */
   get scopedConfig(): Provider<unknown> | undefined {
     return this.#state.scopedConfig
+  }
+
+  /**
+   * The storage bound with `bindContextStorage()` when the snapshot was taken, or `undefined` when none was.
+   */
+  get contextStorage(): ContextStorage | undefined {
+    return this.#state.contextStorage
   }
 
   /**

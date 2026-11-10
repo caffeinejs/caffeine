@@ -480,21 +480,21 @@ export class ErrScopeMismatch extends CaffeineIoCError {
 }
 
 /**
- * ErrNoRequestStorageSet is an error that is thrown when attempting to use the request scope feature
- * without setting its request scope storage.
+ * ErrNoContextStorage is thrown when `container.contextStorage` is read but the runtime made none and none was bound
+ * with `bindContextStorage()`.
  */
-export class ErrNoRequestStorageSet extends CaffeineIoCError {
+export class ErrNoContextStorage extends CaffeineIoCError {
   constructor() {
     super(
-      errMessage(
-        'No request scope storage has been set.\n' +
-          'Request scope is platform specific and must be manually set.\n' +
-          'See the documentation for more information.',
-      )
-        .reference('@caffeinejs/di', ErrNoRequestStorageSet)
+      errMessage('Cannot read the context storage: the runtime provides none and bindContextStorage() was not called')
+        .solutions(
+          'Call container.bindContextStorage(storage) before the container compiles',
+          'Load @caffeinejs/di through its "node" export condition, which gives every container an AsyncLocalStorage',
+        )
+        .reference('@caffeinejs/di', ErrNoContextStorage)
         .build(),
-      'ERR_NO_REQUEST_SCOPE_STORAGE_SET',
+      'ERR_NO_CONTEXT_STORAGE',
     )
-    this.name = 'ErrNoRequestScopeStorageSet'
+    this.name = 'ErrNoContextStorage'
   }
 }

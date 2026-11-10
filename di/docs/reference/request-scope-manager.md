@@ -17,7 +17,6 @@ Node.js environments.
 ```ts
 interface RequestScopeManager {
   run<T>(fn: () => T | Promise<T>): Promise<T>
-  setStorage(storage: ContextStorage): void
 }
 ```
 
@@ -58,24 +57,9 @@ Accessing a `REQUEST`-scoped binding outside of a `run()` block throws
 `ErrOutOfScope`, and so does accessing one after the block that owns it has
 ended — a destroyed scope never resolves again.
 
-### setStorage
-
-```ts
-setStorage(storage: ContextStorage): void
-```
-
-Keeps the request scope's frames on `storage` in place of the container's
-`ContextStorage`, the one every container binds on Node. Bind your own
-`ContextStorage` instead when the HTTP adapter and other consumers must share
-it; call `setStorage()` only when the request scope alone needs a different one.
-
-```ts
-import { AsyncLocalStorage } from 'node:async_hooks'
-
-container.requestScopeManager.setStorage(new AsyncLocalStorage())
-```
-
-See [Execution context](../../README.md#execution-context) for `ContextStorage`.
+The request scope keeps its frames in the container's `contextStorage`. To put
+it on a storage of your own, bind it with `container.bindContextStorage()`. See
+[Execution context](../../README.md#execution-context).
 
 ---
 

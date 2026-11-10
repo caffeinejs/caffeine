@@ -1,6 +1,11 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+
 import {
   $aop,
   CaffeineIoC,
+  contextKey,
+  type ContextStorage,
+  ExecutionContext,
   Injectable,
   type JoinPoint,
   type MethodAspect,
@@ -17,6 +22,7 @@ import { fakeTimersClock } from '../clock.testkit.js'
 import { ErrInvalidOption } from '../errors.js'
 import { ErrRateLimitExceeded } from '../ratelimiter/ratelimiter.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
+import type { Clock } from '../timers.js'
 import { Bulkhead, CircuitBreaker, Fallback, RateLimiter, Resilient, Retry, TimeLimiter } from './annotations.js'
 import { RESILIENCE_ASPECT_ORDER, ResilienceAspect, resiliencePointcut } from './aop.js'
 import { type ResilienceDefinitions, type ResilienceKind, ResilienceRegistry } from './registry.js'
@@ -41,12 +47,12 @@ const DEFINITIONS: ResilienceDefinitions = {
   shared: { circuitBreaker: { minimumNumberOfCalls: 2, slidingWindow: { type: 'count', size: 2 } } },
 }
 
-// The definitions with every instance on the clock the test drives.
+// The definitions with every instance on the clock the test drives, unless a definition gives its own.
 function onFakeClock(definitions: ResilienceDefinitions): ResilienceDefinitions {
   return Object.fromEntries(
     Object.entries(definitions).map(([name, preset]) => [
       name,
-      Object.fromEntries(Object.entries(preset).map(([kind, o]) => [kind, { ...o, clock: fakeTimersClock }])),
+      Object.fromEntries(Object.entries(preset).map(([kind, o]) => [kind, { clock: fakeTimersClock, ...o }])),
     ]),
   )
 }
@@ -55,14 +61,14 @@ function onFakeClock(definitions: ResilienceDefinitions): ResilienceDefinitions 
 async function containerWith(
   bind: (di: CaffeineIoC) => void,
   definitions: ResilienceDefinitions = DEFINITIONS,
-  options: { profiles?: string[]; order?: readonly ResilienceKind[] } = {},
+  options: { profiles?: string[]; order?: readonly ResilienceKind[]; storage?: ContextStorage } = {},
 ) {
   const di = new CaffeineIoC(options.profiles === undefined ? { decorators: false } : { profiles: options.profiles })
   const registry = new ResilienceRegistry(onFakeClock(definitions))
   di.bind(ResilienceRegistry, t => t.toValue(registry))
   di.aspect(ResilienceAspect, s =>
     s
-      .toValue(new ResilienceAspect(registry, options.order))
+      .toValue(new ResilienceAspect(registry, options.order, options.storage))
       .pointcuts(resiliencePointcut)
       .order(RESILIENCE_ASPECT_ORDER),
   )
@@ -996,5 +1002,87 @@ describe('preparing a class', () => {
     await expect(di.get(Misnamed).call()).rejects.toThrow(
       'Cannot weave "Misnamed.call": no preset named "inventroy" is defined',
     )
+  })
+})
+
+describe('the frame each attempt runs in', () => {
+  const kCaller = contextKey<string>('caller')
+  // A real timer runs its callback in the frame it was set in; a fake one runs it in the test's. The rate limiter sets
+  // the timer of each waiting call from the callback that woke the one before it.
+  const contextClock: Clock = {
+    ...fakeTimersClock,
+    setTimeout: (callback, delay) => fakeTimersClock.setTimeout(AsyncLocalStorage.bind(callback), delay),
+  }
+
+  // What the code below each call saw of its caller's frame, in the order the attempts ran.
+  class Tenanted {
+    seen: Array<string | undefined> = []
+    readonly #first = Promise.withResolvers<void>()
+    storage!: ContextStorage
+
+    release(): void {
+      this.#first.resolve()
+    }
+
+    @Bulkhead('queued')
+    async queued(): Promise<void> {
+      this.seen.push(this.storage.getStore()?.get(kCaller))
+      if (this.seen.length === 1) {
+        await this.#first.promise
+      }
+    }
+
+    @RateLimiter('limited')
+    async limited(): Promise<void> {
+      this.seen.push(this.storage.getStore()?.get(kCaller))
+    }
+  }
+
+  async function tenanted() {
+    const storage = new AsyncLocalStorage<ExecutionContext>()
+    const { di } = await containerWith(
+      d => d.bind(Tenanted, t => t.toSelf()),
+      {
+        queued: { bulkhead: { maxConcurrentCalls: 1, maxWaitDuration: 1 * Second } },
+        limited: {
+          rateLimiter: {
+            limitForPeriod: 1,
+            limitRefreshPeriod: 100 * Millisecond,
+            maxWaitDuration: 1 * Second,
+            clock: contextClock,
+          },
+        },
+      },
+      { storage },
+    )
+    const service = di.get(Tenanted)
+    service.storage = storage
+    const as = <T>(caller: string, fn: () => Promise<T>) => storage.run(ExecutionContext.ROOT.with(kCaller, caller), fn)
+    return { service, as }
+  }
+
+  // A call that waited for a slot runs when another call ends, from that call's continuation: it must still see its
+  // own caller, or it reads another request's tenant, context and request-scoped services.
+  it('extends the caller’s frame for a call that waited in a bulkhead', async () => {
+    const { service, as } = await tenanted()
+
+    const a = as('a', () => service.queued())
+    const b = as('b', () => service.queued())
+    await vi.advanceTimersByTimeAsync(0)
+    service.release()
+    await Promise.all([a, b])
+
+    expect(service.seen).toEqual(['a', 'b'])
+  })
+
+  // The third call is woken by a timer the second call's wake-up set, in the second caller's frame.
+  it('extends the caller’s frame for each call that waited for a rate limiter permit', async () => {
+    const { service, as } = await tenanted()
+
+    const calls = ['a', 'b', 'c'].map(caller => as(caller, () => service.limited()))
+    await vi.advanceTimersByTimeAsync(200)
+    await Promise.all(calls)
+
+    expect(service.seen).toEqual(['a', 'b', 'c'])
   })
 })

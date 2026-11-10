@@ -84,7 +84,9 @@ it.
 
 Either way, the test container keeps the values the source bound with
 `bindConfig()`, and the provider it bound with `bindScopedConfig()`, so `$i.config` and
-`$i.liveConfig` injections resolve as they do in production.
+`$i.liveConfig` injections resolve as they do in production. It also keeps the
+storage the source bound with `bindContextStorage()`, so a test that frames its
+calls in that storage reaches the test container's request scope.
 
 When constructed empty, the test container registers decorated classes, so types
 imported via the feature module register on it.

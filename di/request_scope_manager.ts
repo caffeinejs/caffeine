@@ -1,5 +1,3 @@
-import type { ContextStorage } from './context/context.js'
-
 /**
  * RequestScopeManager is a manager for request-scoped instances.
  */
@@ -18,11 +16,4 @@ export interface RequestScopeManager {
    * @throws ErrOutOfScope When a request-scoped key is resolved after the scope has ended.
    */
   run<T>(fn: () => T | Promise<T>): Promise<T>
-
-  /**
-   * Sets the storage the request scope keeps its frames in, in place of the container's {@link ContextStorage}.
-   *
-   * @param storage - The storage to set.
-   */
-  setStorage(storage: ContextStorage): void
 }

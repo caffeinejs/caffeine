@@ -1,9 +1,18 @@
 declare const kContextKeyType: unique symbol
 
 /**
+ * Phantom brand that attaches the value type to a {@link ContextKey}. Invariant, so a key never widens: a
+ * `ContextKey<string>` is not a `ContextKey<string | number>`.
+ */
+export interface ContextKeyBrand<in out T> {
+  // Taken and returned, so the brand is invariant structurally too: `in out` alone does not hold through `symbol & …`.
+  readonly [kContextKeyType]: (value: T) => T
+}
+
+/**
  * A slot of an {@link ExecutionContext}, typed by the value it holds. Create one with {@link contextKey}.
  */
-export type ContextKey<T> = symbol & { readonly [kContextKeyType]?: T }
+export type ContextKey<T> = symbol & ContextKeyBrand<T>
 
 /**
  * Creates a {@link ContextKey}. Two calls with the same description make two distinct slots.
@@ -52,23 +61,22 @@ export class ExecutionContext {
  * Carries an {@link ExecutionContext} along asynchronous continuations: the shape of `AsyncLocalStorage` from
  * `node:async_hooks`, which satisfies it as it is.
  *
- * It is also the injection key. On Node, every container binds a storage of its own under it unless the application
- * binds one: `container.bind(ContextStorage, t => t.toValue(new AsyncLocalStorage()))`. Read the bound one with
- * `container.contextStorage`.
+ * On Node, every container makes a storage of its own; `container.bindContextStorage(storage)` replaces it before
+ * the container compiles. Read the container's with `container.contextStorage`.
  */
-export abstract class ContextStorage {
+export interface ContextStorage {
   /** Runs `fn` with `context` as the store of every continuation it starts. */
-  abstract run<R>(context: ExecutionContext, fn: () => R): R
+  run<R>(context: ExecutionContext, fn: () => R): R
 
   /** The context of the current continuation, `undefined` outside every `run`. */
-  abstract getStore(): ExecutionContext | undefined
+  getStore(): ExecutionContext | undefined
 }
 
 let defaultStorage: (() => ContextStorage) | undefined
 
 /**
  * Sets how every container built afterwards creates its default {@link ContextStorage}. The Node entry calls it once
- * at load; without it, a container binds no default.
+ * at load; without it, a container makes none.
  */
 export function setDefaultContextStorage(factory: () => ContextStorage): void {
   defaultStorage = factory

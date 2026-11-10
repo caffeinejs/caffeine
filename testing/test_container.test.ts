@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+
 import {
   $i,
   CaffeineIoC,
@@ -10,7 +12,9 @@ import {
   Profile,
   Provides,
   ProvidesAsync,
+  Scopes,
   token,
+  type ExecutionContext,
   type Provider,
 } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
@@ -300,6 +304,17 @@ describe('TestContainer', function () {
   })
 
   describe('focus()', function () {
+    // A request-scoped binding needs the container's storage to open a request scope, though it injects none.
+    it('keeps a focused request-scoped binding runnable in a request scope', async function () {
+      class Session {}
+      const source = new CaffeineIoC({ decorators: false })
+      source.bind(Session, t => t.toSelf().lifetime(Scopes.REQUEST))
+      const di = new TestContainer(source).focus(Session).build()
+      await di.init()
+
+      await expect(di.requestScopeManager.run(() => di.get(Session))).resolves.toBeInstanceOf(Session)
+    })
+
     it('keeps root and its transitive deps', async function () {
       const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(Controller).build()
@@ -405,6 +420,16 @@ describe('TestContainer', function () {
       host = 'moved.local'
 
       expect(settings.host.get()).toBe('moved.local')
+    })
+
+    // A test that frames its calls in the storage the application bound must reach the container it builds, whether
+    // or not it narrows the profiles.
+    it('keeps the context storage the source container bound, with profiles narrowed', function () {
+      const storage = new AsyncLocalStorage<ExecutionContext>()
+      const source = new CaffeineIoC({ decorators: false }).bindContextStorage(storage)
+
+      expect(newTestContainer(source).build().contextStorage).toBe(storage)
+      expect(newTestContainer(source).profiles('test').build().contextStorage).toBe(storage)
     })
   })
 

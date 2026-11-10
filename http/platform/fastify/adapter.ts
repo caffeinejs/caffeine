@@ -8,7 +8,7 @@ import { Server as TLSServer, type TLSSocket } from 'node:tls'
 
 import { ConfigStore } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
-import { Container, contextKey, type ContextStorage, ExecutionContext, Scopes } from '@caffeinejs/di'
+import { Container, contextKey, ExecutionContext, Scopes } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 import Fastify, {
   LogController,
@@ -218,15 +218,12 @@ export class Adapter implements IAdapter<AdapterTypes> {
   }
 
   readonly #container: Container
-  // The container's storage, read by the first setup(): the container is initialized by then, and every request
-  // comes after it.
-  #storage: ContextStorage | undefined
 
   constructor(kit: AdapterFactoryIn) {
     this.#container = kit.container
     this.#container.bind(Context, t =>
       t
-        .toFactory(() => this.#storage!.getStore()!.get(kHTTPContext)!)
+        .toFactory(() => this.#container.contextStorage.getStore()!.get(kHTTPContext)!)
         .lifetime(Scopes.REQUEST)
         .byPassPostProcessors()
         .internal(),
@@ -358,7 +355,7 @@ export class Adapter implements IAdapter<AdapterTypes> {
 
     // Always: the constructor binds `Context` request-scoped, so every application has a request scope.
     const man = container.requestScopeManager
-    const storage = (this.#storage ??= container.contextStorage)
+    const storage = container.contextStorage
     fastify.addHook('onRequest', (req, reply, done) => {
       storage.run(ExecutionContext.ROOT.with(kHTTPContext, req.httpContext), () => {
         man

@@ -293,6 +293,7 @@ export class TestContainer {
             decorators: this.#snap.decorators,
             values: this.#snap.values,
             scopedConfig: this.#snap.scopedConfig,
+            contextStorage: this.#snap.contextStorage,
           })
 
     const di = new CaffeineIoC({ lazy: this.#lazy })

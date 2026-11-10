@@ -1,4 +1,5 @@
 import HTTP, { IncomingMessage, ServerResponse } from 'http'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 
 import Supertest from 'supertest'
@@ -189,7 +190,7 @@ describe('Request Scope', function () {
   })
 })
 
-describe("Request Scope on the container's ContextStorage", function () {
+describe("Request Scope on the container's context storage", function () {
   const kTenant = contextKey<string>('tenant')
   const kAttempt = contextKey<number>('attempt')
 
@@ -216,6 +217,37 @@ describe("Request Scope on the container's ContextStorage", function () {
       await di.requestScopeManager.run(async () => {
         expect(() => di.requestScopeManager.run(() => undefined)).toThrow(ErrIllegalScopeState)
       })
+    })
+  })
+
+  // An application whose default lifetime is the request scope must still open one: the storage it opens it on cannot
+  // itself live in that scope.
+  it('opens a request scope when the default lifetime is the request scope', async () => {
+    const di = new CaffeineIoC({ decorators: false, defaultScopeID: Scopes.REQUEST })
+    await di.init()
+
+    await expect(di.requestScopeManager.run(() => 'ran')).resolves.toBe('ran')
+  })
+
+  // Two containers may share one storage (a snapshot restored, a storage bound in both): each request scope is its
+  // own, or one container resolves the other's request-scoped instances.
+  it('keeps the request scopes of two containers on one storage apart', async () => {
+    const storage = new AsyncLocalStorage<ExecutionContext>()
+    class Session {}
+    const containerOn = async () => {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindContextStorage(storage)
+      di.bind(Session, t => t.toSelf().lifetime(Scopes.REQUEST))
+      await di.init()
+      return di
+    }
+    const first = await containerOn()
+    const second = await containerOn()
+
+    await first.requestScopeManager.run(async () => {
+      expect(() => second.get(Session)).toThrow(ErrOutOfScope)
+      const inner = await second.requestScopeManager.run(() => second.get(Session))
+      expect(inner).not.toBe(first.get(Session))
     })
   })
 })

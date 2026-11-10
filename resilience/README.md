@@ -696,10 +696,11 @@ class InventoryHTTP {
 - Inside nested annotated methods, the innermost attempt is the one read. An inner method that takes no signal runs
   under the outer attempt's, so the outer deadline still reaches the code below it. Outside every attempt, `signal`
   and `attempt` are `undefined`, so the same class works when called directly.
-- `r.context(storage)` keeps attempts on a storage of their own in place of the container's `ContextStorage`. The
-  package imports nothing from Node: any object with `run(context, fn)` and `getStore()` works.
-- Where no `ContextStorage` is bound and `r.context(...)` gave none, `ResilienceContext` is still bound, and reading
-  it throws `ErrInvalidOption`. The method's own signal argument works either way.
+- Attempts are kept on the container's `contextStorage`, the one the request scope and the HTTP adapter use, so code
+  below an annotated method still sees the request it runs in. Give the container a storage of your own with
+  `container.bindContextStorage(...)`.
+- Where the container has no context storage, `ResilienceContext` is still bound, and reading it throws
+  `ErrInvalidOption`. The method's own signal argument works either way.
 
 ### Health
 

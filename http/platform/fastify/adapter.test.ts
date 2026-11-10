@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 import { $t } from '@caffeinejs/application/schema'
-import { ContextStorage, contextKey, ExecutionContext, Scopes, Injectable, Lifetime } from '@caffeinejs/di'
+import { contextKey, ExecutionContext, Scopes, Injectable, Lifetime } from '@caffeinejs/di'
 import type { FastifyError, FastifyInstance } from 'fastify'
 import { describe, it, expect } from 'vitest'
 
@@ -272,7 +272,7 @@ describe('Fastify Adapter', () => {
 
     // An application or a test container that binds its own storage must get every request framed in it, and each
     // request starts from a clean frame there: nothing the caller of the server had set leaks into a handler.
-    it('opens each request on a clean frame of the ContextStorage the application binds', async () => {
+    it('opens each request on a clean frame of the context storage the application binds', async () => {
       const storage = new AsyncLocalStorage<ExecutionContext>()
       const kCaller = contextKey<string>('caller')
       const router = new Router('/own-storage')
@@ -282,7 +282,7 @@ describe('Fastify Adapter', () => {
         .handler((ctx, deps) => ({ leaked: storage.getStore()?.get(kCaller) ?? null, same: deps.injected === ctx }))
 
       const app = createWebApplication().mount(router)
-      app.container.bind(ContextStorage, t => t.toValue(storage))
+      app.container.bindContextStorage(storage)
       await app.bootstrap()
 
       const res = await storage.run(ExecutionContext.ROOT.with(kCaller, 'test'), () => app.request('/own-storage'))
