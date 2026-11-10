@@ -1,4 +1,4 @@
-import Fastify, { type FastifyServerOptions } from 'fastify'
+import Fastify, { type FastifyPluginAsync, type FastifyServerOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrConfiguration } from '../../core/error/common.js'
@@ -78,8 +78,88 @@ describe('a route with a parameter named *', () => {
     expect(await bootstrapWith('/a/:x-:*')).toBeInstanceOf(ErrConfiguration)
   })
 
+  it('fails start-up on a terminal optional parameter named *', async () => {
+    expect(await bootstrapWith('/a/:*?')).toBeInstanceOf(ErrConfiguration)
+  })
+
   it('leaves a wildcard and a named parameter alone', async () => {
     expect(await bootstrapWith('/assets/:name/*')).toBe(undefined)
+  })
+
+  it.each(['*tail', 'name:*'])('serves a route with the distinct parameter name %s', async name => {
+    const plugin: FastifyPluginAsync = async server => {
+      server.get(`/assets/:${name}`, async request => (request.params as Record<string, string>)[name])
+    }
+    app = createWebApplication().with(() => plugin) as WebApplication
+    await app.bootstrap()
+
+    expect(await (await app.request('/assets/report.txt')).text()).toBe('report.txt')
+  })
+
+  it('refuses a wildcard parameter in the URL an application hook registers', async () => {
+    const plugin: FastifyPluginAsync = async server => {
+      server.addHook('onRoute', route => {
+        route.url = '/assets/:*'
+      })
+      server.route({ method: ['GET', 'HEAD'], url: '/assets/:name', handler: async () => 'answer' })
+    }
+    app = createWebApplication().with(() => plugin) as WebApplication
+
+    await expect(app.bootstrap()).rejects.toThrow('Cannot register "/assets/:*"')
+  })
+
+  it('refuses an ambiguous parameter when a prefixed root also registers a slash alias', async () => {
+    const plugin: FastifyPluginAsync = async server => {
+      await server.register(
+        async routes => {
+          routes.addHook('onRoute', route => {
+            route.url = '/assets/:*'
+          })
+          routes.route({ method: ['GET', 'HEAD'], url: '/', handler: async () => 'answer' })
+        },
+        { prefix: '/raw' },
+      )
+    }
+    app = createWebApplication().with(() => plugin) as WebApplication
+
+    await expect(app.bootstrap()).rejects.toThrow('Cannot register "/assets/:*"')
+  })
+
+  it('refuses an ambiguous parameter in the generated alias when the hook gives the first route a safe URL', async () => {
+    const plugin: FastifyPluginAsync = async server => {
+      await server.register(
+        async routes => {
+          routes.addHook('onRoute', route => {
+            route.url = '/safe'
+          })
+          routes.route({ method: ['GET', 'HEAD'], url: '/', handler: async () => 'answer' })
+        },
+        { prefix: '/assets/:*' },
+      )
+    }
+    app = createWebApplication().with(() => plugin) as WebApplication
+
+    await expect(app.bootstrap()).rejects.toThrow('Cannot register "/assets/:*/"')
+  })
+
+  it.each(['/', ''])('validates only the URL a prefixed route at %j actually registers', async url => {
+    const plugin: FastifyPluginAsync = async server => {
+      await server.register(
+        async routes => {
+          routes.addHook('onRoute', route => {
+            route.url = '/assets/:*'
+            route.url = '/raw/'
+            route.url = '/assets/:name'
+          })
+          routes.route({ method: ['GET', 'HEAD'], url, handler: async () => 'answer' })
+        },
+        { prefix: '/raw' },
+      )
+    }
+    app = createWebApplication().with(() => plugin) as WebApplication
+    await app.bootstrap()
+
+    expect(await (await app.request('/assets/report.txt')).text()).toBe('answer')
   })
 
   // An escaped colon is text, and a parameter's regular expression is the parameter's, whatever it holds.

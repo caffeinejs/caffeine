@@ -5,7 +5,7 @@ import { join, posix, relative, sep } from 'node:path'
 
 import { Second } from '@caffeinejs/std/duration'
 
-import { contentTypeOf } from '../content_type.js'
+import { contentTypeOf, validContentTypeHeader } from '../content_type.js'
 import { MANIFEST_FILE, VARIANT_DIRECTORY, nameProblem, type ManifestFile } from '../manifest/manifest.js'
 import { ErrStaticBuild } from './errors.js'
 
@@ -68,6 +68,7 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
   const skipped: SkippedFile[] = []
   const misnamed: string[] = []
   const untyped: string[] = []
+  const invalidTypes: string[] = []
 
   for (const { entry, path } of listed) {
     const reason = fixedRule(entry, path)
@@ -96,6 +97,11 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
       continue
     }
 
+    if (!validContentTypeHeader(type.type)) {
+      invalidTypes.push(path)
+      continue
+    }
+
     files.push({ path, ...type })
   }
 
@@ -105,6 +111,14 @@ export async function scan(root: string, options: ScanOptions = {}): Promise<Sca
 
   if (untyped.length > 0) {
     throw untypedError(root, untyped)
+  }
+
+  if (invalidTypes.length > 0) {
+    throw new ErrStaticBuild(
+      root,
+      `invalid Content-Type for ${listOf(invalidTypes)}`,
+      'Supply a valid content type in types',
+    )
   }
 
   return { files, skipped }

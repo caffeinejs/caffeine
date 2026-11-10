@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
 
 import { type WebApplication } from '@caffeinejs/http'
-import { authenticationExempt, newRouter, healthProbes } from '@caffeinejs/http/fastify'
+import { authenticationExempt, compress, newRouter, healthProbes } from '@caffeinejs/http/fastify'
 import fastifyCompress from '@fastify/compress'
 import fastifyCors from '@fastify/cors'
 import type { FastifyInstance } from 'fastify'
@@ -18,6 +19,7 @@ const api = () =>
 
 const pages = () =>
   newRouter()
+    .extend(compress(false))
     .detail('http', { internal: true })
     .authorize({ allowAnonymous: true })
     .get('/', shellOf(dist))
@@ -80,23 +82,55 @@ describe('a single-page application next to the plugins an application runs in p
     expect(await page.text()).toContain('<div id="root">')
   })
 
-  it('is compressed by a compression plugin like any response', async () => {
-    app = isolated()
-      .with(() =>
-        fp(async (instance: FastifyInstance) => instance.register(fastifyCompress, { threshold: 0 }), {
-          name: 'compress',
-        }),
-      )
-      .with(files())
-      .mount(api(), pages()) as WebApplication
-    await app.bootstrap()
+  it.each(['manifest', 'scan'] as const)(
+    'keeps the selected file representation with a global compression plugin in %s mode',
+    async mode => {
+      app = isolated()
+        .with(() =>
+          fp(
+            async (instance: FastifyInstance) =>
+              instance.register(fastifyCompress, {
+                threshold: 0,
+                onUnsupportedEncoding: (_encoding, _request, reply) => {
+                  reply.code(406)
+                  return 'Unsupported response encoding'
+                },
+              }),
+            { name: 'compress' },
+          ),
+        )
+        .with(staticFiles(s => s.serve(dist, { mode, unrouted: ['index.html'], anonymous: true })))
+        .mount(api(), pages()) as WebApplication
+      await app.bootstrap()
 
-    const res = await app.request('/dashboard', { headers: { ...NAVIGATION, 'accept-encoding': 'gzip' } })
+      const headers = { ...NAVIGATION, 'accept-encoding': 'gzip' }
+      for (const path of ['/assets/app-eZr2sdaR.js', '/dashboard']) {
+        const res = await app.request(path, { headers })
+        const head = await app.request(path, { method: 'HEAD', headers })
+        const bytes = Buffer.from(await res.arrayBuffer())
 
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-encoding')).toBe('gzip')
-    expect(gunzipSync(Buffer.from(await res.arrayBuffer())).toString()).toContain('<div id="root">')
-  })
+        expect(res.status).toBe(200)
+        expect(res.headers.get('etag')).toBe(`"${createHash('sha256').update(bytes).digest('base64')}"`)
+        expect(res.headers.get('content-encoding')).toBe(mode === 'manifest' ? 'gzip' : null)
+        expect(head.status).toBe(200)
+        expect(head.headers.get('content-encoding')).toBe(res.headers.get('content-encoding'))
+        expect(head.headers.get('content-length')).toBe(String(bytes.length))
+        expect(head.headers.get('etag')).toBe(res.headers.get('etag'))
+
+        if (mode === 'manifest') {
+          const resumed = await app.request(path, {
+            headers: { ...headers, range: 'bytes=6-10', 'if-range': res.headers.get('etag')! },
+          })
+          expect(resumed.status).toBe(200)
+          expect(Buffer.from(await resumed.arrayBuffer())).toEqual(gunzipSync(bytes))
+        }
+      }
+
+      const pets = await app.request('/api/pets', { headers: { 'accept-encoding': 'gzip' } })
+      expect(pets.headers.get('content-encoding')).toBe('gzip')
+      expect(gunzipSync(Buffer.from(await pets.arrayBuffer())).toString()).toBe('{"pets":[]}')
+    },
+  )
 
   // The client routes are ordinary routes, so the one not-found handler a Fastify context allows stays the
   // application's own.

@@ -1,3 +1,4 @@
+import { validateHeaderName, validateHeaderValue } from 'node:http'
 import { join, posix, relative } from 'node:path'
 
 import { ErrConfiguration, ErrHTTPNotFound } from '@caffeinejs/http'
@@ -10,7 +11,7 @@ import {
 } from '@caffeinejs/http/fastify'
 import { Day, Second, formatDuration, truncate } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
-import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { StaticBuilder, kBuild } from './builder.js'
@@ -56,6 +57,7 @@ const COMPUTED = new Set([
   'cache-control',
   'content-type',
   'content-length',
+  'transfer-encoding',
   'content-encoding',
   'content-range',
   'accept-ranges',
@@ -74,10 +76,10 @@ const COMPUTED = new Set([
  * routes. Compressed variants are negotiated by `Accept-Encoding` and are never URLs of their own.
  *
  * Start-up fails loudly: a missing or stale manifest, a listed file that is not there, two files answering one URL,
- * and a URL another route answers, registered before the mount or after it, each name the file and the fix. A route
- * constrained to a version, a host or a strategy of the application's is not checked: what it matches depends on the
- * request, and a request it does not match reaches the file. Install it once per server; one `staticFiles(...)` takes
- * several `.serve(...)` calls.
+ * and another route answering a file's URL each name the file and the fix. The collision check probes that URL
+ * without request constraints. A version, host or custom constraint can select a different route for a request.
+ * On a case-insensitive router, a case-sensitive parameter regex can select a different route for another spelling
+ * of the URL. Install it once per server. One `staticFiles(...)` takes several `.serve(...)` calls.
  */
 export function staticFiles<C = unknown>(configure?: StaticConfigurer<C>): HTTPPluginFactory<C> {
   return async context => {
@@ -135,7 +137,9 @@ async function prepareMount({ root, options }: ResolvedMount, allowProduction: b
     anonymous: options.anonymous === true,
     index: options.index ?? 'index.html',
     mode,
-    routed: prepared.filter(file => !unrouted.some(glob => posix.matchesGlob(file.path, glob))),
+    routed: unrouted.includes('**')
+      ? []
+      : prepared.filter(file => !unrouted.some(glob => posix.matchesGlob(file.path, glob))),
   }
 }
 
@@ -159,7 +163,11 @@ async function scanned(root: string): Promise<StaticManifest> {
  */
 function policyOf(root: string, options: MountOptions): FilePolicy {
   const cacheControl = options.cacheControl ?? 'no-cache'
+  assertHeader(root, 'cacheControl', 'cache-control', cacheControl)
+
+  // Only unquoted commas separate directives. Leave the quoted values as the caller wrote them.
   const directives = cacheControl
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
     .split(',')
     .map(directive => directive.trim())
     .filter(Boolean)
@@ -191,7 +199,7 @@ function policyOf(root: string, options: MountOptions): FilePolicy {
   const directive = (path: string) =>
     immutable.some(glob => posix.matchesGlob(path, glob))
       ? `max-age=${Math.floor(maxAge / Second)}, immutable`
-      : directives.join(', ')
+      : cacheControl.trim()
   const scoped = (scopeName: string, path: string) => [scopeName, directive(path)].filter(Boolean).join(', ')
   const routeScope = options.anonymous === true ? 'public' : 'private'
 
@@ -244,10 +252,25 @@ function extraHeaders(
       )
     }
 
+    assertHeader(root, `headers(file) for "${path}"`, name, value)
     lowered[key] = value
   }
 
   return lowered
+}
+
+function assertHeader(root: string, option: string, name: string, value: string): void {
+  try {
+    validateHeaderName(name)
+    validateHeaderValue(name, value)
+  } catch {
+    throw new ErrConfiguration(
+      errMessage(`Cannot serve "${root}": ${option} sets an invalid HTTP header ${JSON.stringify(name)}`)
+        .solutions(`Supply a valid header name and value in ${option}`)
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
 }
 
 /**
@@ -301,12 +324,15 @@ function staticPlugin(
 
     for (const [url, target] of routes) {
       try {
-        instance.route({
+        const route: RouteOptions & { compress: false } = {
           method: ['GET', 'HEAD'],
           url,
+          // A later compressor would change the bytes without changing their strong ETag.
+          compress: false,
           ...(target.mount.anonymous ? { config: authenticationExempt() } : {}),
           handler: target.kind === 'file' ? fileHandler(target.file) : directoryHandler(target.files, router),
-        })
+        }
+        instance.route(route)
       } catch (err) {
         // The router refuses a second route at a URL as it matches it, whatever spelling either was written in.
         if ((err as { code?: unknown }).code === 'FST_ERR_DUPLICATED_ROUTE') {
@@ -358,11 +384,21 @@ function staticPlugin(
   return fp(plugin, { name: '@caffeinejs/static' })
 }
 
-/** The path of a request URL, where the router ends it: at `?`, or at `;` too when it reads one as the query's start. */
+/** The path of a request target, with the authority and query removed as the router removes them. */
 function pathOf(url: string, router: RouterFlags): string {
-  const end = router.useSemicolonDelimiter ? url.search(/[?;]/) : url.indexOf('?')
+  const start = url.startsWith('/') ? 0 : url.indexOf('/', url.indexOf('://') + 3)
+  const path = start === -1 ? '/' : url.slice(start)
+  const end = path.search(router.useSemicolonDelimiter ? /[?#;]/ : /[?#]/)
 
-  return end === -1 ? url : url.slice(0, end)
+  return end === -1 ? path : path.slice(0, end)
+}
+
+/** A path key with the router's slash and case options applied. */
+function pathKey(path: string, router: RouterFlags): string {
+  const slashes = router.ignoreDuplicateSlashes ? path.replace(/\/{2,}/g, '/') : path
+  const normalized = router.ignoreTrailingSlash && slashes.length > 1 ? slashes.replace(/\/$/, '') : slashes
+
+  return key(normalized, router)
 }
 
 /**
@@ -439,19 +475,30 @@ function nestedDirectory(
  * its directory, rather than to another route.
  */
 function answeredByMount(instance: FastifyInstance, url: string, rest: string, router: RouterFlags): boolean {
-  // Spelled as a browser sends it, which the router decodes as it does a request's.
-  const sent = encodeURI(url)
+  const prefix = url.slice(0, url.length - rest.length)
+  const folded = key(prefix, router)
+  const extra = folded.length - prefix.length
+  // The router uses the folded prefix's length to slice the original path, before decoding any escaped percent.
+  const captured = extra === 0 ? rest : rest.replaceAll('%', '%25').slice(extra).replaceAll('%25', '%')
 
-  return ['GET', 'HEAD'].every(method => {
-    const params = instance.findRoute({ method, url: sent })?.params as Record<string, string> | undefined
+  const answers = (path: string, expected: string) => {
+    // Spelled as a browser sends it, which the router decodes as it does a request's.
+    const sent = encodeURI(path)
 
-    return (
-      params !== undefined &&
-      Object.keys(params).length === 1 &&
-      params['*'] !== undefined &&
-      key(params['*'], router) === key(rest, router)
-    )
-  })
+    return ['GET', 'HEAD'].every(method => {
+      const params = instance.findRoute({ method, url: sent })?.params as Record<string, string> | undefined
+
+      return (
+        params !== undefined &&
+        Object.keys(params).length === 1 &&
+        params['*'] !== undefined &&
+        key(params['*'], router) === key(expected, router)
+      )
+    })
+  }
+
+  // An expanded prefix can leave an empty capture even for a longer wildcard. Check the folded spelling too.
+  return answers(url, captured) && (extra === 0 || answers(folded + rest, rest))
 }
 
 /**
@@ -460,23 +507,18 @@ function answeredByMount(instance: FastifyInstance, url: string, rest: string, r
  * from its files.
  */
 function routesOf(mounts: readonly PreparedMount[], router: RouterFlags): Map<string, RouteTarget> {
-  const fold = (url: string) => {
-    const cased = router.caseSensitive ? url : url.toLowerCase()
-
-    return router.ignoreTrailingSlash && cased.length > 1 ? cased.replace(/\/$/, '') : cased
-  }
   const claimed = new Map<string, { mount: PreparedMount; file: PreparedFile }>()
   // Each directory route's URL as first spelled, by its URL as the router matches it.
   const directories = new Map<string, string>()
   const claim = (url: string, mount: PreparedMount, file: PreparedFile) => {
-    const key = fold(url)
-    const held = claimed.get(key)
+    const normalized = pathKey(url, router)
+    const held = claimed.get(normalized)
 
     if (held !== undefined) {
       throw new ErrStaticRouteConflict(url, describe(held.mount, held.file), describe(mount, file))
     }
 
-    claimed.set(key, { mount, file })
+    claimed.set(normalized, { mount, file })
   }
   const routes = new Map<string, RouteTarget>()
 
@@ -513,17 +555,17 @@ function directoryRoute(
   router: RouterFlags,
 ): void {
   const spelled = `${mount.prefix}${file.path.slice(0, slash)}/*`
-  // A router that folds case matches `/Assets/*` and `/assets/*` as one route: the files of both share it.
-  const folded = router.caseSensitive ? spelled : spelled.toLowerCase()
-  const url = directories.get(folded) ?? spelled
-  directories.set(folded, url)
-  const rest = file.path.slice(slash + 1)
+  // Two directory spellings that the router matches as one route share their files.
+  const normalized = pathKey(spelled, router)
+  const url = directories.get(normalized) ?? spelled
+  directories.set(normalized, url)
+  const lookup = router.caseSensitive ? file.path.slice(slash + 1) : pathKey(mount.prefix + file.path, router)
   const route = routes.get(url)
 
   if (route === undefined) {
-    routes.set(url, { kind: 'directory', files: new Map([[key(rest, router), file]]), mount, first: file })
+    routes.set(url, { kind: 'directory', files: new Map([[lookup, file]]), mount, first: file })
   } else if (route.kind === 'directory' && route.mount.anonymous === mount.anonymous) {
-    route.files.set(key(rest, router), file)
+    route.files.set(lookup, file)
   } else {
     // One route has one config: mounts that disagree on `anonymous` cannot share a directory.
     throw new ErrStaticRouteConflict(url, describe(route.mount, firstOf(route)), describe(mount, file))
@@ -565,8 +607,16 @@ function directoryHandler(files: ReadonlyMap<string, PreparedFile>, router: Rout
     // The router matches these escapes as written, then decodes them in the wildcard. An exact route at a file's URL
     // matches only the literal spelling, so the escaped one would reach the file here, under this route's gate; and
     // `%2F`, read as `/`, would reach a file by a URL another route answers. So they name nothing here either.
-    const escaped = RESERVED_ESCAPE.test(pathOf(request.url, router))
-    const file = escaped ? undefined : files.get(key((request.params as { '*': string })['*'], router))
+    const path = pathOf(request.url, router)
+    let file: PreparedFile | undefined
+
+    if (!RESERVED_ESCAPE.test(path)) {
+      // Folding can expand a character in the prefix. The wildcard's offset would then skip part of the file name.
+      const lookup = router.caseSensitive
+        ? (request.params as { '*': string })['*']
+        : pathKey(decodeURIComponent(path), router)
+      file = files.get(lookup)
+    }
 
     // A miss is this handler's answer as a file is, so it is as late as one after the timeout: the 503 answers.
     return answer(

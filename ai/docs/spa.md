@@ -21,18 +21,19 @@ await buildStatic({ root: 'site/dist' }) // the br and gzip variants, and the ma
 Start-up reads every file the manifest lists and checks its hash, so a file changed after the build fails the
 deployment instead of going out under the tag of the bytes it replaced.
 
-The build keeps its variants in `.static-variants/` under the root and reads every other file as one of the site.
-A tree that still holds `app.js.br` or `app.js.gz` beside `app.js`, as `@fastify/static`'s `preCompressed` wanted,
-fails the build on `.br`, which has no content type, and serves a stray `.gz` as an archive of its own. Build into an
-empty output directory, or remove each such copy whose file is beside it before `buildStatic` runs:
+The build keeps its variants in `.static-variants/` under the root. It treats compressed files from an older
+`@fastify/static` setup as site files. A legacy `.br` or `.deflate` sidecar can fail the build, and a legacy
+`.gz` sidecar can become a downloadable archive.
+
+Build into an empty output directory when migrating. If you reuse an existing directory, list the candidate
+sidecars, including ones whose original files are gone.
 
 ```sh
-find site/dist -type f \( -name '*.br' -o -name '*.gz' \) \
-  -exec sh -c 'for f; do if [ -f "${f%.*}" ]; then rm -- "$f"; fi; done' sh {} +
+find site/dist -type f \( -name '*.br' -o -name '*.gz' -o -name '*.deflate' \) -print
 ```
 
-That leaves an archive such as `backup.tar.gz` alone, but removes `notes.txt.gz` beside `notes.txt` too: keep an
-archive the site serves on purpose out of the command's reach, and list one it must not serve in `exclude`.
+Remove only files you know were generated as precompressed copies. If those copies must stay on disk, list their
+paths in the build's `exclude` option. Keep any archives you intend to serve.
 
 ## The two rules
 
@@ -50,7 +51,7 @@ handler returns it: a handler that drops the value answers with nothing in it.
 import { resolve } from 'node:path'
 
 import { ErrHTTPNotFound, type IContext } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/fastify'
+import { compress, newRouter } from '@caffeinejs/http/fastify'
 import { isDocumentRequest, sendFile, staticFiles } from '@caffeinejs/static'
 
 const DIST = resolve('site/dist')
@@ -62,6 +63,7 @@ const notFound = (ctx: IContext): never => {
 const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
 
 const pages = newRouter()
+  .extend(compress(false))
   .detail('http', { internal: true }) // @caffeinejs/openapi does not describe client routes
   .authorize({ allowAnonymous: true })
   .get('/', shellDocument)
@@ -83,7 +85,8 @@ it: a miss under `/assets/` is the mount's own 404, and a miss at the root falls
 
 The `br` and `gzip` variants the build wrote to `.static-variants/` are negotiated by `Accept-Encoding` and are
 never URLs of their own.
-They apply to `sendFile` too, so the shell served from a compiled route is compressed as well.
+They apply to `sendFile` too. If the server uses `@fastify/compress`, use `compress(false)` on routes that
+return `sendFile` so the file's encoding and strong ETag still describe the bytes sent.
 
 `immutable: ['assets/**']` pins the content-hashed files for a year (`immutableMaxAge` changes it); every other
 file is revalidated on each use (`cacheControl`, default `'no-cache'`).
@@ -108,14 +111,20 @@ One `authorize` per tier, on the application's own routers, over the same bundle
 
 ```ts
 const publicPages = newRouter()
+  .extend(compress(false))
   .authorize({ allowAnonymous: true })
   .get('/', shellDocument)
   .get('/login', shellDocument)
   .get('/*', clientRoute)
 
-const memberPages = newRouter().authorize().get('/dashboard', shellDocument).get('/dashboard/*', clientRoute)
+const memberPages = newRouter()
+  .extend(compress(false))
+  .authorize()
+  .get('/dashboard', shellDocument)
+  .get('/dashboard/*', clientRoute)
 
 const adminPages = newRouter()
+  .extend(compress(false))
   .authorize({ roles: ['admin'] })
   .get('/admin', shellDocument)
   .get('/admin/*', clientRoute)
@@ -132,9 +141,11 @@ it. The data is protected by the API.
 against `/dashboard/*`; the wildcard covers `/dashboard/` with an empty match, but not the bare path.
 
 A prefixed router needs no special handling for the bare path: `newRouter('/app')` with a route at `/`
-composes to `/app`, not `/app/`. So the pair is the ordinary one, written on the prefixed router —
-`newRouter('/app').get('/', shellDocument).get('/*', clientRoute)`. Registering the routes on an unprefixed
-router instead is a choice, not a workaround.
+composes to `/app`, so the prefixed router declares the pair as follows.
+
+```ts
+newRouter('/app').extend(compress(false)).get('/', shellDocument).get('/*', clientRoute)
+```
 
 ## A separate application whose bundle must be gated too
 
@@ -147,6 +158,7 @@ const ADMIN = resolve('admin/dist')
 const adminDocument = (ctx: IContext) => sendFile(ctx, 'index.html', ADMIN)
 
 const admin = newRouter()
+  .extend(compress(false))
   .detail('http', { internal: true })
   .authorize({ roles: ['admin'] })
   .get('/admin', adminDocument)

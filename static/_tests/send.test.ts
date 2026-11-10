@@ -100,7 +100,7 @@ describe('sendFile', () => {
 
   it('finds the mount by the root it is given, and takes the first without one', async () => {
     const started = await start(
-      s => s.serve(fixtures, { prefix: '/a' }).serve(other, { prefix: '/b' }),
+      s => s.serve(fixtures, { prefix: '/a' }).serve(pathToFileURL(`${other}/`), { prefix: '/b' }),
       newRouter()
         .get('/first', ctx => sendFile(ctx, 'hello.txt'))
         .get('/second', ctx => sendFile(ctx, 'other.txt', other))
@@ -123,6 +123,26 @@ describe('sendFile', () => {
 
     expect((await started.request('/hello.txt')).status).toBe(404)
     expect((await started.request('/pick')).status).toBe(200)
+  })
+
+  it('keeps .well-known files and their index URLs off an entirely unrouted mount', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'caffeine-static-well-known-'))
+
+    try {
+      await mkdir(join(root, '.well-known'))
+      await writeFile(join(root, '.well-known/index.html'), 'well-known index')
+      await buildStatic({ root })
+      const started = await start(
+        s => s.serve(root, { unrouted: ['**'] }),
+        newRouter().get('/pick', ctx => sendFile(ctx, '.well-known/index.html')),
+      )
+
+      expect((await started.request('/.well-known/index.html')).status).toBe(404)
+      expect((await started.request('/.well-known/')).status).toBe(404)
+      expect(await (await started.request('/pick')).text()).toBe('well-known index')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   // A path with a leading "/" is a request path, looked up as it is decoded: nothing resolves `..` against a directory.
@@ -155,6 +175,30 @@ describe('sendFile', () => {
     expect((await started.request('/', { headers: { 'accept-encoding': 'br', 'if-none-match': etag } })).status).toBe(
       304,
     )
+  })
+
+  it('retains configured cache metadata when a file is revalidated', async () => {
+    const headers = {
+      'content-location': '/hello.txt',
+      date: 'Thu, 01 Jan 2026 00:00:00 GMT',
+      expires: 'Fri, 01 Jan 2027 00:00:00 GMT',
+    }
+    const started = await start(
+      s => s.serve(fixtures, { headers: () => headers, cacheControl: '' }),
+      newRouter().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
+    )
+
+    for (const path of ['/hello.txt', '/pick']) {
+      const first = await started.request(path)
+      const refreshed = await started.request(path, { headers: { 'if-none-match': first.headers.get('etag')! } })
+
+      expect(first.status).toBe(200)
+      expect(refreshed.status).toBe(304)
+      for (const [name, value] of Object.entries(headers)) {
+        expect(first.headers.get(name)).toBe(value)
+        expect(refreshed.headers.get(name)).toBe(value)
+      }
+    }
   })
 
   it('keeps a Vary the handler wrote, adding Accept-Encoding', async () => {

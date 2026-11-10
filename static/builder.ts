@@ -73,5 +73,5 @@ export class StaticBuilder {
 
 /** Makes a root absolute, the form every mount is compared and resolved in. */
 export function resolveRoot(root: StaticRoot): string {
-  return root instanceof URL ? fileURLToPath(root) : resolve(root)
+  return resolve(root instanceof URL ? fileURLToPath(root) : root)
 }

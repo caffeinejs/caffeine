@@ -27,6 +27,9 @@ export interface StaticContext {
  * the router is sent all the same. Preconditions and ranges apply to a `GET` or a `HEAD` the handler left at `200`; a
  * status it set is kept, with the whole file.
  *
+ * When using `@fastify/compress`, apply `compress(false)` or `@Compress(false)` to routes that return this
+ * responder. It selects the encoding itself, and its validators describe those bytes.
+ *
  * `path` is the manifest's key as written, such as `'100%.txt'`, or, with a leading `/`, a URL path: the slash is
  * dropped and each segment percent-decoded, so `'/100%25.txt'` names the same file. A decoded segment holding a `/`
  * names nothing. A path the manifest does not list, `..` included, is a `404`. `root` picks the mount by the root its

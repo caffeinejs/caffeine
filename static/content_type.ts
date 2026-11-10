@@ -94,6 +94,12 @@ export function contentTypeOf(path: string, types: Readonly<Record<string, strin
   return ext === '' ? undefined : TABLE.get(ext)
 }
 
+/** Whether a content type is nonempty and can be sent as a header value. */
+export function validContentTypeHeader(type: string): boolean {
+  // Printable Latin-1, excluding C1 controls. The build and manifest reader accept the same values.
+  return /^[\x20-\x7e\xa0-\xff]+$/.test(type)
+}
+
 function withCharset(type: string): string {
   return /^text\//i.test(type) && !/;\s*charset=/i.test(type) ? type + UTF8 : type
 }

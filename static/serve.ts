@@ -155,8 +155,12 @@ export function prepareFile(disk: RootOnDisk, path: string, entry: ManifestFile,
       etag: headers.etag!,
       'last-modified': headers['last-modified']!,
     }
-    if (headers.vary !== undefined) {
-      notModifiedHeaders.vary = headers.vary
+    // RFC 9110 §15.4.5 retains cache metadata from the corresponding 200 response.
+    for (const name of ['content-location', 'date', 'expires', 'vary']) {
+      const value = headers[name]
+      if (value !== undefined) {
+        notModifiedHeaders[name] = value
+      }
     }
 
     return {

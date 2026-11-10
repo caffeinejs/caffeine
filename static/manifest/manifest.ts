@@ -3,6 +3,8 @@ import { join } from 'node:path'
 
 import { errMessage } from '@caffeinejs/std/err'
 
+import { validContentTypeHeader } from '../content_type.js'
+
 /** A content coding a file has a variant in. The manifest keys variants by it. */
 export type Encoding = 'br' | 'gzip'
 
@@ -164,7 +166,7 @@ function checkFile(path: string, file: unknown, shape: (detail: string) => ErrSt
   }
 
   // Written as Content-Type on every response: a line break would fail each one, or split the header.
-  if (CONTROL.test(file.type)) {
+  if (!validContentTypeHeader(file.type)) {
     throw shape(`"${at}.type" is not a header value`)
   }
 

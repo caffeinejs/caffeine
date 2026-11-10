@@ -127,6 +127,21 @@ describe('staticFiles', () => {
     expect(await (await app.request('/ASSETS/app.JS')).text()).toBe('assets/App.js')
   })
 
+  it.each(['i\u0307', '\u0130'])(
+    'keeps the full file name when folding %s changes the directory length',
+    async directory => {
+      const root = await tree('folded', [`${directory}/report.txt`, `${directory}/xreport.txt`])
+      app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+        .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
+        .with(staticFiles(s => s.serve(root))) as WebApplication
+      await app.bootstrap()
+
+      const res = await app.request('/%C4%B0/xreport.txt')
+      expect(res.status).toBe(200)
+      expect(await res.text()).toBe(`${directory}/xreport.txt`)
+    },
+  )
+
   // Two directories that differ by case are one route to a router that folds case, and each file still its own URL.
   it('serves files under directories that differ by case as one route, when the router folds it', async () => {
     const root = await tree('dirs', ['Assets/a.js', 'assets/b.js'])
@@ -137,6 +152,20 @@ describe('staticFiles', () => {
 
     expect(await (await app.request('/assets/a.js')).text()).toBe('Assets/a.js')
     expect(await (await app.request('/ASSETS/B.JS')).text()).toBe('assets/b.js')
+  })
+
+  it('serves disjoint files from mounts whose directory URLs differ by duplicate slashes', async () => {
+    const one = await tree('one', ['assets/a.txt'])
+    const two = await tree('two', ['assets/b.txt'])
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ factory: { routerOptions: { ignoreDuplicateSlashes: true } } }))
+      .with(
+        staticFiles(s => s.serve(one, { prefix: '/web//public' }).serve(two, { prefix: '/web/public' })),
+      ) as WebApplication
+    await app.bootstrap()
+
+    expect(await (await app.request('/web/public/assets/a.txt')).text()).toBe('assets/a.txt')
+    expect(await (await app.request('/web//public/assets/b.txt')).text()).toBe('assets/b.txt')
   })
 
   // The router keeps "%2F" as one segment's character while matching, then decodes it in the wildcard: read as "/", it
@@ -465,6 +494,15 @@ describe('staticFiles', () => {
     expect((await app!.request('/favicon.svg')).headers.get('cache-control')).toBe('public, max-age=60')
   })
 
+  it('preserves quoted cache-control values that contain directive names', async () => {
+    const cacheControl = 'no-cache="X-First, Public, X-Last"'
+    await start(s => s.serve(spa, { cacheControl })).bootstrap()
+
+    const res = await app!.request('/index.html')
+
+    expect(res.headers.get('cache-control')).toBe(`private, ${cacheControl}`)
+  })
+
   it('adds what headers(file) returns, merging Vary', async () => {
     await start(s =>
       s.serve(spa, {
@@ -486,6 +524,17 @@ describe('staticFiles', () => {
     expect(firstLine(err)).toBe(
       `Cannot serve "${spa}": headers(file) returned "__proto__" for "assets/app-eZr2sdaR.js", which a reply cannot send`,
     )
+  })
+
+  it.each([
+    [{ headers: () => ({ 'x-bad': 'first\nsecond' }) }, '"x-bad"'],
+    [{ headers: () => ({ 'invalid name': 'value' }) }, '"invalid name"'],
+    [{ cacheControl: 'max-age=1, ext="first\nsecond"' }, 'cacheControl'],
+  ] as Array<[MountOptions, string]>)('refuses a header the server cannot send (%o)', async (options, header) => {
+    const err = await refusal(s => s.serve(spa, options))
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(firstLine(err)).toContain(header)
   })
 
   // A plugin such as @fastify/cors writes Vary: Origin first; replacing it lets a shared cache hand one origin's
@@ -513,6 +562,10 @@ describe('staticFiles', () => {
       [
         { headers: () => ({ ETag: '"mine"' }) },
         `headers(file) returned "etag" for "assets/app-eZr2sdaR.js", which the server computes`,
+      ],
+      [
+        { headers: () => ({ 'transfer-encoding': 'chunked' }) },
+        `headers(file) returned "transfer-encoding" for "assets/app-eZr2sdaR.js", which the server computes`,
       ],
       [
         { headers: () => ({ 'cache-control': 'no-store' }) },
@@ -631,6 +684,19 @@ describe('staticFiles', () => {
       )
     })
 
+    it('refuses a nested mount when the folded prefix consumes the entire wildcard value', async () => {
+      const prefix = `/${'İ'.repeat(24)}`
+      const outer = await tree('outer', ['assets/inner/a.txt'])
+      const inner = await tree('inner', ['inner/b.txt'])
+      app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+        .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
+        .with(
+          staticFiles(s => s.serve(outer, { prefix }).serve(inner, { prefix: `${prefix}/assets` })),
+        ) as WebApplication
+
+      await expect(app.bootstrap()).rejects.toThrow(ErrStaticRouteConflict)
+    })
+
     // One route carries one gate: merging the two would expose the protected files or lock out the public ones.
     it('from two mounts sharing a directory that disagree on anonymous', async () => {
       const open = await tree('open', ['assets/a.js'])
@@ -646,10 +712,11 @@ describe('staticFiles', () => {
 
     // A router that folds case reaches both files by one URL; which one answers would be an accident.
     it('from two files that differ by case, when the router folds it', async () => {
-      const root = await tree('cased', ['A.txt', 'a.txt'])
+      const upper = await tree('upper', ['A.txt'])
+      const lower = await tree('lower', ['a.txt'])
       app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
         .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
-        .with(staticFiles(s => s.serve(root))) as WebApplication
+        .with(staticFiles(s => s.serve(upper).serve(lower))) as WebApplication
 
       const err = await app.bootstrap().catch((err: unknown) => err)
 

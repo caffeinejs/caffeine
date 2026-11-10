@@ -1,5 +1,5 @@
 import { errMessage } from '@caffeinejs/std/err'
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, RouteOptions } from 'fastify'
 
 import { ErrConfiguration } from '../../core/error/common.js'
 
@@ -59,28 +59,73 @@ export function recordRouterFlags(server: FastifyInstance, options: object): voi
 }
 
 /**
+ * Remembers the first URL of a prefixed root whose options Fastify reuses for its slash alias.
+ *
+ * Fastify adds the second alias after registering the first, without another onRoute call. Read the value
+ * replaced by that assignment, which already includes any changes from the application's onRoute hooks.
+ */
+export function trackPrefixedRootURL(
+  route: RouteOptions & { routePath: string; prefix: string },
+): (() => string | undefined) | undefined {
+  if (route.prefix === '' || route.routePath !== '') {
+    return undefined
+  }
+
+  const alias = `${route.prefix}/`
+  let current = route.url
+  let first: string | undefined
+  const getURL = () => current
+
+  Object.defineProperty(route, 'url', {
+    configurable: true,
+    enumerable: true,
+    get: getURL,
+    set(url: string) {
+      if (url === alias) {
+        first = current
+      }
+
+      current = url
+    },
+  })
+
+  return () => {
+    const descriptor = Object.getOwnPropertyDescriptor(route, 'url')
+
+    if (descriptor?.configurable && descriptor.get === getURL) {
+      Object.defineProperty(route, 'url', { configurable: true, enumerable: true, writable: true, value: current })
+    }
+
+    return route.routePath === '/' ? first : undefined
+  }
+}
+
+/**
  * Why the route `url` cannot register, when it declares a parameter named `*`: find-my-way gives the wildcard's value
  * that name, so whoever reads `params['*']` could not tell the two apart. `::` is an escaped colon, and the regular
  * expression a parameter may carry, in parentheses, is not read for parameters.
  */
 export function starParameterRefusal(url: string): ErrConfiguration | undefined {
-  for (let i = 0; i < url.length; i++) {
-    if (url[i] !== ':') {
+  // The router registers the full form of a terminal optional parameter with the question mark removed.
+  const path = url.replace(/(\/:[^/()]*?)\?(\/?)$/, '$1$2')
+
+  for (let i = 0; i < path.length; i++) {
+    if (path[i] !== ':') {
       continue
     }
 
-    if (url[i + 1] === ':') {
+    if (path[i + 1] === ':') {
       i++
-    } else if (url[i + 1] !== '*') {
-      // The name runs to the next separator; a regular expression may follow it at once.
-      let end = i + 1
+      continue
+    }
 
-      while (end < url.length && !'/-.:('.includes(url[end]!)) {
-        end++
-      }
+    let end = i + 1
 
-      i = url[end] === '(' ? closingParenthesis(url, end) : end - 1
-    } else {
+    while (end < path.length && !'/-.('.includes(path[end]!)) {
+      end++
+    }
+
+    if (path.slice(i + 1, end) === '*') {
       return new ErrConfiguration(
         errMessage(`Cannot register "${url}": a parameter named "*" reads as a wildcard, whose value has that name`)
           .solutions('Name the parameter, such as ":name"', 'Write a wildcard as "*", without ":"')
@@ -88,6 +133,8 @@ export function starParameterRefusal(url: string): ErrConfiguration | undefined 
           .build(),
       )
     }
+
+    i = path[end] === '(' ? closingParenthesis(path, end) : end - 1
   }
 
   return undefined

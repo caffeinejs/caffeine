@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, truncate, utimes, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, truncate, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -154,10 +154,11 @@ describe('buildStatic', () => {
   it('leaves the previous manifest and its variants whole when stopped before its own manifest', async () => {
     const first = 'first '.repeat(400)
     const second = 'second '.repeat(400)
+    const originalTime = 1_700_000_000.99975
     await writeFile(join(root, 'manual.txt'), first)
+    await utimes(join(root, 'manual.txt'), originalTime, originalTime)
     await buildStatic({ root })
     const previous = await readFile(join(root, MANIFEST_FILE))
-    const { atime, mtime } = await stat(join(root, 'manual.txt'))
     // Where the second input's gzip variant goes, a directory: the build stops there, its brotli variant written.
     const blocked = (await variantsOf(second)).gzip!.path
     await mkdir(join(root, blocked))
@@ -173,7 +174,7 @@ describe('buildStatic', () => {
     await rm(join(root, blocked), { recursive: true })
     await writeFile(join(root, 'manual.txt'), first)
     // The input as it was, its time included: the manifest records the second it changed in.
-    await utimes(join(root, 'manual.txt'), atime, mtime)
+    await utimes(join(root, 'manual.txt'), originalTime, originalTime)
     await buildStatic({ root })
     expect(await readFile(join(root, MANIFEST_FILE))).toEqual(previous)
 
@@ -271,6 +272,16 @@ describe('buildStatic', () => {
         .digest('base64'),
     )
   })
+
+  it.each(['', 'text/plain\ninvalid', 'text/plain; name=漢'])(
+    'refuses a content type it cannot publish (%j)',
+    async type => {
+      await writeFile(join(root, 'data.txt'), 'x')
+
+      await expect(buildStatic({ root, types: { '.txt': type } })).rejects.toThrow(ErrStaticBuild)
+      expect((await readdir(root)).includes(MANIFEST_FILE)).toBe(false)
+    },
+  )
 
   it('refuses a tree with a file nothing types and writes no manifest', async () => {
     await writeFile(join(root, 'data.xyz'), 'x')
