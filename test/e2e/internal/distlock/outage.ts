@@ -9,8 +9,22 @@ export interface RelayedClient {
   close(): Promise<void>
 }
 
-function newClient(port: number) {
-  return createClient({ url: `redis://127.0.0.1:${port}`, socket: { reconnectStrategy: () => 50 } })
+function newClient(url: string) {
+  return createClient({ url, socket: { reconnectStrategy: () => 50 } })
+}
+
+/** The server a Redis URL names, with the Redis port when it names none. */
+export function upstreamOf(url: string): { host: string; port: number } {
+  const { hostname, port } = new URL(url)
+  return { host: hostname, port: Number(port || 6379) }
+}
+
+/** `url` pointed at a relay on loopback, with its database, credentials and options kept. */
+export function relayURL(url: string, port: number): string {
+  const relayed = new URL(url)
+  relayed.hostname = '127.0.0.1'
+  relayed.port = String(port)
+  return relayed.toString()
 }
 
 function ignore(): void {
@@ -22,9 +36,8 @@ function ignore(): void {
  * its error channel: a dropped connection is what these specs are about, and an unlistened error event throws.
  */
 export async function relayedClient(url: string): Promise<RelayedClient> {
-  const { hostname, port } = new URL(url)
-  const proxy = await startProxy({ host: hostname, port: Number(port) })
-  const client = newClient(proxy.port)
+  const proxy = await startProxy(upstreamOf(url))
+  const client = newClient(relayURL(url, proxy.port))
   client.on('error', ignore)
   await client.connect()
 
