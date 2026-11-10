@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
+import { resolveBinary } from '@caffeinejs/cli'
 import type { Plugin } from 'esbuild'
 
 export interface CaffeineEsbuildOptions {
@@ -19,7 +20,7 @@ export function caffeineEsbuild(opts: CaffeineEsbuildOptions = {}): Plugin {
         if (opts.configPath) {
           args.push('--config', opts.configPath)
         }
-        const result = spawnSync('caffeine', args, { stdio: 'inherit' })
+        const result = spawnSync(resolveBinary(), args, { stdio: 'inherit' })
         if (result.status !== 0) {
           throw new Error('caffeine generate failed')
         }

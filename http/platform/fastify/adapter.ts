@@ -249,8 +249,9 @@ export class Adapter implements IAdapter<AdapterTypes> {
     recordRouterFlags(fastify, options)
 
     // Node's `close()` waits on what it does not end itself, so the adapter keeps what the server has open. An HTTP/1
-    // server ends its idle connections once, and counts one that has not sent a request as active, never idle: a
-    // client that connects and stays silent (a browser's preconnect, a load balancer's TCP check) holds it. A TLS
+    // server ends its idle connections once. Node 24 counts one that has not sent a request as active, never idle, so a
+    // client that connects and stays silent (a browser's preconnect, a load balancer's TCP check) holds it; Node 26
+    // resets it. A TLS
     // server's HTTP layer meets a connection only once its handshake ends, so not even `closeAllConnections()` reaches
     // one still handshaking. Node 22's HTTP/2 server leaves its sessions open, an idle one until
     // `http2SessionTimeout`.
@@ -542,7 +543,7 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
     // never began its handshake, or a TLS one that finished it and fell silent, an HTTP/2 one that never sent its
     // preface included. Each is destroyed, whether open when closing began or opening after, before the server stops
     // listening or from a handshake that ends after. Judged once Node has read what had arrived, so a request already
-    // on its way is answered: with a 503 once Fastify is closing.
+    // on its way is answered.
     const endIfSilent = (socket: Socket) =>
       afterIO(() => {
         if (socket.bytesRead === 0) {
@@ -573,6 +574,9 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
 
     subscribe(RESPONSE_FINISH, closeIdle)
     try {
+      // Node 26's `close()` resets a connection that has not delivered a request yet, bytes already arrived included:
+      // the server reads them first, and the silent connections above are judged by then.
+      await new Promise<void>(resolve => afterIO(resolve))
       await this.#fastify.close()
     } finally {
       unsubscribe(RESPONSE_FINISH, closeIdle)

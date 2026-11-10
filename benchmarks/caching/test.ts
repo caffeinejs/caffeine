@@ -35,8 +35,15 @@ const servers: ServerConfig[] = [
     cacheStatus: [null, null],
     ...built('caffeine', 'caffeine.js'),
   },
-  { name: 'nestjs', cmd: 'node', port: 3052, ...built('nestjs', 'nestjs.js') },
-  { name: 'nestjs (no cache)', cmd: 'node', port: 3053, env: { BENCH_CACHE: 'off' }, ...built('nestjs', 'nestjs.js') },
+  { name: 'nestjs (node)', cmd: 'node', port: 3052, cacheStatus: ['MISS', 'HIT'], ...built('nestjs', 'nestjs.js') },
+  {
+    name: 'nestjs (node, no cache)',
+    cmd: 'node',
+    port: 3053,
+    env: { BENCH_CACHE: 'off' },
+    cacheStatus: [null, null],
+    ...built('nestjs', 'nestjs.js'),
+  },
   { name: 'hono', cmd: 'node', port: 3054, ...built('hono', 'hono.js') },
   { name: 'hono (no cache)', cmd: 'node', port: 3055, env: { BENCH_CACHE: 'off' }, ...built('hono', 'hono.js') },
 ]
