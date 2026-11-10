@@ -4,7 +4,7 @@ import { Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
-import { FaultyBackend } from './backend.testkit.js'
+import { FaultyBackend, RotatingBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLock } from './distlock.js'
 import { kDistLock } from './keys.js'
@@ -246,6 +246,64 @@ describe('once', () => {
 
     expect(backend.released).toEqual([])
     expect(await lock.once('nightly-report', () => 'again', { ttl: 30 * Second })).toEqual({ executed: false })
+  })
+
+  // The renewal timed out while the action is still running, and the lease reads as lost. Giving its late answer
+  // back would free the key under the running action, and a second caller would run it again inside the window.
+  it('keeps the window shut when a renewal answers late while the action is still running', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const finish = gate()
+
+    const first = lock.once('nightly-report', () => finish.wait, { ttl: 30 * Second, renew: true })
+    backend.late = ['extend']
+    // The renewal leaves at a third of the lease and is abandoned at storeTimeout.
+    await vi.advanceTimersByTimeAsync(15 * Second)
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(backend.released).toEqual([])
+    expect(await lock.once('nightly-report', () => 'again', { ttl: 30 * Second })).toEqual({ executed: false })
+
+    finish.open()
+    await first
+  })
+
+  // The action threw after the late renewal moved the key to a new token. Giving the key back for a retry inside the
+  // window has to release that token: the one the lease started with no longer holds anything.
+  it('gives the key back under the token a late renewal rotated to when the action then throws', async () => {
+    const backend = new FaultyBackend(new RotatingBackend())
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const finish = gate()
+
+    const first = lock
+      .once(
+        'nightly-report',
+        async () => {
+          await finish.wait
+          throw new Error('report failed')
+        },
+        { ttl: 30 * Second, renew: true },
+      )
+      .catch(() => undefined)
+    backend.late = ['extend']
+    await vi.advanceTimersByTimeAsync(15 * Second)
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    finish.open()
+    await first
+
+    expect(await lock.once('nightly-report', () => 'retried', { ttl: 30 * Second })).toEqual({
+      executed: true,
+      result: 'retried',
+    })
   })
 
   it('runs the action on exactly one of two applications sharing a backend', async () => {

@@ -4,7 +4,7 @@ import { Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
-import { FaultyBackend } from './backend.testkit.js'
+import { FaultyBackend, RotatingBackend } from './backend.testkit.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLockBuilder } from './builder.js'
 import type { DistLock, Lock } from './distlock.js'
@@ -48,27 +48,31 @@ class CountingBackend implements Backend {
   }
 }
 
-/** Hands out a new token on every extend, as {@link Backend.extend} allows. */
-class RotatingBackend implements Backend {
-  readonly inner = new MemoryLockBackend()
+/** Holds every acquisition until the test opens it, and counts what reached the backend. */
+class HeldAcquisitionBackend implements Backend {
+  attempts = 0
+  extensions = 0
 
-  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
-    return this.inner.tryAcquire(key, ttl)
+  readonly #inner = new MemoryLockBackend()
+  readonly #gate = Promise.withResolvers<void>()
+
+  open(): void {
+    this.#gate.resolve()
   }
 
-  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
-    if ((await this.inner.extend(lease, ttl)) === undefined) {
-      return undefined
-    }
+  async tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    this.attempts += 1
+    await this.#gate.promise
+    return this.#inner.tryAcquire(key, ttl)
+  }
 
-    await this.inner.release(lease)
-    const rotated = await this.inner.tryAcquire(lease.key, ttl)
-    // A new token string, but the same fencing token: extend keeps it.
-    return rotated === undefined ? undefined : { ...rotated, fencingToken: lease.fencingToken }
+  extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    this.extensions += 1
+    return this.#inner.extend(lease, ttl)
   }
 
   release(lease: LockLease): Promise<void> {
-    return this.inner.release(lease)
+    return this.#inner.release(lease)
   }
 }
 
@@ -512,6 +516,35 @@ describe('distlock lifecycle', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(backend.released).toEqual([])
+  })
+
+  // Close resolved with an acquisition still waiting on the backend. Retrying it would write to a backend the
+  // application may already have torn down.
+  it('sends no further acquisition attempt once close resolved', async () => {
+    const backend = new HeldAcquisitionBackend()
+    const { lock, close } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const acquiring = lock.acquire('orders:rebuild', { wait: 1 * Minute }).catch((e: unknown) => e)
+    await close()
+    await vi.advanceTimersByTimeAsync(30 * Second)
+
+    expect(backend.attempts).toBe(1)
+    expect(await acquiring).toBeInstanceOf(ErrLockBackendTimeout)
+  })
+
+  it('starts no renewal for a lock whose acquisition answered after close resolved', async () => {
+    const backend = new HeldAcquisitionBackend()
+    const { lock, close } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const acquiring = lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    await close()
+    backend.open()
+    await acquiring
+    await vi.advanceTimersByTimeAsync(20 * Second)
+
+    expect(backend.extensions).toBe(0)
   })
 
   // The same hole as above, opened by the holder's own extend: it timed out, the holder let go, and the rotated
