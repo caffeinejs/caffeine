@@ -8,7 +8,7 @@ import { Server as TLSServer, type TLSSocket } from 'node:tls'
 
 import { ConfigStore } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
-import { Container, contextKey, ExecutionContext, Scopes } from '@caffeinejs/di'
+import { Container, contextKey, ErrOutOfScope, ExecutionContext, Scopes } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 import Fastify, {
   LogController,
@@ -199,9 +199,6 @@ declare module 'fastify' {
  */
 const CACHING_PLUGIN = '@caffeinejs/caching'
 
-// The request's context, in the frame the adapter opens on the container's storage for each request.
-const kHTTPContext = contextKey<Context>('@caffeinejs/http:context')
-
 export class Adapter implements IAdapter<AdapterTypes> {
   /**
    * The parameter compilers handed to every route's dispatch, built once for the whole server. The reply type
@@ -218,12 +215,31 @@ export class Adapter implements IAdapter<AdapterTypes> {
   }
 
   readonly #container: Container
+  // The request's context, in the frame this adapter opens for each request. A slot of its own: applications sharing
+  // one storage never read each other's request.
+  readonly #key = contextKey<Context>('@caffeinejs/http:context')
 
   constructor(kit: AdapterFactoryIn) {
     this.#container = kit.container
     this.#container.bind(Context, t =>
       t
-        .toFactory(() => this.#container.contextStorage.getStore()!.get(kHTTPContext)!)
+        .toFactory(({ binding, container }) => {
+          // A snapshot copies the factory, but its registered binding belongs to the restored container.
+          const ctx = this.#container.getBindings<unknown>(Context).includes(binding)
+            ? container.contextStorage.getStore()?.get(this.#key)
+            : undefined
+          if (ctx === undefined) {
+            throw new ErrOutOfScope(
+              errMessage('Cannot resolve the HTTP Context: no request of this application is in progress')
+                .solutions(
+                  'Resolve Context only while this application handles a request, such as from a handler or a service it calls',
+                )
+                .reference('@caffeinejs/di', ErrOutOfScope)
+                .build(),
+            )
+          }
+          return ctx
+        })
         .lifetime(Scopes.REQUEST)
         .byPassPostProcessors()
         .internal(),
@@ -357,7 +373,7 @@ export class Adapter implements IAdapter<AdapterTypes> {
     const man = container.requestScopeManager
     const storage = container.contextStorage
     fastify.addHook('onRequest', (req, reply, done) => {
-      storage.run(ExecutionContext.ROOT.with(kHTTPContext, req.httpContext), () => {
+      storage.run(ExecutionContext.ROOT.with(this.#key, req.httpContext), () => {
         man
           .run(
             () =>

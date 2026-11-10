@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 import { $t } from '@caffeinejs/application/schema'
-import { contextKey, ExecutionContext, Scopes, Injectable, Lifetime } from '@caffeinejs/di'
+import { CaffeineIoC, contextKey, ExecutionContext, Scopes, Injectable, Lifetime, token } from '@caffeinejs/di'
 import type { FastifyError, FastifyInstance } from 'fastify'
 import { describe, it, expect } from 'vitest'
 
@@ -290,6 +290,134 @@ describe('Fastify Adapter', () => {
 
       await app.close()
     })
+
+    // Two applications may share one storage: a scope one of them opens under the other's request must not resolve
+    // that request's context, its principal and its reply.
+    it('keeps the request context of two applications on one storage apart', async () => {
+      const storage = new AsyncLocalStorage<ExecutionContext>()
+      const b = createWebApplication().mount(
+        newRouter('/b')
+          .get('/')
+          .inject({ injected: Context })
+          .handler((ctx, deps) => ({ same: deps.injected === ctx })),
+      )
+      b.container.bindContextStorage(storage)
+      const a = createWebApplication().mount(
+        newRouter('/a')
+          .get('/')
+          .handler(async () => {
+            const error = await b.container.requestScopeManager
+              .run(() => b.container.get(Context))
+              .then(
+                () => null,
+                (reason: Error) => reason.name,
+              )
+            return { error }
+          }),
+      )
+      a.container.bindContextStorage(storage)
+      await a.bootstrap()
+      await b.bootstrap()
+
+      try {
+        expect(await (await a.request('/a')).json()).toEqual({ error: 'ErrOutOfScope' })
+        expect(await (await b.request('/b')).json()).toEqual({ same: true })
+      } finally {
+        await a.close()
+        await b.close()
+      }
+    })
+
+    it('resolves the request context through a caller-supplied container facade', async () => {
+      const backing = new CaffeineIoC({ decorators: false })
+      const container = new Proxy(backing, {
+        get(target, key) {
+          const value: unknown = Reflect.get(target, key, target)
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      })
+      const app = createWebApplication({ container }).mount(
+        newRouter('/facade')
+          .get('/')
+          .inject({ injected: Context })
+          .handler((ctx, { injected }) => ({ same: injected === ctx })),
+      )
+
+      try {
+        await app.bootstrap()
+        expect(await (await app.request('/facade')).json()).toEqual({ same: true })
+      } finally {
+        await app.close()
+      }
+    })
+
+    it.each([false, true])('collects the request context with an additional binding (primary %s)', async primary => {
+      const app = createWebApplication()
+      const kOtherContext = token<Context>('other-context')
+      let context: Context
+      app.container.bind(kOtherContext, t =>
+        t
+          .toFactory(() => context)
+          .extends(Context)
+          .lifetime(Scopes.REQUEST)
+          .primary(primary),
+      )
+      app.mount(
+        newRouter('/contexts')
+          .get('/')
+          .handler(ctx => {
+            context = ctx as Context
+            return { matching: app.container.getMany(Context).filter(value => value === ctx).length }
+          }),
+      )
+
+      try {
+        await app.bootstrap()
+        expect(await (await app.request('/contexts')).json()).toEqual({ matching: 2 })
+      } finally {
+        await app.close()
+      }
+    })
+
+    it.each(['shared', 'separate'] as const)(
+      'keeps a live HTTP context out of a restored container with %s storage',
+      async mode => {
+        const storage = new AsyncLocalStorage<ExecutionContext>()
+        const clone = new CaffeineIoC({ decorators: false, lazy: true })
+        const app = createWebApplication().mount(
+          newRouter('/source')
+            .get('/')
+            .inject({ injected: Context })
+            .handler(async (ctx, { injected }) => {
+              const error = await clone.requestScopeManager
+                .run(() => clone.get(Context))
+                .then(
+                  () => null,
+                  (reason: Error) => reason.name,
+                )
+              return { same: injected === ctx, error }
+            }),
+        )
+        app.container.bindContextStorage(storage)
+
+        try {
+          await app.bootstrap()
+          clone.restore(app.container.snapshot())
+          if (mode === 'separate') {
+            clone.bindContextStorage(new AsyncLocalStorage<ExecutionContext>())
+          }
+          await clone.init()
+
+          expect(await (await app.request('/source')).json()).toEqual({
+            same: true,
+            error: 'ErrOutOfScope',
+          })
+        } finally {
+          await clone.dispose()
+          await app.close()
+        }
+      },
+    )
   })
 })
 

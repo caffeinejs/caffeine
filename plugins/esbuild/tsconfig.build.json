@@ -14,5 +14,10 @@
     "**/*.testkit.ts",
     "**/*.e2e.ts",
     "vitest.config.ts"
+  ],
+  "references": [
+    {
+      "path": "../../cli/tsconfig.build.json"
+    }
   ]
 }

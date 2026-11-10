@@ -279,13 +279,34 @@ Runs `fn` immediately after the instance is created. Must be synchronous; the co
 di.bind(DatabasePool, t => t.toSelf().postConstruct(pool => pool.connect()))
 ```
 
+### bootstrap
+
+```ts
+bootstrap(fn, { afterBindings?: boolean })
+```
+
+Runs `fn` during `init()` after eager instances are resolved. Set
+`afterBindings: true` to run it after the ordinary binding bootstrap callbacks.
+Each phase runs its callbacks in dependency order.
+
+### preserveOnReset
+
+```ts
+preserveOnReset()
+```
+
+Keeps the cached instance when the container resets the binding. Use it for
+resources that their consumers retain for the container's lifetime. A final
+`dispose()` still runs the binding's destruction hook.
+
 ### preDestroy
 
 ```ts
 preDestroy(fn)
 ```
 
-Runs `fn` before the instance is destroyed during `dispose()`.
+Runs `fn` before the instance is destroyed during `dispose()` or an instance
+reset that removes it.
 
 ```ts
 di.bind(DatabasePool, t => t.toSelf().preDestroy(pool => pool.end()))

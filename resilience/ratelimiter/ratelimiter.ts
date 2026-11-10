@@ -6,7 +6,7 @@ import { disposable } from '../dispose.js'
 import { Emitter } from '../emitter.js'
 import { ErrCallRefused, refusal } from '../errors.js'
 import { Options } from '../options.js'
-import type { CallContext, Operation, Wrapper } from '../policy.js'
+import { type CallContext, type Operation, restoreWaitingCall, type Wrapper } from '../policy.js'
 import { clampDelay, type Clock } from '../timers.js'
 import { type Waiter, Waiters } from '../waiters.js'
 
@@ -378,9 +378,18 @@ export class RateLimiter implements Wrapper {
     }
   }
 
-  // Refuses a call that was waiting: its permit lies `retryAfter` away.
+  // Refuses a call that was waiting, in its caller's context: its permit lies `retryAfter` away.
   #refuse(call: WaitingCall<any, any>, retryAfter: Duration, disposed: boolean): void {
     this.#rejected++
+    const restore = call.ctx.restore
+    if (restore === undefined) {
+      this.#reject(call, retryAfter, disposed)
+    } else {
+      restoreWaitingCall(call.ctx, restore, () => this.#reject(call, retryAfter, disposed), call.reject)
+    }
+  }
+
+  #reject(call: WaitingCall<any, any>, retryAfter: Duration, disposed: boolean): void {
     if (this.#emitter.has('rejected')) {
       this.#emitter.emit('rejected', { name: this.#name, retryAfter })
     }
@@ -435,8 +444,18 @@ export class RateLimiter implements Wrapper {
     this.#schedule()
   }
 
-  // Runs a call that waited for its permit, which it already holds.
+  // Runs a call that waited for its permit, which it already holds, in its caller's context: it starts from a timer or
+  // another call's continuation.
   #admit<T, I>(call: WaitingCall<T, I>, now: number): void {
+    const restore = call.ctx.restore
+    if (restore === undefined) {
+      this.#start(call, now)
+    } else {
+      restoreWaitingCall(call.ctx, restore, () => this.#start(call, now), call.reject)
+    }
+  }
+
+  #start<T, I>(call: WaitingCall<T, I>, now: number): void {
     if (this.#emitter.has('permitted')) {
       this.#emitter.emit('permitted', { name: this.#name, waited: now - call.since })
     }

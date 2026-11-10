@@ -501,6 +501,16 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
+   * Keeps the binding's instance through explicit resets, for a value whose consumers hold it for the container's
+   * lifetime. Its normal destruction hook still runs when the container is disposed.
+   */
+  preserveOnReset(): this {
+    this.binding.preserveOnReset = true
+
+    return this
+  }
+
+  /**
    * Registers a callback invoked when the container destroys this binding's instance.
    *
    * @example
@@ -519,15 +529,19 @@ export class BindingSpec<TValue, K = unknown> {
   /**
    * Registers a callback invoked automatically by init(), after every binding has been resolved.
    *
+   * Set `afterBindings: true` when the callback depends on ordinary binding bootstrap callbacks finishing.
+   * Dependency ordering applies within each phase.
+   *
    * @example
    * ```ts
    * container.bind(key, t => t.toClass(CacheWarmer).bootstrap(svc => svc.warm()))
    * ```
    */
-  bootstrap(fn: (value: TValue) => void | Promise<void>): this {
+  bootstrap(fn: (value: TValue) => void | Promise<void>, options?: { readonly afterBindings?: boolean }): this {
     notNil(fn, `Parameter fn must not be null or undefined`)
 
     this.binding.bootstrap = fn
+    this.binding.bootstrapAfterBindings = options?.afterBindings
 
     return this
   }

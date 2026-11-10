@@ -1,6 +1,12 @@
-import { createApplication, ErrFeatureAlreadyInstalled, type Feature } from '@caffeinejs/application'
-import { CaffeineIoC } from '@caffeinejs/di'
-import { Second } from '@caffeinejs/std/duration'
+import {
+  createApplication,
+  ErrFeatureAlreadyInstalled,
+  type Feature,
+  kFeatureConfigure,
+  kFeatureName,
+} from '@caffeinejs/application'
+import { CaffeineIoC, token } from '@caffeinejs/di'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { run } from '../compose.js'
@@ -522,6 +528,42 @@ describe('Resilience() and transports', () => {
     )
   })
 
+  it('discovers transports after their binding bootstrap hooks', async () => {
+    class LateTransport extends ResilienceTransport {
+      get label(): symbol {
+        return this.ready ? kService : Symbol.for('transport-not-ready')
+      }
+
+      ready = false
+
+      isClientError(): boolean {
+        return false
+      }
+    }
+    const transport: Feature = {
+      [kFeatureName]: 'late-transport',
+      [kFeatureConfigure]({ container }) {
+        container.bind(LateTransport, t =>
+          t
+            .toSelf()
+            .extends(ResilienceTransport)
+            .bootstrap(value => {
+              value.ready = true
+            }),
+        )
+      },
+    }
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .install(Resilience(inventory))
+      .install(transport)
+    app.container.bind(StockService, t => t.toSelf().labels(kService, kEntrypoint))
+    opened.push(() => app.close())
+
+    await app.bootstrap()
+
+    await expect(app.container.get(StockService).get()).resolves.toBe('stock')
+  })
+
   it('leaves a retried entrypoint to the transport that claims its label', async () => {
     const app = await serve(true, StockService)
 
@@ -577,6 +619,110 @@ describe('Resilience() and transports', () => {
 
     await expect(app.container.get(Shelf).count()).resolves.toBe(3)
     await expect(app.container.get(Orders).find()).resolves.toBe('order')
+  })
+
+  it('prepares a restored fallback without registering it in the source registry', async () => {
+    const app = await serve(true, Orders)
+    const clone = new CaffeineIoC({ lazy: true })
+    clone.restore(app.container.snapshot())
+    opened.push(() => clone.dispose())
+    await clone.init()
+
+    await expect(clone.get(Orders).find()).resolves.toBe('order')
+
+    const source = app.container.get(ResilienceRegistry)
+    const restored = clone.get(ResilienceRegistry)
+    expect(source.fallbacks().map(fallback => fallback.name)).toEqual(['Orders.find'])
+    expect(restored.fallbacks().map(fallback => fallback.name)).toEqual(['Orders.find'])
+    expect(restored).not.toBe(source)
+
+    await clone.dispose()
+    await clone.init()
+    const reopened = clone.get(ResilienceRegistry)
+
+    expect(reopened).not.toBe(restored)
+    await expect(clone.get(Orders).find()).resolves.toBe('order')
+    expect(reopened.fallbacks().map(fallback => fallback.name)).toEqual(['Orders.find'])
+  })
+
+  it('keeps the registry aligned with woven methods after resetting instances', async () => {
+    const app = await serve(true, Orders)
+
+    await app.container.resetInstances()
+    await expect(app.container.get(Orders).find()).resolves.toBe('order')
+
+    expect(
+      app.container
+        .get(ResilienceRegistry)
+        .fallbacks()
+        .map(fallback => fallback.name),
+    ).toEqual(['Orders.find'])
+  })
+
+  it('keeps a configured bulkhead able to queue after resetting instances', async () => {
+    const started = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<void>()
+    class Worker {
+      @Bulkhead('held')
+      async work(active: boolean): Promise<void> {
+        if (active) {
+          started.resolve()
+          await held.promise
+        }
+      }
+    }
+    const app = await boot(
+      Resilience(r =>
+        inventory(r).preset('held', p => p.bulkhead({ maxConcurrentCalls: 1, maxWaitDuration: 1 * Second })),
+      ),
+      Worker,
+    )
+    await app.container.resetInstances()
+    const worker = app.container.get(Worker)
+    const active = worker.work(true)
+    await started.promise
+    const waiting = worker.work(false).then(
+      () => 'finished',
+      (error: unknown) => error,
+    )
+    const queued = app.container.get(ResilienceRegistry).bulkhead('held').metrics().queuedCalls
+    held.resolve()
+
+    await active
+    expect(await waiting).toBe('finished')
+    expect(queued).toBe(1)
+  })
+
+  it('rebuilds policy state before an async binding calls a woven method during re-init', async () => {
+    class Worker {
+      attempts = 0
+
+      @Retry('worker')
+      async work(): Promise<string> {
+        if (++this.attempts === 1) {
+          throw new Error('retry me')
+        }
+        return 'ready'
+      }
+    }
+    const app = await boot(
+      Resilience(r => inventory(r).preset('worker', p => p.retry({ maxAttempts: 2, backoff: Millisecond }))),
+      Worker,
+    )
+    const clone = new CaffeineIoC({ lazy: true })
+    clone.restore(app.container.snapshot())
+    const kResult = token<string>('worker-result')
+    clone.bind(kResult, t => t.toAsyncFactory(({ container }) => container.get(Worker).work()))
+    opened.push(() => clone.dispose())
+
+    await clone.init()
+    expect(clone.get(kResult)).toBe('ready')
+    clone.hooks.removeAllListeners('onDisposed')
+    await clone.dispose()
+
+    await clone.init()
+    expect(clone.get(kResult)).toBe('ready')
+    expect(clone.get(Worker).attempts).toBe(2)
   })
 
   // A time limiter, a bulkhead and a rate limiter treat every error alike, so they need no transport to classify one.
@@ -656,6 +802,21 @@ describe('Resilience() and the client errors of a transport', () => {
     expect(error).toBeInstanceOf(ErrNotFound)
     expect(storefront.attempts).toBe(1)
     expect(breaker.metrics().bufferedCalls).toBe(0)
+  })
+
+  it('classifies client errors after restoring a container without an application bootstrap', async () => {
+    const app = await serve()
+    const clone = new CaffeineIoC({ lazy: true })
+    clone.restore(app.container.snapshot())
+    opened.push(() => clone.dispose())
+    await clone.init()
+
+    const storefront = clone.get(Storefront)
+    await expect(storefront.item(clone.get(Catalog), 'missing')).rejects.toThrow('no such item')
+
+    expect(storefront.attempts).toBe(1)
+    expect(clone.get(ResilienceRegistry).circuitBreaker('inventory').metrics().bufferedCalls).toBe(0)
+    expect(app.container.get(ResilienceRegistry).circuitBreaker('inventory').metrics().bufferedCalls).toBe(0)
   })
 
   // The classification belongs to the entrypoint's own calls: a client class it calls keeps its policies whole.

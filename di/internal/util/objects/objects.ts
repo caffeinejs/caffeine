@@ -11,3 +11,21 @@ export function mergeObject<T>(value: any, other: any): T {
 
   return res as T
 }
+
+/** Names what `value` is for a message, such as `an array` or `a value of type number`. */
+export function typeName(value: unknown): string {
+  if (value === null || value === undefined) {
+    return String(value)
+  }
+  if (value === '') {
+    return 'an empty string'
+  }
+  if (Array.isArray(value)) {
+    return 'an array'
+  }
+  if (value instanceof Promise) {
+    return 'a Promise'
+  }
+
+  return `a value of type ${typeof value}`
+}

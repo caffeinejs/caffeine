@@ -240,7 +240,6 @@ export type ContainerBindingOps = Pick<
   | 'hasValues'
   | 'bindScopedConfig'
   | 'hasScopedConfig'
-  | 'bindContextStorage'
   | 'hasContextStorage'
   | 'rebind'
   | 'aspect'

@@ -1,3 +1,7 @@
+import { errMessage } from '@caffeinejs/std/err'
+
+import { ErrInvalidOption } from './errors.js'
+
 /**
  * What a policy and the operation see of one call.
  *
@@ -15,6 +19,50 @@ export interface CallContext {
    * A transport integration sets it on the calls of the entrypoints it claims. Nothing sets it on any other call.
    */
   readonly isClientError?: (error: unknown) => boolean
+  /**
+   * Runs `fn` in the asynchronous context the call was made in. A policy that starts a waiting call later, from another
+   * call's continuation or a timer, as a bulkhead or a rate limiter does, starts it through `restore`, so the policies
+   * below it and every listener of an event about that call see the caller's context, such as the request it serves.
+   *
+   * Invoke `fn` synchronously once and return its result. If restoring the context fails before `fn` runs, the
+   * waiting call rejects. The resilience aspect sets this when the container has a context storage.
+   */
+  readonly restore?: <R>(fn: () => R) => R
+}
+
+/** Runs queued work through the supplied restore callback and reports whether it started. */
+export function restoreWaitingCall(
+  ctx: CallContext,
+  restore: NonNullable<CallContext['restore']>,
+  run: () => void,
+  reject: (error: unknown) => void,
+): boolean {
+  let invoked = false
+  let completed = false
+  try {
+    restore.call(ctx, () => {
+      if (invoked) {
+        return
+      }
+      invoked = true
+      run()
+      completed = true
+    })
+    if (!completed) {
+      throw new ErrInvalidOption(
+        errMessage('Cannot restore the waiting call: restore() must run its callback synchronously')
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
+    }
+  } catch (error) {
+    if (!completed) {
+      reject(error)
+    }
+  } finally {
+    invoked = true
+  }
+  return completed
 }
 
 /**

@@ -3,6 +3,7 @@ import { DeferredCtor } from './deferred_ctor.js'
 import { CaffeineIoCError, ErrCircularCondition, ErrInvalidBinding, ErrNoValuesProvider } from './errors.js'
 import { parseBool } from './internal/util/bool/index.js'
 import { errMessage } from './internal/util/errutil/index.js'
+import { typeName } from './internal/util/objects/index.js'
 import { Identifier, InjectionToken, isValidKey, keyStr } from './key.js'
 
 /**
@@ -610,21 +611,4 @@ function hostEnv(): Record<string, string | undefined> {
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
-}
-
-function typeName(value: unknown): string {
-  if (value === null || value === undefined) {
-    return String(value)
-  }
-  if (value === '') {
-    return 'an empty string'
-  }
-  if (Array.isArray(value)) {
-    return 'an array'
-  }
-  if (value instanceof Promise) {
-    return 'a Promise'
-  }
-
-  return `a value of type ${typeof value}`
 }

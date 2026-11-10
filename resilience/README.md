@@ -4,7 +4,7 @@ Circuit breaker, retry, time limiter, bulkhead, rate limiter and fallback for an
 plain functions. Its one dependency is `@caffeinejs/std`, which has none; every integration is an optional subpath.
 
 ```sh
-npm install @caffeinejs/resilience
+npm install -E @caffeinejs/resilience
 ```
 
 | Import from                             | What                                                                                                      |
@@ -512,7 +512,7 @@ const breaker = circuitBreaker({ name: 'inventory', clock: fakeTimersClock })
 ## Annotations
 
 ```sh
-npm install @caffeinejs/di @caffeinejs/application
+npm install -E @caffeinejs/di @caffeinejs/application
 ```
 
 `@caffeinejs/resilience/aop` applies the policies to methods of the classes the container builds. The `Resilience()`
@@ -778,7 +778,7 @@ APP_RESILIENCE__PRESETS__LEDGER__RETRY__BACKOFF__DELAY=1s
 ## HTTP
 
 ```sh
-npm install @caffeinejs/http
+npm install -E @caffeinejs/http
 ```
 
 `@caffeinejs/resilience/http` answers resilience errors over HTTP and checks, at start-up, which handlers may be
@@ -1087,7 +1087,7 @@ returns is guarded the same way: a synchronous throw from it rejects the call, s
 what they started.
 
 To hand the rest of the chain a different signal, call it with a new context that keeps the other fields of the one
-it got, such as `isClientError`. This one also aborts the work when the process starts shutting down:
+it got, such as `isClientError` and `restore`. This one also aborts the work when the process starts shutting down:
 
 ```ts
 const untilShutdown: Policy = op => (ctx, input) =>
@@ -1096,6 +1096,10 @@ const untilShutdown: Policy = op => (ctx, input) =>
     input,
   )
 ```
+
+A policy that holds a call and starts it later, from another call's continuation or a timer shared by several calls, starts it through
+`ctx.restore(() => ...)` when the context has one: the annotated methods set it, so the rest of the chain and the
+policy's own events run in the caller's context, the request it serves among others.
 
 For a deadline, use `timeLimiter()`: it also rejects when the operation ignores its signal, links the caller's
 signal and leaves no timer or listener behind.

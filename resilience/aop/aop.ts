@@ -103,12 +103,13 @@ interface Plans {
  * to it after the method returns, so a body it streams still learns that the caller left.
  */
 export class ResilienceAspect implements MethodAspect {
-  readonly #registry: ResilienceRegistry
+  #registry: ResilienceRegistry
   readonly #order: readonly ResilienceKind[]
   readonly #storage: ContextStorage | undefined
+  readonly #prepareBindings: ((aspect: ResilienceAspect) => void) | undefined
   // Each call in flight, kept only with a storage.
   readonly #calls = new WeakMap<JoinPoint, Call>()
-  readonly #plans = new WeakMap<AnyClass, Plans>()
+  #plans = new WeakMap<AnyClass, Plans>()
 
   /**
    * `order` lists the policy kinds outermost first, each once. With `storage`, each attempt runs in a frame of its
@@ -116,10 +117,28 @@ export class ResilienceAspect implements MethodAspect {
    *
    * @throws {@link ErrInvalidOption} when `order` leaves a kind out, names one twice or names anything else.
    */
-  constructor(registry: ResilienceRegistry, order: readonly ResilienceKind[] = ORDER, storage?: ContextStorage) {
+  constructor(
+    registry: ResilienceRegistry,
+    order: readonly ResilienceKind[] = ORDER,
+    storage?: ContextStorage,
+    prepareBindings?: (aspect: ResilienceAspect) => void,
+  ) {
     this.#registry = registry
     this.#order = checkedOrder(order)
     this.#storage = storage
+    this.#prepareBindings = prepareBindings
+  }
+
+  prepareBindings(): void {
+    this.#prepareBindings?.(this)
+  }
+
+  // The container can initialize again after disposal. Already woven methods still hold this aspect.
+  useRegistry(registry: ResilienceRegistry): void {
+    if (registry !== this.#registry) {
+      this.#registry = registry
+      this.#plans = new WeakMap()
+    }
   }
 
   /**
@@ -193,10 +212,15 @@ export class ResilienceAspect implements MethodAspect {
     if (signal !== undefined && signal.aborted) {
       return Promise.reject(signal.reason)
     }
-    if (this.#storage !== undefined) {
-      this.#calls.set(jp, { frame: frame ?? ExecutionContext.ROOT, attempt: 0 })
+    const storage = this.#storage
+    if (storage === undefined) {
+      return plan({ signal, isClientError: plans.isClientError }, jp)
     }
-    return plan({ signal, isClientError: plans.isClientError }, jp)
+    const caller = frame ?? ExecutionContext.ROOT
+    this.#calls.set(jp, { frame: caller, attempt: 0 })
+    // A policy that starts the call later, from another continuation, starts it back in the caller's frame.
+    const restore = <R>(fn: () => R): R => storage.run(caller, fn)
+    return plan({ signal, isClientError: plans.isClientError, restore }, jp)
   }
 
   #plansOf(cls: AnyClass): Plans {

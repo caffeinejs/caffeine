@@ -26,6 +26,7 @@ import {
   ErrMultiplePrimary,
   ErrInvalidContainerState,
   ErrInjectableBase,
+  ErrInvalidContextStorage,
   ErrNoContextStorage,
   ErrNoValuesProvider,
   ErrNotRefreshable,
@@ -116,13 +117,17 @@ export class CaffeineIoC implements Container {
   private _dropped: [InjectionToken, Binding][] = []
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
   private _aspectScopeCache: Set<NamedToken<Scope>> | null = null
+  private _clearAOPCaches: (() => void) | undefined
   private _hasRequestScope = false
   private _hasAsync = false
   private _values: unknown
   private _scopedConfig: Provider<unknown> | undefined
-  // The runtime's default, one per container; bindContextStorage() replaces it until the container compiles.
+  // The runtime's default, one per container; bindContextStorage() replaces it until the container compiles or the
+  // storage is read.
   private readonly _defaultContextStorage: ContextStorage | undefined
   private _contextStorage: ContextStorage | undefined
+  // The storage consumers read, fixed by the first read: a request scope may already keep its frames there.
+  private _usedContextStorage: ContextStorage | undefined
 
   /**
    * Creates a new container instance.
@@ -144,6 +149,8 @@ export class CaffeineIoC implements Container {
     this.scopes = new Map<NamedToken<Scope>, Scope>()
     this.modules = [...(opts.modules ?? [])]
     this._decorators = opts.decorators ?? true
+    // Before the scopes: a scope factory may take the container's storage.
+    this._defaultContextStorage = newDefaultContextStorage()
 
     for (const [id, factory] of scopeEntries()) {
       this.scopes.set(id, factory(this))
@@ -158,8 +165,6 @@ export class CaffeineIoC implements Container {
       this.refresher = refresher
       this.bind(Keys.kRefresher, t => t.toValue(refresher).byPassPostProcessors().internal())
     }
-
-    this._defaultContextStorage = newDefaultContextStorage()
 
     if (this.scopes.has(Scopes.REQUEST)) {
       const requestScope = this.scopes.get(Scopes.REQUEST) as RequestScope
@@ -195,18 +200,22 @@ export class CaffeineIoC implements Container {
 
   /**
    * The {@link ContextStorage} the request scope and the framework keep their frames in: the one bound with
-   * {@link bindContextStorage}, else the one the runtime made for this container. It cannot change once the container
-   * has compiled.
+   * {@link bindContextStorage}, else the one the runtime made for this container. The first read fixes it: nothing
+   * replaces it afterwards. A scope factory that keeps the storage reads it when the scope is used, not when it is
+   * built, or no application can bind its own.
    *
    * @throws {@link ErrNoContextStorage} if the runtime made none and none was bound, which only happens off Node
    */
   get contextStorage(): ContextStorage {
-    const storage = this._contextStorage ?? this._defaultContextStorage
-    if (storage === undefined) {
-      throw new ErrNoContextStorage()
+    if (this._usedContextStorage === undefined) {
+      const storage = this._contextStorage ?? this._defaultContextStorage
+      if (storage === undefined) {
+        throw new ErrNoContextStorage()
+      }
+      this._usedContextStorage = storage
     }
 
-    return storage
+    return this._usedContextStorage
   }
 
   /**
@@ -860,8 +869,12 @@ export class CaffeineIoC implements Container {
    * Replaces the {@link ContextStorage} the runtime made for this container. Every consumer reads the container's
    * storage, so one bound here is the one the request scope, the framework and the application share.
    *
-   * @throws {@link ErrInvalidContainerState} if the container has already been compiled, because a request scope may
-   * already keep its frames in the previous storage
+   * Bind it before the container compiles, never from a module.
+   *
+   * @throws {@link ErrInvalidContextStorage} if `storage` has no `run()` or no `getStore()` method
+   * @throws {@link ErrInvalidContainerState} if the container has started compiling, or if {@link contextStorage} was
+   * already read and `storage` is another one: whatever read it, such as a request scope opened before `init()`, keeps
+   * its frames there
    *
    * @example
    * ```ts
@@ -869,18 +882,15 @@ export class CaffeineIoC implements Container {
    * ```
    */
   bindContextStorage(storage: ContextStorage): this {
-    notNil(storage, 'Parameter storage must not be null or undefined')
-    this.assertNotDeciding('Cannot bind the context storage')
-
-    if (this._ready || this._compiled) {
+    if (this._compiling || this._compiled || this._ready) {
       throw new ErrInvalidContainerState(
-        errMessage('Cannot bind the context storage: container has already been compiled')
+        errMessage('Cannot bind the context storage: container has already started compiling')
+          .solutions('Call container.bindContextStorage() before init(), outside any module')
           .reference('@caffeinejs/di', ErrInvalidContainerState)
           .build(),
       )
     }
-
-    this._contextStorage = storage
+    this.setContextStorage(storage, 'Cannot bind the context storage', 'Call bindContextStorage() before')
 
     return this
   }
@@ -1045,6 +1055,10 @@ export class CaffeineIoC implements Container {
    */
   restore(snap: Snapshot): void {
     this.assertOpen('Cannot restore')
+    // First: a refusal leaves the container as it was.
+    if (snap.contextStorage !== undefined) {
+      this.setContextStorage(snap.contextStorage, 'Cannot restore', 'Restore the snapshot before')
+    }
 
     for (const { key, binding, rebind } of snap.declarations()) {
       this.declared.push({ key, binding: copyBinding(binding), rebind })
@@ -1065,14 +1079,10 @@ export class CaffeineIoC implements Container {
     if (snap.scopedConfig !== undefined) {
       this._scopedConfig = snap.scopedConfig
     }
-
-    if (snap.contextStorage !== undefined) {
-      this._contextStorage = snap.contextStorage
-    }
   }
 
   /**
-   * Resets all instances in the container.
+   * Resets instances in the container, except bindings marked to survive resets.
    * Async bindings will be automatically re-initialized.
    */
   async resetInstances(): Promise<void> {
@@ -1080,13 +1090,13 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Resets the instance bound to the given key.
+   * Resets instances bound to the given key, except bindings marked to survive resets.
    * Async bindings associated with the key will be automatically re-initialized.
    */
   async resetInstance(key: InjectionToken): Promise<void> {
     notNil(key)
 
-    const bindings = this.getBindings(key)
+    const bindings = this.getBindings(key).filter(binding => !binding.preserveOnReset)
     const asyncBindings = bindings.filter(b => b.async)
 
     if (asyncBindings.length === 0) {
@@ -1116,6 +1126,9 @@ export class CaffeineIoC implements Container {
    * If the binding is async, the instance will be automatically re-initialized.
    */
   async resetBinding(binding: Binding): Promise<void> {
+    if (binding.preserveOnReset) {
+      return
+    }
     if (binding.async) {
       return this.preDestroyBinding(binding).finally(() => this.resolveAsyncBinding(binding.ctx!.key, binding))
     }
@@ -1244,6 +1257,7 @@ export class CaffeineIoC implements Container {
       }
     } finally {
       this._ready = false
+      this._clearAOPCaches?.()
       this.hooks.emit('onDisposed')
     }
 
@@ -1649,7 +1663,8 @@ export class CaffeineIoC implements Container {
     checkAspects(aspects ?? [])
 
     if (aspects !== undefined) {
-      const aopInterceptors = buildAOPInterceptors(this)
+      const { interceptors: aopInterceptors, clear } = buildAOPInterceptors(this)
+      this._clearAOPCaches = clear
       for (const [key, binding] of this.registry.entries()) {
         const ctor = binding.type ?? (typeof key === 'function' ? (key as Function) : null)
         if (ctor) {
@@ -1879,6 +1894,23 @@ export class CaffeineIoC implements Container {
     }
   }
 
+  // `action` opens the refusal and `fix` its solution, both naming the call the reader made.
+  private setContextStorage(storage: ContextStorage, action: string, fix: string): void {
+    if (typeof storage?.run !== 'function' || typeof storage.getStore !== 'function') {
+      throw new ErrInvalidContextStorage(storage)
+    }
+    if (this._usedContextStorage !== undefined && this._usedContextStorage !== storage) {
+      throw new ErrInvalidContainerState(
+        errMessage(`${action}: the context storage is already in use`)
+          .solutions(`${fix} anything reads container.contextStorage or opens a request scope`)
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
+    }
+
+    this._contextStorage = storage
+  }
+
   private assertOpen(action: string): void {
     if (this._compiling || this._compiled || this._ready) {
       throw new ErrInvalidContainerState(
@@ -1953,7 +1985,9 @@ export class CaffeineIoC implements Container {
       return []
     }
 
-    return this.topoSortEntries([...this._bootstrapBindings.entries()])
+    const ordered = this.topoSortEntries([...this._bootstrapBindings.entries()])
+    const late = ordered.filter(([, binding]) => binding.bootstrapAfterBindings)
+    return late.length === 0 ? ordered : [...ordered.filter(([, binding]) => !binding.bootstrapAfterBindings), ...late]
   }
 
   /**

@@ -128,6 +128,9 @@ export interface Binding<T = any> {
    */
   preDestroy?: (value: T) => void | Promise<void>
 
+  /** Whether explicit instance resets leave this binding's cached value and destruction hook in place. */
+  preserveOnReset?: boolean
+
   /**
    * The post-construct hook for the component.
    */
@@ -137,6 +140,9 @@ export interface Binding<T = any> {
    * The bootstrap hook for the component. Run automatically by init(), after every other binding is resolved.
    */
   bootstrap?: (value: T) => void | Promise<void>
+
+  /** Whether this bootstrap callback runs after the ordinary binding bootstrap callbacks. */
+  bootstrapAfterBindings?: boolean
 
   /**
    * Whether to bypass post-processors for this binding.
@@ -200,8 +206,10 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     primary: initial.primary,
     lazy: initial.lazy,
     preDestroy: initial.preDestroy,
+    preserveOnReset: initial.preserveOnReset,
     postConstruct: initial.postConstruct,
     bootstrap: initial.bootstrap,
+    bootstrapAfterBindings: initial.bootstrapAfterBindings,
     configuration: initial.configuration,
     keysProvided: initial.keysProvided || [],
     extend: initial.extend,

@@ -1,5 +1,4 @@
 import {
-  type BootstrapKit,
   type Feature,
   FeatureBuilder,
   type FeatureConfigurer,
@@ -7,7 +6,7 @@ import {
   kFeatureName,
 } from '@caffeinejs/application'
 import { HealthIndicator } from '@caffeinejs/application/health'
-import { type AnyClass, reflect, type ResolutionContext, Scopes } from '@caffeinejs/di'
+import { type AnyClass, type ContainerOps, reflect, type ResolutionContext, Scopes } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -346,95 +345,120 @@ export class ResilienceBuilder<C = unknown> extends FeatureBuilder<C> {
   protected override configure(kit: FeatureConfigureKit<C>): void {
     const config = this.#config ?? {}
     const definitions = mergedPresets(config, this.#presets, this.#defaults)
-    const registry = new ResilienceRegistry(definitions)
     const order = this.#order ?? config.order
     const storage = ({ container }: ResolutionContext) =>
       container.hasContextStorage ? container.contextStorage : undefined
 
-    // Disposed at shutdown, so no backoff or queued call holds it.
-    kit.container.bind(ResilienceRegistry, t => t.toValue(registry).preDestroy(instances => instances.dispose()))
+    // A restored container owns its policies. Preserve the aspect identity if the container is disposed and
+    // initialized again, since previously woven methods still hold it.
+    const aspects = new WeakMap<ContainerOps, ResilienceAspect>()
+
+    kit.container.bind(ResilienceRegistry, t =>
+      t
+        .toFactory(() => new ResilienceRegistry(definitions))
+        .lifetime(Scopes.SINGLETON)
+        .preserveOnReset()
+        .preDestroy(registry => registry.dispose()),
+    )
     kit.container.bind(ResilienceContext, t =>
       t.toFactory(ctx => new ResilienceContext(storage(ctx))).lifetime(Scopes.SINGLETON),
     )
     if (this.#health !== undefined) {
-      const indicator = new ResilienceHealthIndicator(registry, criticalBreakers(this.#health, definitions))
-      kit.container.bind(ResilienceHealthIndicator, t => t.toValue(indicator).extends(HealthIndicator))
+      const critical = criticalBreakers(this.#health, definitions)
+      kit.container.bind(ResilienceHealthIndicator, t =>
+        t
+          .toFunction(registry => new ResilienceHealthIndicator(registry, critical), [ResilienceRegistry])
+          .lifetime(Scopes.SINGLETON)
+          .extends(HealthIndicator),
+      )
     }
     kit.container.aspect(ResilienceAspect, s =>
       s
-        .toFactory(ctx => new ResilienceAspect(registry, order, storage(ctx)))
+        .toFactory(ctx => {
+          const { container } = ctx
+          const registry = container.get(ResilienceRegistry)
+          const current = aspects.get(container)
+          if (current !== undefined) {
+            current.useRegistry(registry)
+            return current
+          }
+          const aspect = new ResilienceAspect(registry, order, storage(ctx), current =>
+            prepareBindings(container, container.get(ResilienceRegistry), current),
+          )
+          aspects.set(container, aspect)
+          return aspect
+        })
         .lifetime(Scopes.SINGLETON)
+        .preserveOnReset()
+        .bootstrap(aspect => aspect.prepareBindings(), { afterBindings: true })
         .pointcuts(resiliencePointcut)
         .order(RESILIENCE_ASPECT_ORDER),
     )
   }
+}
 
-  protected override bootstrap(kit: BootstrapKit<C>): void {
-    // A retried entrypoint replays a request, and a breaker or a fallback on one judges its client's errors: only the
-    // transport that serves it can tell whether a replay is safe and which errors are the client's. The bootstrap kit
-    // has no getManyOptional, and getMany refuses a key nothing binds.
-    const transports =
-      kit.container.getBindings(ResilienceTransport).length === 0 ? [] : kit.container.getMany(ResilienceTransport)
-    const claimed = new Map(transports.map(transport => [transport.label, transport]))
-    const registry = kit.container.get(ResilienceRegistry)
-    // The transport that claims each entrypoint class, which tells its client errors apart.
-    const served = new Map<AnyClass, ResilienceTransport>()
-    // A controller from `@Controller` carries both labels: one binding, checked once.
-    const entrypoints = new Set(
-      ENTRYPOINT_LABELS.flatMap(label => kit.container.getBindingsByLabel(label).map(({ binding }) => binding)),
-    )
-    for (const binding of entrypoints) {
-      const cls = binding.type as AnyClass | undefined
-      if (cls === undefined) {
-        continue
+function prepareBindings(container: ContainerOps, registry: ResilienceRegistry, aspect: ResilienceAspect): void {
+  // A retried entrypoint replays a request, and a breaker or a fallback on one judges its client's errors: only the
+  // transport that serves it can tell whether a replay is safe and which errors are the client's.
+  const transports =
+    container.getBindings(ResilienceTransport).length === 0 ? [] : container.getMany(ResilienceTransport)
+  const claimed = new Map(transports.map(transport => [transport.label, transport]))
+  // The transport that claims each entrypoint class, which tells its client errors apart.
+  const served = new Map<AnyClass, ResilienceTransport>()
+  // A controller from `@Controller` carries both labels: one binding, checked once.
+  const entrypoints = new Set(
+    ENTRYPOINT_LABELS.flatMap(label => container.getBindingsByLabel(label).map(({ binding }) => binding)),
+  )
+  for (const binding of entrypoints) {
+    const cls = binding.type as AnyClass | undefined
+    if (cls === undefined) {
+      continue
+    }
+    const label = binding.labels.find(other => claimed.has(other))
+    if (label !== undefined) {
+      served.set(cls, claimed.get(label)!)
+      continue
+    }
+    for (const member of wovenMembers(cls)) {
+      const where = `${cls.name}.${String(member)}`
+      const { retry, circuitBreaker } = stagesOf(cls, member, registry).stages
+      if (retry !== undefined) {
+        throw unclaimed(
+          cls,
+          `Cannot retry "${where}": ${written(retry)} retries a request entrypoint that no installed transport integration checks`,
+          `Move ${written(retry)} to the outbound client method that "${where}" calls`,
+        )
       }
-      const label = binding.labels.find(other => claimed.has(other))
-      if (label !== undefined) {
-        served.set(cls, claimed.get(label)!)
-        continue
+      // A breaker and a fallback judge errors: with no transport to tell them apart, a client's own errors would open
+      // the one and reach the other. The other policies treat every error alike.
+      if (circuitBreaker !== undefined) {
+        throw unclaimed(
+          cls,
+          `Cannot weave "${where}": no installed transport integration claims this request entrypoint, so ${written(circuitBreaker)} would count a client's own error, such as a 404 it throws, as a failure`,
+          `Move ${written(circuitBreaker)} to the outbound client method that "${where}" calls`,
+        )
       }
-      for (const member of wovenMembers(cls)) {
-        const where = `${cls.name}.${String(member)}`
-        const { retry, circuitBreaker } = stagesOf(cls, member, registry).stages
-        if (retry !== undefined) {
-          throw unclaimed(
-            cls,
-            `Cannot retry "${where}": ${written(retry)} retries a request entrypoint that no installed transport integration checks`,
-            `Move ${written(retry)} to the outbound client method that "${where}" calls`,
-          )
-        }
-        // A breaker and a fallback judge errors: with no transport to tell them apart, a client's own errors would open
-        // the one and reach the other. The other policies treat every error alike.
-        if (circuitBreaker !== undefined) {
-          throw unclaimed(
-            cls,
-            `Cannot weave "${where}": no installed transport integration claims this request entrypoint, so ${written(circuitBreaker)} would count a client's own error, such as a 404 it throws, as a failure`,
-            `Move ${written(circuitBreaker)} to the outbound client method that "${where}" calls`,
-          )
-        }
-        const recovery = reflect.effective(cls, Fallback, member)
-        if (recovery !== undefined) {
-          throw unclaimed(
-            cls,
-            `Cannot weave "${where}": no installed transport integration claims this request entrypoint, so @Fallback('${String(recovery.method)}') would answer a client's own error, such as a 403 it throws`,
-          )
-        }
+      const recovery = reflect.effective(cls, Fallback, member)
+      if (recovery !== undefined) {
+        throw unclaimed(
+          cls,
+          `Cannot weave "${where}": no installed transport integration claims this request entrypoint, so @Fallback('${String(recovery.method)}') would answer a client's own error, such as a 403 it throws`,
+        )
       }
     }
+  }
 
-    const aspect = kit.container.get(ResilienceAspect)
-    const classes = new Set<AnyClass>()
-    for (const annotation of ANNOTATIONS.keys()) {
-      for (const { binding } of kit.container.getBindingsByAnnotation(annotation)) {
-        if (binding.type !== undefined) {
-          classes.add(binding.type as AnyClass)
-        }
+  const classes = new Set<AnyClass>()
+  for (const annotation of ANNOTATIONS.keys()) {
+    for (const { binding } of container.getBindingsByAnnotation(annotation)) {
+      if (binding.type !== undefined) {
+        classes.add(binding.type as AnyClass)
       }
     }
+  }
 
-    for (const cls of classes) {
-      aspect.prepare(cls, served.get(cls))
-    }
+  for (const cls of classes) {
+    aspect.prepare(cls, served.get(cls))
   }
 }
 

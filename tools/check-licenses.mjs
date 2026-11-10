@@ -81,6 +81,12 @@ function isAllowedLicense(expression) {
   return atoms.every(atom => ALLOWED.has(atom))
 }
 
+/** The peers npm 7 and later install along with a package: every one it does not mark optional. */
+function requiredPeers(manifest) {
+  const optional = manifest.peerDependenciesMeta ?? {}
+  return Object.keys(manifest.peerDependencies ?? {}).filter(name => optional[name]?.optional !== true)
+}
+
 function resolveDepLockPath(packages, fromLockPath, depName) {
   const segments = fromLockPath === '' ? [] : fromLockPath.split('/')
   for (let i = segments.length; i >= 0; i--) {
@@ -93,13 +99,22 @@ function resolveDepLockPath(packages, fromLockPath, depName) {
   return undefined
 }
 
-function collectProductionTree(packages, workspaceRel, directDeps) {
+/**
+ * Every package installing the workspace brings: its dependencies with all of theirs, and its required peers. A peer
+ * is checked alone: it is a host such as vite or fastify that the application installs for itself, and what the host
+ * brings is the application's choice.
+ */
+function collectProductionTree(packages, workspaceRel, manifest) {
   const found = new Map()
-  const queue = Object.keys(directDeps).map(name => ({ from: workspaceRel, name }))
+  const descended = new Set()
+  const queue = [
+    ...Object.keys(manifest.dependencies ?? {}).map(name => ({ from: workspaceRel, name, descend: true })),
+    ...requiredPeers(manifest).map(name => ({ from: workspaceRel, name, descend: false })),
+  ]
   const queued = new Set(queue.map(item => `${item.from}\0${item.name}`))
 
   while (queue.length > 0) {
-    const { from, name } = queue.pop()
+    const { from, name, descend } = queue.pop()
     if (name.startsWith('@caffeinejs/')) {
       continue
     }
@@ -112,24 +127,23 @@ function collectProductionTree(packages, workspaceRel, directDeps) {
 
     const entry = packages[lockPath]
     const id = entry.name ? `${entry.name}@${entry.version ?? '?'}` : `${name}@${entry.version ?? '?'}`
-    if (found.has(id)) {
-      continue
-    }
-
     found.set(id, {
       lockPath,
       license: normalizeLicenseField(entry.license),
     })
+    if (!descend || descended.has(id)) {
+      continue
+    }
+    descended.add(id)
 
-    const nested = entry.dependencies ?? {}
-    for (const child of Object.keys(nested)) {
+    for (const child of Object.keys(entry.dependencies ?? {})) {
       if (child.startsWith('@caffeinejs/')) {
         continue
       }
       const key = `${lockPath}\0${child}`
       if (!queued.has(key)) {
         queued.add(key)
-        queue.push({ from: lockPath, name: child })
+        queue.push({ from: lockPath, name: child, descend: true })
       }
     }
   }
@@ -156,13 +170,12 @@ function main() {
     }
 
     const pkgJson = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
-    const direct = pkgJson.dependencies ?? {}
-    if (Object.keys(direct).length === 0) {
+    if (Object.keys(pkgJson.dependencies ?? {}).length === 0 && requiredPeers(pkgJson).length === 0) {
       continue
     }
 
     const workspaceRel = relative(root, dir).replaceAll('\\', '/')
-    const tree = collectProductionTree(packages, workspaceRel, direct)
+    const tree = collectProductionTree(packages, workspaceRel, pkgJson)
     scanned += 1
 
     for (const [id, info] of tree) {
@@ -189,7 +202,7 @@ function main() {
     process.exit(1)
   }
 
-  console.log(`license:check ok (${scanned} workspace package(s) with production dependencies)`)
+  console.log(`license:check ok (${scanned} workspace package(s) with dependencies or required peers)`)
 }
 
 main()

@@ -1,4 +1,5 @@
 import { errMessage } from './internal/util/errutil/index.js'
+import { typeName } from './internal/util/objects/index.js'
 import { keyStr, InjectionToken, Identifier } from './key.js'
 import { Ctor } from './types.js'
 
@@ -496,5 +497,24 @@ export class ErrNoContextStorage extends CaffeineIoCError {
       'ERR_NO_CONTEXT_STORAGE',
     )
     this.name = 'ErrNoContextStorage'
+  }
+}
+
+/**
+ * ErrInvalidContextStorage is thrown by `bindContextStorage()` when the storage has no `run()` or no `getStore()`
+ * method.
+ */
+export class ErrInvalidContextStorage extends CaffeineIoCError {
+  constructor(storage: unknown) {
+    super(
+      errMessage(
+        `Cannot bind the context storage: it must have run(context, fn) and getStore() methods, got ${typeName(storage)}`,
+      )
+        .solutions('Pass an AsyncLocalStorage, such as container.bindContextStorage(new AsyncLocalStorage())')
+        .reference('@caffeinejs/di', ErrInvalidContextStorage)
+        .build(),
+      'ERR_INVALID_CONTEXT_STORAGE',
+    )
+    this.name = 'ErrInvalidContextStorage'
   }
 }

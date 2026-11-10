@@ -1,4 +1,4 @@
-import type { ContainerBindingOps, ContainerOps } from '@caffeinejs/di'
+import type { Container, ContainerBindingOps, ContainerOps } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { ConfigSnapshot, ConfigStore } from './config/index.js'
@@ -11,8 +11,8 @@ import type { Logger } from './logger/logger.js'
  * so binding is still open.
  */
 export interface FeatureConfigureKit<C = unknown> {
-  /** IoC container exposing binding operations. Lookup is not available until the container initializes. */
-  container: ContainerBindingOps
+  /** Bindings and context storage can be configured here, before the container compiles. */
+  container: ContainerBindingOps & Pick<Container, 'bindContextStorage'>
   /**
    * The configuration the application is being configured with. A snapshot: a node handed from it to a builder keeps
    * these values, and a reload never reaches it.

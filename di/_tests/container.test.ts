@@ -346,6 +346,31 @@ describe('resetInstance — binding stays registered after preDestroy (H-1)', fu
   })
 })
 
+it('keeps a binding marked to survive resets tracked for final disposal', async () => {
+  class Resource {}
+  const di = new CaffeineIoC({ decorators: false })
+  const destroyed: Resource[] = []
+  di.bind(Resource, t =>
+    t
+      .toSelf()
+      .preserveOnReset()
+      .preDestroy(resource => {
+        destroyed.push(resource)
+      }),
+  )
+  await di.init()
+  const resource = di.get(Resource)
+
+  await di.resetInstance(Resource)
+  await di.resetBinding(di.getBinding(Resource))
+  await di.resetInstances()
+
+  expect(destroyed).toEqual([])
+  expect(di.get(Resource)).toBe(resource)
+  await di.dispose()
+  expect(destroyed).toEqual([resource])
+})
+
 describe('init() idempotency (M-3)', function () {
   it('should run modules exactly once when init() is called multiple times', async function () {
     const spy = vi.fn()

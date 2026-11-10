@@ -6,7 +6,7 @@ import { disposable } from '../dispose.js'
 import { Emitter } from '../emitter.js'
 import { ErrCallRefused, refusal } from '../errors.js'
 import { Options } from '../options.js'
-import type { CallContext, Operation, Wrapper } from '../policy.js'
+import { type CallContext, type Operation, restoreWaitingCall, type Wrapper } from '../policy.js'
 import { clampDelay, type Clock } from '../timers.js'
 import { type Waiter, Waiters } from '../waiters.js'
 
@@ -171,8 +171,8 @@ export class Bulkhead implements Wrapper {
 
     // Refused once the line is empty, so a listener that calls back in finds it so.
     for (const call of refused) {
-      this.#refused()
-      call.reject(this.#full(now - call.since, true))
+      this.#rejected++
+      this.#refuseWaiting(call, now - call.since, true)
     }
   }
 
@@ -228,8 +228,8 @@ export class Bulkhead implements Wrapper {
         // Not unref'd: a call waiting for a slot is pending work.
         call.timer = this.#clock.setTimeout(() => {
           if (this.#leave(call)) {
-            this.#refused()
-            reject(this.#full(this.#maxWaitMs))
+            this.#rejected++
+            this.#refuseWaiting(call, this.#maxWaitMs, false)
           }
         }, this.#maxWaitMs)
 
@@ -276,44 +276,54 @@ export class Bulkhead implements Wrapper {
   // One past its wait, whose timer has not fired yet, leaves the line refused, as that timer would have refused it.
   // The slot changes hands before `finished` is emitted, so a listener that starts another call finds it where it is.
   #release(start: number): void {
-    const now = this.#clock.now()
-    let call = this.#queue.first
-    let expired: Array<QueuedCall<unknown, unknown>> | undefined
-    while (call !== undefined && now - call.since > this.#maxWaitMs) {
-      this.#leave(call)
-      expired ??= []
-      expired.push(call)
-      call = this.#queue.first
-    }
-    if (call === undefined) {
-      this.#available++
-    } else {
-      this.#leave(call)
-    }
-    if (expired !== undefined) {
-      this.#rejected += expired.length
-    }
-
-    if (this.#emitter.has('finished')) {
-      this.#emitter.emit('finished', { name: this.#name, duration: now - start })
-    }
-
-    if (expired !== undefined) {
-      for (const refused of expired) {
-        if (this.#emitter.has('rejected')) {
-          this.#emitter.emit('rejected', { name: this.#name })
-        }
-        refused.reject(this.#full(this.#maxWaitMs))
+    let finished: number | undefined = start
+    for (;;) {
+      const now = this.#clock.now()
+      let call = this.#queue.first
+      let expired: Array<QueuedCall<unknown, unknown>> | undefined
+      while (call !== undefined && now - call.since > this.#maxWaitMs) {
+        this.#leave(call)
+        expired ??= []
+        expired.push(call)
+        call = this.#queue.first
       }
-    }
+      if (call === undefined) {
+        this.#available++
+      } else {
+        this.#leave(call)
+      }
+      if (expired !== undefined) {
+        this.#rejected += expired.length
+      }
 
-    if (call !== undefined) {
-      this.#admit(call)
+      if (finished !== undefined && this.#emitter.has('finished')) {
+        this.#emitter.emit('finished', { name: this.#name, duration: now - finished })
+      }
+      finished = undefined
+
+      if (expired !== undefined) {
+        for (const refused of expired) {
+          this.#refuseWaiting(refused, this.#maxWaitMs, false)
+        }
+      }
+
+      if (call === undefined || this.#admit(call)) {
+        return
+      }
     }
   }
 
-  // Runs a call that waited for its slot.
-  #admit<T, I>(call: QueuedCall<T, I>): void {
+  // Runs a call that waited for its slot, in its caller's context.
+  #admit<T, I>(call: QueuedCall<T, I>): boolean {
+    const restore = call.ctx.restore
+    if (restore === undefined) {
+      this.#start(call)
+      return true
+    }
+    return restoreWaitingCall(call.ctx, restore, () => this.#start(call), call.reject)
+  }
+
+  #start<T, I>(call: QueuedCall<T, I>): void {
     const start = this.#clock.now()
     if (this.#emitter.has('permitted')) {
       this.#emitter.emit('permitted', { name: this.#name, waited: start - call.since })
@@ -330,6 +340,23 @@ export class Bulkhead implements Wrapper {
         call.reject(error)
       },
     )
+  }
+
+  // Refuses a call that waited, in its caller's context: it is refused from a timer or another call's continuation.
+  #refuseWaiting(call: QueuedCall<any, any>, waited: Duration, disposed: boolean): void {
+    const restore = call.ctx.restore
+    if (restore === undefined) {
+      this.#reject(call, waited, disposed)
+    } else {
+      restoreWaitingCall(call.ctx, restore, () => this.#reject(call, waited, disposed), call.reject)
+    }
+  }
+
+  #reject(call: QueuedCall<any, any>, waited: Duration, disposed: boolean): void {
+    if (this.#emitter.has('rejected')) {
+      this.#emitter.emit('rejected', { name: this.#name })
+    }
+    call.reject(this.#full(waited, disposed))
   }
 
   #refused(): void {

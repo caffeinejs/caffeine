@@ -82,6 +82,33 @@ function listen<K extends keyof TimeLimiterEvents>(
   return seen
 }
 
+it('preserves a caller context method when it supplies the attempt signal', async () => {
+  class Caller implements CallContext {
+    readonly signal = undefined
+    readonly #tenant = 'inventory'
+    current = 'outside'
+
+    restore<R>(fn: () => R): R {
+      const outer = this.current
+      this.current = this.#tenant
+      try {
+        return fn()
+      } finally {
+        this.current = outer
+      }
+    }
+  }
+
+  const caller = new Caller()
+  const call = limiterOf().wrap(async ctx => ({
+    tenant: ctx.restore?.(() => caller.current),
+    timed: ctx.signal instanceof AbortSignal,
+  }))
+
+  await expect(call(caller, undefined)).resolves.toEqual({ tenant: 'inventory', timed: true })
+  expect(caller.current).toBe('outside')
+})
+
 describe('time limiter options', () => {
   it.each([
     [0, '0s'],

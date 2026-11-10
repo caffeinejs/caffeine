@@ -111,13 +111,21 @@ interface WeavingEntry {
  * resolved instance. Only targeted bindings receive an interceptor — untargeted bindings have
  * zero overhead.
  */
-export function buildAOPInterceptors(container: Container): Map<Function, PostResolutionInterceptor> {
+export function buildAOPInterceptors(container: Container): {
+  readonly interceptors: Map<Function, PostResolutionInterceptor>
+  readonly clear: () => void
+} {
   const weavingMap = buildWeavingMap(container)
   const result = new Map<Function, PostResolutionInterceptor>()
+  const clearCaches: Array<() => void> = []
 
   for (const [ctor, entries] of weavingMap) {
     let resolved: ResolvedEntry[] | undefined
-    const methodMapCache = new WeakMap<object, Map<string | symbol, MethodAspect[]>>()
+    let methodMapCache = new WeakMap<object, Map<string | symbol, MethodAspect[]>>()
+    clearCaches.push(() => {
+      resolved = undefined
+      methodMapCache = new WeakMap()
+    })
 
     result.set(ctor, (ctx, instance) => {
       resolved ??= entries.map(e => ({
@@ -135,7 +143,14 @@ export function buildAOPInterceptors(container: Container): Map<Function, PostRe
     })
   }
 
-  return result
+  return {
+    interceptors: result,
+    clear: () => {
+      for (const clear of clearCaches) {
+        clear()
+      }
+    },
+  }
 }
 
 export function buildWeavingMap(container: Container): Map<Function, WeavingEntry[]> {

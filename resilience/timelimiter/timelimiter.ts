@@ -140,7 +140,12 @@ export class TimeLimiter implements Wrapper {
       const clock = this.#clock
       const limit = this.#timeoutMs
       const start = clock.now()
-      const pending = inner({ ...ctx, signal }, input)
+      const attempt = { ...ctx, signal }
+      if (ctx.restore !== undefined) {
+        // The caller may supply a method that needs the original context as its receiver.
+        attempt.restore = fn => ctx.restore!(fn)
+      }
+      const pending = inner(attempt, input)
       // No timer fires while the operation runs before it returns, so that time is taken off the limit here.
       const elapsed = clock.now() - start
 

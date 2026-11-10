@@ -426,8 +426,8 @@ order, same `AggregateError` on failure. There is no synchronous `Symbol.dispose
 resetInstances(): Promise<void>
 ```
 
-Resets all instances. On the next resolution, fresh
-instances are created.
+Resets instances so the next resolution creates fresh ones. Bindings marked with
+[`preserveOnReset()`](./binding-spec.md#preserveonreset) keep their instances.
 
 > Note that async bindings are automatically reloaded after being disposed.
 
@@ -437,7 +437,8 @@ instances are created.
 resetInstance(key: InjectionToken): Promise<void>
 ```
 
-Resets the bindings associated with the given key.
+Resets the bindings associated with the given key. Bindings marked with
+[`preserveOnReset()`](./binding-spec.md#preserveonreset) keep their instances.
 
 > Note that async bindings are automatically reloaded after being disposed.
 

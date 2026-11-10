@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ErrInvalidContainerState } from '../errors.js'
 import { CaffeineIoC, Scopes } from '../index.nodejs.js'
+import { SingletonScope } from '../internal/core/scope/singleton.js'
+import { token } from '../key.js'
+import { bindScope, type Scope, unbindScope } from '../scope.js'
+import { Snapshot } from '../snapshot.js'
 import { contextKey, ExecutionContext } from './context.js'
 
 const kTenant = contextKey<string>('tenant')
@@ -111,6 +115,100 @@ describe('container.contextStorage', () => {
 
     expect(fromBound.contextStorage).toBe(storage)
     expect(fromPlain.contextStorage).not.toBe(plain.contextStorage)
+  })
+
+  // A test container restored into a container whose storage is already in use would leave that storage's readers apart
+  // from the one the snapshot carries.
+  it('refuses to restore a snapshot whose storage differs from the one already read', () => {
+    class Session {}
+    const source = new CaffeineIoC({ decorators: false }).bindContextStorage(new AsyncLocalStorage<ExecutionContext>())
+    source.bind(Session, t => t.toSelf())
+    const di = new CaffeineIoC({ decorators: false })
+    const inUse = di.contextStorage
+
+    expect(() => di.restore(source.snapshot())).toThrow('Cannot restore: the context storage is already in use')
+    // Refused whole: a caller that goes on gets none of the snapshot, not its bindings without its storage.
+    expect(di.contextStorage).toBe(inUse)
+    expect(di.snapshot().size).toBe(0)
+  })
+
+  // A module runs while the container compiles, and again in every container restored from its snapshot: a storage it
+  // bound would replace the one a test captured.
+  it('refuses a storage bound from a module', async () => {
+    const di = new CaffeineIoC({ decorators: false })
+    di.addModules(c => {
+      // @ts-expect-error Storage configuration must finish before modules run.
+      c.bindContextStorage(new AsyncLocalStorage<ExecutionContext>())
+    })
+
+    await expect(di.init()).rejects.toThrow('Cannot bind the context storage: container has already started compiling')
+  })
+
+  // A request scope opened before init() keeps its frames in the storage it read: one bound afterwards would put the
+  // rest of the block out of scope.
+  it('refuses a storage bound once a request scope has read it', async () => {
+    class Session {}
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Session, t => t.toSelf().lifetime(Scopes.REQUEST))
+
+    await di.requestScopeManager.run(async () => {
+      expect(() => di.bindContextStorage(new AsyncLocalStorage<ExecutionContext>())).toThrow(
+        'Cannot bind the context storage: the context storage is already in use',
+      )
+      await di.init()
+
+      expect(di.get(Session)).toBeInstanceOf(Session)
+    })
+  })
+
+  // A scope a runtime or an application registers is built with the container, and may read its storage there. Such a
+  // read fixes the storage, so the request scope reads it lazily instead.
+  it('is readable from a scope factory while the container is built', () => {
+    const kProbe = token<Scope>(Symbol('probe'))
+    const seen: Array<[boolean, unknown]> = []
+    bindScope(kProbe, c => {
+      seen.push([c.hasContextStorage, c.contextStorage])
+      return new SingletonScope()
+    })
+
+    try {
+      const di = new CaffeineIoC({ decorators: false })
+
+      expect(seen).toEqual([[true, di.contextStorage]])
+      expect(seen[0]![1]).toBeInstanceOf(AsyncLocalStorage)
+    } finally {
+      unbindScope(kProbe)
+    }
+  })
+
+  // A storage that cannot run a frame would only fail at the first request, far from the line that bound it.
+  it('refuses a storage without run() and getStore()', () => {
+    const di = new CaffeineIoC({ decorators: false })
+
+    expect(() => di.bindContextStorage({ run: () => undefined } as never)).toThrow(
+      expect.objectContaining({
+        code: 'ERR_INVALID_CONTEXT_STORAGE',
+        message: expect.stringMatching(
+          /^Cannot bind the context storage: it must have run\(context, fn\) and getStore\(\) methods, got a value of type object\n/,
+        ),
+      }),
+    )
+  })
+
+  it('rejects a null storage during binding and snapshot restoration', () => {
+    const di = new CaffeineIoC({ decorators: false })
+    const snapshot = new Snapshot({
+      declarations: [],
+      modules: [],
+      profiles: [],
+      decorators: false,
+      contextStorage: null as never,
+    })
+
+    expect(() => di.bindContextStorage(null as never)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_CONTEXT_STORAGE' }),
+    )
+    expect(() => di.restore(snapshot)).toThrow(expect.objectContaining({ code: 'ERR_INVALID_CONTEXT_STORAGE' }))
   })
 
   // Off Node the runtime makes none: the read names the fix instead of failing inside a consumer.

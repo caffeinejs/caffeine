@@ -1036,11 +1036,24 @@ describe('the frame each attempt runs in', () => {
     async limited(): Promise<void> {
       this.seen.push(this.storage.getStore()?.get(kCaller))
     }
+
+    @Resilient('timed')
+    async timed(): Promise<void> {
+      this.seen.push(this.storage.getStore()?.get(kCaller))
+    }
+
+    @Resilient('held')
+    async held(): Promise<void> {
+      this.seen.push(this.storage.getStore()?.get(kCaller))
+      if (this.seen.length === 1) {
+        await this.#first.promise
+      }
+    }
   }
 
-  async function tenanted() {
+  async function tenanted(order?: readonly ResilienceKind[]) {
     const storage = new AsyncLocalStorage<ExecutionContext>()
-    const { di } = await containerWith(
+    const { di, registry } = await containerWith(
       d => d.bind(Tenanted, t => t.toSelf()),
       {
         queued: { bulkhead: { maxConcurrentCalls: 1, maxWaitDuration: 1 * Second } },
@@ -1052,13 +1065,29 @@ describe('the frame each attempt runs in', () => {
             clock: contextClock,
           },
         },
+        timed: {
+          rateLimiter: {
+            limitForPeriod: 1,
+            limitRefreshPeriod: 100 * Millisecond,
+            maxWaitDuration: 1 * Second,
+            clock: contextClock,
+          },
+          timeLimiter: { timeoutDuration: 1 * Second },
+        },
+        held: {
+          bulkhead: { maxConcurrentCalls: 1, maxWaitDuration: 1 * Second },
+          timeLimiter: { timeoutDuration: 1 * Second },
+        },
       },
-      { storage },
+      { storage, order },
     )
     const service = di.get(Tenanted)
     service.storage = storage
     const as = <T>(caller: string, fn: () => Promise<T>) => storage.run(ExecutionContext.ROOT.with(kCaller, caller), fn)
-    return { service, as }
+    // What a listener of each event saw of its call's caller, by event.
+    const heard: Record<string, Array<string | undefined>> = {}
+    const hear = (event: string) => () => (heard[event] ??= []).push(storage.getStore()?.get(kCaller))
+    return { service, as, registry, heard, hear }
   }
 
   // A call that waited for a slot runs when another call ends, from that call's continuation: it must still see its
@@ -1084,5 +1113,72 @@ describe('the frame each attempt runs in', () => {
     await Promise.all(calls)
 
     expect(service.seen).toEqual(['a', 'b', 'c'])
+  })
+
+  // A waiting call is admitted from another call's continuation: the policies below it and every listener of its events
+  // must still see its own caller, or a metric or a span is tagged with another request's tenant.
+  it('runs the policies below a rate limiter and its listeners in the frame of each call that waited', async () => {
+    const { service, as, registry, heard, hear } = await tenanted()
+    registry.rateLimiter('timed').on('permitted', hear('permitted'))
+    registry.timeLimiter('timed').on('success', hear('success'))
+
+    const calls = ['a', 'b', 'c'].map(caller => as(caller, () => service.timed()))
+    await vi.advanceTimersByTimeAsync(200)
+    await Promise.all(calls)
+
+    expect(service.seen).toEqual(['a', 'b', 'c'])
+    expect(heard).toEqual({ permitted: ['a', 'b', 'c'], success: ['a', 'b', 'c'] })
+  })
+
+  it('runs the policies below a bulkhead and its listeners in the frame of the call that waited', async () => {
+    const { service, as, registry, heard, hear } = await tenanted([
+      'retry',
+      'circuitBreaker',
+      'rateLimiter',
+      'bulkhead',
+      'timeLimiter',
+    ])
+    registry.bulkhead('held').on('permitted', hear('permitted'))
+    registry.timeLimiter('held').on('success', hear('success'))
+
+    const a = as('a', () => service.held())
+    const b = as('b', () => service.held())
+    await vi.advanceTimersByTimeAsync(0)
+    service.release()
+    await Promise.all([a, b])
+
+    expect(service.seen).toEqual(['a', 'b'])
+    expect(heard).toEqual({ permitted: ['a', 'b'], success: ['a', 'b'] })
+  })
+
+  // A call still waiting at shutdown is refused from the code that disposes the policy, not from its own caller.
+  it('tells the listeners of a refusal which caller each waiting call came from', async () => {
+    const { service, as, registry, heard, hear } = await tenanted([
+      'retry',
+      'circuitBreaker',
+      'rateLimiter',
+      'bulkhead',
+      'timeLimiter',
+    ])
+    registry.rateLimiter('timed').on('rejected', hear('limiter'))
+    registry.bulkhead('held').on('rejected', hear('bulkhead'))
+
+    // The first call to hold the bulkhead goes first: it waits for release() while the others line up.
+    const held = ['d', 'e'].map(caller => as(caller, () => service.held()))
+    const limited = ['a', 'b', 'c'].map(caller => as(caller, () => service.timed()))
+    await vi.advanceTimersByTimeAsync(0)
+    registry.rateLimiter('timed').dispose()
+    registry.bulkhead('held').dispose()
+    service.release()
+    const settled = await Promise.allSettled([...held, ...limited])
+
+    expect(settled.map(outcome => outcome.status)).toEqual([
+      'fulfilled',
+      'rejected',
+      'fulfilled',
+      'rejected',
+      'rejected',
+    ])
+    expect(heard).toEqual({ limiter: ['b', 'c'], bulkhead: ['e'] })
   })
 })

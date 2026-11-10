@@ -7,6 +7,7 @@ import { fakeTimersClock } from '../clock.testkit.js'
 import { compose, run } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
 import type { CallContext, Operation } from '../policy.js'
+import { restoring } from '../restoring.testkit.js'
 import { timeLimiter } from '../timelimiter/timelimiter.js'
 import { unhandledRejections } from '../unhandled.testkit.js'
 import { bulkhead, type BulkheadEvents, type BulkheadOptions, ErrBulkheadFull } from './bulkhead.js'
@@ -611,5 +612,69 @@ describe('bulkhead, unhandled rejections', () => {
     })
 
     expect(reasons).toEqual([])
+  })
+})
+
+describe('a call that waited', () => {
+  // Admitted or refused from another call's continuation, it runs, and its events are heard, in its own caller's
+  // context: what the operation does and what a listener records belong to that caller's request.
+  it('is admitted and refused through the restore() of its own context', async () => {
+    const pool = bulkheadOf({ maxConcurrentCalls: 1, maxQueuedCalls: 2, maxWaitDuration: 1 * Second })
+    const { ctxOf, current } = restoring()
+    const heard: string[] = []
+    pool.on('permitted', () => heard.push(`permitted in ${current()}`))
+    pool.on('rejected', () => heard.push(`rejected in ${current()}`))
+    // Each call holds its slot until its own gate opens; c has none, and never gets a slot.
+    const gates: Record<string, PromiseWithResolvers<void>> = {
+      a: Promise.withResolvers<void>(),
+      b: Promise.withResolvers<void>(),
+    }
+    const ran: string[] = []
+    const call = pool.wrap(async (_ctx: CallContext, caller: string) => {
+      ran.push(`${caller} in ${current()}`)
+      await gates[caller]?.promise
+    })
+
+    const a = call(ctxOf('a'), 'a')
+    const b = call(ctxOf('b'), 'b')
+    const c = call(ctxOf('c'), 'c')
+    gates.a!.resolve()
+    await a
+    pool.dispose()
+    await expect(c).rejects.toBeInstanceOf(ErrBulkheadFull)
+    gates.b!.resolve()
+    await b
+
+    expect(ran).toEqual(['a in none', 'b in b'])
+    expect(heard).toEqual(['permitted in none', 'permitted in b', 'rejected in c'])
+  })
+
+  it('passes the slot to the next caller when restoring a queued call throws', async () => {
+    const pool = bulkheadOf({ maxConcurrentCalls: 1, maxQueuedCalls: 2, maxWaitDuration: 1 * Second })
+    const { operation, started, resolve } = gate()
+    const call = pool.wrap((ctx, caller: string) => operation(caller)(ctx))
+    const cause = new Error('restore failed')
+    const active = outcome(call({ signal: undefined }, 'active'))
+    const failed = outcome(
+      call(
+        {
+          signal: undefined,
+          restore: () => {
+            throw cause
+          },
+        },
+        'failed',
+      ),
+    )
+    const next = outcome(call({ signal: undefined }, 'next'))
+
+    resolve('active')
+
+    await expect(active).resolves.toEqual({ value: 'active' })
+    await expect(failed).resolves.toEqual({ error: cause })
+    expect(started).toEqual(['active', 'next'])
+    resolve('next')
+    await expect(next).resolves.toEqual({ value: 'next' })
+    expect(pool.metrics().availableConcurrentCalls).toBe(1)
   })
 })

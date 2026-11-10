@@ -7,6 +7,7 @@ import { fakeTimersClock } from '../clock.testkit.js'
 import { compose, run } from '../compose.js'
 import { ErrCallRefused, ErrInvalidOption } from '../errors.js'
 import type { CallContext } from '../policy.js'
+import { restoring } from '../restoring.testkit.js'
 import { unhandledRejections } from '../unhandled.testkit.js'
 import { ErrRateLimitExceeded, rateLimiter, type RateLimiterEvents, type RateLimiterOptions } from './ratelimiter.js'
 
@@ -638,5 +639,61 @@ describe('rate limiter, unhandled rejections', () => {
     })
 
     expect(reasons).toEqual([])
+  })
+})
+
+describe('a call that waited', () => {
+  // Admitted from a timer and refused from the code that disposes the limiter, it runs, and its events are heard, in
+  // its own caller's context: what the operation does and what a listener records belong to that caller's request.
+  it('is admitted and refused through the restore() of its own context', async () => {
+    const quota = limiterOf({ limitForPeriod: 1, limitRefreshPeriod: 100 * Millisecond, maxWaitDuration: 1 * Second })
+    const { ctxOf, current } = restoring()
+    const heard: string[] = []
+    quota.on('permitted', () => heard.push(`permitted in ${current()}`))
+    quota.on('rejected', () => heard.push(`rejected in ${current()}`))
+    const ran: string[] = []
+    const call = quota.wrap(async (_ctx: CallContext, caller: string) => {
+      ran.push(`${caller} in ${current()}`)
+    })
+
+    const a = call(ctxOf('a'), 'a')
+    const b = call(ctxOf('b'), 'b')
+    const c = call(ctxOf('c'), 'c')
+    await vi.advanceTimersByTimeAsync(100)
+    await Promise.all([a, b])
+    quota.dispose()
+    await expect(c).rejects.toBeInstanceOf(ErrRateLimitExceeded)
+
+    expect(ran).toEqual(['a in none', 'b in b'])
+    expect(heard).toEqual(['permitted in none', 'permitted in b', 'rejected in c'])
+  })
+
+  it('continues waking queued calls when restoring one caller throws', async () => {
+    const quota = limiterOf({ limitForPeriod: 1, limitRefreshPeriod: 100 * Millisecond, maxWaitDuration: 1 * Second })
+    const { starts, operation } = recorder()
+    const call = quota.wrap((_ctx, caller: string) => operation(caller)())
+    const cause = new Error('restore failed')
+    const active = call({ signal: undefined }, 'active')
+    const failed = call(
+      {
+        signal: undefined,
+        restore: () => {
+          throw cause
+        },
+      },
+      'failed',
+    )
+    const outcome = failed.catch((error: unknown) => error)
+    const next = call({ signal: undefined }, 'next')
+
+    await vi.advanceTimersByTimeAsync(200)
+
+    await expect(active).resolves.toBe('active')
+    await expect(outcome).resolves.toBe(cause)
+    await expect(next).resolves.toBe('next')
+    expect(starts).toEqual([
+      ['active', 0],
+      ['next', 200],
+    ])
   })
 })

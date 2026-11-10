@@ -1,5 +1,15 @@
 # @caffeinejs/di
 
+CaffeineIoC, the dependency injection container of CaffeineJS, built on standard ECMAScript decorators.
+
+```sh
+npm install -E @caffeinejs/di
+```
+
+Documentation: [di/docs/README.md](https://github.com/caffeinejs/caffeine/blob/main/di/docs/README.md).
+
+Install every `@caffeinejs/*` package at the same exact version: [Versioning](https://github.com/caffeinejs/caffeine/blob/main/docs/versioning.md).
+
 ## Execution context
 
 A container carries one `ContextStorage` that every consumer shares: the request scope, the HTTP adapter's request
@@ -34,9 +44,19 @@ storage.run((storage.getStore() ?? ExecutionContext.ROOT).with(kTenant, 'acme'),
 | `context.get(key)`                    | The slot's value, `undefined` when unset.                                                  |
 | `context.with(key, value)`            | A new frame with the slot set; `context` is unchanged.                                     |
 | `context.without(key)`                | A new frame without the slot; `context` is unchanged.                                      |
-| `container.bindContextStorage(store)` | Replaces the container's storage. Throws `ErrInvalidContainerState` once it has compiled.  |
+| `container.bindContextStorage(store)` | Replaces the container's storage. See below for when it may be called.                     |
 | `container.contextStorage`            | The bound storage, else the runtime's. Throws `ErrNoContextStorage` when there is neither. |
 | `container.hasContextStorage`         | Whether reading `contextStorage` succeeds.                                                 |
 
+Call `bindContextStorage()` before the container compiles and before anything reads `contextStorage`, such as a
+request scope opened before `init()`: whatever read the storage keeps its frames there. It throws
+`ErrInvalidContainerState` otherwise, so a module cannot bind one, and `ErrInvalidContextStorage` for an object without
+`run()` and `getStore()`. A scope factory that keeps the storage reads it when the scope is used, as the request scope
+does: one read while the container is built fixes it.
+
 A storage bound with `bindContextStorage()` is carried by `snapshot()`, so a test container built from the
 application shares it. Off Node the runtime makes none: bind one before reading `contextStorage`.
+
+## License
+
+[MIT](LICENSE)
