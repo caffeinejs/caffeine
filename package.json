@@ -71,6 +71,7 @@
     "packages:check": "node tools/check-packages.mjs",
     "release:version": "node tools/release-version.mjs",
     "release:pack": "node tools/pack.mjs",
+    "release:pin-bun": "node tools/pack.mjs --pin-bun",
     "pins:check": "node tools/check-pins.mjs",
     "spec:check": "node tools/generate-spec.mjs --check",
     "spec:gen": "node tools/generate-spec.mjs",

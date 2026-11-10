@@ -1,7 +1,8 @@
 name: Package
 
-# Packs what a release publishes and installs it the way an application does, on every platform the caffeine binary
-# is built for. CI runs it on every change; the release runs it to build what it publishes.
+# Packs what a release publishes, with an SBOM of each platform's binary, and installs it the way an application does,
+# on every platform the caffeine binary is built for. CI runs it on every change; the release runs it to build what it
+# publishes.
 on:
   workflow_call:
     inputs:
@@ -34,11 +35,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      - name: Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
-
+      # No Bun: release:pack compiles with the Bun runtimes tools/bun-runtimes.json pins.
       - name: Install
         run: npm ci --ignore-scripts
 
@@ -69,6 +66,15 @@ jobs:
           path: |
             artifacts/*.tgz
             artifacts/packages.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+      # Apart from the tarballs, so the release attaches them without downloading every binary.
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sboms
+          path: artifacts/*.cdx.json
           if-no-files-found: error
           retention-days: ${{ inputs.retention-days }}
 
