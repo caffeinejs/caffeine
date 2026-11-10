@@ -53,9 +53,6 @@ export class HeldLock implements Lock {
   #givingUp = false
   // Whether a renewal of this lease failed since the last one that succeeded, so retries stay at `debug`.
   #renewalFailed = false
-  // Renewal was stopped by whoever holds the key and means to leave it standing: `once` keeping its window, or
-  // shutdown. Not set when renewal stops because the lease was lost.
-  #kept = false
   // Set for a `once` lock: its key is the window, and nothing but its holder lets go of it.
   readonly #window: boolean
   // Explicit extends that timed out and have not answered. Each may have shortened the lease already, so until it
@@ -135,7 +132,7 @@ export class HeldLock implements Lock {
     }
 
     this.#released = true
-    this.#halt()
+    this.stopRenewal()
     this.#clearDeadline()
 
     // A renewal already on the wire has to land first, or its write outlives the release and the key stays
@@ -169,11 +166,6 @@ export class HeldLock implements Lock {
   // Stops renewing without touching the key. What shutdown calls, and what `once` calls when it leaves the
   // window standing.
   stopRenewal(): void {
-    this.#kept = true
-    this.#halt()
-  }
-
-  #halt(): void {
     this.#stopped = true
 
     if (this.#timer !== undefined) {
@@ -409,8 +401,8 @@ export class HeldLock implements Lock {
   // answer back would free the key under an action still running. A release the action asks for then sends the
   // token the key carries.
   //
-  // A renewal that gave up marks the lease lost, possibly only after this runs, so its lease is given back, unless
-  // shutdown stopped renewal to leave the key standing.
+  // A renewal that gave up marks the lease lost, possibly only after this runs, so its lease is given back. After
+  // shutdown the service sends nothing, so it lapses instead.
   //
   // A renewal still retrying, or an explicit extend, on a lock still held is reconciled with the lease the lock
   // carries when it was sent on that lease or answered under its token. Anything else gives the lease back, or a
@@ -433,9 +425,7 @@ export class HeldLock implements Lock {
     }
 
     if (renewal && this.#givingUp) {
-      if (!this.#kept) {
-        this.#host.giveBack(late)
-      }
+      this.#host.giveBack(late)
       return
     }
 
@@ -472,7 +462,7 @@ export class HeldLock implements Lock {
     }
 
     this.#taken = true
-    this.#halt()
+    this.stopRenewal()
     this.#clearDeadline()
 
     // A backend failure was already logged as a warning; the loss it caused is the same incident. An expiry with
