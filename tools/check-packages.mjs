@@ -19,10 +19,10 @@
 // Publishing: a workspace is published unless it is `private`, and no published package depends on one that is,
 // which npm could not install. Every workspace's version and every `@caffeinejs/*` specifier is the root version. A
 // published package carries the root's `license`, `author`, `bugs` and `engines`, a `repository` naming its own
-// directory, a `homepage`, public access, the standard `files`, and a copy of the root LICENSE. With
-// `--tarballs <dir>`, each `npm pack` tarball there is checked too: one per published package and per package a
-// tarball names in `optionalDependencies`, such as the caffeine binary's platform packages, all at the root version,
-// and nothing in any of them that the build left behind for the repository alone.
+// directory, a `homepage`, public access, the standard `files`, a README.md with more than its title, and a copy of
+// the root LICENSE. With `--tarballs <dir>`, each `npm pack` tarball there is checked too: one per published package
+// and per package a tarball names in `optionalDependencies`, such as the caffeine binary's platform packages, all at
+// the root version, and nothing in any of them that the build left behind for the repository alone.
 import { execFileSync } from 'node:child_process'
 import { existsSync, globSync, readdirSync, readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
@@ -440,6 +440,10 @@ function checkPublishing(dir, manifest, rootManifest, unpublished, fail) {
   }
   if (!isEqual(manifest.files?.slice(0, FILES.length), FILES)) {
     fail(`its "files" does not start with ${JSON.stringify(FILES)}`)
+  }
+  const readme = join(dir, 'README.md')
+  if (!existsSync(readme) || readFileSync(readme, 'utf8').trim().split('\n').length < 2) {
+    fail(`its README.md is missing or holds no more than a title: write ${directory}/README.md, which npm shows`)
   }
   const license = join(dir, 'LICENSE')
   if (!existsSync(license) || !readFileSync(license).equals(readFileSync(join(root, 'LICENSE')))) {

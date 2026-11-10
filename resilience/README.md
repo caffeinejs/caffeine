@@ -4,7 +4,7 @@ Circuit breaker, retry, time limiter, bulkhead, rate limiter and fallback for an
 plain functions. Its one dependency is `@caffeinejs/std`, which has none; every integration is an optional subpath.
 
 ```sh
-npm install @caffeinejs/resilience
+npm install -E @caffeinejs/resilience
 ```
 
 | Import from                             | What                                                                                                      |
@@ -512,7 +512,7 @@ const breaker = circuitBreaker({ name: 'inventory', clock: fakeTimersClock })
 ## Annotations
 
 ```sh
-npm install @caffeinejs/di @caffeinejs/application
+npm install -E @caffeinejs/di @caffeinejs/application
 ```
 
 `@caffeinejs/resilience/aop` applies the policies to methods of the classes the container builds. The `Resilience()`
@@ -782,7 +782,7 @@ APP_RESILIENCE__PRESETS__LEDGER__RETRY__BACKOFF__DELAY=1s
 ## HTTP
 
 ```sh
-npm install @caffeinejs/http
+npm install -E @caffeinejs/http
 ```
 
 `@caffeinejs/resilience/http` answers resilience errors over HTTP and checks, at start-up, which handlers may be

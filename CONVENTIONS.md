@@ -100,7 +100,7 @@ A module is a directory of source files in a library package (not `benchmarks/`,
 
 ### Renames
 
-Every package is unreleased (`0.0.0`). A rename updates every caller in the same change and leaves no alias, re-export or deprecation shim behind.
+Until 1.0.0 every release may break callers ([`docs/versioning.md`](docs/versioning.md)). A rename updates every caller in the same change and leaves no alias, re-export or deprecation shim behind.
 
 ## Features and plugins
 
