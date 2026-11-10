@@ -90,11 +90,18 @@ export function trackPrefixedRootURL(
   })
 
   return () => {
-    const descriptor = Object.getOwnPropertyDescriptor(route, 'url')
-
-    if (descriptor?.configurable && descriptor.get === getURL) {
-      Object.defineProperty(route, 'url', { configurable: true, enumerable: true, writable: true, value: current })
+    // A hook that redefined the property took the assignments that name the first URL with it: what registered there
+    // can no longer be read, so it is refused rather than passed unchecked.
+    if (Object.getOwnPropertyDescriptor(route, 'url')?.get !== getURL) {
+      throw new ErrConfiguration(
+        errMessage(`Cannot check the routes under "${route.prefix}": an onRoute hook redefined the "url" property`)
+          .solutions('Assign route.url in the onRoute hook instead of calling Object.defineProperty on it')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
     }
+
+    Object.defineProperty(route, 'url', { configurable: true, enumerable: true, writable: true, value: current })
 
     return route.routePath === '/' ? first : undefined
   }

@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, open, readdir, readlink, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { Writable } from 'node:stream'
@@ -125,6 +126,23 @@ describe('staticFiles', () => {
     await app.bootstrap()
 
     expect(await (await app.request('/ASSETS/app.JS')).text()).toBe('assets/App.js')
+  })
+
+  // A request may name its target in absolute form, authority included: the router matches its path, so the lookup
+  // must read the same path, or a folded name would miss.
+  it('finds a file under a directory from an absolute-form request target, when the router folds case', async () => {
+    const root = await tree('absolute', ['assets/App.js'])
+    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({
+        factory: { routerOptions: { caseSensitive: false } },
+        listener: { host: '127.0.0.1', port: 0 },
+      }))
+      .with(staticFiles(s => s.serve(root))) as WebApplication
+    const { address } = await app.run()
+
+    const res = await absoluteFormGet(address.origin, '/ASSETS/app.JS?v=1')
+
+    expect(res).toEqual({ status: 200, body: 'assets/App.js' })
   })
 
   it.each(['i\u0307', '\u0130'])(
@@ -929,4 +947,20 @@ async function descriptorsOn(path: string): Promise<number> {
   const targets = await Promise.all(fds.map(fd => readlink(`/proc/self/fd/${fd}`).catch(() => '')))
 
   return targets.filter(target => target === path).length
+}
+
+// Node's client writes `path` as the request target verbatim, so a full URL goes out in absolute form.
+function absoluteFormGet(origin: string, path: string): Promise<{ status: number; body: string }> {
+  const { hostname, port } = new URL(origin)
+
+  return new Promise((resolve, reject) => {
+    httpRequest({ host: hostname, port, path: `${origin}${path}` }, res => {
+      let body = ''
+      res.setEncoding('utf8')
+      res.on('data', chunk => (body += chunk))
+      res.on('end', () => resolve({ status: res.statusCode!, body }))
+    })
+      .on('error', reject)
+      .end()
+  })
 }

@@ -386,8 +386,8 @@ function staticPlugin(
 
 /** The path of a request target, with the authority and query removed as the router removes them. */
 function pathOf(url: string, router: RouterFlags): string {
-  const start = url.startsWith('/') ? 0 : url.indexOf('/', url.indexOf('://') + 3)
-  const path = start === -1 ? '/' : url.slice(start)
+  // An absolute-form target reaches a directory route only with a path after its authority.
+  const path = url.startsWith('/') ? url : url.slice(url.indexOf('/', url.indexOf('://') + 3))
   const end = path.search(router.useSemicolonDelimiter ? /[?#;]/ : /[?#]/)
 
   return end === -1 ? path : path.slice(0, end)

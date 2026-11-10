@@ -162,6 +162,32 @@ describe('a route with a parameter named *', () => {
     expect(await (await app.request('/assets/report.txt')).text()).toBe('answer')
   })
 
+  // A hook that replaces the URL property outright hides what Fastify registered under the prefix, such as a
+  // parameter named "*": start-up must stop rather than pass that route unchecked.
+  it('refuses a prefixed root whose URL property a hook redefines', async () => {
+    const plugin: FastifyPluginAsync = async server => {
+      await server.register(
+        async routes => {
+          routes.addHook('onRoute', route => {
+            Object.defineProperty(route, 'url', {
+              configurable: true,
+              enumerable: true,
+              writable: true,
+              value: '/assets/:*',
+            })
+          })
+          routes.route({ method: ['GET', 'HEAD'], url: '/', handler: async () => 'answer' })
+        },
+        { prefix: '/raw' },
+      )
+    }
+    app = createWebApplication().with(() => plugin) as WebApplication
+
+    await expect(app.bootstrap()).rejects.toThrow(
+      'Cannot check the routes under "/raw": an onRoute hook redefined the "url" property',
+    )
+  })
+
   // An escaped colon is text, and a parameter's regular expression is the parameter's, whatever it holds.
   it.each([['/a::*'], ['/files/:name(^[a-z]+:*$)'], ['/files/:name(^\\(:*\\)$)'], ['/files/:name(:*']])(
     'reads no parameter named * in %s',
