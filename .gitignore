@@ -188,10 +188,8 @@ Makefile.overrides
 *.profile.txt
 *.0x/
 
-# What buildStatic() writes beside committed static files
+# What buildStatic() writes among committed static files
 examples/03-petstore/public/static.manifest.json
-examples/03-petstore/public/**/*.br
-examples/03-petstore/public/**/*.gz
+examples/03-petstore/public/.static-variants/
 devtools-ui/public/static.manifest.json
-devtools-ui/public/**/*.br
-devtools-ui/public/**/*.gz
+devtools-ui/public/.static-variants/

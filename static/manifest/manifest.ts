@@ -14,12 +14,21 @@ export const MANIFEST_FILE = 'static.manifest.json'
 
 const ENCODINGS: readonly string[] = ['br', 'gzip'] satisfies readonly Encoding[]
 
-/** Where the build writes `path`'s variant in `encoding`, and the one path a manifest may list it at. */
-export function variantPath(path: string, encoding: Encoding): string {
-  return `${path}${encoding === 'br' ? '.br' : '.gz'}`
+/** The directory under a root where the build keeps every variant, named by the hashes of its file and its own. */
+export const VARIANT_DIRECTORY = '.static-variants'
+
+/**
+ * Where the build keeps the variant in `encoding` of a file whose bytes hash to `file`, the variant's own hashing to
+ * `variant` (both base64), and the one path a manifest may list it at. Named by its own hash, it is never written
+ * over with other bytes; named by its file's, it is listed for no other file.
+ */
+export function variantPath(file: string, variant: string, encoding: Encoding): string {
+  const name = (hash: string) => hash.replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+
+  return `${VARIANT_DIRECTORY}/${name(file)}.${name(variant)}.${encoding === 'br' ? 'br' : 'gz'}`
 }
 
-/** A compressed copy of a file, written beside it by the build. */
+/** A compressed copy of a file, which the build keeps under {@link VARIANT_DIRECTORY}. */
 export interface ManifestVariant {
   /** Base64 SHA-256 of the variant's own bytes. */
   readonly hash: string
@@ -180,8 +189,8 @@ function checkFile(path: string, file: unknown, shape: (detail: string) => ErrSt
 
     checkFields(vat, variant, shape)
 
-    // The build writes each variant beside its file: any other path would send bytes the file's rules never checked.
-    const expected = variantPath(path, encoding as Encoding)
+    // Any other path would send bytes the file's rules never checked, or another file's variant as this one's.
+    const expected = variantPath(file.hash as string, variant.hash as string, encoding as Encoding)
 
     if (variant.path !== expected) {
       throw shape(`"${vat}.path" is not "${expected}", the path the build writes it at`)

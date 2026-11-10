@@ -2,7 +2,6 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance } from 'fastify'
 
 import { ErrConfiguration } from '../../core/error/common.js'
-import type { RegisteredRoute } from './security/security.js'
 
 /** How a server's router matches a request's path. */
 export interface RouterFlags {
@@ -57,76 +56,6 @@ export function recordRouterFlags(server: FastifyInstance, options: object): voi
     ignoreDuplicateSlashes: flag('ignoreDuplicateSlashes'),
     useSemicolonDelimiter: flag('useSemicolonDelimiter'),
   } satisfies RouterFlags)
-}
-
-const kRouteLookup = Symbol('@caffeinejs/http:route-lookup')
-
-type RouteLookup = (method: string, path: string) => boolean
-
-/**
- * Whether a route registered on `server` so far answers `method` at `path`, whatever its constraints. Paths compare
- * as the router matches them, case and slashes folded by {@link routerFlagsOf}; a parameter or a wildcard compares as
- * written.
- *
- * Fastify's `hasRoute` finds a route only by the constraints it registered with, so it misses one constrained to a
- * version or a host. This is for a plugin that must refuse a route registered before it: one registered after it
- * reaches the plugin's own `onRoute` hook.
- *
- * @throws ErrConfiguration on a server the adapter did not build, or once the server is ready.
- */
-export function hasRouteAt(server: FastifyInstance, method: string, path: string): boolean {
-  const lookup = (server as unknown as Record<symbol, RouteLookup | undefined>)[kRouteLookup]
-
-  if (lookup === undefined) {
-    throw notBuilt(`look up a route at "${path}"`)
-  }
-
-  return lookup(method, path)
-}
-
-/**
- * Answers {@link hasRouteAt} on `server` from `routes`, which the adapter's root `onRoute` hook fills, until `closed`
- * says the server is ready and the record is gone.
- */
-export function installRouteLookup(
-  server: FastifyInstance,
-  routes: readonly RegisteredRoute[],
-  closed: () => boolean,
-): void {
-  // Indexed as routes arrive: a mount asks once per file, and a site has thousands.
-  const index = new Set<string>()
-  let indexed = 0
-
-  server.decorate(kRouteLookup, ((method, path) => {
-    if (closed()) {
-      throw new ErrConfiguration(
-        errMessage(`Cannot look up a route at "${path}": the server is ready, and its routes are no longer recorded`)
-          .solutions('Look the route up while the plugin registers, before the server is ready')
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
-    }
-
-    const flags = routerFlagsOf(server)
-
-    for (; indexed < routes.length; indexed++) {
-      const { method: methods, url } = routes[indexed]!
-
-      for (const each of typeof methods === 'string' ? [methods] : methods) {
-        index.add(`${each.toUpperCase()} ${fold(url, flags)}`)
-      }
-    }
-
-    return index.has(`${method.toUpperCase()} ${fold(path, flags)}`)
-  }) satisfies RouteLookup)
-}
-
-/** `path` as the router registers it: slashes folded as its flags say, and lower-cased when it ignores case. */
-function fold(path: string, flags: RouterFlags): string {
-  const collapsed = flags.ignoreDuplicateSlashes ? path.replace(/\/{2,}/g, '/') : path
-  const trimmed = flags.ignoreTrailingSlash && collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
-
-  return flags.caseSensitive ? trimmed : trimmed.toLowerCase()
 }
 
 function notBuilt(action: string): ErrConfiguration {

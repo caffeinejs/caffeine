@@ -12,7 +12,7 @@ import { build } from 'esbuild'
 //
 //   * content-hashed names under `assets/`, so the mount's `immutable: ['assets/**']` can pin them for a year;
 //   * `index.html` rewritten to point at those names, kept OUT of `assets/` so it is revalidated on every use;
-//   * `buildStatic()` last: a `.br` and a `.gz` beside each file worth compressing, and the manifest the
+//   * `buildStatic()` last: `br` and `gzip` variants of each file worth compressing, and the manifest the
 //     mount serves from, so the server reads no file system metadata per request.
 
 const here = dirname(fileURLToPath(import.meta.url))

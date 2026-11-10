@@ -15,7 +15,7 @@ front-end build ends with it:
 ```ts
 import { buildStatic } from '@caffeinejs/static/build'
 
-await buildStatic({ root: 'site/dist' }) // the .br and .gz variants, and the manifest
+await buildStatic({ root: 'site/dist' }) // the br and gzip variants, and the manifest
 ```
 
 Start-up reads every file the manifest lists and checks its hash, so a file changed after the build fails the
@@ -68,7 +68,8 @@ app
 application's own routes above. The mount registers a route per file at its root and one per directory under
 it: a miss under `/assets/` is the mount's own 404, and a miss at the root falls through to `/*`.
 
-The `.br` and `.gz` variants the build wrote are negotiated by `Accept-Encoding` and are never URLs of their own.
+The `br` and `gzip` variants the build wrote to `.static-variants/` are negotiated by `Accept-Encoding` and are
+never URLs of their own.
 They apply to `sendFile` too, so the shell served from a compiled route is compressed as well.
 
 `immutable: ['assets/**']` pins the content-hashed files for a year (`immutableMaxAge` changes it); every other

@@ -5,15 +5,16 @@ import { newRouter } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
+import { readManifest } from '../../manifest/manifest.js'
 import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, SCRIPT, shellOf } from './_headers.js'
 
 /**
- * A build that wrote `.br` and `.gz` beside every compressible file, served from its manifest.
+ * A build that wrote `br` and `gzip` variants of every compressible file, served from its manifest.
  *
  * Two halves are easy to get wrong and neither is visible without this scenario. The variants come from the
  * manifest rather than the file system, so they serve the mount's file routes **and** `sendFile` from a compiled
  * route: the shell is compressed without the application asking. And the variants never become routes of their
- * own: a `GET` of `…/app.js.br` would otherwise answer with raw brotli, which no client asked for.
+ * own: a `GET` of one under `.static-variants/` would otherwise answer with raw brotli, which no client asked for.
  */
 function site(): WebApplication {
   return isolated()
@@ -80,7 +81,9 @@ describe('a mount serving the compressed variants its build wrote', () => {
     app = site()
     await app.bootstrap()
 
-    for (const path of [`${SCRIPT_URL}.br`, `${SCRIPT_URL}.gz`]) {
+    const { variants } = (await readManifest(dist)).files[SCRIPT_URL.slice(1)]!
+
+    for (const path of [`/${variants.br!.path}`, `/${variants.gzip!.path}`, `${SCRIPT_URL}.br`, `${SCRIPT_URL}.gz`]) {
       await expectNotFoundJSON(await app.request(path, { headers: NAVIGATION }))
     }
   })

@@ -42,7 +42,7 @@ describe('readManifest', () => {
     expect(Object.keys(manifest.files)).toEqual(['assets/app.js', 'favicon.svg'])
     expect(manifest.files['assets/app.js']!.variants.br).toEqual({
       hash: '3AaMjvOZO8KpKL/ledZHabZeRWKB93lFQCovYxMqhg4=',
-      path: 'assets/app.js.br',
+      path: '.static-variants/oXLO3K5HR0thXFTVEKXYSo3qMDLpWFh0MLQTU4vj8zM.3AaMjvOZO8KpKL_ledZHabZeRWKB93lFQCovYxMqhg4.br',
       size: 512,
     })
     expect(manifest.files['favicon.svg']!.variants).toEqual({})
@@ -133,18 +133,36 @@ describe('readManifest', () => {
     [
       'a variant out of the root',
       { 'a.svg': { ...file, variants: { br: { hash: file.hash, path: '/etc/passwd', size: 1 } } } },
-      '"files.a.svg.variants.br.path" is not "a.svg.br", the path the build writes it at',
+      '"files.a.svg.variants.br.path" is not ".static-variants/rNsTc9F2GTnLXaozMiIymFKVgUZKkK-uOZJ-eu-O3UY.rNsTc9F2GTnLXaozMiIymFKVgUZKkK-uOZJ-eu-O3UY.br", the path the build writes it at',
     ],
     // A variant's bytes are sent as the file's: a hand-written manifest must not publish `.env` through one.
     [
       'a variant that points at a dotfile',
       { 'a.svg': { ...file, variants: { gzip: { hash: file.hash, path: '.env', size: 1 } } } },
-      '"files.a.svg.variants.gzip.path" is not "a.svg.gz", the path the build writes it at',
+      '"files.a.svg.variants.gzip.path" is not ".static-variants/rNsTc9F2GTnLXaozMiIymFKVgUZKkK-uOZJ-eu-O3UY.rNsTc9F2GTnLXaozMiIymFKVgUZKkK-uOZJ-eu-O3UY.gz", the path the build writes it at',
     ],
+    // Named by its file's hash and its own, a variant at another path is a file of the site, or another file's.
     [
-      "a variant at another file's path",
-      { 'a.svg': { ...file, variants: { br: { hash: file.hash, path: 'b.svg.br', size: 1 } } } },
-      '"files.a.svg.variants.br.path" is not "a.svg.br", the path the build writes it at',
+      'a variant at a file of the site',
+      { 'a.svg': { ...file, variants: { br: { hash: file.hash, path: 'a.svg.br', size: 1 } } } },
+      '"files.a.svg.variants.br.path" is not ".static-variants/rNsTc9F2GTnLXaozMiIymFKVgUZKkK-uOZJ-eu-O3UY.rNsTc9F2GTnLXaozMiIymFKVgUZKkK-uOZJ-eu-O3UY.br", the path the build writes it at',
+    ],
+    // Bytes that do hash as listed, built for another file: sent as this one's, they would answer with that file.
+    [
+      "another file's variant",
+      {
+        'a.svg': {
+          ...file,
+          variants: {
+            br: {
+              hash: '3AaMjvOZO8KpKL/ledZHabZeRWKB93lFQCovYxMqhg4=',
+              path: '.static-variants/oXLO3K5HR0thXFTVEKXYSo3qMDLpWFh0MLQTU4vj8zM.3AaMjvOZO8KpKL_ledZHabZeRWKB93lFQCovYxMqhg4.br',
+              size: 1,
+            },
+          },
+        },
+      },
+      '"files.a.svg.variants.br.path" is not ".static-variants/rNsTc9F2GTnLXaozMiIymFKVgUZKkK-uOZJ-eu-O3UY.3AaMjvOZO8KpKL_ledZHabZeRWKB93lFQCovYxMqhg4.br", the path the build writes it at',
     ],
   ])('refuses %s, naming the field', async (_case, files, detail) => {
     expect(firstLine(await refusal(JSON.stringify({ version: 1, files })))).toBe(`Cannot serve "${root}": ${detail}`)

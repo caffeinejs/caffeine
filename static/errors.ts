@@ -25,7 +25,7 @@ export class ErrStaticScanInProduction extends ErrCaffeineWebApplication {
  * ErrStaticRouteConflict is thrown at start-up when two files answer one URL: two mounts listing one path, an index
  * directory equal to another file's URL, two names that differ only by case under a case-insensitive router, or a
  * nested mount whose directory route takes in another's files. Without `second`, another route, registered before or
- * after the mount, is at the file's URL.
+ * after the mount, answers the file's URL, as the router matches it; a constrained route is not checked.
  */
 export class ErrStaticRouteConflict extends ErrCaffeineWebApplication {
   constructor(url: string, first: string, second?: string) {

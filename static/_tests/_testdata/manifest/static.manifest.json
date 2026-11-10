@@ -8,12 +8,12 @@
       "variants": {
         "br": {
           "hash": "3AaMjvOZO8KpKL/ledZHabZeRWKB93lFQCovYxMqhg4=",
-          "path": "assets/app.js.br",
+          "path": ".static-variants/oXLO3K5HR0thXFTVEKXYSo3qMDLpWFh0MLQTU4vj8zM.3AaMjvOZO8KpKL_ledZHabZeRWKB93lFQCovYxMqhg4.br",
           "size": 512
         },
         "gzip": {
           "hash": "HtA7EulPe84vgg4lxKvVJFT7hLVMUWn4Cx5fN6J232s=",
-          "path": "assets/app.js.gz",
+          "path": ".static-variants/oXLO3K5HR0thXFTVEKXYSo3qMDLpWFh0MLQTU4vj8zM.HtA7EulPe84vgg4lxKvVJFT7hLVMUWn4Cx5fN6J232s.gz",
           "size": 640
         }
       }

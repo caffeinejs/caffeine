@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, truncate, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,7 +7,14 @@ import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { MANIFEST_FILE, readManifest } from '../manifest/manifest.js'
+import {
+  MANIFEST_FILE,
+  VARIANT_DIRECTORY,
+  readManifest,
+  type ManifestFile,
+  type StaticManifest,
+  variantPath,
+} from '../manifest/manifest.js'
 import { ErrStaticBuild } from '../scan/errors.js'
 import { buildStatic } from './build.js'
 
@@ -40,7 +47,7 @@ describe('buildStatic', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('writes both variants beside each compressible file, and lists them in the manifest', async () => {
+  it('writes both variants into its own directory, named by their hash, and lists them in the manifest', async () => {
     const report = await buildStatic({ root })
     const { files } = await readManifest(root)
     const script = files['assets/app-eZr2sdaR.js']!
@@ -51,14 +58,15 @@ describe('buildStatic', () => {
       'favicon.svg',
       'index.html',
     ])
-    expect(script.variants.br!.path).toBe('assets/app-eZr2sdaR.js.br')
-    expect(script.variants.gzip!.path).toBe('assets/app-eZr2sdaR.js.gz')
+    expect(script.variants.br!.path).toBe(variantPath(script.hash, script.variants.br!.hash, 'br'))
+    expect(script.variants.gzip!.path).toBe(variantPath(script.hash, script.variants.gzip!.hash, 'gzip'))
 
     const original = await readFile(join(root, 'assets/app-eZr2sdaR.js'))
     expect(brotliDecompressSync(await readFile(join(root, script.variants.br!.path)))).toEqual(original)
     expect(gunzipSync(await readFile(join(root, script.variants.gzip!.path)))).toEqual(original)
     expect(report.files).toBe(4)
     expect(report.variants).toBe(6)
+    expect((await stored(root)).toSorted()).toEqual(listed(files).toSorted())
   })
 
   // Below 1 KiB a compressed copy saves less than the headers of the request that asks for it.
@@ -78,10 +86,12 @@ describe('buildStatic', () => {
   it('keeps no variant that saves less than 5%', async () => {
     await writeFile(join(root, 'random.txt'), noise(2048))
 
-    await buildStatic({ root })
+    const report = await buildStatic({ root })
+    const { files } = await readManifest(root)
 
-    expect((await readManifest(root)).files['random.txt']!.variants).toEqual({})
-    expect((await readdir(root)).filter(name => name.startsWith('random.txt'))).toEqual(['random.txt'])
+    expect(files['random.txt']!.variants).toEqual({})
+    expect(report.variants).toBe(6)
+    expect((await stored(root)).toSorted()).toEqual(listed(files).toSorted())
   })
 
   // A deployment that builds twice must not change every ETag, nor a CDN cache with them.
@@ -96,204 +106,136 @@ describe('buildStatic', () => {
     expect(report.skipped.filter(({ reason }) => reason === 'manifest')).toHaveLength(1)
   })
 
-  // A deleted file's variants are the build's own: a rebuild must neither fail on them nor publish them as files.
-  it('drops the variants of a file deleted since the last build', async () => {
+  // The variants are the build's own: a rebuild must neither keep a deleted file's nor publish them as files.
+  it('removes the variants of a file deleted since the last build', async () => {
     await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
     await buildStatic({ root })
+    const before = listed((await readManifest(root)).files)
     await rm(join(root, 'manual.txt'))
 
     const report = await buildStatic({ root })
     const { files } = await readManifest(root)
 
     expect(Object.keys(files).filter(path => path.startsWith('manual'))).toEqual([])
-    expect((await readdir(root)).filter(name => name.startsWith('manual'))).toEqual([])
+    expect((await stored(root)).toSorted()).toEqual(listed(files).toSorted())
+    expect(listed(files)).toHaveLength(before.length - 2)
     expect(report.files).toBe(4)
   })
 
-  it('drops an orphaned gzip variant left alone, which would otherwise be served as a .gz file', async () => {
+  // Two files of the same bytes share their variants: deleting one must not take the other's away.
+  it('keeps the variants a deleted file shared with a file still there', async () => {
     await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+    await writeFile(join(root, 'copy.txt'), 'manual '.repeat(400))
     await buildStatic({ root })
     await rm(join(root, 'manual.txt'))
-    await rm(join(root, 'manual.txt.br'))
 
     await buildStatic({ root })
+    const copy = (await readManifest(root)).files['copy.txt']!
 
-    expect(Object.keys((await readManifest(root)).files).filter(path => path.startsWith('manual'))).toEqual([])
+    expect(gunzipSync(await readFile(join(root, copy.variants.gzip!.path))).toString()).toBe('manual '.repeat(400))
   })
 
-  // Only the bytes the build wrote are its own: a file put at a former variant's path is the site's, and is served.
-  it('keeps a file written over an orphaned variant', async () => {
-    await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
-    await buildStatic({ root })
-    await rm(join(root, 'manual.txt'))
-    await rm(join(root, 'manual.txt.br'))
-    await writeFile(join(root, 'manual.txt.gz'), 'an archive of its own')
-
-    await buildStatic({ root })
-
-    expect(Object.keys((await readManifest(root)).files).filter(path => path.startsWith('manual'))).toEqual([
-      'manual.txt.gz',
-    ])
-    expect(await readFile(join(root, 'manual.txt.gz'), 'utf8')).toBe('an archive of its own')
-  })
-
-  // A name beside a file is reserved for its variant, but only bytes a build recorded are the build's to delete.
-  it('keeps an archive beside a file it never compressed, and serves neither as the other', async () => {
-    await writeFile(join(root, 'manual.txt'), 'short')
-    await writeFile(join(root, 'manual.txt.gz'), 'an archive of its own')
-
-    const report = await buildStatic({ root })
-
-    expect(await readFile(join(root, 'manual.txt.gz'), 'utf8')).toBe('an archive of its own')
-    expect(report.skipped).toContainEqual({ path: 'manual.txt.gz', reason: 'reserved' })
-    expect(Object.keys((await readManifest(root)).files).filter(path => path.startsWith('manual'))).toEqual([
-      'manual.txt',
-    ])
-  })
-
-  it('refuses to write a variant over bytes it did not write, leaving them as they were', async () => {
+  // The build writes nothing beside a file of the site, so an archive there is the site's to serve.
+  it('serves an archive beside a file it compresses as a file of its own, and leaves it as it was', async () => {
     await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
     await writeFile(join(root, 'manual.txt.gz'), 'an archive of its own')
 
-    const err = await buildStatic({ root }).catch((err: unknown) => err)
+    await buildStatic({ root })
+    const { files } = await readManifest(root)
 
-    expect(err).toBeInstanceOf(ErrStaticBuild)
-    expect((err as Error).message.split('\n')[0]).toBe(
-      `Cannot build static files from "${root}": "manual.txt.gz" holds bytes no build wrote, where the gzip variant of "manual.txt" goes`,
-    )
+    expect(Object.keys(files).filter(path => path.startsWith('manual'))).toEqual(['manual.txt', 'manual.txt.gz'])
+    expect(files['manual.txt.gz']!.type).toBe('application/gzip')
+    expect(Object.keys(files['manual.txt']!.variants)).toEqual(['br', 'gzip'])
     expect(await readFile(join(root, 'manual.txt.gz'), 'utf8')).toBe('an archive of its own')
-    expect((await readdir(root)).filter(name => name.endsWith('.tmp'))).toEqual([])
   })
 
-  // The scan skips a symlink, so only the destination itself shows the build would replace something it never wrote.
-  it('refuses to write a variant over a symlink, leaving it and its target as they were', async () => {
-    const outside = await mkdtemp(join(tmpdir(), 'caffeine-outside-'))
-
-    try {
-      await writeFile(join(outside, 'archive.gz'), 'an archive of its own')
-      await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
-      await symlink(join(outside, 'archive.gz'), join(root, 'manual.txt.gz'))
-
-      const err = await buildStatic({ root }).catch((err: unknown) => err)
-
-      expect(err).toBeInstanceOf(ErrStaticBuild)
-      expect((err as Error).message.split('\n')[0]).toBe(
-        `Cannot build static files from "${root}": "manual.txt.gz" is not a regular file, where the gzip variant of "manual.txt" goes`,
-      )
-      expect((await lstat(join(root, 'manual.txt.gz'))).isSymbolicLink()).toBe(true)
-      expect(await readFile(join(outside, 'archive.gz'), 'utf8')).toBe('an archive of its own')
-    } finally {
-      await rm(outside, { recursive: true, force: true })
-    }
-  })
-
-  // A build stopped between its variants leaves new bytes where the manifest records old ones. They are still the
-  // build's: going back to the old input must rebuild, not refuse them as a file of the site.
-  it('rebuilds an earlier input over the variants of a build stopped before its manifest', async () => {
+  // A build stopped between two variants must leave the site as the last manifest describes it, and the next build of
+  // either input must succeed.
+  it('leaves the previous manifest and its variants whole when stopped before its own manifest', async () => {
     const first = 'first '.repeat(400)
+    const second = 'second '.repeat(400)
     await writeFile(join(root, 'manual.txt'), first)
     await buildStatic({ root })
-    await writeFile(join(root, 'manual.txt'), 'second '.repeat(400))
-    // Where the gzip variant goes, a directory: the build stops there, after renaming its new brotli variant.
-    await rm(join(root, 'manual.txt.gz'))
-    await mkdir(join(root, 'manual.txt.gz'))
+    const previous = await readFile(join(root, MANIFEST_FILE))
+    // Where the second input's gzip variant goes, a directory: the build stops there, its brotli variant written.
+    const blocked = (await variantsOf(second)).gzip!.path
+    await mkdir(join(root, blocked))
+    await writeFile(join(root, 'manual.txt'), second)
+
     await expect(buildStatic({ root })).rejects.toThrow()
-    await rm(join(root, 'manual.txt.gz'), { recursive: true })
+
+    expect(await readFile(join(root, MANIFEST_FILE))).toEqual(previous)
+    const kept = (await readManifest(root)).files['manual.txt']!.variants
+    expect(brotliDecompressSync(await readFile(join(root, kept.br!.path))).toString()).toBe(first)
+    expect(gunzipSync(await readFile(join(root, kept.gzip!.path))).toString()).toBe(first)
+
+    await rm(join(root, blocked), { recursive: true })
     await writeFile(join(root, 'manual.txt'), first)
-
     await buildStatic({ root })
+    expect(await readFile(join(root, MANIFEST_FILE))).toEqual(previous)
 
-    expect(brotliDecompressSync(await readFile(join(root, 'manual.txt.br'))).toString()).toBe(first)
-    expect((await readdir(root)).filter(name => name.startsWith('.'))).toEqual([])
-  })
-
-  // A record cut short by a failed append must not swallow the record written after it: that one is what lets the
-  // next build know the bytes it renamed into place for its own.
-  it('rebuilds an earlier input after a retry wrote its record behind one cut short', async () => {
-    // One file alone, so the record cut short is the last one, and the brotli variant's the first written after it.
-    const site = join(root, 'manual')
-    await mkdir(site)
-    const first = 'first '.repeat(400)
-    await writeFile(join(site, 'manual.txt'), first)
-    await buildStatic({ root: site })
-    const firstBrotli = await readFile(join(site, 'manual.txt.br'))
-    await writeFile(join(site, 'manual.txt'), 'second '.repeat(400))
-    // Where the gzip variant goes, a directory: the build stops there, after renaming its new brotli variant.
-    await rm(join(site, 'manual.txt.gz'))
-    await mkdir(join(site, 'manual.txt.gz'))
-    await expect(buildStatic({ root: site })).rejects.toThrow()
-    // As if appending the brotli record had failed halfway: the record cut short, the earlier variant still in place.
-    const [header, record] = (await readFile(join(site, '.static.variants'), 'utf8')).split('\n')
-    await writeFile(join(site, '.static.variants'), `${header}\n${record!.slice(0, record!.length / 2)}`)
-    await writeFile(join(site, 'manual.txt.br'), firstBrotli)
-    // The retry stops at the same place, its record written behind the one cut short.
-    await expect(buildStatic({ root: site })).rejects.toThrow()
-    await rm(join(site, 'manual.txt.gz'), { recursive: true })
-    await writeFile(join(site, 'manual.txt'), first)
-
-    await buildStatic({ root: site })
-
-    expect(brotliDecompressSync(await readFile(join(site, 'manual.txt.br'))).toString()).toBe(first)
-  })
-
-  // The record is the build's own: a link there would have it write to a file anywhere, and a file of the site there
-  // would be read as the build's and removed.
-  it('refuses a symlink where it keeps its record, and writes nothing through it', async () => {
-    const outside = await mkdtemp(join(tmpdir(), 'caffeine-outside-'))
-
-    try {
-      await writeFile(join(outside, 'notes.txt'), 'notes of its own\n')
-      await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
-      await symlink(join(outside, 'notes.txt'), join(root, '.static.variants'))
-
-      const err = await buildStatic({ root }).catch((err: unknown) => err)
-
-      expect(err).toBeInstanceOf(ErrStaticBuild)
-      expect((err as Error).message.split('\n')[0]).toBe(
-        `Cannot build static files from "${root}": ".static.variants" is not a record a build wrote, and the build keeps its record there`,
-      )
-      expect((await lstat(join(root, '.static.variants'))).isSymbolicLink()).toBe(true)
-      expect(await readFile(join(outside, 'notes.txt'), 'utf8')).toBe('notes of its own\n')
-    } finally {
-      await rm(outside, { recursive: true, force: true })
-    }
-  })
-
-  it('refuses a file of the site where it keeps its record, and leaves it', async () => {
-    await writeFile(join(root, '.static.variants'), 'notes of its own\n')
-
-    const err = await buildStatic({ root }).catch((err: unknown) => err)
-
-    expect(err).toBeInstanceOf(ErrStaticBuild)
-    expect(await readFile(join(root, '.static.variants'), 'utf8')).toBe('notes of its own\n')
-  })
-
-  // A build stopped after writing its variants and before its manifest leaves the same bytes the next one writes.
-  it('rebuilds over the variants of a build that wrote no manifest', async () => {
-    await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
+    await writeFile(join(root, 'manual.txt'), second)
     await buildStatic({ root })
-    await rm(join(root, MANIFEST_FILE))
-
-    await buildStatic({ root })
-
-    expect(Object.keys((await readManifest(root)).files['manual.txt']!.variants)).toEqual(['br', 'gzip'])
+    const rebuilt = (await readManifest(root)).files['manual.txt']!.variants
+    expect(gunzipSync(await readFile(join(root, rebuilt.gzip!.path))).toString()).toBe(second)
   })
 
   // A build that fails mid-write must leave nothing the next build reads as a file of the site.
-  it('leaves no temporary behind when a write fails, so the next build succeeds', async () => {
-    await writeFile(join(root, 'manual.txt'), 'manual '.repeat(400))
-    // A directory where the variant goes: the rename onto it fails.
-    await mkdir(join(root, 'manual.txt.br'))
+  it('leaves no temporary behind when its manifest cannot be written, and the next build succeeds', async () => {
+    await mkdir(join(root, MANIFEST_FILE))
 
     await expect(buildStatic({ root })).rejects.toThrow()
-    await rm(join(root, 'manual.txt.br'), { recursive: true })
+    expect((await readdir(join(root, VARIANT_DIRECTORY))).filter(name => name.endsWith('.tmp'))).toEqual([])
 
+    await rm(join(root, MANIFEST_FILE), { recursive: true })
     await buildStatic({ root })
-    expect((await readdir(root)).filter(name => name.startsWith('manual')).toSorted()).toEqual([
-      'manual.txt',
-      'manual.txt.br',
-      'manual.txt.gz',
-    ])
+    expect(Object.keys((await readManifest(root)).files)).toHaveLength(4)
+  })
+
+  // A build killed outright leaves its temporaries, and a deleted file's variants may still be there: both are the
+  // build's, and only those are.
+  it('removes the temporaries and the variants no manifest lists, and nothing else of its directory', async () => {
+    await mkdir(join(root, VARIANT_DIRECTORY))
+    await writeFile(join(root, VARIANT_DIRECTORY, '.0123456789ab.tmp'), 'cut short')
+    const gone = createHash('sha256').update('gone').digest('base64')
+    const unlisted = variantPath(gone, gone, 'br')
+    await writeFile(join(root, unlisted), 'gone')
+    await writeFile(join(root, VARIANT_DIRECTORY, 'notes.txt'), 'notes of its own')
+
+    const report = await buildStatic({ root })
+    const { files } = await readManifest(root)
+
+    expect((await stored(root)).toSorted()).toEqual(listed(files).toSorted())
+    expect(await readFile(join(root, VARIANT_DIRECTORY, 'notes.txt'), 'utf8')).toBe('notes of its own')
+    expect(report.skipped).toContainEqual({ path: `${VARIANT_DIRECTORY}/notes.txt`, reason: 'variant' })
+  })
+
+  // A link would have the build write, and remove, wherever it points.
+  it('refuses a symlink where it keeps its variants, and writes nothing through it', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'caffeine-outside-'))
+
+    try {
+      await writeFile(join(outside, 'notes.txt'), 'notes of its own')
+      await symlink(outside, join(root, VARIANT_DIRECTORY))
+
+      const err = await buildStatic({ root }).catch((err: unknown) => err)
+
+      expect(err).toBeInstanceOf(ErrStaticBuild)
+      expect((err as Error).message.split('\n')[0]).toBe(
+        `Cannot build static files from "${root}": "${VARIANT_DIRECTORY}" is not a directory, and the build keeps the variants there`,
+      )
+      expect(await readdir(outside)).toEqual(['notes.txt'])
+      expect((await readdir(root)).includes(MANIFEST_FILE)).toBe(false)
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a file where it keeps its variants, and leaves it', async () => {
+    await writeFile(join(root, VARIANT_DIRECTORY), 'notes of its own')
+
+    await expect(buildStatic({ root })).rejects.toThrow(ErrStaticBuild)
+    expect(await readFile(join(root, VARIANT_DIRECTORY), 'utf8')).toBe('notes of its own')
   })
 
   // Node reads no file past 2 GiB into one buffer; one large video must not stop the whole build. Sparse, so it
@@ -322,6 +264,34 @@ describe('buildStatic', () => {
     expect((await readdir(root)).includes(MANIFEST_FILE)).toBe(false)
   })
 })
+
+/** Every file in the build's directory under `root` named as a variant, as a root-relative path. */
+async function stored(root: string): Promise<string[]> {
+  const names = await readdir(join(root, VARIANT_DIRECTORY))
+
+  return names
+    .filter(name => /^[\w-]{43}\.[\w-]{43}\.(?:br|gz)$/.test(name))
+    .map(name => `${VARIANT_DIRECTORY}/${name}`)
+}
+
+/** Every variant path `files` lists, once each. */
+function listed(files: StaticManifest['files']): string[] {
+  return [...new Set(Object.values(files).flatMap(file => Object.values(file.variants).map(variant => variant.path)))]
+}
+
+/** The variants a build writes for a file holding `text`, built in a directory of their own. */
+async function variantsOf(text: string): Promise<ManifestFile['variants']> {
+  const scratch = await mkdtemp(join(tmpdir(), 'caffeine-variants-'))
+
+  try {
+    await writeFile(join(scratch, 'manual.txt'), text)
+    await buildStatic({ root: scratch })
+
+    return (await readManifest(scratch)).files['manual.txt']!.variants
+  } finally {
+    await rm(scratch, { recursive: true, force: true })
+  }
+}
 
 async function snapshot(root: string): Promise<Record<string, string>> {
   const names = (await readdir(root, { recursive: true, withFileTypes: true })).filter(entry => entry.isFile())

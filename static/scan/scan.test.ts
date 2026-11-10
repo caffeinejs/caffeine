@@ -50,20 +50,19 @@ describe('scan', () => {
     ])
   })
 
-  // A name beside a file is where its variant goes, never a file to serve; without a manifest recording its bytes it
-  // is not the build's either. The build's own are in its tests, which write that manifest.
-  it('reads x.gz beside x as reserved without a record of it, and as a file of its own without x', async () => {
-    await tree(['app.js', 'app.js.br', 'app.js.gz', 'backup.tar.gz', 'static.manifest.json'])
+  // The build's own directory holds its variants, served only as a file's representations, never as files; beside a
+  // file, a .gz is a file of the site like any other.
+  it("leaves out the build's variants and the manifest, and reads x.gz beside x as a file of its own", async () => {
+    await tree(['app.js', 'app.js.gz', '.static-variants/abc.br', 'static.manifest.json'])
 
     const { files, skipped } = await scan(root)
 
     expect(files).toEqual([
       { path: 'app.js', type: 'text/javascript; charset=utf-8', compressible: true },
-      { path: 'backup.tar.gz', type: 'application/gzip', compressible: false },
+      { path: 'app.js.gz', type: 'application/gzip', compressible: false },
     ])
     expect(skipped).toEqual([
-      { path: 'app.js.br', reason: 'reserved' },
-      { path: 'app.js.gz', reason: 'reserved' },
+      { path: '.static-variants/abc.br', reason: 'variant' },
       { path: 'static.manifest.json', reason: 'manifest' },
     ])
   })

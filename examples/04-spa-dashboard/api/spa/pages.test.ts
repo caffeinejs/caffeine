@@ -1,4 +1,5 @@
 import type { WebApplication } from '@caffeinejs/http'
+import { readManifest } from '@caffeinejs/static'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
@@ -12,6 +13,7 @@ import {
   signIn,
   type Session,
 } from '../util/testing/harness.js'
+import { SITE } from './site.js'
 
 /**
  * The single-page application: client routes, the bundle, and the two plugins in front of them.
@@ -202,9 +204,11 @@ describe('the single-page application', () => {
 
     // The variants are representations of the bundle, not files of their own: reachable as their own URL, one would
     // answer with raw brotli and no content-encoding.
-    it('does not expose the compressed siblings as URLs of their own', async () => {
-      for (const suffix of ['.br', '.gz']) {
-        await expectNotFoundJSON(await app.request(`${bundle}${suffix}`, { headers: NAVIGATION }))
+    it('does not expose the compressed variants as URLs of their own', async () => {
+      const { variants } = (await readManifest(SITE)).files[bundle.slice(1)]!
+
+      for (const path of [`/${variants.br!.path}`, `/${variants.gzip!.path}`, `${bundle}.br`, `${bundle}.gz`]) {
+        await expectNotFoundJSON(await app.request(path, { headers: NAVIGATION }))
       }
     })
   })

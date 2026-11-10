@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, inject, it, vi } from 'vitest'
 import { buildStatic } from './build/build.js'
 import type { MountOptions } from './config.js'
 import { ErrStaticRouteConflict, ErrStaticScanInProduction } from './errors.js'
-import { ErrStaticManifest } from './manifest/manifest.js'
+import { ErrStaticManifest, readManifest, type StaticManifest } from './manifest/manifest.js'
 import { staticFiles, type StaticConfigurer } from './static.js'
 
 const { spa, fixtures } = inject('fixtures')
@@ -501,13 +501,14 @@ describe('staticFiles', () => {
   // The ETag is the manifest's hash: bytes replaced at the same length after the build would be served under the old
   // one, and a cache holding the old bytes would revalidate them as current.
   it.each([
-    ['the file', 'app.js'],
-    ['a variant', 'app.js.br'],
-  ])('fails start-up on %s replaced at the same length after the build', async (_case, replaced) => {
+    ['the file', (_manifest: StaticManifest) => 'app.js'],
+    ['a variant', (manifest: StaticManifest) => manifest.files['app.js']!.variants.br!.path],
+  ])('fails start-up on %s replaced at the same length after the build', async (_case, pathOf) => {
     const root = join(dir, 'replaced')
     await mkdir(root)
     await writeFile(join(root, 'app.js'), 'console.log("a")\n'.repeat(100))
     await buildStatic({ root })
+    const replaced = pathOf(await readManifest(root))
     const { size } = await stat(join(root, replaced))
     await writeFile(join(root, replaced), 'x'.repeat(size))
 
@@ -700,15 +701,17 @@ describe('staticFiles', () => {
         const err = await app.bootstrap().catch((err: unknown) => err)
 
         expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+        expect(firstLine(err as Error)).toBe(
+          `Cannot register "/web//public/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
+        )
       },
     )
 
-    // Fastify finds a route only by the constraints it was registered with: requests without that version would reach
-    // the file by the mount's wildcard, under the mount's gate rather than the route's.
-    it('from a route constrained to a version, registered before the mount at the URL of a file under a directory', async () => {
+    // find-my-way registers the URL without the optional segment too: that route answers the file's own URL.
+    it('from a route with an optional segment registered before the mount, which also answers the URL of a file', async () => {
       const root = await tree('nested', ['assets/report.txt'])
       const plugin: FastifyPluginAsync = async instance => {
-        instance.get('/assets/report.txt', { constraints: { version: '2.0.0' } }, async () => 'protected')
+        instance.get('/assets/report.txt/:lang?', async () => 'protected')
       }
       const earlier: HTTPPluginFactory = () => plugin
 
@@ -717,6 +720,37 @@ describe('staticFiles', () => {
       expect(err).toBeInstanceOf(ErrStaticRouteConflict)
       expect(firstLine(err)).toBe(
         `Cannot register "/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
+      )
+    })
+
+    // A parameter ranks above a wildcard: the route would answer every file directly under the directory.
+    it('from a parametric route registered after the mount over a directory of files', async () => {
+      const root = await tree('nested', ['assets/report.txt'])
+      start(s => s.serve(root, { anonymous: true })).mount(newRouter().get('/assets/:name', () => 'protected'))
+
+      const err = await app!.bootstrap().catch((err: unknown) => err)
+
+      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+      expect(firstLine(err as Error)).toBe(
+        `Cannot register "/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
+      )
+    })
+
+    // The router folds the prefixes as it folds any URL, and gives the file to the longer wildcard, which misses it.
+    it('from a mount nested in another under a prefix the router folds', async () => {
+      const outer = await tree('outer', ['assets/private/report.txt'])
+      const inner = await tree('inner', ['private/other.txt'])
+      app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+        .server(() => ({ factory: { routerOptions: { ignoreDuplicateSlashes: true } } }))
+        .with(
+          staticFiles(s => s.serve(outer, { prefix: '/web//public' }).serve(inner, { prefix: '/web/public/assets' })),
+        ) as WebApplication
+
+      const err = await app.bootstrap().catch((err: unknown) => err)
+
+      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+      expect(firstLine(err as Error)).toBe(
+        `Cannot register "/web//public/assets/private/report.txt": "${name(outer, 'assets/private/report.txt')}" and "${name(inner, 'private/other.txt')}" both answer it`,
       )
     })
 
@@ -732,6 +766,19 @@ describe('staticFiles', () => {
       expect(firstLine(err)).toBe(
         `Cannot register "/hello.txt": "${name(fixtures, 'hello.txt')}" answers another route at that URL`,
       )
+    })
+
+    // Only the router's duplicate is a conflict: another plugin's refusal of the route must reach the reader as written.
+    it('but lets another error from registering a route through as it was thrown', async () => {
+      const refused = new Error('refused by policy')
+      const plugin: FastifyPluginAsync = async instance => {
+        instance.addHook('onRoute', () => {
+          throw refused
+        })
+      }
+      const earlier: HTTPPluginFactory = () => fp(plugin, { name: 'policy' })
+
+      expect(await refusal(s => s.serve(fixtures), [earlier])).toBe(refused)
     })
   })
 

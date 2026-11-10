@@ -1,7 +1,8 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { readManifest } from '@caffeinejs/static'
 import { buildStatic } from '@caffeinejs/static/build'
 import { KiB } from '@caffeinejs/std/bytes'
 
@@ -24,7 +25,10 @@ function source(size: number, line: (i: number) => string): string {
   return text.slice(0, size)
 }
 
-/** Writes the site and runs `buildStatic` over it, so both servers read the same files and variants. */
+/**
+ * Writes the site and runs `buildStatic` over it, then copies each variant beside its file, where `@fastify/static`'s
+ * `preCompressed` looks for it, so both servers read the same files and variants.
+ */
 export async function buildFixture(): Promise<void> {
   await rm(FIXTURE, { recursive: true, force: true })
   await mkdir(join(FIXTURE, 'assets'), { recursive: true })
@@ -44,4 +48,10 @@ export async function buildFixture(): Promise<void> {
   )
 
   await buildStatic({ root: FIXTURE })
+
+  for (const [path, file] of Object.entries((await readManifest(FIXTURE)).files)) {
+    for (const [encoding, variant] of Object.entries(file.variants)) {
+      await copyFile(join(FIXTURE, variant.path), join(FIXTURE, `${path}${encoding === 'br' ? '.br' : '.gz'}`))
+    }
+  }
 }
