@@ -2,15 +2,38 @@
 
 `@caffeinejs/static` serves files. It has no SPA feature and no `.spa()` — a single-page application is
 **routing the application writes**, so its prefix, its authorization and its ordering stay where the rest of
-the application's routing is. Three exports are all it adds.
+the application's routing is. Two exports are all it adds.
 
-| Export                                         | For                                                                      |
-| ---------------------------------------------- | ------------------------------------------------------------------------ |
-| `sendFile(ctx, filename, root?, options?)`     | Sending a file from a handler, through `@fastify/static`'s own machinery |
-| `download(ctx, filepath, filename?, options?)` | The same, as an attachment. A relative path needs `options.root`         |
-| `isDocumentRequest(ctx, navigationOnly?)`      | Whether a request that matched no route should get the shell             |
-| `spaMount(index?)`                             | The `@fastify/static` options a SPA's file mount always sets             |
-| `immutableAssets(root, prefixes?)`             | A `setHeaders` callback pinning content-hashed assets                    |
+| Export                                    | For                                                                     |
+| ----------------------------------------- | ----------------------------------------------------------------------- |
+| `sendFile(ctx, path, root?)`              | Sending a file a mount lists from a handler, as the mount's route would |
+| `isDocumentRequest(ctx, navigationOnly?)` | Whether a request that matched no route should get the shell            |
+
+A mount serves what `buildStatic()` from `@caffeinejs/static/build` listed in `static.manifest.json`, so the
+front-end build ends with it:
+
+```ts
+import { buildStatic } from '@caffeinejs/static/build'
+
+await buildStatic({ root: 'site/dist' }) // the br and gzip variants, and the manifest
+```
+
+Start-up reads every file the manifest lists and checks its hash, so a file changed after the build fails the
+deployment instead of going out under the tag of the bytes it replaced.
+
+The build keeps its variants in `.static-variants/` under the root. It treats compressed files from an older
+`@fastify/static` setup as site files. A legacy `.br` or `.deflate` sidecar can fail the build, and a legacy
+`.gz` sidecar can become a downloadable archive.
+
+Build into an empty output directory when migrating. If you reuse an existing directory, list the candidate
+sidecars, including ones whose original files are gone.
+
+```sh
+find site/dist -type f \( -name '*.br' -o -name '*.gz' -o -name '*.deflate' \) -print
+```
+
+Remove only files you know were generated as precompressed copies. If those copies must stay on disk, list their
+paths in the build's `exclude` option. Keep any archives you intend to serve.
 
 ## The two rules
 
@@ -19,8 +42,8 @@ the application's routing is. Three exports are all it adds.
 `/settings` is a fallback, so it is a page for a browser and a 404 for anything else — which is what keeps a
 missing `/assets/app-eZr2sdaR.js` a real 404 instead of HTML under a JavaScript content type.
 
-**`return` what `sendFile` returns.** `@fastify/static` pumps the file without awaiting, so a handler that
-drops the value lets the adapter send an empty body over it: the caller sees a 200 with nothing in it.
+**`return` what `sendFile` returns.** It is a `Responder`, which answers in the handler's place only when the
+handler returns it: a handler that drops the value answers with nothing in it.
 
 ## Public application beside an API
 
@@ -28,8 +51,8 @@ drops the value lets the adapter send an empty body over it: the caller sees a 2
 import { resolve } from 'node:path'
 
 import { ErrHTTPNotFound, type IContext } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/fastify'
-import { immutableAssets, isDocumentRequest, sendFile, spaMount, staticFiles } from '@caffeinejs/static'
+import { compress, newRouter } from '@caffeinejs/http/fastify'
+import { isDocumentRequest, sendFile, staticFiles } from '@caffeinejs/static'
 
 const DIST = resolve('site/dist')
 
@@ -40,6 +63,7 @@ const notFound = (ctx: IContext): never => {
 const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
 
 const pages = newRouter()
+  .extend(compress(false))
   .detail('http', { internal: true }) // @caffeinejs/openapi does not describe client routes
   .authorize({ allowAnonymous: true })
   .get('/', shellDocument)
@@ -51,27 +75,27 @@ const pages = newRouter()
 const apiMisses = newRouter('/api').get('/*', notFound)
 
 app
-  .with(
-    staticFiles(s =>
-      s.serve(DIST, { ...spaMount(), preCompressed: true, setHeaders: immutableAssets(DIST) }, { anonymous: true }),
-    ),
-  )
+  .with(staticFiles(s => s.serve(DIST, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
   .mount(apiMisses, pages)
 ```
 
-`spaMount()` is
-`{ wildcard: false, index: false, globIgnore: ['index.html', '**/*.br', '**/*.gz', '**/*.deflate'] }`.
-`wildcard: false` is load-bearing, not a tuning knob: the default registers `GET <prefix>*`, which is the
-application's own client-route path, and the two collide at start-up.
+`unrouted: ['index.html']` keeps the shell off the mount's routes, so `/` and `/index.html` are the
+application's own routes above. The mount registers a route per file at its root and one per directory under
+it: a miss under `/assets/` is the mount's own 404, and a miss at the root falls through to `/*`.
 
-`preCompressed: true` needs no further setup. It finds `app-HASH.js.br` on the file system rather than through
-the router, so the compressed siblings are served without being routes — which is why `spaMount()` ignores
-them. It applies to `sendFile` too, so the shell served from a compiled route is compressed as well. Overriding
-`globIgnore` **replaces** the list above rather than extending it, so restate whatever still applies.
+The `br` and `gzip` variants the build wrote to `.static-variants/` are negotiated by `Accept-Encoding` and are
+never URLs of their own.
+They apply to `sendFile` too. If the server uses `@fastify/compress`, use `compress(false)` on routes that
+return `sendFile` so the file's encoding and strong ETag still describe the bytes sent.
 
-`{ anonymous: true }` marks every file the mount registers exempt from authentication. Under
+`immutable: ['assets/**']` pins the content-hashed files for a year (`immutableMaxAge` changes it); every other
+file is revalidated on each use (`cacheControl`, default `'no-cache'`).
+
+`{ anonymous: true }` marks every file the mount registers exempt from authentication, and lets a shared cache
+store them (`Cache-Control: public`), since they are the same for every caller. Under
 `requireAuthenticatedByDefault()` it is what keeps the public page's scripts loading — **forget it and the page
-renders while every script answers 401**, which is loud in the browser and silent in the logs.
+renders while every script answers 401**, which is loud in the browser and silent in the logs. `sendFile` always
+writes `private`: it cannot see the gate of the route that called it.
 
 ## Authentication, and protected client routes
 
@@ -87,14 +111,20 @@ One `authorize` per tier, on the application's own routers, over the same bundle
 
 ```ts
 const publicPages = newRouter()
+  .extend(compress(false))
   .authorize({ allowAnonymous: true })
   .get('/', shellDocument)
   .get('/login', shellDocument)
   .get('/*', clientRoute)
 
-const memberPages = newRouter().authorize().get('/dashboard', shellDocument).get('/dashboard/*', clientRoute)
+const memberPages = newRouter()
+  .extend(compress(false))
+  .authorize()
+  .get('/dashboard', shellDocument)
+  .get('/dashboard/*', clientRoute)
 
 const adminPages = newRouter()
+  .extend(compress(false))
   .authorize({ roles: ['admin'] })
   .get('/admin', shellDocument)
   .get('/admin/*', clientRoute)
@@ -111,33 +141,37 @@ it. The data is protected by the API.
 against `/dashboard/*`; the wildcard covers `/dashboard/` with an empty match, but not the bare path.
 
 A prefixed router needs no special handling for the bare path: `newRouter('/app')` with a route at `/`
-composes to `/app`, not `/app/`. So the pair is the ordinary one, written on the prefixed router —
-`newRouter('/app').get('/', shellDocument).get('/*', clientRoute)`. Registering the routes on an unprefixed
-router instead is a choice, not a workaround.
+composes to `/app`, so the prefixed router declares the pair as follows.
+
+```ts
+newRouter('/app').extend(compress(false)).get('/', shellDocument).get('/*', clientRoute)
+```
 
 ## A separate application whose bundle must be gated too
 
-An administration build nobody else may even download. Its files are **not** mounted: `@fastify/static`'s file
-routes are raw Fastify routes carrying no authorization, so they would fall to the application's fallback
-policy. Serving them from a compiled route puts every byte behind the same `authorize` as the page.
+An administration build nobody else may even download. Its files are **not** routed: a mount's file routes are
+raw Fastify routes carrying no authorization, so they would fall to the application's fallback policy. Serving
+them from a compiled route puts every byte behind the same `authorize` as the page.
 
 ```ts
 const ADMIN = resolve('admin/dist')
 const adminDocument = (ctx: IContext) => sendFile(ctx, 'index.html', ADMIN)
 
 const admin = newRouter()
+  .extend(compress(false))
   .detail('http', { internal: true })
   .authorize({ roles: ['admin'] })
   .get('/admin', adminDocument)
   .get('/admin/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!.slice('/admin'.length), ADMIN))
   .get('/admin/*', ctx => (isDocumentRequest(ctx) ? adminDocument(ctx) : notFound(ctx)))
 
-// `serve: false` registers no routes at all: the mount exists to decorate the reply and to name the root.
-app.with(staticFiles(s => s.serve(ADMIN, { serve: false }))).mount(admin)
+// `unrouted: ['**']` registers no routes at all: the mount exists so `sendFile` can find its files.
+app.with(staticFiles(s => s.serve(ADMIN, { unrouted: ['**'] }))).mount(admin)
 ```
 
-Path safety is `@fastify/static`'s: it rejects `..` and non-canonical paths before sending, and confines to
-`root`.
+Path safety is the manifest's: `sendFile` looks the path up among the files the build listed, decoding it first
+when it starts with `/`, so `..`, a dotfile or anything the build did not list is a 404, and nothing joins a
+request path onto `root`.
 
 Two applications on one origin are these two side by side. `/admin/*` beats `/*` by static-prefix length, so
 nothing coordinates them.
@@ -150,6 +184,60 @@ from the build, so the bundler's own base (`base: '/app/'` in Vite) has to name 
 `ctx.redirect('~/login')`, and a link or a form rendered by the server writes `ctx.req.basePath + '/login'`.
 Cookie sign-in's `loginPath` and `accessDeniedPath` are written as the application sees them and get the base on
 their own, and its session cookie is scoped to the base.
+
+## A download
+
+`Attachment()` from `@caffeinejs/http` sends a file as an attachment, with its name and, given validators, ranges
+and conditional requests:
+
+```ts
+import { openAsBlob } from 'node:fs'
+import { realpath, stat } from 'node:fs/promises'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
+
+import { Attachment, ErrHTTPNotFound } from '@caffeinejs/http'
+
+// Resolved once, so a symlink on the way to the directory itself does not fail every check.
+const REPORTS = await realpath('var/reports')
+
+const notFound = (): never => {
+  throw new ErrHTTPNotFound()
+}
+
+/** Where `path` is under `REPORTS`, or undefined when it is outside, the directory itself or a dotfile. */
+function confined(path: string): string | undefined {
+  // On Windows, a path on another drive is relative to nothing, and comes back absolute.
+  const inside = relative(REPORTS, path)
+  const outside = inside === '' || isAbsolute(inside) || inside.split(sep).some(segment => segment.startsWith('.'))
+
+  return outside ? undefined : inside
+}
+
+reports.get('/reports/*', async ctx => {
+  // Confined twice: as written, then with symlinks resolved, since a link inside the directory can point anywhere.
+  const requested = resolve(REPORTS, ctx.req.param('*') ?? '')
+  confined(requested) ?? notFound()
+  const real = await realpath(requested).catch(notFound)
+  const name = confined(real) ?? notFound()
+  const stats = await stat(real).catch(notFound)
+
+  if (!stats.isFile()) {
+    notFound()
+  }
+
+  // The checked path is the one opened, not the one requested.
+  return Attachment(await openAsBlob(real), {
+    name,
+    etag: `"${stats.size}-${stats.mtime.getTime()}"`,
+    lastModified: stats.mtime,
+  })
+})
+```
+
+This trusts whoever writes `var/reports`: a symlink swapped in between the check and the open is followed. Keep
+the directory writable only by the application, or serve files a build lists instead.
+
+A file the build lists is better served by a mount or `sendFile`, which never derive a path from a request.
 
 ## Do not
 

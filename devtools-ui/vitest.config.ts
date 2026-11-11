@@ -20,6 +20,8 @@ export default defineConfig({
   oxc: false,
   test: {
     name: 'devtools-ui',
+    // Builds public/, which `staticFiles(...)` serves from the manifest the build writes.
+    globalSetup: ['_tests/global_setup.ts'],
     include: ['**/*.test.ts', '**/*.test.tsx'],
     environment: 'node',
     passWithNoTests: true,

@@ -1,5 +1,3 @@
-import { fileURLToPath } from 'node:url'
-
 import { CaffeineIoC } from '@caffeinejs/di'
 import {
   AuthenticateResult,
@@ -12,17 +10,20 @@ import {
   type IContext,
 } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { inject } from 'vitest'
 
 import { isDocumentRequest, sendFile } from '../../index.js'
 
-/** The built site every scenario serves: `index.html` with `<div id="root">` and one hashed asset. */
-export const dist = fileURLToPath(new URL('../_testdata/spa', import.meta.url))
+const built = inject('fixtures')
+
+/** The built site every scenario serves: `index.html` with `<div id="root">`, hashed assets and `favicon.svg`. */
+export const dist = built.spa
 /** A second built site, for an administration shell: `<div id="admin-root">` and `assets/admin-Zz9.js`. */
-export const admin = fileURLToPath(new URL('../_testdata/admin', import.meta.url))
+export const admin = built.admin
 /** Plain files, for a `.serve()` mount next to a shell. */
-export const fixtures = fileURLToPath(new URL('../_testdata/fixtures', import.meta.url))
+export const fixtures = built.fixtures
 /** A directory holding no `index.html`. */
-export const noShell = fileURLToPath(new URL('../_testdata/fixtures2', import.meta.url))
+export const noShell = built.fixtures2
 
 // The header sets a browser sends, mirroring test/e2e/internal/browser/index.ts so the two layers agree on what
 // a navigation, a fetch and a script request look like.

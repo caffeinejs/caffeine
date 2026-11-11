@@ -3,18 +3,18 @@ import { $t } from '@caffeinejs/application/schema'
 
 import type { StaticOptions } from '../config.js'
 
-/**
- * One mount. Only `root` and `anonymous` are declared: the `@fastify/static` options are not ours, they are
- * numerous, and they move between releases, so a hand-maintained mirror would reject options that work. Every
- * other key is kept and handed to `@fastify/static` as written.
- */
-const mountSchema = $t.Object(
-  {
-    root: $t.Union([$t.String(), $t.Array($t.String())]),
-    anonymous: $t.Optional($t.Boolean()),
-  },
-  { additionalProperties: $t.Unknown() },
-)
+/** One mount: its root and the data members of `MountOptions`. `headers` is a function and stays in code. */
+const mountSchema = $t.Object({
+  root: $t.String(),
+  prefix: $t.Optional($t.String()),
+  anonymous: $t.Optional($t.Boolean()),
+  mode: $t.Optional($t.UnionEnum(['manifest', 'scan'])),
+  index: $t.Optional($t.Union([$t.String(), $t.Literal(false)])),
+  unrouted: $t.Optional($t.Array($t.String())),
+  cacheControl: $t.Optional($t.String()),
+  immutableMaxAge: $t.Optional($t.Duration()),
+  immutable: $t.Optional($t.Array($t.String())),
+})
 
 /**
  * The schema of the static files configuration block, satisfying {@link StaticOptions}. Hand the node to

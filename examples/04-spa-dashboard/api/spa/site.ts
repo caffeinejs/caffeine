@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 
-import { immutableAssets, spaMount, staticFiles } from '@caffeinejs/static'
+import { staticFiles } from '@caffeinejs/static'
 
 /**
  * The built front end. The one path that crosses from `api/` to `web/`.
@@ -13,18 +13,17 @@ export const SITE = fileURLToPath(new URL('../../web/dist', import.meta.url))
 /**
  * Serves the bundle, and nothing else — the client routes are the application's own (`pages.ts`).
  *
- * `spaMount()` supplies `wildcard: false` (so a miss falls through to the client-route wildcard instead of the
- * mount answering its own 404, and so the mount's default catch-all does not collide with it), `index: false`
- * and a `globIgnore` that keeps `index.html` and the compressed siblings off the mount.
+ * The mount serves what `web/build.mjs` listed in `static.manifest.json`. A miss at the root falls through to the
+ * client-route wildcard; a miss under `assets/` is the mount's own `404`. `unrouted` keeps `index.html` off the
+ * router, so the shell is answered only by the document routes in `pages.ts`, through `sendFile`. The compressed
+ * variants come from the manifest, so they apply to that `sendFile` too, and are never URLs of their own.
  *
- * `preCompressed` then serves `.br`/`.gz` from beside each file. It is filesystem-side rather than routing, so
- * it also applies to the `sendFile` in `pages.ts` — the shell is compressed without the route asking.
+ * `immutable` pins the hashed bundle for a year; everything else is revalidated on every use.
  *
- * `{ anonymous: true }` is what keeps this working under `requireAuthenticatedByDefault()`: the sign-in page
- * has to load its own scripts before anyone is signed in. It covers `favicon.svg`, `robots.txt`,
- * `sitemap.xml` and `manifest.webmanifest` too — each is its own route under `wildcard: false`, and listing
- * them by hand in the gate's `except` would drift the moment the build emits another one.
+ * `anonymous: true` is what keeps this working under `requireAuthenticatedByDefault()`: the sign-in page has to
+ * load its own scripts before anyone is signed in. It covers `favicon.svg`, `robots.txt`, `sitemap.xml` and
+ * `manifest.webmanifest` too, and lets a shared cache store them, since they are the same for every caller.
  */
 export const site = staticFiles(s =>
-  s.serve(SITE, { ...spaMount(), preCompressed: true, setHeaders: immutableAssets(SITE) }, { anonymous: true }),
+  s.serve(SITE, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] }),
 )

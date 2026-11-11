@@ -1,31 +1,24 @@
-import { fileURLToPath } from 'node:url'
+import { brotliDecompressSync } from 'node:zlib'
 
 import { type WebApplication } from '@caffeinejs/http'
 import { newRouter } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { immutableAssets, spaMount, staticFiles } from '../../index.js'
-import { clientRouteOf, expectNotFoundJSON, isolated, NAVIGATION, SCRIPT, shellOf } from './_headers.js'
+import { staticFiles } from '../../index.js'
+import { readManifest } from '../../manifest/manifest.js'
+import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, SCRIPT, shellOf } from './_headers.js'
 
 /**
- * A build that ships `.br` and `.gz` next to every file, served with `preCompressed`.
+ * A build that wrote `br` and `gzip` variants of every compressible file, served from its manifest.
  *
- * Two halves are easy to get wrong and neither is visible without this scenario. `preCompressed` resolves the
- * sibling on the file system rather than through the router, so it works for the mount's file routes **and**
- * for `sendFile` from a compiled route — the shell is compressed without the application asking. And the
- * siblings must not become routes of their own: `spaMount()` ignores them, because a `GET` of
- * `…/app.js.br` would otherwise answer with raw brotli under `application/octet-stream` and no
- * `Content-Encoding`, which no client can read.
+ * Two halves are easy to get wrong and neither is visible without this scenario. The variants come from the
+ * manifest rather than the file system, so they serve the mount's file routes **and** `sendFile` from a compiled
+ * route: the shell is compressed without the application asking. And the variants never become routes of their
+ * own: a `GET` of one under `.static-variants/` would otherwise answer with raw brotli, which no client asked for.
  */
-const dist = fileURLToPath(new URL('../_testdata/compressed', import.meta.url))
-
 function site(): WebApplication {
   return isolated()
-    .with(
-      staticFiles(s =>
-        s.serve(dist, { ...spaMount(), preCompressed: true, setHeaders: immutableAssets(dist) }, { anonymous: true }),
-      ),
-    )
+    .with(staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
     .mount(
       newRouter()
         .detail('http', { internal: true })
@@ -36,46 +29,43 @@ function site(): WebApplication {
     ) as WebApplication
 }
 
-describe('a mount serving pre-compressed siblings', () => {
+const SCRIPT_URL = '/assets/app-eZr2sdaR.js'
+
+describe('a mount serving the compressed variants its build wrote', () => {
   let app: WebApplication
 
   afterEach(async () => {
     await app?.close()
   })
 
-  it('serves brotli to a client that accepts it', async () => {
+  it('serves brotli to a client that accepts it, typed as the file it stands for', async () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.request('/assets/app-Ab12Cd34.js', {
-      headers: { ...SCRIPT, 'accept-encoding': 'br' },
-    })
+    const res = await app.request(SCRIPT_URL, { headers: { ...SCRIPT, 'accept-encoding': 'gzip, deflate, br' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-encoding')).toBe('br')
-    expect(res.headers.get('vary') ?? '').toContain('accept-encoding')
-    // The content type stays the uncompressed file's, not the sibling's.
-    expect(res.headers.get('content-type') ?? '').toContain('javascript')
+    expect(res.headers.get('vary')).toBe('Accept-Encoding')
+    expect(res.headers.get('content-type')).toBe('text/javascript; charset=utf-8')
+    expect(brotliDecompressSync(Buffer.from(await res.arrayBuffer())).toString()).toContain('spa bundle')
   })
 
-  it('falls back through the encodings the client actually accepts', async () => {
+  it('falls back through the codings the client accepts, and to identity with no Accept-Encoding', async () => {
     app = site()
     await app.bootstrap()
 
-    const gzip = await app.request('/assets/app-Ab12Cd34.js', {
-      headers: { ...SCRIPT, 'accept-encoding': 'gzip' },
-    })
+    const gzip = await app.request(SCRIPT_URL, { headers: { ...SCRIPT, 'accept-encoding': 'gzip' } })
     expect(gzip.headers.get('content-encoding')).toBe('gzip')
 
-    // No `Accept-Encoding` at all: the identity bytes, and nothing invented.
-    const plain = await app.request('/assets/app-Ab12Cd34.js', { headers: SCRIPT })
+    const plain = await app.request(SCRIPT_URL, { headers: SCRIPT })
     expect(plain.status).toBe(200)
-    expect(plain.headers.get('content-encoding')).toBeNull()
-    expect(await plain.text()).toContain('compressed bundle')
+    expect(plain.headers.get('content-encoding')).toBe(null)
+    // A shared cache that stored this copy must not hand it to a client that asked for brotli, nor the reverse.
+    expect(plain.headers.get('vary')).toBe('Accept-Encoding')
+    expect(await plain.text()).toContain('spa bundle')
   })
 
-  // `sendFile` goes through the same pump and reads `preCompressed` off the plugin's registration closure,
-  // so a compiled route serving the shell gets it without asking.
   it('compresses the shell served from a compiled route', async () => {
     app = site()
     await app.bootstrap()
@@ -84,26 +74,25 @@ describe('a mount serving pre-compressed siblings', () => {
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-encoding')).toBe('br')
-    expect(res.headers.get('content-type') ?? '').toContain('text/html')
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
   })
 
-  // What `spaMount()`'s globIgnore is for: reachable as its own URL, this would hand out unreadable bytes.
-  it('does not register the compressed siblings as routes of their own', async () => {
+  it('does not register the variants as routes of their own', async () => {
     app = site()
     await app.bootstrap()
 
-    for (const path of ['/assets/app-Ab12Cd34.js.br', '/assets/app-Ab12Cd34.js.gz']) {
+    const { variants } = (await readManifest(dist)).files[SCRIPT_URL.slice(1)]!
+
+    for (const path of [`/${variants.br!.path}`, `/${variants.gzip!.path}`, `${SCRIPT_URL}.br`, `${SCRIPT_URL}.gz`]) {
       await expectNotFoundJSON(await app.request(path, { headers: NAVIGATION }))
     }
   })
 
-  it('still caches the hashed assets immutably', async () => {
+  it('caches the variant of a hashed asset immutably, as its identity', async () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.request('/assets/app-Ab12Cd34.js', {
-      headers: { ...SCRIPT, 'accept-encoding': 'br' },
-    })
+    const res = await app.request(SCRIPT_URL, { headers: { ...SCRIPT, 'accept-encoding': 'br' } })
 
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
   })

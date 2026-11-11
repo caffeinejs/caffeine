@@ -2,7 +2,7 @@ import { type WebApplication, Authentication, Authorization } from '@caffeinejs/
 import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { sendFile, spaMount, staticFiles } from '../../index.js'
+import { sendFile, staticFiles } from '../../index.js'
 import {
   admin as adminDist,
   clientRouteOf,
@@ -28,7 +28,11 @@ function origin(authenticateByDefault: boolean): WebApplication {
   const app = isolated()
     .install(Authentication(a => a.addStrategy('header', new HeaderAuthenticationHandler())))
     .with(authentication())
-    .with(staticFiles(s => s.serve(dist, spaMount(), { anonymous: true }).serve(adminDist, { serve: false })))
+    .with(
+      staticFiles(s =>
+        s.serve(dist, { unrouted: ['index.html'], anonymous: true }).serve(adminDist, { unrouted: ['**'] }),
+      ),
+    )
     .mount(
       newRouter('/api')
         .get('/pets', () => ({ pets: [] }))

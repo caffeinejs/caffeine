@@ -2,7 +2,7 @@ import { type WebApplication } from '@caffeinejs/http'
 import { newRouter } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { immutableAssets, spaMount, staticFiles } from '../../index.js'
+import { staticFiles } from '../../index.js'
 import { clientRouteOf, dist, expectNotFoundJSON, fixtures, isolated, NAVIGATION, SCRIPT, shellOf } from './_headers.js'
 
 /**
@@ -12,13 +12,14 @@ import { clientRouteOf, dist, expectNotFoundJSON, fixtures, isolated, NAVIGATION
  * `/app`, so the bare path is covered by the pair every subtree needs anyway. `/app/` needs no route of its
  * own — `/app/*` matches it with an empty wildcard. See `http/_tests/group_root_path.test.ts`.
  */
-function site(): WebApplication {
+function site(routerOptions: { ignoreTrailingSlash?: boolean } = {}): WebApplication {
   return isolated()
+    .server(() => ({ factory: { routerOptions } }))
     .with(
       staticFiles(s =>
         s
           .serve(fixtures, { prefix: '/static' })
-          .serve(dist, { ...spaMount(), prefix: '/app', setHeaders: immutableAssets(dist) }, { anonymous: true }),
+          .serve(dist, { prefix: '/app', unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] }),
       ),
     )
     .mount(
@@ -84,5 +85,22 @@ describe('an application mounted under a prefix', () => {
     await app.bootstrap()
 
     await expectNotFoundJSON(await app.request('/settings', { headers: NAVIGATION }))
+  })
+
+  // find-my-way matches `/app` and `/app/` as one route under `ignoreTrailingSlash`, so the mount registers each
+  // directory once and the shell's own routes still answer both spellings.
+  it('serves the same files under a router that ignores trailing slashes', async () => {
+    app = site({ ignoreTrailingSlash: true })
+    await app.bootstrap()
+
+    for (const path of ['/app', '/app/', '/app/settings/']) {
+      const res = await app.request(path, { headers: NAVIGATION })
+
+      expect(res.status, path).toBe(200)
+      expect(await res.text(), path).toContain('<div id="root">')
+    }
+
+    expect((await app.request('/app/assets/app-eZr2sdaR.js/', { headers: SCRIPT })).status).toBe(200)
+    expect((await app.request('/static/hello.txt/')).status).toBe(200)
   })
 })
