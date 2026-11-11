@@ -497,7 +497,7 @@ export class HeldLock implements Lock {
         this.#finishRefusal()
       }
 
-      this.#extendFailed(error, renewal, ctx)
+      this.#extendFailed(error, renewal && sent.token === this.token, ctx)
       throw error
     }
 
@@ -523,7 +523,9 @@ export class HeldLock implements Lock {
       this.#ttl = ttl
     }
 
-    if (this.#taken || this.#ownershipUncertain() || this.expiresAt <= Date.now()) {
+    // The answer can make a bound already past count again: the lease ends here, not when the timer gets to it.
+    this.#expireIfDue()
+    if (this.#taken || this.#ownershipUncertain() || this.#earliestExpiry() <= Date.now()) {
       if (ctx !== undefined) {
         ctx.outcome = 'lost'
       }
@@ -541,7 +543,8 @@ export class HeldLock implements Lock {
   }
 
   // Records an extension that failed. The lease is left as it was: an explicit extend lets its caller decide; a
-  // renewal retries while the lease has time, and marks it lost once the channel has settled when it does not.
+  // renewal retries while the lease has time, and marks it lost once the channel has settled when it does not. A
+  // renewal under a token the lock has moved off is no renewal of the current lease, and is passed as `false`.
   #extendFailed(error: unknown, renewal: boolean, ctx: Writable<ExtendContext> | undefined): void {
     const { storeTimeout } = this.#host.options
 
@@ -682,6 +685,8 @@ export class HeldLock implements Lock {
       this.#refusedRenewal = undefined
       this.#leaseReplies = undefined
       this.#unanswered.clear()
+      // Renewals that failed did so under the token this one replaces.
+      this.#renewalFailed = false
       this.#lease = next
       this.#leaseTTL = ttl
     } else if (version === previousVersion) {
@@ -694,21 +699,17 @@ export class HeldLock implements Lock {
       possibleLatest.push({ version: this.#leaseVersion, lease: next, ttl })
       this.#leaseReplies = possibleLatest
 
-      // Whichever of these landed last sets the expiry. A backend reports an expiry no later than `ttl` after the
-      // write landed, so the last one landed no earlier than the latest `expiresAt - ttl` among them and holds the key
-      // at least its `ttl` from then. The lease is the reply that can end soonest by that measure, the later expiry
-      // on a tie, and an unanswered write counts against it unless it asks for at least the longest of them.
-      const landed = Math.max(...possibleLatest.map(reply => reply.lease.expiresAt - reply.ttl))
-      const ends = (reply: { lease: LockLease; ttl: Duration }) => Math.max(reply.lease.expiresAt, landed + reply.ttl)
-      let chosen = possibleLatest[0]!
+      // Whichever of these landed last sets the expiry, and each reports only the validity its own backend vouches
+      // for: the lease is the earliest of them, and an unanswered write counts against it unless it asks for at least
+      // the longest of them.
+      this.#lease = next
+      this.#leaseTTL = ttl
       for (const reply of possibleLatest) {
-        const sooner = ends(reply) - ends(chosen)
-        if (sooner < 0 || (sooner === 0 && reply.lease.expiresAt > chosen.lease.expiresAt)) {
-          chosen = reply
+        if (reply.lease.expiresAt < this.expiresAt) {
+          this.#lease = reply.lease
         }
+        this.#leaseTTL = Math.max(this.#leaseTTL, reply.ttl)
       }
-      this.#lease = chosen.lease
-      this.#leaseTTL = Math.max(...possibleLatest.map(reply => reply.ttl))
     }
 
     if (this.#timer !== undefined && (this.expiresAt < previousExpiry || previousExpiry <= Date.now())) {
