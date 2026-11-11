@@ -14,6 +14,8 @@ RUN --mount=type=cache,target=/root/.npm \
   npm ci --ignore-scripts --no-audit --no-fund --workspace=@caffeinejs/devtools-ui --include-workspace-root
 COPY . .
 RUN node_modules/.bin/tsc --build devtools-ui/tsconfig.build.json
+# The manifest and compressed variants `staticFiles(...)` serves public/ from.
+RUN npm run build:static -w @caffeinejs/devtools-ui
 
 # Copies each linked workspace package as published: its `files`, its package.json (npm always packs it) and any
 # nested node_modules.

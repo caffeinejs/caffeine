@@ -96,7 +96,7 @@ export function parseDuration(text: string): Duration {
  *
  * @example
  * // A third-party option in milliseconds
- * staticFiles(s => s.serve(dir, { maxAge: duration('7d') }))
+ * new LRUCache({ max: 500, ttl: duration('7d') })
  * // One in seconds
  * { clockTolerance: seconds(duration('30s')) }
  *

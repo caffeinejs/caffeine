@@ -8,7 +8,7 @@ import {
 import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { immutableAssets, spaMount, staticFiles } from '../../index.js'
+import { staticFiles } from '../../index.js'
 import {
   clientRouteOf,
   dist,
@@ -74,7 +74,7 @@ function bff(gatedPages: boolean): WebApplication {
     .install(Authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login'))))
     .with(authentication())
     .install(Authorization(z => z.requireAuthenticatedByDefault()))
-    .with(staticFiles(s => s.serve(dist, { ...spaMount(), setHeaders: immutableAssets(dist) }, { anonymous: true })))
+    .with(staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
     .mount(auth, api, signIn, pages, rest) as WebApplication
 }
 

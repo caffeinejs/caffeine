@@ -13,6 +13,8 @@ WORKDIR /app
 COPY . .
 RUN npm ci
 RUN npm run build
+# The manifest `staticFiles(...)` serves public/ from. The entrypoint runs `tsx src/main.ts` directly, never `start`.
+RUN npm run build:static -w @caffeinejs/example-petstore
 
 # The caffeine CLI's `generate` command is Bun-only — it uses Bun.Glob, Bun.file and Bun.write, and its published
 # bin runs a `bun build --compile` native binary that the root `tsc --build` never produces. So codegen runs in a Bun

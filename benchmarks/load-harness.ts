@@ -26,6 +26,8 @@ export interface RequestSpec {
   method?: 'GET' | 'POST'
   headers?: Record<string, string>
   body?: string
+  /** The status class every response must have. Default `'2xx'`; `'3xx'` for a revalidation answered `304`. */
+  expect?: '2xx' | '3xx'
 }
 
 export interface LoadBenchmark {
@@ -193,8 +195,10 @@ async function measure(server: ServerConfig, benchmark: LoadBenchmark): Promise<
       throw failure
     }
     // A server that rejects every request answers faster than one that serves them, and would top the table.
-    if (result.non2xx > 0) {
-      throw new Error(`Cannot accept the "${server.name}" run: ${result.non2xx} non-2xx responses`)
+    const expected = spec.expect ?? '2xx'
+    const unexpected = result['1xx'] + result['2xx'] + result['3xx'] + result['4xx'] + result['5xx'] - result[expected]
+    if (unexpected > 0) {
+      throw new Error(`Cannot accept the "${server.name}" run: ${unexpected} responses that are not ${expected}`)
     }
     // `errors` counts timeouts too.
     if (result.errors > MAX_FAILURES) {

@@ -16,29 +16,30 @@ Close everything else on the machine before a timing run, and do not run two ben
 
 ## What each one isolates
 
-| Name                           | Measures                                                                     |
-| ------------------------------ | ---------------------------------------------------------------------------- |
-| `helloworld`                   | Routing and serialization floor: one `GET` returning a small object          |
-| `request`                      | A validated `POST`: params, query, body, headers, a hook, a response schema  |
-| `request:bun`                  | The `request` fixtures on Bun                                                |
-| `mixedscopes`                  | `request` plus one request-scoped dependency                                 |
-| `authn`                        | JWT bearer verification and a role check                                     |
-| `caching`                      | A 16 KB JSON `GET` served from each framework's response cache, and uncached |
-| `fastify`                      | The server alone against its fetch-style routing plugin                      |
-| `fetchy`                       | One JSON `POST` through fetchy and through other HTTP clients                |
-| `fetchy:overhead`              | fetchy's own cost per call, over a transport that answers from memory        |
-| `startup`                      | Process start to listening, and bootstrap alone, for one six-module app      |
-| `memory`                       | Heap held by that app once built, over an empty process                      |
-| `testing`                      | Building an app, serving one request in-process, and closing it              |
-| `di`, `di-compile`             | Container resolution and binding; `compile()` and boot at 200–2000 bindings  |
-| `di-compare`, `di-perf`        | Resolution against other containers                                          |
-| `aspect`                       | A woven method call against a plain one                                      |
-| `resilience`                   | Strategy overhead around a no-op operation                                   |
-| `config-read`, `config-reload` | One configuration read on a request path; one reload of a 448-leaf tree      |
+| Name                           | Measures                                                                            |
+| ------------------------------ | ----------------------------------------------------------------------------------- |
+| `helloworld`                   | Routing and serialization floor: one `GET` returning a small object                 |
+| `request`                      | A validated `POST`: params, query, body, headers, a hook, a response schema         |
+| `request:bun`                  | The `request` fixtures on Bun                                                       |
+| `mixedscopes`                  | `request` plus one request-scoped dependency                                        |
+| `authn`                        | JWT bearer verification and a role check                                            |
+| `caching`                      | A 16 KB JSON `GET` served from each framework's response cache, and uncached        |
+| `fastify`                      | The server alone against its fetch-style routing plugin                             |
+| `fetchy`                       | One JSON `POST` through fetchy and through other HTTP clients                       |
+| `fetchy:overhead`              | fetchy's own cost per call, over a transport that answers from memory               |
+| `startup`                      | Process start to listening, and bootstrap alone, for one six-module app             |
+| `memory`                       | Heap held by that app once built, over an empty process                             |
+| `testing`                      | Building an app, serving one request in-process, and closing it                     |
+| `di`, `di-compile`             | Container resolution and binding; `compile()` and boot at 200–2000 bindings         |
+| `di-compare`, `di-perf`        | Resolution against other containers                                                 |
+| `aspect`                       | A woven method call against a plain one                                             |
+| `resilience`                   | Strategy overhead around a no-op operation                                          |
+| `config-read`, `config-reload` | One configuration read on a request path; one reload of a 448-leaf tree             |
+| `static`, `static:startup`     | Files from a built manifest against `@fastify/static`; `bootstrap()` at 5,000 files |
 
 ## Load benchmarks
 
-`helloworld`, `request`, `request:bun`, `mixedscopes`, `authn`, `caching` and `fastify` share `load-harness.ts`.
+`helloworld`, `request`, `request:bun`, `mixedscopes`, `authn`, `caching`, `fastify` and `static` share `load-harness.ts`.
 
 - Every server runs in its own process, under the Node binary running the harness, with `NODE_ENV=production`.
 - Rounds are interleaved and rotated: each round runs every server once and starts one server later than the
