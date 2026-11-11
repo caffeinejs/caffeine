@@ -93,7 +93,7 @@ export class ErrLockBackendTimeout extends ErrDistLock {
 const LOST_BECAUSE: Record<LostReason, string> = {
   taken: 'another holder took the key',
   expired: 'the lease expired',
-  error: 'a renewal could not reach the backend',
+  error: 'an extension could not reach the backend',
   shutdown: 'the lock service is closing',
 }
 
