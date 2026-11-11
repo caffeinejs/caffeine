@@ -677,12 +677,7 @@ export class HeldLock implements Lock {
       return false
     }
 
-    // This write landed after every failed one settled before it was sent: whatever those did, it overrode.
-    for (const [key, write] of this.#unanswered) {
-      if (write.settled !== undefined && write.settled < seq) {
-        this.#unanswered.delete(key)
-      }
-    }
+    this.#supersedeFailed(seq)
 
     const previousExpiry = this.expiresAt
     const previousVersion = this.#leaseVersion
@@ -728,6 +723,16 @@ export class HeldLock implements Lock {
     this.#rearmDeadline()
     this.#schedule()
     return true
+  }
+
+  // A write that succeeded landed after every failed one that settled before it was sent: whatever those did, it
+  // overrode.
+  #supersedeFailed(seq: number): void {
+    for (const [key, write] of this.#unanswered) {
+      if (write.settled !== undefined && write.settled < seq) {
+        this.#unanswered.delete(key)
+      }
+    }
   }
 
   // The one loss a lease can have: whichever of the deadline, a renewal or shutdown notices first reports it, and
