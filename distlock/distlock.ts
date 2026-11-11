@@ -1,3 +1,5 @@
+import { addAbortListener } from 'node:events'
+
 import type { Logger } from '@caffeinejs/application/logger'
 import { type OnDestroy } from '@caffeinejs/di'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
@@ -30,16 +32,16 @@ export interface Lock {
   /**
    * Epoch milliseconds the lease is good until, as the backend reported it.
    *
-   * When two extends were on the wire together, the backend may have applied them in either order, so this is the
-   * earlier of the expiries they reported.
+   * When extends under the same token overlap, the backend may apply them in a different order from their replies.
+   * The lock uses the earliest expiry that those writes could have left in the backend.
    */
   readonly expiresAt: number
 
   /**
    * Whether the lease is gone — its validity has passed, it was released, or a renewal found it taken.
    *
-   * Also `true` while an `extend` that timed out has not answered: the backend may have applied it, and a shorter
-   * `ttl` shortens the lease, so the lease is not one to act on until the answer says how long it now runs.
+   * Also `true` while a shortening extension, timeout or refusal leaves ownership uncertain. The backend may
+   * have shortened the lease or rotated its token before answering.
    */
   get lost(): boolean
 
@@ -56,8 +58,8 @@ export interface Lock {
   /**
    * Extends the lease by `ttl`, or by the lock service's default when omitted.
    *
-   * `false` means the lease was already lost, so whatever the critical section is doing is no longer
-   * protected.
+   * `false` means the lease was lost or ownership could not be confirmed when the call completed.
+   * An overlapping write can leave ownership uncertain even when the backend applied this extension.
    */
   extend(ttl?: Duration): Promise<boolean>
 
@@ -209,14 +211,12 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   /**
    * Stops every renewal timer when the container is disposed, and waits for the renewals already in flight.
    *
-   * Once this resolves nothing here writes to the backend again, which is what makes disposal a point an
-   * adapter can be torn down after. A renewal stuck past `storeTimeout` is not waited for, and an answer it
-   * sends later is dropped rather than given back. A command the backend already sent may still complete there
-   * unless the backend can cancel or drain it. The listeners on {@link events} are removed last, so they still
-   * hear about those renewals.
+   * Disposal stops automatic renewal, acquisition retries and late hand-backs. An outstanding renewal is
+   * waited for up to its store deadline. A command already sent can still complete unless the backend can
+   * cancel or drain it. The listeners on {@link events} are removed after the bounded renewal waits.
    *
-   * Held keys are left alone: `withLock` releases on its own path, and a `once` window has to outlive the
-   * process that opened it or the next replica up would redo the work.
+   * Callers finish work already using the service before tearing down its backend. `withLock` releases on
+   * its own path, and a completed `once` window is left to expire.
    */
   async onDestroy(): Promise<void> {
     this.#disposed = true
@@ -323,7 +323,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     try {
       lease = await this.#attempt(key, ttl, signal, tally)
     } catch (error) {
-      this.#settleAcquire(ctx, key, signal?.aborted === true ? 'aborted' : 'error', tally, started)
+      this.#settleAcquire(ctx, key, tally.aborted ? 'aborted' : 'error', tally, started)
       throw error
     }
 
@@ -354,7 +354,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     try {
       lease = await this.#retry(key, ttl, deadline, retryDelay, options.signal, tally)
     } catch (error) {
-      this.#settleAcquire(ctx, key, options.signal?.aborted === true ? 'aborted' : 'error', tally, started)
+      this.#settleAcquire(ctx, key, tally.aborted ? 'aborted' : 'error', tally, started)
       throw error
     }
 
@@ -389,7 +389,10 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
   ): Promise<LockLease | undefined> {
     let timedOut: ErrLockBackendTimeout | undefined
     for (;;) {
-      signal?.throwIfAborted()
+      if (signal?.aborted === true) {
+        tally.aborted = true
+        throw signal.reason
+      }
 
       tally.attempts += 1
       timedOut = undefined
@@ -399,7 +402,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
           return lease
         }
       } catch (error) {
-        if (!(error instanceof ErrLockBackendTimeout) || signal?.aborted === true) {
+        if (!(error instanceof ErrLockBackendTimeout) || Boolean(signal?.aborted)) {
           throw error
         }
 
@@ -411,8 +414,13 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
         break
       }
 
-      await sleep(Math.min(jittered(retryDelay, this.options.retryJitter), deadline - now), signal)
-      if (this.#disposed) {
+      try {
+        await sleep(Math.min(jittered(retryDelay, this.options.retryJitter), deadline - now), signal)
+      } catch (error) {
+        tally.aborted = true
+        throw error
+      }
+      if (this.#disposed || Date.now() >= deadline) {
         break
       }
     }
@@ -440,6 +448,9 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
           timeout: Math.min(storeTimeout, ttl),
           bound: storeTimeout <= ttl ? 'storeTimeout' : 'ttl',
           signal,
+          onCallerAbort: () => {
+            tally.aborted = true
+          },
         },
         bounded => this.backend.tryAcquire(key, ttl, bounded),
         late => {
@@ -452,7 +463,7 @@ export class CaffeineDistLock implements DistLock, OnDestroy {
     } catch (error) {
       // A backend that gave up because the caller aborted did nothing wrong. One incident per call: the attempts
       // after the first that failed are its consequences.
-      if (signal?.aborted !== true) {
+      if (!tally.aborted) {
         const fields = { err: error, key, operation: 'acquire' }
         if (tally.failed) {
           this.log.debug(fields, 'lock backend failed')
@@ -654,12 +665,13 @@ type Miss = 'held' | 'expired'
 interface Tally {
   attempts: number
   failures: { timeout: number; other: number }
+  aborted: boolean
   failed: boolean
   expired: boolean
 }
 
 function newTally(): Tally {
-  return { attempts: 0, failures: { timeout: 0, other: 0 }, failed: false, expired: false }
+  return { attempts: 0, failures: { timeout: 0, other: 0 }, aborted: false, failed: false, expired: false }
 }
 
 function checkKey(key: unknown): void {
@@ -690,24 +702,18 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       return
     }
 
-    let onAbort: (() => void) | undefined
-
     const timer = setTimeout(() => {
-      if (onAbort !== undefined) {
-        signal?.removeEventListener('abort', onAbort)
-      }
-
+      callerAbort?.[Symbol.dispose]()
       resolve()
     }, ms)
     timer.unref?.()
 
-    if (signal !== undefined) {
-      onAbort = () => {
-        clearTimeout(timer)
-        reject(signal.reason)
-      }
-
-      signal.addEventListener('abort', onAbort, { once: true })
-    }
+    const callerAbort =
+      signal === undefined
+        ? undefined
+        : addAbortListener(signal, () => {
+            clearTimeout(timer)
+            reject(signal.reason)
+          })
   })
 }

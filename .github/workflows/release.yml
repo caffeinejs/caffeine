@@ -1,0 +1,275 @@
+name: Release
+
+# Publishes the release a `v*` tag names. It checks the tag, packs the packages once, drafts the GitHub release from
+# the commits since the previous tag with the SBOM of each platform's binary, publishes those same tarballs to npm once
+# a reviewer of the `release` environment approves, pushes the signed devtools-ui image, and then publishes the GitHub
+# release. Running it again after a failure skips what npm has already.
+#
+# Run by hand, it rehearses on the commit it runs on: every check, the packing, the notes in the run summary and an
+# `npm publish --dry-run`, with nothing created or published.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# One release at a time, and never one cancelled halfway through its publish. A rehearsal waits for nothing.
+concurrency:
+  group: ${{ github.event_name == 'push' && 'release' || format('release-rehearsal-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every branch and tag: the branch check and the notes read the history.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Tag
+        if: ${{ github.event_name == 'push' }}
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Cannot release $TAG: the root package.json is at $version, so the tag must be v$version"
+            exit 1
+          fi
+
+      - name: Branch
+        run: |
+          for ref in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin); do
+            if [[ "${ref#origin/}" =~ ^(main|[0-9]+\.x)$ ]] && git merge-base --is-ancestor "$GITHUB_SHA" "$ref"; then
+              exit 0
+            fi
+          done
+          echo "::error::Cannot release $GITHUB_SHA: neither main nor an N.x branch holds it: tag a commit merged there"
+          exit 1
+
+      - name: CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&status=success" --jq '.total_count')
+          if [ "$passed" -eq 0 ]; then
+            echo "::error::Cannot release $GITHUB_SHA: CI has not passed on it: wait for the CI run of the push, or run CI on it"
+            exit 1
+          fi
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      # A tag lists the commits since the previous release tag. A release lists every commit since the previous
+      # release, its release candidates' included, in one section, even when it tags the commit the last one did.
+      - name: Notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            exclude=
+            case "$TAG" in *-*) ;; *) exclude='*-*' ;; esac
+            previous=$(git describe --tags --abbrev=0 --match 'v*' --exclude "$TAG" ${exclude:+--exclude "$exclude"} "$GITHUB_SHA" 2> /dev/null || true)
+            ./node_modules/.bin/git-cliff --tag "$TAG" ${exclude:+--ignore-tags '-'} --output notes.md "${previous:+$previous..}$GITHUB_SHA"
+          else
+            ./node_modules/.bin/git-cliff --unreleased --output notes.md
+          fi
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload notes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notes
+          path: notes.md
+          if-no-files-found: error
+          retention-days: 7
+
+  package:
+    name: Package
+    needs: verify
+    uses: ./.github/workflows/package.yml
+    with:
+      # The publish job downloads these tarballs once a reviewer approves, which can take up to 30 days.
+      retention-days: 30
+    permissions:
+      contents: read
+
+  draft:
+    name: Draft
+    runs-on: ubuntu-latest
+    needs: package
+    if: ${{ github.event_name == 'push' }}
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Notes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: notes
+
+      - name: SBOMs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sboms
+          path: sboms
+
+      # A draft from an earlier attempt is kept, with the edits made to it since; its SBOMs are replaced by this run's.
+      - name: Draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "The release $TAG exists already: kept"
+          else
+            prerelease=
+            case "$TAG" in *-*) prerelease=--prerelease ;; esac
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag $prerelease \
+              --title "$TAG" --notes-file notes.md
+          fi
+          gh release upload "$TAG" sboms/*.cdx.json --repo "$GITHUB_REPOSITORY" --clobber
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: draft
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+      # npm trusted publishing exchanges this job's OIDC token for a publish token, and attaches provenance.
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # No registry-url: its placeholder token would reach `npm view`, and trusted publishing needs none.
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: NPM
+        run: |
+          version=$(npm --version)
+          if ! node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); process.exit(a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1))) ? 0 : 1)' "$version"; then
+            echo "::error::Cannot publish with npm $version: trusted publishing needs npm 11.5.1 or later"
+            exit 1
+          fi
+
+      - name: Packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: artifacts
+
+      - name: Publish
+        run: node tools/publish.mjs artifacts
+
+  # Built from the tagged commit, as CI built it, once npm has the packages: no approval of its own.
+  image:
+    name: Image
+    runs-on: ubuntu-latest
+    needs: publish
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Pushes to ghcr.io.
+      packages: write
+      # Signs with cosign and attests the provenance, keyless.
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # The tag with and without its v, such as v1.2.0 and 1.2.0, and `latest` for a tag that is not a prerelease.
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/devtools-ui
+          tags: |
+            type=semver,pattern={{raw}}
+            type=semver,pattern={{version}}
+
+      # The Dockerfile's labels stand: the action's would name the image after the repository.
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: devtools-ui/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          sbom: true
+          provenance: mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/devtools-ui@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$IMAGE"
+
+      - name: Attest provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/devtools-ui
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+  finalize:
+    name: Finalize
+    runs-on: ubuntu-latest
+    needs: image
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false

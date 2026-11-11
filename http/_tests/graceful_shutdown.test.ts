@@ -236,7 +236,7 @@ describe('graceful shutdown', () => {
   })
 
   // What a connection had already sent when closing began is a request, not silence, even before the server has
-  // read it: it gets the 503 Fastify answers every request with once closing, not a reset.
+  // read it: the server reads it before it stops taking requests, and answers it, not with a reset.
   it('answers a request whose bytes arrived as closing began', async () => {
     const app = await start(s => s.drainDelay(0).shutdownTimeout(5 * Second))
     const client = await silentConnection(app)
@@ -249,7 +249,7 @@ describe('graceful shutdown', () => {
     await expect(app.close()).resolves.toBeUndefined()
     await hungUp
 
-    expect(received).toMatch(/^HTTP\/1\.1 503 /)
+    expect(received).toMatch(/^HTTP\/1\.1 200 /)
   })
 
   // The server listens until its `preClose` hooks have run, so a client can still connect once closing has begun.

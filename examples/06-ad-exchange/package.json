@@ -24,7 +24,7 @@
   "devDependencies": {
     "@caffeinejs/cli": "0.0.0",
     "@types/autocannon": "^7.12.7",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.6",
     "autocannon": "^8.0.0",
     "tsx": "^4.23.15"
   }

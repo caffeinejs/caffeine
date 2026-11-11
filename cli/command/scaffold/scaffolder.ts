@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { access, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 export interface ScaffoldContext {
@@ -32,13 +32,18 @@ async function exists(p: string): Promise<boolean> {
   )
 }
 
+// The compiled binary embeds the templates and the ai/ pack, and copyFile cannot read a file it embeds.
+async function copy(src: string, dest: string): Promise<void> {
+  await writeFile(dest, await readFile(src))
+}
+
 async function copyTree(srcDir: string, destDir: string): Promise<void> {
   const files = await walk(srcDir)
   for (const src of files) {
     const rel = src.slice(srcDir.length + 1)
     const dest = join(destDir, rel)
     await mkdir(dirname(dest), { recursive: true })
-    await copyFile(src, dest)
+    await copy(src, dest)
   }
 }
 
@@ -63,10 +68,10 @@ export async function findAiDir(start: string): Promise<string | undefined> {
 async function copyAgentFiles(outDir: string, aiDir: string): Promise<void> {
   const templates = join(aiDir, 'templates')
   if (await exists(join(templates, 'AGENTS.md'))) {
-    await copyFile(join(templates, 'AGENTS.md'), join(outDir, 'AGENTS.md'))
+    await copy(join(templates, 'AGENTS.md'), join(outDir, 'AGENTS.md'))
   }
   if (await exists(join(templates, 'CLAUDE.md'))) {
-    await copyFile(join(templates, 'CLAUDE.md'), join(outDir, 'CLAUDE.md'))
+    await copy(join(templates, 'CLAUDE.md'), join(outDir, 'CLAUDE.md'))
   }
 
   const skills = join(aiDir, 'skills')
@@ -89,7 +94,7 @@ export async function scaffold(ctx: ScaffoldContext): Promise<void> {
       pkg.name = ctx.projectName
       await writeFile(dest, JSON.stringify(pkg, null, 2) + '\n')
     } else {
-      await copyFile(src, dest)
+      await copy(src, dest)
     }
   }
 
