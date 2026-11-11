@@ -1,10 +1,21 @@
+import { $t } from '@caffeinejs/application/schema'
 import { Scopes, Injectable, Lifetime } from '@caffeinejs/di'
-import type { FastifyInstance } from 'fastify'
+import type { FastifyError, FastifyInstance } from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import { $p } from '../../core/routing/picker.js'
-import { Controller, Get, Method, Router, Args } from '../../index.js'
-import { Context, createWebApplication } from './index.js'
+import {
+  Catch,
+  Controller,
+  Get,
+  Method,
+  Router,
+  Args,
+  type ErrorHandler,
+  type IContext,
+  type WebApplication,
+} from '../../index.js'
+import { Context, createWebApplication, newRouter } from './index.js'
 
 describe('Fastify Adapter', () => {
   // Binds a real ephemeral socket (unlike the app.request() tests below), so it can hang up under
@@ -256,5 +267,91 @@ describe('Fastify Adapter', () => {
 
       await app.close()
     })
+  })
+})
+
+@Catch(Error)
+class MessageEcho implements ErrorHandler<FastifyError> {
+  async handle(ctx: IContext, err: FastifyError) {
+    ctx.status(409)
+    return { message: err.message }
+  }
+}
+void [MessageEcho]
+
+describe('the schema error formatter', () => {
+  // 1,000 items, each missing 20 required members.
+  const Twenty = $t.Object({
+    items: $t.Array($t.Object(Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`f${i}`, $t.String()])))),
+  })
+  const EMPTY_ITEMS = JSON.stringify({ items: Array.from({ length: 1_000 }, () => ({})) })
+
+  async function messageOf(app: WebApplication<any, any, any, any>): Promise<unknown> {
+    await app.bootstrap()
+    const res = await app.request('/fmt', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: EMPTY_ITEMS,
+    })
+    await app.close()
+
+    return ((await res.json()) as { message: unknown }).message
+  }
+
+  function route() {
+    return newRouter('/fmt')
+      .catchBy([MessageEcho])
+      .post('/', { body: Twenty }, () => ({ ok: true }))
+  }
+
+  // Fastify's own would join all 20,000 of Ajv's messages into the one an application handler and every log line read.
+  it('names the slot and the count rather than every message', async () => {
+    const app = createWebApplication()
+      .server(() => ({ factory: { ajv: { customOptions: { allErrors: true } } } }))
+      .mount(route())
+
+    expect(await messageOf(app)).toBe('Invalid request body: 20000 errors')
+  })
+
+  it('keeps a formatter the factory settings name', async () => {
+    const app = createWebApplication()
+      .server(() => ({ factory: { schemaErrorFormatter: (_errors, slot) => new Error(`own ${slot}`) } }))
+      .mount(route())
+
+    expect(await messageOf(app)).toBe('own body')
+  })
+
+  it('gives way to a formatter a server callback sets', async () => {
+    const app = createWebApplication()
+      .serverCallback((_kit, instance) => {
+        instance.setSchemaErrorFormatter((_errors, slot) => new Error(`late ${slot}`))
+      })
+      .mount(route())
+
+    expect(await messageOf(app)).toBe('late body')
+  })
+})
+
+// Installing the formatter must leave the application's Ajv options as they were, alone or beside others.
+describe('the Ajv options an application sets', () => {
+  it.each([
+    ['alone', { allErrors: true }],
+    ['beside another option', { allErrors: true, coerceTypes: false }],
+  ])('keeps allErrors %s', async (_, customOptions) => {
+    const app = createWebApplication()
+      .server(() => ({ factory: { ajv: { customOptions } } }))
+      .mount(
+        newRouter('/all').post('/', { body: $t.Object({ a: $t.Integer(), b: $t.Integer() }) }, () => ({ ok: true })),
+      )
+    await app.bootstrap()
+
+    const res = await app.request('/all', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ a: 'x', b: 'y' }),
+    })
+    await app.close()
+
+    expect(((await res.json()) as { errors: unknown[] }).errors).toHaveLength(2)
   })
 })

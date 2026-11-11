@@ -521,7 +521,8 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
         expect(error).toBeInstanceOf(ErrLockBackendTimeout)
         expect(elapsed).toBeLessThan(STORE_TIMEOUT + 500)
 
-        // The SET reached the server and its reply was only held back: the late lease is given back.
+        // The SET reached the server. Only its reply is held back.
+        expect(await admin.exists(k)).toBe(1)
         relayed.proxy.release()
         await waitFor(async () => (await admin.exists(k)) === 0, 2 * Second)
 
@@ -610,11 +611,14 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
         relayed.proxy.dropConnections()
 
         const started = performance.now()
-        // The client fails the command on the dropped socket, and a backend error that is not a timeout is not
-        // retried.
-        await expect(lock.acquire(k, { ttl: 10 * Second, wait: 500 * Millisecond })).rejects.toBeInstanceOf(
-          SocketClosedUnexpectedlyError,
-        )
+        // A dropped socket can surface either Redis's close error or a TLS reset. Both are immediate backend errors.
+        const error = await lock
+          .acquire(k, { ttl: 10 * Second, wait: 500 * Millisecond })
+          .catch((failure: unknown) => failure)
+        expect(
+          error instanceof SocketClosedUnexpectedlyError ||
+            (error instanceof Error && 'code' in error && error.code === 'ECONNRESET'),
+        ).toBe(true)
         expect(performance.now() - started).toBeLessThan(500 + STORE_TIMEOUT + 500)
         expect(outcomes).toEqual(['error'])
 

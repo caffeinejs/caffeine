@@ -1,6 +1,6 @@
 services:
   redis:
-    image: redis:8.10.3-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537
+    image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
     ports:
       - '127.0.0.1:6379:6379'
     healthcheck:
@@ -21,7 +21,7 @@ services:
   # two of them, which is what a cluster-aware client of these has to be tested against. The node announces the
   # address the host reaches it on, since a cluster client dials what the node announces.
   redis-cluster:
-    image: redis:8.10.3-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537
+    image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
     command: >
       sh -c "redis-server --port 6381 --cluster-enabled yes --cluster-announce-ip 127.0.0.1
       --cluster-announce-port 6381 --save '' --appendonly no &

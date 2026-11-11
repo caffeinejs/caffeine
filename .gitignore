@@ -180,6 +180,8 @@ replay_pid*
 
 dist/
 out/
+# npm run release:pack
+/artifacts/
 docs/.ai/
 
 Makefile.overrides

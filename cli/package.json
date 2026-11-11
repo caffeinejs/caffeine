@@ -15,11 +15,10 @@
   },
   "type": "module",
   "engines": {
-    "bun": ">=1.2.0",
     "node": ">=24"
   },
   "bin": {
-    "caffeine": "./dist/caffeine"
+    "caffeine": "./dist/launcher.js"
   },
   "exports": {
     ".": {
@@ -33,6 +32,7 @@
     "!dist/**/*.tsbuildinfo",
     "!dist/**/*.d.ts.map",
     "!dist/**/_spectypes",
+    "!dist/caffeine",
     "caffeinerc.schema.json"
   ],
   "publishConfig": {
@@ -41,7 +41,7 @@
   "scripts": {
     "build": "tsc --build tsconfig.build.json && npm run generate:schema",
     "generate:schema": "bun tools/generate_schema.ts",
-    "compile": "bun build --compile bin.ts --outfile dist/caffeine",
+    "compile": "bun tools/compile.ts",
     "clean:dist": "rm -rf dist",
     "test": "bun test",
     "test:typecheck": "tsc --noEmit"

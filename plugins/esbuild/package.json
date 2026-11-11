@@ -38,6 +38,7 @@
     "clean:dist": "rm -rf dist"
   },
   "peerDependencies": {
+    "@caffeinejs/cli": "0.0.0",
     "esbuild": "*"
   },
   "devDependencies": {

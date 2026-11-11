@@ -210,32 +210,44 @@ describe('generateDocument', () => {
 })
 
 describe('response inference', () => {
-  it('adds the validation status when a request slot has a schema', () => {
-    const router = fixtureRouter('/pets', r =>
-      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
-    )
+  // The error handler answers a failed body with 422 and failed parameters with 400; the document lists what a route
+  // can answer, so a route validating both lists both.
+  it.each([
+    ['a body', { body: petSchema }, ['200', '422']],
+    ['path parameters', { params: $t.Object({ id: $t.Integer() }) }, ['200', '400']],
+    ['a query string', { querystring: $t.Object({ page: $t.Integer() }) }, ['200', '400']],
+    ['headers', { headers: $t.Object({ 'x-tenant': $t.String() }) }, ['200', '400']],
+    // A file body is streamed, never validated, so it cannot fail its schema.
+    ['a file body', { body: $t.Object({ file: $t.File(), caption: $t.String() }) }, ['200']],
+    [
+      'a body and a query string',
+      { body: petSchema, querystring: $t.Object({ page: $t.Integer() }) },
+      ['200', '400', '422'],
+    ],
+  ])('adds the validation status of each slot it validates, for %s', (_name, schema, statuses) => {
+    const router = fixtureRouter('/pets', r => r.routes([fixtureRoute('POST', '/', 'create').schema(schema)]))
 
-    const document = generateDocument({
-      routeGroups: [router],
-      options: fixtureOptions({ errorSchema: errorSchema }),
-    })
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions({ errorSchema: errorSchema }) })
 
-    expect(Object.keys(operationAt(document, '/pets', 'post')?.responses ?? {})).toContain('400')
+    expect(Object.keys(operationAt(document, '/pets', 'post')?.responses ?? {})).toEqual(statuses)
   })
 
   it('honours a configured validation status', () => {
     const router = fixtureRouter('/pets', r =>
-      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
+      r.routes([
+        fixtureRoute('POST', '/', 'create').schema({ body: petSchema, querystring: $t.Object({ page: $t.Integer() }) }),
+      ]),
     )
 
     const document = generateDocument({
       routeGroups: [router],
-      options: fixtureOptions({ errors: { validation: 422, unauthorized: 401, forbidden: 403 } }),
+      options: fixtureOptions({
+        errors: { bodyValidation: 400, parameterValidation: 409, unauthorized: 401, forbidden: 403 },
+      }),
     })
     const statuses = Object.keys(operationAt(document, '/pets', 'post')?.responses ?? {})
 
-    expect(statuses).toContain('422')
-    expect(statuses).not.toContain('400')
+    expect(statuses).toEqual(['200', '400', '409'])
   })
 
   it('adds 401 and 403 on a protected route', () => {
@@ -280,6 +292,107 @@ describe('response inference', () => {
     expect(declared?.content?.['application/json'].schema).toMatchObject({
       properties: { detail: { type: 'string' } },
     })
+  })
+
+  // What the error handler sends: the document describes the body a client will parse in each format it can ask
+  // for, not a placeholder.
+  it('describes an inferred error as the problem the server sends, in every format', () => {
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema }).authorize()]),
+    )
+
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
+    const responses = operationAt(document, '/pets', 'post')?.responses ?? {}
+
+    for (const status of ['422', '401', '403']) {
+      expect(responses[status]?.content).toEqual({
+        'application/json': { schema: { $ref: '#/components/schemas/Problem' } },
+        'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } },
+        'text/markdown': { schema: { type: 'string' } },
+      })
+    }
+    expect(document.components?.schemas?.Problem).toMatchObject({
+      type: 'object',
+      required: ['type', 'title', 'status', 'detail', 'code'],
+      properties: {
+        category: { type: 'string' },
+        what_you_should_do: { type: 'string' },
+        instance: { type: 'string' },
+        correlation_id: { type: 'string' },
+        timestamp: { type: 'string', format: 'date-time' },
+        errors: { type: 'array', items: { $ref: '#/components/schemas/ProblemIssue' } },
+        stacktrace: { type: 'string' },
+      },
+    })
+    expect(document.components?.schemas?.ProblemIssue).toMatchObject({
+      type: 'object',
+      required: ['code', 'detail'],
+      properties: {
+        source: {
+          type: 'object',
+          required: ['in'],
+          properties: {
+            in: {
+              anyOf: ['body', 'query', 'path', 'header', 'cookie'].map(value => ({ const: value, type: 'string' })),
+            },
+            name: { type: 'string' },
+            pointer: { type: 'string' },
+          },
+        },
+        params: { type: 'object' },
+      },
+    })
+  })
+
+  it('lets the application errorSchema replace the problem schema', () => {
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
+    )
+
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions({ errorSchema }) })
+    const content = operationAt(document, '/pets', 'post')?.responses?.['422'].content
+
+    for (const mediaType of ['application/json', 'application/problem+json']) {
+      expect(content?.[mediaType].schema).toMatchObject({
+        properties: { message: { type: 'string' }, statusCode: { type: 'integer' } },
+      })
+    }
+    expect(document.components?.schemas?.Problem).toBeUndefined()
+  })
+
+  // A format the application added is one more a client can ask for; only its serializer knows its shape.
+  it('lists an inferred error under every format error handling negotiates', () => {
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
+    )
+
+    const document = generateDocument({
+      routeGroups: [router],
+      options: fixtureOptions(),
+      problemMediaTypes: ['application/json', 'application/problem+json', 'text/markdown', 'text/html'],
+    })
+    const content = operationAt(document, '/pets', 'post')?.responses?.['422'].content ?? {}
+
+    expect(Object.keys(content)).toEqual(['application/json', 'application/problem+json', 'text/markdown', 'text/html'])
+    expect(content['text/html']).toEqual({})
+  })
+
+  // A declared status is a body the handler sends itself, through the serializer, as `application/json`:
+  // labelling it a problem would tell a client to parse a shape the route never promised.
+  it('keeps a declared error under the media type the handler sends it as', () => {
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema, response: { 404: errorSchema } })]),
+    )
+
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
+    const responses = operationAt(document, '/pets', 'post')?.responses ?? {}
+
+    expect(Object.keys(responses['422']?.content ?? {})).toEqual([
+      'application/json',
+      'application/problem+json',
+      'text/markdown',
+    ])
+    expect(Object.keys(responses['404']?.content ?? {})).toEqual(['application/json'])
   })
 
   it('normalizes a lowercase wildcard status to the spec form', () => {
@@ -961,6 +1074,13 @@ describe('responses', () => {
     expect(responses['200']).toEqual({ description: 'OK', content: { 'application/json': {} } })
   })
 
+  // RFC 9110 renamed 422; Node still calls it "Unprocessable Entity".
+  it('describes a declared 422 by its RFC 9110 name', () => {
+    const responses = responsesOf(fixtureRoute('POST', '/', 'create').schema({ response: { 422: petSchema } }))
+
+    expect(responses['422']?.description).toBe('Unprocessable Content')
+  })
+
   it('emits no content for a declared 204 and names an unusual declared status generically', () => {
     const responses = responsesOf(
       fixtureRoute('DELETE', '/', 'clear').schema({ response: { 204: $t.Null(), 299: petSchema } }),
@@ -973,10 +1093,17 @@ describe('responses', () => {
   it('describes an inferred status with no standard reason generically', () => {
     const responses = responsesOf(
       fixtureRoute('POST', '/', 'create').schema({ body: petSchema }),
-      fixtureOptions({ errors: { validation: 499, unauthorized: 401, forbidden: 403 } }),
+      fixtureOptions({ errors: { bodyValidation: 499, parameterValidation: 400, unauthorized: 401, forbidden: 403 } }),
     )
 
-    expect(responses['499']).toEqual({ description: 'Error', content: { 'application/json': {} } })
+    expect(responses['499']).toEqual({
+      description: 'Error',
+      content: {
+        'application/json': { schema: { $ref: '#/components/schemas/Problem' } },
+        'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } },
+        'text/markdown': { schema: { type: 'string' } },
+      },
+    })
   })
 
   it('adds an authored status that nothing derived, with no content of its own', () => {

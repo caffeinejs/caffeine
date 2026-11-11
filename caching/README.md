@@ -5,7 +5,7 @@ HTTP response caching for a Caffeine web application: a server-side store in fro
 Follows RFC 9110, RFC 9111 and RFC 5861.
 
 ```sh
-npm install @caffeinejs/caching
+npm install -E @caffeinejs/caching
 ```
 
 | Import                             | What it holds                                                                                                 |

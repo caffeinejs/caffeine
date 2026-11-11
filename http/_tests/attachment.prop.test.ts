@@ -110,6 +110,7 @@ const DATES: Record<DateKind, string> = {
 interface Content {
   etag?: string
   lastModified?: Date
+  lastModifiedStrong?: boolean
 }
 
 interface Conditional {
@@ -132,6 +133,9 @@ const strongMatch = (tag: Tag, etag: string | undefined) =>
 const weakMatch = (tag: Tag, etag: string | undefined) =>
   etag !== undefined && tag !== 'report-v1' && tag.replace(/^W\//, '') === etag.replace(/^W\//, '')
 
+// §13.1.1, §13.1.2: a list holding a value that is no entity tag is no list of them, and names no tag at all.
+const listed = (list: Tag[]): Tag[] => (list.includes('report-v1') ? [] : list)
+
 /**
  * The answer RFC 9110 §13.2.2 has an origin server give a GET or HEAD for the content, taking the steps in its order:
  * If-Match, else If-Unmodified-Since; then If-None-Match, else If-Modified-Since; then Range under If-Range.
@@ -139,7 +143,7 @@ const weakMatch = (tag: Tag, etag: string | undefined) =>
 function conditionalModel(content: Content, request: Conditional, size: number): ConditionalAnswer {
   // Step 1, §13.1.1: `*` holds while there is a representation; a list holds when one tag matches strongly.
   if (request.ifMatch !== undefined) {
-    if (request.ifMatch !== '*' && !request.ifMatch.some(tag => strongMatch(tag, content.etag))) {
+    if (request.ifMatch !== '*' && !listed(request.ifMatch).some(tag => strongMatch(tag, content.etag))) {
       return { status: 412 }
     }
   } else if (request.ifUnmodifiedSince !== undefined) {
@@ -152,7 +156,7 @@ function conditionalModel(content: Content, request: Conditional, size: number):
 
   // Step 3, §13.1.2: false, for a GET or HEAD a 304, when `*` meets a representation or a tag matches weakly.
   if (request.ifNoneMatch !== undefined) {
-    if (request.ifNoneMatch === '*' || request.ifNoneMatch.some(tag => weakMatch(tag, content.etag))) {
+    if (request.ifNoneMatch === '*' || listed(request.ifNoneMatch).some(tag => weakMatch(tag, content.etag))) {
       return { status: 304 }
     }
   } else if (request.ifModifiedSince !== undefined) {
@@ -164,13 +168,13 @@ function conditionalModel(content: Content, request: Conditional, size: number):
   }
 
   // Step 5, §13.1.5: a GET's Range is served while If-Range holds: a strong tag strongly matching, or the very
-  // Last-Modified date.
+  // Last-Modified date when that date is strong (§8.8.2.2).
   const ifRange = request.ifRange
   const ifRangeHolds =
     ifRange === undefined ||
     ('tag' in ifRange
       ? strongMatch(ifRange.tag, content.etag)
-      : ifRange.date === 'equal' && content.lastModified !== undefined)
+      : ifRange.date === 'equal' && content.lastModified !== undefined && content.lastModifiedStrong === true)
   if (request.method === 'GET' && request.range !== undefined && ifRangeHolds) {
     return rangeModel(request.range, size)
   }
@@ -292,6 +296,7 @@ const dateKind = fc.constantFrom<DateKind>('earlier', 'equal', 'later', 'invalid
 const content: fc.Arbitrary<Content> = fc.record({
   etag: fc.constantFrom(CURRENT, 'W/"report-v1"', undefined),
   lastModified: fc.constantFrom(MODIFIED, undefined),
+  lastModifiedStrong: fc.constantFrom(true, false, undefined),
 })
 const conditional: fc.Arbitrary<Conditional> = fc.record({
   method: fc.constantFrom<'GET' | 'HEAD'>('GET', 'HEAD'),
@@ -351,7 +356,7 @@ describe('Attachment() over any combination of preconditions (property)', () => 
 
       expect(res.status).toBe(expected.status)
       if (expected.status === 412 && request.method === 'GET') {
-        expect(await res.json()).toMatchObject({ statusCode: 412, code: 'ERR_HTTP_PRECONDITION_FAILED' })
+        expect(await res.json()).toMatchObject({ status: 412, code: 'ERR_HTTP_PRECONDITION_FAILED' })
       } else if (expected.status === 412 || expected.status === 304 || request.method === 'HEAD') {
         expect(await res.text()).toBe('')
       } else {
