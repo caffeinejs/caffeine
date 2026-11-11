@@ -48,11 +48,12 @@ export interface Lock {
 
   /**
    * Aborts when the lease is gone: taken by another holder, expired by the clock, lost to a backend failure, or
-   * released, as soon as `release()` is called rather than once the backend answers. An extend to a shorter `ttl`
-   * that has not answered aborts it once that `ttl` runs out, since the key may be free from then on; nothing
-   * answering later revives it. `signal.reason` is an {@link ErrLockLost} or an {@link ErrLockReleased}. A `once`
-   * lock whose action returned has left its holder's hands: the window lapsing aborts nothing and publishes no
-   * `lost`.
+   * released, as soon as `release()` is called rather than once the backend answers. An extend that has not
+   * answered aborts it once its `ttl` runs out if it asked for less than the write the lease came from, even when a
+   * longer extend answered since: the key may be free from then on, and nothing answering later revives it.
+   * `signal.reason` is an {@link ErrLockLost} or an {@link ErrLockReleased}; a lease lost before its release, even
+   * one a `lost` listener releases, keeps its `ErrLockLost`. A `once` lock whose action returned has left its
+   * holder's hands: the window lapsing aborts nothing and publishes no `lost`.
    *
    * Cancellation is cooperative: pass the signal to the I/O the critical section does, such as `fetch` or a
    * database query, so the work stops with the lease.
@@ -63,11 +64,15 @@ export interface Lock {
    * Extends the lease by `ttl`, or by the lock service's default when omitted.
    *
    * `false` means the lease was lost or ownership could not be confirmed when the call completed.
-   * An overlapping write can leave ownership uncertain even when the backend applied this extension.
+   * An overlapping write can leave ownership uncertain even when the backend applied this extension. On a `once`
+   * lock whose action returned it is always `false`, and the window stays as it was.
    */
   extend(ttl?: Duration): Promise<boolean>
 
-  /** Releases the key, unless the lease was already lost. Releasing twice is harmless. */
+  /**
+   * Releases the key, unless the lease was already lost. Releasing twice is harmless. On a `once` lock whose action
+   * returned it does nothing: what is left of the lease is the window.
+   */
   release(): Promise<void>
 
   [Symbol.asyncDispose](): Promise<void>
