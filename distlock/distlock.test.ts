@@ -1717,9 +1717,9 @@ describe('lock signal', () => {
         await vi.advanceTimersByTimeAsync(1 * Second)
         aborted = held.signal.aborted
       },
-      { ttl: 30 * 24 * 60 * Minute },
+      { ttl: 30 * Day },
     )
-    await vi.advanceTimersByTimeAsync(25 * 24 * 60 * Minute)
+    await vi.advanceTimersByTimeAsync(25 * Day)
 
     expect(aborted).toBe(false)
     expect(lost).toEqual([])

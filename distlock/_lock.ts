@@ -462,7 +462,7 @@ export class HeldLock implements Lock {
       )
     } catch (error) {
       // The backend may have applied an extension it did not answer in time, and a shorter ttl shortens the lease:
-      // until the answer arrives, the lock reads as lost. A renewal that timed out is marked lost outright.
+      // until the answer arrives, the lock reads as lost. A renewal that timed out retries while the lease has time.
       this.#waitingExtends.delete(call)
       if (storeSignal?.aborted === true && error === storeSignal.reason) {
         if (!call.answered && !call.uncertain && sent.token === this.token) {
