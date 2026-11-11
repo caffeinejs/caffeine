@@ -56,8 +56,9 @@ export interface Lock {
   /**
    * Aborts when the lease is gone: taken by another holder, expired by the clock, lost to a backend failure, or
    * released, as soon as `release()` is called rather than once the backend answers. An extend that has not
-   * answered aborts it once its `ttl` runs out if it asked for less than the write the lease came from, even when a
-   * longer extend answered since: the key may be free from then on, and nothing answering later revives it.
+   * answered, or failed without saying whether it landed, aborts it once its `ttl` runs out if it asked for less than
+   * the write the lease came from, even when a longer extend answered since: the key may be free from then on, and
+   * nothing answering later revives it.
    * `signal.reason` is an {@link ErrLockLost} or an {@link ErrLockReleased}; a lease lost before its release, even
    * one a `lost` listener releases, keeps its `ErrLockLost`. A `once` lock whose action returned has left its
    * holder's hands: the window lapsing aborts nothing and publishes no `lost`.
