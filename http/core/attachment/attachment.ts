@@ -6,11 +6,11 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { IContext } from '../../context.js'
 import { MediaType } from '../../media.js'
 import { Responder, type ActionResult } from '../../response.js'
+import { notModified, preconditionFailed, rangeHolds, type Validators } from '../conditional/conditional.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPPreconditionFailed } from '../error/http.js'
-import { notModified, preconditionFailed, rangeHolds } from './_conditional.js'
+import { byteRanges, multipartByteRanges } from '../range/range.js'
 import { contentDisposition } from './_disposition.js'
-import { byteRanges, multipartByteRanges } from './_range.js'
 
 // The largest end offset Node's `Blob.slice` takes: it asserts a 32-bit one, aborting the process past it.
 const LARGEST_SLICEABLE = 2 ** 32 - 1
@@ -23,7 +23,7 @@ const ENTITY_TAG = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/
 const FIELD_VALUE = /^[\t\x20-\x7e\x80-\xff]*$/
 
 /** {@link Attachment}'s options. */
-export interface AttachmentOptions {
+export interface AttachmentOptions extends Validators {
   /**
    * The name the client saves the download under. A `File`'s own name when not given. Either is reduced to a plain
    * file name: its last `/` or `\` segment, without control characters or the marks that reorder how it reads.
@@ -42,8 +42,8 @@ export interface AttachmentOptions {
    */
   etag?: string
   /**
-   * When the content last changed, written as `Last-Modified` and compared with `If-Unmodified-Since`,
-   * `If-Modified-Since` and `If-Range` to the second.
+   * When the content last changed, written as `Last-Modified` and compared with `If-Unmodified-Since` and
+   * `If-Modified-Since` to the second, and with `If-Range` only when `lastModifiedStrong` is set.
    */
   lastModified?: Date
 }
@@ -63,7 +63,8 @@ export type AttachmentBody = Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer> |
  * and `416` answers when none is left. A malformed range, another unit, more than 100 ranges, or ranges adding up to
  * more than the body get the whole body, and so does a body the reply gives a `Content-Encoding`, to several ranges: a
  * multipart answer cannot carry that coding. With `If-Range`, ranges are served only while the client's validator still
- * matches `etag` or `lastModified`; otherwise the whole current body goes out. A stream is sent whole, its length not
+ * matches `etag`, or `lastModified` when `lastModifiedStrong` says it pins the bytes; otherwise the whole current body
+ * goes out. A stream is sent whole, its length not
  * known, and so is a `Blob` past 4 GiB, which Node cannot cut a part out of.
  *
  * Preconditions come first, in RFC 9110's order. A `GET` or a `HEAD` whose `If-Match` lists no tag strongly matching

@@ -1,7 +1,7 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Router } from '@caffeinejs/http'
+import { ProblemSchema, Router } from '@caffeinejs/http'
 
-import { ErrorSchema, toolRoutes, type ToolRouter } from '../tool.js'
+import { toolRoutes, type ToolRouter } from '../tool.js'
 import { ContainerEventSchema } from './events.schema.js'
 import type { EventsTool } from './events.tool.js'
 
@@ -14,7 +14,7 @@ const list = events
       after: $t.Optional($t.Integer({ minimum: 0 })),
       limit: $t.Optional($t.Integer({ minimum: 0 })),
     }),
-    response: { 200: $t.Array(ContainerEventSchema), 400: ErrorSchema },
+    response: { 200: $t.Array(ContainerEventSchema), 400: ProblemSchema },
   })
   .handler((ctx, { tool }) => tool.list(ctx.req.query().after, ctx.req.query().limit))
 

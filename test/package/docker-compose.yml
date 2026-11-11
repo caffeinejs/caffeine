@@ -1,0 +1,9 @@
+# Runs the package test on Alpine, whose C library is musl, from the repository root:
+#   docker compose -f test/package/docker-compose.yml run --rm musl
+services:
+  musl:
+    image: node:24-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8
+    volumes:
+      - ../..:/repository:ro
+    working_dir: /repository
+    command: ['node', 'test/package/run.mjs', 'artifacts']

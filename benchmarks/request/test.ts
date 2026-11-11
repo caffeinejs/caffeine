@@ -200,6 +200,12 @@ for (const server of servers) {
         assert.deepEqual(body.params, EXPECTED_PARAMS, 'params mismatch')
         assert.deepEqual(body.query, EXPECTED_QUERY, 'query mismatch')
         assert.deepEqual(body.body, EXPECTED_BODY, 'body mismatch')
+        // The benchmark times a fixture that echoes these headers and stamps a request id: one that skipped them
+        // would do less work than its row claims.
+        assert.equal(res.headers.get('text'), REQ_HEADERS.text, 'text header not echoed')
+        assert.equal(res.headers.get('num'), REQ_HEADERS.num, 'num header not echoed')
+        assert.equal(res.headers.get('bool'), REQ_HEADERS.bool, 'bool header not echoed')
+        assert.ok(res.headers.get('x-request-id'), 'x-request-id missing')
         // assert.ok(Array.isArray(body.big) && body.big.length === 200, 'big array wrong')
       })
     } finally {
