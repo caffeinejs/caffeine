@@ -216,10 +216,10 @@ const breaker = circuitBreaker({
 | `failureRateThreshold`                  | `50`                           | Failure rate, in percent, at or above which the breaker opens                                                                      |
 | `slowCallRateThreshold`                 | `100`                          | Slow-call rate, in percent, at or above which the breaker opens                                                                    |
 | `slowCallDurationThreshold`             | `1 * Minute`                   | A call longer than this is slow                                                                                                    |
-| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', duration }` for the calls of the last `duration`, in whole seconds                      |
+| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', duration }` for the calls of the last `duration`, in whole seconds; each at most 2^24   |
 | `minimumNumberOfCalls`                  | `100`                          | Calls needed before a rate is computed; capped at a count window's size                                                            |
 | `waitDurationInOpenState`               | `1 * Minute`                   | Time spent open; a function of how many times in a row it opened, such as `exponential()`                                          |
-| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open                                                                                            |
+| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open; at most 2^24                                                                              |
 | `maxWaitDurationInHalfOpenState`        | `0` (forever)                  | Re-opens a half-open breaker whose trial calls never settle                                                                        |
 | `automaticTransitionFromOpenToHalfOpen` | `false`                        | Moves to half open when the wait elapses, not on the next call                                                                     |
 | `recordError`                           | every error                    | Which errors are failures: a predicate, or a list of error classes; any other error counts as a success                            |

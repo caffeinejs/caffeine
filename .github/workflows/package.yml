@@ -49,9 +49,9 @@ jobs:
       - name: Lint
         run: |
           for tarball in artifacts/*.tgz; do
-            npx publint --strict "$tarball"
+            ./node_modules/.bin/publint --strict "$tarball"
             if tar -xzOf "$tarball" package/package.json | jq -e '.exports' > /dev/null; then
-              npx attw "$tarball" --profile esm-only
+              ./node_modules/.bin/attw "$tarball" --profile esm-only
             fi
           done
 
