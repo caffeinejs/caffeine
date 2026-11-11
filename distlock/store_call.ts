@@ -21,6 +21,8 @@ export interface StoreCall {
   readonly bound: StoreTimeoutBound
   /** The caller's signal. Its abort stops the wait as the deadline does, and rejects with its reason. */
   readonly signal?: AbortSignal
+  /** Called if the caller's abort wins this call. */
+  readonly onCallerAbort?: () => void
 }
 
 /**
@@ -44,6 +46,7 @@ export function boundedCall<T>(
 ): Promise<T> {
   const callerSignal = spec.signal
   if (callerSignal?.aborted === true) {
+    spec.onCallerAbort?.()
     return Promise.reject(callerSignal.reason)
   }
 
@@ -59,7 +62,16 @@ export function boundedCall<T>(
   // Not `addEventListener`: another listener on the caller's signal calling `stopImmediatePropagation()` would
   // keep this one from running, and the call would go on after its caller aborted.
   const callerAbort =
-    callerSignal === undefined ? undefined : addAbortListener(callerSignal, () => controller.abort(callerSignal.reason))
+    callerSignal === undefined
+      ? undefined
+      : addAbortListener(callerSignal, () => {
+          if (performance.now() >= deadline) {
+            timeOut()
+            return
+          }
+          spec.onCallerAbort?.()
+          controller.abort(callerSignal.reason)
+        })
 
   const lateError = (error: unknown) => onLateError?.(error, error === signal.reason)
 

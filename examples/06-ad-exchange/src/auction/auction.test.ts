@@ -204,7 +204,7 @@ describe('the auction', () => {
 
     const res = await auction(exchange, { floor: 1, site: { domain: 'news.test' } })
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
     expect(a.count('/bid')).toBe(0)
   })
 

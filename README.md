@@ -15,7 +15,7 @@
   <a href="https://codecov.io/gh/caffeinejs/caffeine"><img src="https://codecov.io/gh/caffeinejs/caffeine/graph/badge.svg?token=CH1MHCDV1J" alt="codecov"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/caffeinejs/caffeine"><img src="https://api.scorecard.dev/projects/github.com/caffeinejs/caffeine/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://sonarcloud.io/summary/new_code?id=caffeinejs_caffeine"><img src="https://sonarcloud.io/api/project_badges/measure?project=caffeinejs_caffeine&amp;metric=alert_status" alt="Quality gate status"></a>
-  <img src="https://img.shields.io/badge/status-work%20in%20progress-F2A93B" alt="Status: work in progress">
+  <img src="https://img.shields.io/badge/status-release%20candidate-F2A93B" alt="Status: release candidate">
 </p>
 
 ## About
@@ -24,8 +24,22 @@ CaffeineJS is a TypeScript framework for building server-side applications. It i
 
 It is built on standard ECMAScript decorators, with no `experimentalDecorators`, `emitDecoratorMetadata` or `reflect-metadata` anywhere, and it carries types end to end: the configuration schema, the route handler and the HTTP client all check against the same definitions.
 
-> [!WARNING]
-> Work in progress. Nothing is published to npm yet, and the public API changes without notice.
+## Status
+
+CaffeineJS is released as release candidates, `0.0.1-rc.N`, until 1.0.0. Any of them may break an application: each
+release's notes on [GitHub Releases](https://github.com/caffeinejs/caffeine/releases) list its breaking changes first.
+
+## Install
+
+Every `@caffeinejs/*` package is released at the same version. Install the ones an application uses at one exact
+version:
+
+```sh
+npm install -E @caffeinejs/http @caffeinejs/application @caffeinejs/di
+```
+
+[Versioning](docs/versioning.md) explains why, and which Node.js versions are supported. To report a vulnerability,
+see the [security policy](SECURITY.md).
 
 ## License
 

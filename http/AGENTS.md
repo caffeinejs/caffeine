@@ -233,7 +233,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   dedupe is sibling-scoped by `RouterState` identity; never dedupe globally.
 - A programmatic handler is `(ctx, deps)`; its dependency bag is built once, never per request.
 - `@Catch` dispatches by class on a matched route:
-  - Thrown `ErrHTTPNotFound` → `@Catch` / default `ErrHTTP` JSON body
+  - Thrown `ErrHTTPNotFound` → `@Catch` / default `ErrHTTP` problem body (`application/problem+json`)
   - No route matched → Fastify not-found. Does **not** go through `@Catch`
   - `ctx.notFound(body)` sets 404 on a request that **already matched**
   - Do not return SPA `index.html` from `@Catch(ErrHTTPNotFound)`

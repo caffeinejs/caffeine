@@ -28,12 +28,12 @@ Run checks in this order and fix failures before considering the task complete. 
   3. `npm test -w <pkg>`
   4. `make lint:<pkg-path>` — zero errors (warnings are pre-existing and acceptable). Not `npm run lint:fix -- <pkg-path>`: npm appends the path only to `oxfmt`, so oxlint would run on the whole repo.
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
-  1. `make check`, and nothing else. It runs the pin check, the error message copies, `build`, `lint:fix`, `lint:markdown`, `spec:check`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
+  1. `make check`, and nothing else. It runs the pin check, the error message copies, `build`, the package manifest check, `lint:fix`, `lint:markdown`, `spec:check`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
 
 One non-md file means the task is not docs-only: TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, and a README next to a TypeScript change all count as code. When in doubt on code scope, run `make check`.
 
-- `npm run build` does not produce the CLI binary. After a clone or a clean, run `npm run build:cli` (or `make build:cli`) before any example test or `caffeine generate`, or `node_modules/.bin/caffeine` is missing.
-- A new production dependency must carry a license in the allowlist in `tools/check-licenses.mjs`; the `license-check` workflow fails the pull request otherwise.
+- `npm run build` does not produce the CLI binary. After a clone or a clean, run `npm run build:cli` (or `make build:cli`) before any example test or `caffeine generate`: until then `caffeine` is missing, is not executable, or fails with `ErrBinaryNotFound`.
+- A new production dependency or required peer must carry a license in the allowlist in `tools/check-licenses.mjs`; the `license-check` workflow fails the pull request otherwise.
 
 ### Build and check projects
 
@@ -100,7 +100,7 @@ A module is a directory of source files in a library package (not `benchmarks/`,
 
 ### Renames
 
-Every package is unreleased (`0.0.0`). A rename updates every caller in the same change and leaves no alias, re-export or deprecation shim behind.
+Until 1.0.0 every release may break callers ([`docs/versioning.md`](docs/versioning.md)). A rename updates every caller in the same change and leaves no alias, re-export or deprecation shim behind.
 
 ## Features and plugins
 
