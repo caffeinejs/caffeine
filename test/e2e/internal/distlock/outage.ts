@@ -1,5 +1,9 @@
+import { isIP } from 'node:net'
+import { checkServerIdentity, type PeerCertificate } from 'node:tls'
+
 import { createClient } from '@redis/client'
 
+import { redisEndpoint } from '../redis/index.js'
 import { startProxy, type TCPProxy } from '../tcp_proxy.js'
 
 /** A Redis or Valkey client that reaches its server through a relay a spec can stage outages on. */
@@ -9,14 +13,18 @@ export interface RelayedClient {
   close(): Promise<void>
 }
 
-function newClient(url: string) {
-  return createClient({ url, socket: { reconnectStrategy: () => 50 } })
-}
+function newClient(url: string, port: number) {
+  const upstream = new URL(url)
+  const { host } = redisEndpoint(upstream)
+  const socket = { reconnectStrategy: () => 50 }
+  const identity = isIP(host)
+    ? { checkServerIdentity: (_name: string, cert: PeerCertificate) => checkServerIdentity(host, cert) }
+    : { servername: host }
 
-/** The server a Redis URL names, with the Redis port when it names none. */
-export function upstreamOf(url: string): { host: string; port: number } {
-  const { hostname, port } = new URL(url)
-  return { host: hostname, port: Number(port || 6379) }
+  return createClient({
+    url: relayURL(url, port),
+    socket: upstream.protocol === 'rediss:' ? { ...socket, tls: true, ...identity } : socket,
+  })
 }
 
 /** `url` pointed at a relay on loopback, with its database, credentials and options kept. */
@@ -36,8 +44,8 @@ function ignore(): void {
  * its error channel: a dropped connection is what these specs are about, and an unlistened error event throws.
  */
 export async function relayedClient(url: string): Promise<RelayedClient> {
-  const proxy = await startProxy(upstreamOf(url))
-  const client = newClient(relayURL(url, proxy.port))
+  const proxy = await startProxy(redisEndpoint(new URL(url)))
+  const client = newClient(url, proxy.port)
   client.on('error', ignore)
   await client.connect()
 

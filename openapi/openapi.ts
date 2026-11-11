@@ -7,6 +7,7 @@ import {
   AuthenticationService,
   RouteBuilder,
   kAuthSchemeDescriptors,
+  kErrorHandlingOptions,
   type AuthSchemeDescriptor,
   type RouteAuthzOptions,
   type IRouteGroup,
@@ -130,6 +131,7 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
               routeGroups: routeGroups() as Array<IRouteGroup<unknown>>,
               options: withBasePathServer(options, instance.$basePath),
               schemes: descriptors,
+              problemMediaTypes: problemMediaTypes(instance),
               onWarning: message => warnings.push(message),
             })
           : readDocument(options.source)
@@ -186,6 +188,12 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
   }
 
   return fp(plugin, { name: label })
+}
+
+// The formats error handling negotiates among, so the document lists what the server can send.
+// Error handling is registered in every application, so its options are always bound.
+function problemMediaTypes(instance: FastifyInstance): string[] {
+  return [...instance.$container.get(kErrorHandlingOptions).formats.values()].map(format => format.mediaType)
 }
 
 /**

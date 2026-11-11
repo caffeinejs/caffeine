@@ -168,7 +168,7 @@ export interface IContext<
 
   badRequest(body?: unknown): this
 
-  unprocessableEntity(body?: unknown): this
+  unprocessableContent(body?: unknown): this
 
   internalServerError(body: unknown): this
 
