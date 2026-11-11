@@ -1783,6 +1783,172 @@ describe('lock signal', () => {
     expect(lost).toEqual([])
     expect(await lock.tryAcquire('yearly-report')).toBeUndefined()
   })
+
+  // Each unanswered write may still land and set the key's expiry to its own ttl. One that looked longer when it left
+  // can end up shorter than a reply that answered first, and the key may change hands from then on.
+  it('aborts lock.signal when an unanswered extend could end the lease before the longer one that answered', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 3 * Second })
+    const shorter = held.extend(4 * Second).catch((e: unknown) => e)
+    const longer = held.extend(30 * Second)
+    const [first, second] = backend.extends
+    await second!.write()
+    second!.answer()
+    expect(await longer).toBe(true)
+    await first!.write()
+
+    await vi.advanceTimersByTimeAsync(4 * Second)
+    expect(await shorter).toBeInstanceOf(ErrLockBackendTimeout)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+    expect(lossOf(held).reason).toBe('expired')
+  })
+
+  // A write asking for as long as the one behind the lease only pushes the expiry out, however late it lands: a renewal
+  // that never answered does not cut short the lease its retry renewed.
+  it('keeps lock.signal live past the expiry a renewal that never answered could have set', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    // The renewal leaves at 10s and never answers; its retry and every renewal after it do.
+    for (let elapsed = 0; elapsed < 41; elapsed += 1) {
+      await vi.advanceTimersByTimeAsync(1 * Second)
+      for (const call of backend.extends.slice(1)) {
+        await call.write()
+        call.answer()
+      }
+      backend.extends.splice(1)
+    }
+
+    expect(held.signal.aborted).toBe(false)
+    expect(held.expiresAt).toBeGreaterThan(Date.now())
+  })
+
+  // The `lost` event and the signal describe one incident: a listener cleaning up must not rename it a release.
+  it('keeps the loss reason on lock.signal when a lost listener releases the lock', async () => {
+    const lock = await newLock()
+    let held: Lock | undefined
+    let releasing: Promise<void> | undefined
+    lock.events.on('lost', () => {
+      releasing = held!.release()
+    })
+    fake()
+
+    held = await lock.acquire('orders:rebuild', { ttl: 1 * Second })
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    expect(lossOf(held).reason).toBe('expired')
+    await releasing
+  })
+
+  // A callback that blocks the event loop past the expiry returns before the overdue deadline timer runs. The lease
+  // still ran out while the action held it, so the holder learns it was lost, not that it let go.
+  it.each([
+    {
+      name: 'withLock',
+      run: (lock: DistLock, act: (held: Lock) => void) => lock.withLock('orders:rebuild', act, { ttl: 1 * Second }),
+    },
+    {
+      name: 'once',
+      run: (lock: DistLock, act: (held: Lock) => void) => lock.once('orders:rebuild', act, { ttl: 1 * Second }),
+    },
+  ])('reports a lease that ran out inside a blocking $name action as lost', async ({ run }) => {
+    const lock = await newLock()
+    const lost: LostMessage[] = []
+    lock.events.on('lost', message => lost.push(message))
+    fake()
+
+    let seen: Lock | undefined
+    await run(lock, held => {
+      seen = held
+      vi.setSystemTime(Date.now() + 2 * Second)
+    })
+
+    expect(lossOf(seen!).reason).toBe('expired')
+    expect(lost).toEqual([expect.objectContaining({ key: 'orders:rebuild', reason: 'expired' })])
+  })
+
+  // The first renewal decided to retry, then its rotation answered: that answer is the lease, whatever the retry
+  // under the old token does afterwards.
+  it('adopts a late rotating renewal while its retry is pending, and survives the retry timing out', async () => {
+    const backend = new StagedBackend(new RotatingBackend())
+    const lock = await newLock(backend)
+    const losses: LostMessage[] = []
+    lock.events.on('lost', message => losses.push(message))
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 18 * Second, renew: true })
+    const first = held.token
+    // The renewal leaves at 6s and rotates the key to a lease valid until 24s; its answer is held past 11s.
+    await vi.advanceTimersByTimeAsync(6 * Second)
+    const [rotating] = backend.extends
+    await rotating!.write()
+    await vi.advanceTimersByTimeAsync(5 * Second)
+
+    // The retry leaves under the old token at 11.1s and never answers.
+    await vi.advanceTimersByTimeAsync(DEFAULT_DIST_LOCK_OPTIONS.retryDelay)
+    expect(backend.extends).toHaveLength(2)
+
+    await vi.advanceTimersByTimeAsync(900 * Millisecond)
+    rotating!.answer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(held.token).not.toBe(first)
+    expect(held.lost).toBe(false)
+
+    // The retry times out at 16.1s with under storeTimeout left on the old lease, which is no longer the lock's.
+    await vi.advanceTimersByTimeAsync(4200 * Millisecond)
+    expect(held.signal.aborted).toBe(false)
+    expect(losses).toEqual([])
+    expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
+    await held.release()
+  })
+
+  // Nothing else could have rotated the token, so a late refusal of it is the backend saying the key is gone.
+  it('reports the key taken when a renewal that timed out with time to retry is refused late', async () => {
+    const backend = new FaultyBackend()
+    const lock = await newLock(backend)
+    const losses: LostMessage[] = []
+    lock.events.on('lost', message => losses.push(message))
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    backend.late = ['extend']
+    backend.stolen = true
+    // The renewal leaves at 10s and is given up on at 15s with 15s left: the retry would leave at 15.1s.
+    await vi.advanceTimersByTimeAsync(15 * Second)
+    expect(held.signal.aborted).toBe(false)
+
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(lossOf(held).reason).toBe('taken')
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    expect(losses).toEqual([expect.objectContaining({ reason: 'taken', renewal: true })])
+  })
+
+  // What is left of the lease is the window. A handle the action kept must not end or reshape it afterwards.
+  it('ignores release and extend on a once lock after its action returned', async () => {
+    const lock = await newLock()
+    fake()
+
+    const first = await lock.once('nightly-report', held => held, { ttl: 10 * Second })
+    if (!first.executed) {
+      throw new Error('the first once did not run')
+    }
+
+    await first.result.release()
+    expect(await first.result.extend(1 * Second)).toBe(false)
+    await vi.advanceTimersByTimeAsync(2 * Second)
+    expect(await lock.once('nightly-report', () => 'again')).toEqual({ executed: false })
+
+    await vi.advanceTimersByTimeAsync(8 * Second)
+    expect(await lock.once('nightly-report', () => 'again')).toEqual({ executed: true, result: 'again' })
+  })
 })
 
 // A fencing token is what a resource uses to turn away a holder whose lease lapsed. A token the resource cannot

@@ -78,7 +78,10 @@ export class HeldLock implements Lock {
   #ttl: Duration
   #lease: LockLease
   #leaseVersion = 0
-  #leaseReplies: Array<{ version: number; lease: LockLease }> | undefined
+  // The ttl the write behind `#lease` asked for. A write still unanswered can only end the lease sooner when it asks
+  // for less: landing later with as much or more, it pushes the expiry out.
+  #leaseTTL: Duration
+  #leaseReplies: Array<{ version: number; lease: LockLease; ttl: Duration }> | undefined
   #pendingExtends = 0
   #refusedRenewal: boolean | undefined
   readonly #extending = new Set<Promise<void>>()
@@ -104,9 +107,13 @@ export class HeldLock implements Lock {
   readonly #window: boolean
   // Shortening extensions and abandoned explicit extensions whose writes have not been confirmed.
   #unsettled = 0
-  // When each shortening extension still unanswered could end the lease: `ttl` from when it was sent, since the
-  // backend cannot apply it earlier. The deadline watches the earliest of them along with the lease.
-  readonly #shortening = new Map<object, number>()
+  // Each extension still unanswered under the current token: when it was sent, the ttl it asked for, and whether it
+  // was shorter than what was left of the lease then. One that looked longer when it left can land after a longer
+  // one answered, so the deadline also watches every one that asks for less than the write behind the lease.
+  readonly #unanswered = new Map<object, { sentAt: number; ttl: Duration; shortening: boolean }>()
+  // The reason the signal aborts with, set by the loss before anyone is told, so a release a `lost` listener
+  // makes keeps it.
+  #lossReason: ErrLockLost | undefined
   #timer: ReturnType<typeof setTimeout> | undefined
   #deadline: ReturnType<typeof setTimeout> | undefined
   #renewal: Promise<void> | undefined
@@ -121,6 +128,7 @@ export class HeldLock implements Lock {
     this.#renews = renew
     this.#lease = lease
     this.#ttl = ttl
+    this.#leaseTTL = ttl
     this.#window = window
     this.#armDeadline()
     held.add(this)
@@ -189,7 +197,7 @@ export class HeldLock implements Lock {
   }
 
   async extend(ttl?: Duration): Promise<boolean> {
-    if (this.#released || this.#taken) {
+    if (this.#released || this.#taken || this.#detached) {
       return false
     }
 
@@ -212,10 +220,12 @@ export class HeldLock implements Lock {
   }
 
   release(): Promise<void> {
-    if (this.#released) {
+    // A `once` window left standing is no longer the holder's to end.
+    if (this.#released || this.#detached) {
       return Promise.resolve()
     }
 
+    this.#expireIfDue()
     this.#released = true
     this.#held.delete(this)
     this.stopRenewal()
@@ -223,7 +233,7 @@ export class HeldLock implements Lock {
     // The holder lets go here, not once the backend answers: the key may change hands as soon as the release
     // lands, and work bound to the signal must not outlive that. A lease already lost keeps its loss as the reason.
     if (!this.#controller.signal.aborted) {
-      this.#controller.abort(new ErrLockReleased(this.key))
+      this.#controller.abort(this.#lossReason ?? new ErrLockReleased(this.key))
     }
 
     // Counted from here, not from the backend call: a holder that releases as its signal aborts must be waited for
@@ -265,6 +275,7 @@ export class HeldLock implements Lock {
   // Leaves the lease standing without its holder: stops renewing and stops watching the deadline, so the lease
   // lapsing later aborts nothing and publishes nothing. What `once` calls when its action returned.
   detach(): void {
+    this.#expireIfDue()
     this.#detached = true
     this.#held.delete(this)
     this.stopRenewal()
@@ -291,29 +302,55 @@ export class HeldLock implements Lock {
   }
 
   // Arms the timer that notices the lease lapsing by the clock when nothing else does: at its expiry, or earlier
-  // when a shortening extension still unanswered could end it first. A deadline beyond what `setTimeout`
-  // honours is reached in steps.
+  // when an extension still unanswered could end it first. A deadline beyond what `setTimeout` honours is reached
+  // in steps.
   #armDeadline(): void {
     this.#clearDeadline()
 
-    const expiry = Math.min(this.#lease.expiresAt, ...this.#shortening.values())
-    const remaining = Math.max(0, expiry - Date.now())
+    const remaining = Math.max(0, this.#earliestExpiry() - Date.now())
     this.#deadline = setTimeout(
       () => {
         this.#deadline = undefined
         if (remaining > MAX_TIMER_DELAY) {
           this.#armDeadline()
-        } else if (this.#renewalFailed) {
-          // Renewals were failing when the lease ran out: the backend failure is what lost it.
-          this.#lose('error', true)
         } else {
-          this.#lose('expired', false)
+          this.#expire()
         }
       },
       Math.min(remaining, MAX_TIMER_DELAY),
     )
     // Never the last thing keeping a process alive.
     this.#deadline.unref?.()
+  }
+
+  #expire(): void {
+    if (this.#renewalFailed) {
+      // Renewals were failing when the lease ran out: the backend failure is what lost it.
+      this.#lose('error', true)
+    } else {
+      this.#lose('expired', false)
+    }
+  }
+
+  // Reports a deadline that passed while a callback held the event loop, before release or `once` clears its timer:
+  // the lease ran out while the holder still had it.
+  #expireIfDue(): void {
+    if (this.#deadline !== undefined && Date.now() >= this.#earliestExpiry()) {
+      this.#clearDeadline()
+      this.#expire()
+    }
+  }
+
+  // The earliest the lease can end: its expiry, or `ttl` after an unanswered shorter write was sent, since the
+  // backend cannot apply it earlier.
+  #earliestExpiry(): number {
+    let earliest = this.#lease.expiresAt
+    for (const { sentAt, ttl, shortening } of this.#unanswered.values()) {
+      if (shortening || ttl < this.#leaseTTL) {
+        earliest = Math.min(earliest, sentAt + ttl)
+      }
+    }
+    return earliest
   }
 
   #clearDeadline(): void {
@@ -422,11 +459,13 @@ export class HeldLock implements Lock {
     const call = { answered: false, uncertain: ttl < remaining }
     this.#waitingExtends.set(call, performance.now() + timeout)
     this.#pendingExtends += 1
+    this.#unanswered.set(call, { sentAt: Date.now(), ttl, shortening: call.uncertain })
     if (call.uncertain) {
       this.#unsettled += 1
-      this.#shortening.set(call, Date.now() + ttl)
       this.#armDeadline()
     }
+    // The renewal attempt this call belongs to, so a late answer waits for that attempt's decision and no later one.
+    const attempt = renewal ? this.#renewal : undefined
     let storeSignal: AbortSignal | undefined
 
     let next: LockLease | undefined
@@ -443,12 +482,11 @@ export class HeldLock implements Lock {
           return this.#host.backend.extend(sent, ttl, signal)
         },
         async late => {
-          // A late renewal must see the loss decision, including when its reply would rotate the token.
-          if (renewal) {
-            await this.settled()
-          }
+          // A late renewal must see its own attempt's loss decision, including when its reply would rotate the
+          // token. A retry that attempt left behind is not waited for: the reply supersedes the token it carries.
+          await attempt
           this.#answered(call, sent.token)
-          this.#adoptLate(late, sent, version, renewal)
+          this.#adoptLate(late, sent, ttl, version, renewal)
           this.#finishRefusal()
         },
         (error: unknown, cancelled: boolean) => {
@@ -504,7 +542,7 @@ export class HeldLock implements Lock {
 
     // Taken even when this lock was released or stopped mid-flight: a release waiting behind this
     // renewal has to send the lease the renewal left behind, not the one it superseded.
-    const current = this.#reconcile(next, sent, version, renewal)
+    const current = this.#reconcile(next, sent, ttl, version, renewal)
     this.#finishRefusal()
 
     // Every renewal from here on runs on what an explicit extend asked for. A renewal leaves it alone: one
@@ -582,7 +620,7 @@ export class HeldLock implements Lock {
 
   #answered(call: { answered: boolean; uncertain: boolean }, token: string): void {
     this.#waitingExtends.delete(call)
-    if (this.#shortening.delete(call)) {
+    if (this.#unanswered.delete(call)) {
       this.#rearmDeadline()
     }
     if (!call.answered && token === this.token) {
@@ -628,20 +666,18 @@ export class HeldLock implements Lock {
   // A renewal still retrying, or an explicit extend, under the current token is reconciled while the lock is still
   // held. Other replies are given back, so a backend that rotates the token cannot leave the key under a token
   // nobody holds.
-  #adoptLate(late: LockLease | undefined, sent: LockLease, version: number, renewal: boolean): void {
+  #adoptLate(late: LockLease | undefined, sent: LockLease, ttl: Duration, version: number, renewal: boolean): void {
     const held = !this.#released && !this.#taken
 
     if (late === undefined) {
       // The backend refused the token the call carried. That is news only while the lock still carries it: a newer
-      // extend may have moved the key to another.
-      if (!renewal) {
-        this.#refuse(sent.token, false)
-      }
+      // extend may have moved the key to another. A renewal that gave up already reported the loss.
+      this.#refuse(sent.token, renewal)
       return
     }
 
     if (this.#window && !this.#released) {
-      this.#reconcile(late, sent, version, renewal)
+      this.#reconcile(late, sent, ttl, version, renewal)
       return
     }
 
@@ -650,7 +686,7 @@ export class HeldLock implements Lock {
       return
     }
 
-    if (held && this.#reconcile(late, sent, version, renewal)) {
+    if (held && this.#reconcile(late, sent, ttl, version, renewal)) {
       return
     }
 
@@ -660,7 +696,7 @@ export class HeldLock implements Lock {
   // A successful rotation supersedes every write on the old token. For same-token writes, only the replies
   // already known when this call was sent are definitely older than its write. An answer that renumbered the lease
   // is refused as an on-time one is: the lease cannot be trusted, so it is given back and the lock lost.
-  #reconcile(next: LockLease, sent: LockLease, version: number, renewal: boolean): boolean {
+  #reconcile(next: LockLease, sent: LockLease, ttl: Duration, version: number, renewal: boolean): boolean {
     if (sent.token !== this.token) {
       return false
     }
@@ -686,22 +722,28 @@ export class HeldLock implements Lock {
       this.#unsettled = 0
       this.#refusedRenewal = undefined
       this.#leaseReplies = undefined
-      this.#shortening.clear()
+      this.#unanswered.clear()
       this.#lease = next
+      this.#leaseTTL = ttl
     } else if (version === previousVersion) {
       this.#leaseReplies = undefined
       this.#lease = next
+      this.#leaseTTL = ttl
     } else {
-      const replies = this.#leaseReplies ?? [{ version: previousVersion, lease: this.#lease }]
+      const replies = this.#leaseReplies ?? [{ version: previousVersion, lease: this.#lease, ttl: this.#leaseTTL }]
       const possibleLatest = replies.filter(reply => reply.version > version)
-      possibleLatest.push({ version: this.#leaseVersion, lease: next })
+      possibleLatest.push({ version: this.#leaseVersion, lease: next, ttl })
       this.#leaseReplies = possibleLatest
 
+      // Whichever of these landed last sets the expiry: the lease is the earliest of them, and an unanswered write
+      // counts against it unless it asks for at least the longest of them.
       this.#lease = next
-      for (const { lease } of possibleLatest) {
-        if (lease.expiresAt < this.expiresAt) {
-          this.#lease = lease
+      this.#leaseTTL = ttl
+      for (const reply of possibleLatest) {
+        if (reply.lease.expiresAt < this.expiresAt) {
+          this.#lease = reply.lease
         }
+        this.#leaseTTL = Math.max(this.#leaseTTL, reply.ttl)
       }
     }
 
@@ -742,9 +784,13 @@ export class HeldLock implements Lock {
       this.#host.log.debug(fields, 'lock lease lost')
     }
 
-    // Published before the abort, so a `lost` listener sees the lease before the holder's handlers run.
+    // Published before the abort, so a `lost` listener sees the lease before the holder's handlers run. A release
+    // that listener makes aborts with this reason too.
+    this.#lossReason = new ErrLockLost(this.key, reason)
     publishLost(() => ({ service: this.#host, ...fields }))
-    this.#controller.abort(new ErrLockLost(this.key, reason))
+    if (!this.#controller.signal.aborted) {
+      this.#controller.abort(this.#lossReason)
+    }
   }
 
   async #releaseLease(ctx: Writable<ReleaseContext> | undefined): Promise<void> {
