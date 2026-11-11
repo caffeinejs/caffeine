@@ -1948,6 +1948,127 @@ describe('lock signal', () => {
     await vi.advanceTimersByTimeAsync(8 * Second)
     expect(await lock.once('nightly-report', () => 'again')).toEqual({ executed: true, result: 'again' })
   })
+
+  // A backend that loses its connection may have applied the write before it could answer. Until something shows the
+  // write had no effect, the shorter ttl it carried may be what the key now runs on.
+  it('aborts lock.signal by the time a shorter extend that failed after it was applied could free the key', async () => {
+    const fail = Promise.withResolvers<void>()
+    const backend = new (class extends MemoryLockBackend {
+      override async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+        await super.extend(lease, ttl)
+        await fail.promise
+        throw new Error('connection closed')
+      }
+    })()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    const shortening = held.extend(1 * Second).catch((e: unknown) => e)
+    fail.resolve()
+    expect(await shortening).toBeInstanceOf(Error)
+
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+    expect(lossOf(held).reason).toBe('expired')
+  })
+
+  // Each failed write bounds the lease on its own: an earlier one that asked for longer does not stand in for it.
+  it('aborts lock.signal at the shortest ttl among extends that failed after they were applied', async () => {
+    const backend = new (class extends MemoryLockBackend {
+      override async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+        await super.extend(lease, ttl)
+        throw new Error('connection closed')
+      }
+    })()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    expect(await held.extend(20 * Second).catch((e: unknown) => e)).toBeInstanceOf(Error)
+    expect(await held.extend(1 * Second).catch((e: unknown) => e)).toBeInstanceOf(Error)
+
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    expect(lossOf(held).reason).toBe('expired')
+  })
+
+  // A write sent after the failed one settled lands after it, whatever the failed one did: its answer is the lease.
+  it('keeps lock.signal live when an extend sent after a failed shorter one succeeds', async () => {
+    let failing = true
+    const backend = new (class extends MemoryLockBackend {
+      override async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+        const next = await super.extend(lease, ttl)
+        if (failing) {
+          throw new Error('connection closed')
+        }
+        return next
+      }
+    })()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    expect(await held.extend(1 * Second).catch((e: unknown) => e)).toBeInstanceOf(Error)
+    failing = false
+    expect(await held.extend(30 * Second)).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(2 * Second)
+    expect(held.signal.aborted).toBe(false)
+    expect(held.lost).toBe(false)
+  })
+
+  // A blocked event loop can let an extend's answer through before the overdue deadline timer. The lease ran out first,
+  // and nothing answering afterwards revives it.
+  it.each([
+    { name: 'on time', late: false },
+    { name: 'late', late: true },
+  ])('keeps a lease lost whose deadline passed before an extend answered $name', async ({ late }) => {
+    let monotonic = performance.now()
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => monotonic)
+    try {
+      const backend = new StagedBackend()
+      const lock = await newLock(backend)
+      fake()
+
+      const held = await lock.acquire('orders:rebuild', { ttl: 3 * Second })
+      const extending = held.extend(30 * Second).catch((e: unknown) => e)
+      const [call] = backend.extends
+      await call!.write()
+
+      // Advancing these clocks without dispatching timers models a callback blocking the overdue deadline.
+      vi.setSystemTime(Date.now() + 4 * Second)
+      if (late) {
+        monotonic += 4 * Second
+      }
+      call!.answer()
+      await extending
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(held.lost).toBe(true)
+      expect(lossOf(held).reason).toBe('expired')
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('releases once when a lost listener releases from inside a release that found the deadline overdue', async () => {
+    const backend = new CountingBackend()
+    const lock = await newLock(backend)
+    let held: Lock | undefined
+    let inner: Promise<void> | undefined
+    lock.events.on('lost', () => {
+      inner = held!.release()
+    })
+    fake()
+
+    held = await lock.acquire('orders:rebuild', { ttl: 1 * Second })
+    vi.setSystemTime(Date.now() + 2 * Second)
+    await held.release()
+    await inner
+
+    expect(lossOf(held).reason).toBe('expired')
+    expect(backend.releases).toBe(1)
+  })
 })
 
 // Under sustained contention a fixed pause either hammers the store or reacts slowly; doubling up to a cap does
