@@ -133,8 +133,12 @@ function main() {
   if (pm === 'pnpm') {
     writeJSON(join(project, 'pnpm-workspace.yaml'), { overrides })
   }
+  // CI makes pnpm install from the lockfile only, but the second install below adds specifiers the first one did not
+  // write: the project's lockfile is this test's own, so it is not frozen.
   const install =
-    pm === 'npm' ? ['install', '--ignore-scripts', '--no-audit', '--no-fund'] : ['install', '--ignore-scripts']
+    pm === 'npm'
+      ? ['install', '--ignore-scripts', '--no-audit', '--no-fund']
+      : ['install', '--ignore-scripts', '--no-frozen-lockfile']
   run(project, pm, install)
 
   // An export may import an optional peer, which an install leaves out: the application adds it when it uses that
@@ -214,12 +218,14 @@ process.exit(failed === 0 ? 0 : 1)
     // failure fails, an error without a file and a tsc that never started included.
     const result = spawn(project, ...bin('tsc', ['-p', '.']), true)
     const lines = (result.stdout ?? '').split('\n').map(line => line.trimEnd())
-    // pnpm lays a package out under node_modules/.pnpm/<id>/node_modules/<name>/.
+    // A path is relative to the project, and Windows writes it with backslashes or, from another drive, as `../`
+    // segments: the package is a `node_modules` segment anywhere in it. pnpm lays a package out under
+    // node_modules/.pnpm/<id>/node_modules/<name>/.
     const theirs = lines.filter(
       line =>
         /\): error TS\d+:/.test(line) &&
-        line.startsWith('node_modules/') &&
-        !line.includes('node_modules/@caffeinejs/'),
+        /(^|[\\/])node_modules[\\/]/.test(line) &&
+        !/(^|[\\/])node_modules[\\/]@caffeinejs[\\/]/.test(line),
     )
     for (const line of theirs) {
       console.log(`note: ${line}`)
