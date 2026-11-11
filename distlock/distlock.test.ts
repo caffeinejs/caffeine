@@ -1828,9 +1828,9 @@ describe('lock signal', () => {
     expect(held.expiresAt).toBeGreaterThan(Date.now())
   })
 
-  // A reply that reaches the lock after its own expiry says the write landed before the renewals that answered since:
-  // the backend set that expiry from when it applied the write. It does not end a lease they carried on.
-  it('keeps lock.signal live when a renewal applied before its retry answers after its own expiry', async () => {
+  // Nothing orders a renewal that timed out against the retries that answered since, and its reply is all the validity
+  // its backend vouches for if it landed last: one that answers after its own expiry ends the lease.
+  it('aborts lock.signal when a renewal that may have landed last answers after its own expiry', async () => {
     const backend = new StagedBackend()
     const lock = await newLock(backend)
     fake()
@@ -1848,10 +1848,10 @@ describe('lock signal', () => {
       }
     }
 
+    expect(held.signal.aborted).toBe(false)
     first.answer()
     await vi.advanceTimersByTimeAsync(0)
-    expect(held.signal.aborted).toBe(false)
-    expect(held.lost).toBe(false)
+    expect(lossOf(held).reason).toBe('expired')
   })
 
   // The `lost` event and the signal describe one incident: a listener cleaning up must not rename it a release.
@@ -2155,6 +2155,93 @@ describe('lock signal', () => {
     expect(loss.message.split('\n')[0]).toBe(
       'Cannot keep the lock on "orders:rebuild": an extension could not reach the backend',
     )
+  })
+
+  // A backend may report less validity than the ttl it applied, by a margin of its own: the reply of a write that may
+  // have landed last is the most the holder can rely on, whatever an earlier write reported.
+  it('aborts lock.signal by the expiry the last write reported when its backend kept a margin the first did not', async () => {
+    const inner = new (class extends MemoryLockBackend {
+      margin = 0
+      override async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+        const next = await super.extend(lease, ttl)
+        return next && { ...next, expiresAt: next.expiresAt - this.margin }
+      }
+    })()
+    const backend = new StagedBackend(inner)
+    const lock = await newLock(backend)
+    fake()
+
+    const start = Date.now()
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    const first = held.extend(30 * Second)
+    const second = held.extend(30 * Second)
+    await backend.extends[0]!.write()
+    vi.setSystemTime(start + 1 * Second)
+    inner.margin = 2 * Second
+    await backend.extends[1]!.write()
+    backend.extends[0]!.answer()
+    expect(await first).toBe(true)
+    backend.extends[1]!.answer()
+    await second
+
+    expect(held.expiresAt).toBe(start + 29 * Second)
+    await vi.advanceTimersByTimeAsync(28 * Second)
+    expect(lossOf(held).reason).toBe('expired')
+  })
+
+  // A larger ttl answering can make a bound a failed write left count again after it already passed. The extend that
+  // did so must not report the lease kept while the lock reads as lost.
+  it('reports an extend lost when its answer makes an already passed bound count', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 60 * Second })
+    const failed = held.extend(60 * Second).catch((e: unknown) => e)
+    await backend.extends[0]!.write()
+    backend.extends[0]!.fail(new Error('connection closed'))
+    expect(await failed).toBeInstanceOf(Error)
+
+    await vi.advanceTimersByTimeAsync(30 * Second)
+    const kept = held.extend(60 * Second)
+    await backend.extends[1]!.write()
+    backend.extends[1]!.answer()
+    expect(await kept).toBe(true)
+
+    vi.setSystemTime(Date.now() + 31 * Second)
+    const longer = held.extend(120 * Second)
+    await backend.extends[2]!.write()
+    backend.extends[2]!.answer()
+    expect(await longer).toBe(false)
+    expect(lossOf(held).reason).toBe('expired')
+  })
+
+  // A renewal that failed under a token the lock has since moved off says nothing about the lease that token became.
+  it('reports a rotated lease that runs out by the clock as expired after a renewal under the old token timed out', async () => {
+    const rotating = new ConditionallyRotatingBackend()
+    rotating.keptTTL = 500 * Millisecond
+    const backend = new StagedBackend(rotating)
+    const lock = await newLock(backend)
+    const losses: LostMessage[] = []
+    lock.events.on('lost', loss => losses.push(loss))
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 6 * Second, renew: true })
+    // The renewal leaves at 2s and times out at 6s; an explicit extend at 3s moves the key to a new token.
+    await vi.advanceTimersByTimeAsync(3 * Second)
+    const rotating6s = held.extend(6 * Second)
+    await backend.extends[1]!.write()
+    backend.extends[1]!.answer()
+    expect(await rotating6s).toBe(true)
+    await vi.advanceTimersByTimeAsync(3 * Second)
+
+    // A shortening extend under the new token lands and never answers: the lease ends at 6.5s, before its renewal.
+    void held.extend(500 * Millisecond).catch(() => undefined)
+    await backend.extends[2]!.write()
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(lossOf(held).reason).toBe('expired')
+    expect(losses.map(({ reason, renewal }) => ({ reason, renewal }))).toEqual([{ reason: 'expired', renewal: false }])
   })
 })
 
