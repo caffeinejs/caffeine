@@ -1,4 +1,4 @@
-import { Catch, ErrHTTP, type ErrorHandler, type HTTPErrorBody, type IContext, statusErrorBody } from '@caffeinejs/http'
+import { Catch, ErrHTTP, type ErrorHandler, type IContext, newProblem, type Problem } from '@caffeinejs/http'
 import { Second } from '@caffeinejs/std/duration'
 
 import { ErrCallRefused, failureOf } from '../errors.js'
@@ -8,24 +8,24 @@ import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
  * Answers a refusal (`ErrCallRefused`: an open circuit breaker, a full bulkhead, a spent rate limit) with 503, and a
  * time limit (`ErrTimeLimitExceeded`) with 504.
  *
- * A refusal that knows how long to wait sets `Retry-After`, in whole seconds rounded up. The body is the default JSON
- * envelope with the error's `code` and the status phrase as its message: the names of breakers and dependencies
- * never reach a client. Enrol it with `.errorHandling(e => e.globalHandlers(ResilienceErrorHandler))`.
+ * A refusal that knows how long to wait sets `Retry-After`, in whole seconds rounded up. The body is an RFC 9457
+ * problem with the error's `code` and the status phrase as its title and detail: the names of breakers and
+ * dependencies never reach a client. Enrol it with `.errorHandling(e => e.globalHandlers(ResilienceErrorHandler))`.
  */
 @Catch([ErrCallRefused, ErrTimeLimitExceeded])
 export class ResilienceErrorHandler implements ErrorHandler<ErrCallRefused | ErrTimeLimitExceeded> {
-  handle(ctx: IContext, error: ErrCallRefused | ErrTimeLimitExceeded): HTTPErrorBody {
+  handle(ctx: IContext, error: ErrCallRefused | ErrTimeLimitExceeded): Problem {
     const { kind, code, retryAfter } = failureOf(error)!
     if (kind === 'timeout') {
       ctx.status(504)
-      return statusErrorBody(504, code)
+      return newProblem({ status: 504, code })
     }
 
     ctx.status(503)
     if (retryAfter !== undefined) {
       ctx.header('retry-after', String(Math.max(1, Math.ceil(retryAfter / Second))))
     }
-    return statusErrorBody(503, code)
+    return newProblem({ status: 503, code })
   }
 }
 

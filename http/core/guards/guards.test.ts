@@ -25,6 +25,9 @@ import {
 import { createWebApplication } from '../../platform/fastify/index.js'
 import type { GuardInput } from './guard.js'
 
+// What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
+const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
+
 function buildApp() {
   return createWebApplication()
 }
@@ -206,7 +209,7 @@ describe('guard', () => {
 
     const res = await built.request('/guard-deny/async-result')
     expect(res.status).toBe(403)
-    expect(await res.json()).toMatchObject({ message: 'later' })
+    expect(await res.json()).toMatchObject({ detail: 'later' })
 
     await built.close()
   })
@@ -577,17 +580,19 @@ describe('denial', () => {
     DenialController,
   ]
 
-  it('renders the default 403 envelope for boolean false', async () => {
+  it('renders the default 403 problem for boolean false', async () => {
     const built = buildApp()
     await built.bootstrap()
 
     const res = await built.request('/denial/false')
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({
-      statusCode: 403,
-      error: 'Forbidden',
+      type: 'about:blank',
+      title: 'Forbidden',
+      status: 403,
+      detail: 'Resource forbidden',
       code: 'ERR_HTTP_FORBIDDEN',
-      message: 'Resource forbidden',
+      ...STAMPED,
     })
 
     await built.close()
@@ -600,10 +605,12 @@ describe('denial', () => {
     const res = await built.request('/denial/reason')
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({
-      statusCode: 403,
-      error: 'Forbidden',
+      type: 'about:blank',
+      title: 'Forbidden',
+      status: 403,
+      detail: 'token expired',
       code: 'ERR_HTTP_FORBIDDEN',
-      message: 'token expired',
+      ...STAMPED,
     })
 
     await built.close()
@@ -617,10 +624,12 @@ describe('denial', () => {
     const res = await built.request('/denial/unauthenticated')
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({
-      statusCode: 401,
-      error: 'Unauthorized',
+      type: 'about:blank',
+      title: 'Unauthorized',
+      status: 401,
+      detail: 'session expired',
       code: 'ERR_HTTP_UNAUTHORIZED',
-      message: 'session expired',
+      ...STAMPED,
     })
 
     await built.close()
@@ -632,7 +641,7 @@ describe('denial', () => {
 
     const res = await built.request('/denial/unauthenticated-no-reason')
     expect(res.status).toBe(401)
-    expect(await res.json()).toMatchObject({ code: 'ERR_HTTP_UNAUTHORIZED', message: 'Unauthorized' })
+    expect(await res.json()).toMatchObject({ code: 'ERR_HTTP_UNAUTHORIZED', detail: 'Unauthorized' })
 
     await built.close()
   })

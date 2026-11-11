@@ -39,5 +39,5 @@ await runLoadBenchmark({
       bool: 'true',
     },
   },
-  versions: ['fastify', 'hono', '@nestjs/core', 'express', 'elysia', '@caffeinejs/http'],
+  versions: ['fastify', 'hono', '@nestjs/core', '@nestjs/platform-node', 'express', 'elysia', '@caffeinejs/http'],
 })

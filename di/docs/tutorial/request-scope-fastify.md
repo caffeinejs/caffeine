@@ -15,7 +15,7 @@ request and makes it available to any service that needs it.
 ## 1. Install
 
 ```sh
-npm install @caffeinejs/di fastify
+npm install -E @caffeinejs/di fastify
 ```
 
 ---

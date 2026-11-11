@@ -80,7 +80,7 @@ async function enrolled() {
 
 describe('ResilienceErrorHandler', () => {
   // A refusal means the dependency is unavailable for now, not that the client did anything wrong.
-  it('answers an open breaker with 503, the default envelope and Retry-After in seconds', async () => {
+  it('answers an open breaker with 503, a problem and Retry-After in seconds', async () => {
     const app = await enrolled()
 
     const res = await app.request('/stock/open')
@@ -88,10 +88,11 @@ describe('ResilienceErrorHandler', () => {
     expect(res.status).toBe(503)
     expect(res.headers.get('retry-after')).toBe('37')
     expect(await res.json()).toEqual({
-      statusCode: 503,
-      error: 'Service Unavailable',
+      type: 'about:blank',
+      title: 'Service Unavailable',
+      status: 503,
+      detail: 'Service Unavailable',
       code: 'ERR_CALL_NOT_PERMITTED',
-      message: 'Service Unavailable',
     })
   })
 
@@ -149,10 +150,11 @@ describe('ResilienceErrorHandler', () => {
     expect(res.status).toBe(504)
     expect(res.headers.get('retry-after')).toBe(null)
     expect(await res.json()).toEqual({
-      statusCode: 504,
-      error: 'Gateway Timeout',
+      type: 'about:blank',
+      title: 'Gateway Timeout',
+      status: 504,
+      detail: 'Gateway Timeout',
       code: 'ERR_TIME_LIMIT_EXCEEDED',
-      message: 'Gateway Timeout',
     })
   })
 
