@@ -1775,9 +1775,9 @@ describe('lock signal', () => {
         await vi.advanceTimersByTimeAsync(1 * Second)
         aborted = held.signal.aborted
       },
-      { ttl: 30 * 24 * 60 * Minute },
+      { ttl: 30 * Day },
     )
-    await vi.advanceTimersByTimeAsync(25 * 24 * 60 * Minute)
+    await vi.advanceTimersByTimeAsync(25 * Day)
 
     expect(aborted).toBe(false)
     expect(lost).toEqual([])
@@ -1826,6 +1826,32 @@ describe('lock signal', () => {
 
     expect(held.signal.aborted).toBe(false)
     expect(held.expiresAt).toBeGreaterThan(Date.now())
+  })
+
+  // A reply that reaches the lock after its own expiry says the write landed before the renewals that answered since:
+  // the backend set that expiry from when it applied the write. It does not end a lease they carried on.
+  it('keeps lock.signal live when a renewal applied before its retry answers after its own expiry', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    // The renewal leaves and lands at 10s but answers only at 41s; its retry and every renewal after it answer at once.
+    await vi.advanceTimersByTimeAsync(10 * Second)
+    const first = backend.extends.shift()!
+    await first.write()
+    for (let elapsed = 10; elapsed < 41; elapsed += 1) {
+      await vi.advanceTimersByTimeAsync(1 * Second)
+      for (const call of backend.extends.splice(0)) {
+        await call.write()
+        call.answer()
+      }
+    }
+
+    first.answer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(held.signal.aborted).toBe(false)
+    expect(held.lost).toBe(false)
   })
 
   // The `lost` event and the signal describe one incident: a listener cleaning up must not rename it a release.
@@ -1993,29 +2019,33 @@ describe('lock signal', () => {
     expect(lossOf(held).reason).toBe('expired')
   })
 
-  // A write sent after the failed one settled lands after it, whatever the failed one did: its answer is the lease.
-  it('keeps lock.signal live when an extend sent after a failed shorter one succeeds', async () => {
-    let failing = true
-    const backend = new (class extends MemoryLockBackend {
-      override async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
-        const next = await super.extend(lease, ttl)
-        if (failing) {
-          throw new Error('connection closed')
-        }
-        return next
-      }
-    })()
+  // A failed write gives no order on the backend: a write sent after it can land before it. A bound kept for one failed
+  // write stands in for another only while nothing can take it away, so the answer of a longer write that landed
+  // between them must not free the later one.
+  it('aborts lock.signal by the expiry of a failed shorter extend that landed after a longer one answered last', async () => {
+    const backend = new StagedBackend()
     const lock = await newLock(backend)
     fake()
 
     const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
-    expect(await held.extend(1 * Second).catch((e: unknown) => e)).toBeInstanceOf(Error)
-    failing = false
-    expect(await held.extend(30 * Second)).toBe(true)
+    const a = held.extend(1 * Second).catch((e: unknown) => e)
+    await backend.extends[0]!.write()
+    backend.extends[0]!.fail(new Error('connection closed'))
+    expect(await a).toBeInstanceOf(Error)
+
+    const b = held.extend(30 * Second).catch((e: unknown) => e)
+    await backend.extends[1]!.write()
+    vi.setSystemTime(Date.now() + 500 * Millisecond)
+    const c = held.extend(2 * Second).catch((e: unknown) => e)
+    await backend.extends[2]!.write()
+    backend.extends[2]!.fail(new Error('connection closed'))
+    expect(await c).toBeInstanceOf(Error)
+    backend.extends[1]!.answer()
+    await b
 
     await vi.advanceTimersByTimeAsync(2 * Second)
-    expect(held.signal.aborted).toBe(false)
-    expect(held.lost).toBe(false)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+    expect(lossOf(held).reason).toBe('expired')
   })
 
   // A blocked event loop can let an extend's answer through before the overdue deadline timer. The lease ran out first,
@@ -2069,6 +2099,62 @@ describe('lock signal', () => {
 
     expect(lossOf(held).reason).toBe('expired')
     expect(backend.releases).toBe(1)
+  })
+
+  // A callback holding the event loop past a bound a failed write left keeps the deadline timer from firing. A
+  // contender can take the key by then, so the holder must already read as lost and send nothing on it.
+  it('reports the lock lost and sends no extend once a failed shorter extend could have freed the key', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    const shortening = held.extend(1 * Second).catch((e: unknown) => e)
+    await backend.extends[0]!.write()
+    backend.extends[0]!.fail(new Error('connection closed'))
+    expect(await shortening).toBeInstanceOf(Error)
+
+    vi.setSystemTime(Date.now() + 2 * Second)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+    expect(held.lost).toBe(true)
+    expect(await held.extend(30 * Second)).toBe(false)
+    expect(backend.extends).toHaveLength(1)
+    expect(lossOf(held).reason).toBe('expired')
+  })
+
+  // A timer fires no earlier than asked, but one asked for a fraction of a millisecond is cut to the whole one below.
+  it('keeps lock.signal live until a fractional ttl has fully run out', async () => {
+    const lock = await newLock()
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 100.75 })
+    await vi.advanceTimersByTimeAsync(100)
+    expect(held.signal.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(lossOf(held).reason).toBe('expired')
+  })
+
+  // An explicit extend that fails after it may have landed loses the lease too: the message must not blame a renewal
+  // the holder never turned on.
+  it('names an extension, not a renewal, when an explicit extend fails with its outcome unknown', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
+    const extending = held.extend(30 * Second).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(DEFAULT_DIST_LOCK_OPTIONS.storeTimeout)
+    expect(await extending).toBeInstanceOf(ErrLockBackendTimeout)
+    await backend.extends[0]!.write()
+    backend.extends[0]!.fail(new Error('connection closed'))
+    await vi.advanceTimersByTimeAsync(0)
+
+    const loss = lossOf(held)
+    expect(loss.reason).toBe('error')
+    expect(loss.message.split('\n')[0]).toBe(
+      'Cannot keep the lock on "orders:rebuild": an extension could not reach the backend',
+    )
   })
 })
 
