@@ -4,7 +4,7 @@ Circuit breaker, retry, time limiter, bulkhead, rate limiter and fallback for an
 plain functions. Its one dependency is `@caffeinejs/std`, which has none; every integration is an optional subpath.
 
 ```sh
-npm install @caffeinejs/resilience
+npm install -E @caffeinejs/resilience
 ```
 
 | Import from                             | What                                                                                                      |
@@ -216,10 +216,10 @@ const breaker = circuitBreaker({
 | `failureRateThreshold`                  | `50`                           | Failure rate, in percent, at or above which the breaker opens                                                                      |
 | `slowCallRateThreshold`                 | `100`                          | Slow-call rate, in percent, at or above which the breaker opens                                                                    |
 | `slowCallDurationThreshold`             | `1 * Minute`                   | A call longer than this is slow                                                                                                    |
-| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', duration }` for the calls of the last `duration`, in whole seconds                      |
+| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', duration }` for the calls of the last `duration`, in whole seconds; each at most 2^24   |
 | `minimumNumberOfCalls`                  | `100`                          | Calls needed before a rate is computed; capped at a count window's size                                                            |
 | `waitDurationInOpenState`               | `1 * Minute`                   | Time spent open; a function of how many times in a row it opened, such as `exponential()`                                          |
-| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open                                                                                            |
+| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open; at most 2^24                                                                              |
 | `maxWaitDurationInHalfOpenState`        | `0` (forever)                  | Re-opens a half-open breaker whose trial calls never settle                                                                        |
 | `automaticTransitionFromOpenToHalfOpen` | `false`                        | Moves to half open when the wait elapses, not on the next call                                                                     |
 | `recordError`                           | every error                    | Which errors are failures: a predicate, or a list of error classes; any other error counts as a success                            |
@@ -512,7 +512,7 @@ const breaker = circuitBreaker({ name: 'inventory', clock: fakeTimersClock })
 ## Annotations
 
 ```sh
-npm install @caffeinejs/di @caffeinejs/application
+npm install -E @caffeinejs/di @caffeinejs/application
 ```
 
 `@caffeinejs/resilience/aop` applies the policies to methods of the classes the container builds. The `Resilience()`
@@ -782,7 +782,7 @@ APP_RESILIENCE__PRESETS__LEDGER__RETRY__BACKOFF__DELAY=1s
 ## HTTP
 
 ```sh
-npm install @caffeinejs/http
+npm install -E @caffeinejs/http
 ```
 
 `@caffeinejs/resilience/http` answers resilience errors over HTTP and checks, at start-up, which handlers may be
@@ -798,7 +798,7 @@ createWebApplication({ container, config })
   .errorHandling(e => e.globalHandlers(ResilienceErrorHandler))
 ```
 
-`ResilienceErrorHandler` answers with the default JSON envelope, its message the status phrase, so breaker and
+`ResilienceErrorHandler` answers with an RFC 9457 problem, its title and detail the status phrase, so breaker and
 dependency names never reach a client:
 
 | Error                  | Status | `Retry-After`                                |

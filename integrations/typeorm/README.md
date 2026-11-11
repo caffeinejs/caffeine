@@ -4,7 +4,7 @@ TypeORM for Caffeine applications: a feature that owns a `DataSource`, and an in
 controller or service the repository for an entity.
 
 ```sh
-npm install @caffeinejs/typeorm typeorm
+npm install -E @caffeinejs/typeorm typeorm
 ```
 
 ## Quick start

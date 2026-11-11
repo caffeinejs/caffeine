@@ -31,6 +31,9 @@ import {
 } from '../../../index.js'
 import { authentication, createWebApplication, csrf, newRouter } from '../../../platform/fastify/index.js'
 
+// What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
+const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
+
 /**
  * The `csrf()` plugin on a server: what it refuses, what it lets through, and what leaves a route out of it.
  *
@@ -83,16 +86,18 @@ function post(app: Requesting, path: string, headers: Record<string, string> = {
   return app.request(path, { method: 'POST', headers })
 }
 
-/** The standard envelope a refusal renders, which carries no header value. */
+/** The standard problem a refusal renders, which carries no header value. */
 async function expectRefused(res: Response): Promise<void> {
   expect(res.status).toBe(403)
 
   const text = await res.text()
   expect(JSON.parse(text)).toEqual({
-    statusCode: 403,
-    error: 'Forbidden',
+    type: 'about:blank',
+    title: 'Forbidden',
+    status: 403,
+    detail: 'Cannot accept the request: it is cross-origin',
     code: 'ERR_CSRF_CROSS_ORIGIN',
-    message: 'Cannot accept the request: it is cross-origin',
+    ...STAMPED,
   })
   expect(text).not.toContain('evil.example')
 }

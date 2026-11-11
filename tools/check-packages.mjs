@@ -16,11 +16,13 @@
 // project (`tsconfig.json`) does. `_spectypes/` is compiled but left out of the published package, so it counts as a
 // test.
 //
-// Publishing: a workspace is published unless it is `private`. Every workspace's version and every `@caffeinejs/*`
-// specifier is the root version. A published package carries the root's `license`, `author`, `bugs` and `engines`, a
-// `repository` naming its own directory, a `homepage`, public access, the standard `files`, and a copy of the root
-// LICENSE. With `--tarballs <dir>`, each `npm pack` tarball there is checked too: one per published package, and
-// nothing in it that the build left behind for the repository alone.
+// Publishing: a workspace is published unless it is `private`, and no published package depends on one that is,
+// which npm could not install. Every workspace's version and every `@caffeinejs/*` specifier is the root version. A
+// published package carries the root's `license`, `author`, `bugs` and `engines`, a `repository` naming its own
+// directory, a `homepage`, public access, the standard `files`, a README.md with more than its title, and a copy of
+// the root LICENSE. With `--tarballs <dir>`, each `npm pack` tarball there is checked too: one per published package
+// and per package a tarball names in `optionalDependencies`, such as the caffeine binary's platform packages, all at
+// the root version, and nothing in any of them that the build left behind for the repository alone.
 import { execFileSync } from 'node:child_process'
 import { existsSync, globSync, readdirSync, readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
@@ -189,13 +191,13 @@ function installedManifest(name, fromDir) {
   }
 }
 
-function check({ dir, manifest }, rootManifest) {
+function check({ dir, manifest }, rootManifest, unpublished) {
   const where = `${posix(relative(root, dir))}/package.json`
   const errors = []
   const fail = message => errors.push(`Cannot accept ${where}: ${message}`)
   const rootDevDependencies = rootManifest.devDependencies ?? {}
 
-  checkPublishing(dir, manifest, rootManifest, fail)
+  checkPublishing(dir, manifest, rootManifest, unpublished, fail)
   if (!existsSync(join(dir, 'tsconfig.build.json'))) {
     fail('it is published but has no tsconfig.build.json to build it: add one, or mark the package "private": true')
     return errors
@@ -401,9 +403,22 @@ function check({ dir, manifest }, rootManifest) {
 
 const isEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
-/** The metadata npm shows and provenance verifies, and the license text every tarball carries. */
-function checkPublishing(dir, manifest, rootManifest, fail) {
+/**
+ * The metadata npm shows and provenance verifies, the license text every tarball carries, and no dependency on a
+ * workspace that is never published.
+ */
+function checkPublishing(dir, manifest, rootManifest, unpublished, fail) {
   const directory = posix(relative(root, dir))
+
+  for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+    for (const name of Object.keys(manifest[field] ?? {})) {
+      if (unpublished.has(name)) {
+        fail(
+          `its "${field}" names "${name}", which is "private" and never published, so npm cannot install it: drop "private": true from the package.json of "${name}", or remove it from "${field}"`,
+        )
+      }
+    }
+  }
 
   for (const field of ['license', 'author', 'bugs']) {
     if (!isEqual(manifest[field], rootManifest[field])) {
@@ -425,6 +440,10 @@ function checkPublishing(dir, manifest, rootManifest, fail) {
   }
   if (!isEqual(manifest.files?.slice(0, FILES.length), FILES)) {
     fail(`its "files" does not start with ${JSON.stringify(FILES)}`)
+  }
+  const readme = join(dir, 'README.md')
+  if (!existsSync(readme) || readFileSync(readme, 'utf8').trim().split('\n').length < 2) {
+    fail(`its README.md is missing or holds no more than a title: write ${directory}/README.md, which npm shows`)
   }
   const license = join(dir, 'LICENSE')
   if (!existsSync(license) || !readFileSync(license).equals(readFileSync(join(root, 'LICENSE')))) {
@@ -486,16 +505,39 @@ function strayReason(entry) {
 
 function checkTarballs(tarballDir, published, version) {
   const errors = []
-  const tarballs = globSync('*.tgz', { cwd: tarballDir }).toSorted()
-  const seen = new Set()
+  const tarballs = globSync('*.tgz', { cwd: tarballDir })
+    .toSorted()
+    .map(tarball => {
+      const file = join(tarballDir, tarball)
+      const manifest = JSON.parse(execFileSync('tar', ['-xzOf', file, 'package/package.json'], { encoding: 'utf8' }))
+      return { tarball, file, manifest }
+    })
 
-  for (const tarball of tarballs) {
-    const file = join(tarballDir, tarball)
-    const manifest = JSON.parse(execFileSync('tar', ['-xzOf', file, 'package/package.json'], { encoding: 'utf8' }))
+  // A package a tarball names in `optionalDependencies` that is no workspace, such as the one holding the caffeine
+  // binary for a platform, is packed with it: name -> the tarball that names it.
+  const optional = new Map()
+  for (const { tarball, manifest } of tarballs) {
+    for (const [name, specifier] of Object.entries(manifest.optionalDependencies ?? {})) {
+      if (!name.startsWith('@caffeinejs/')) {
+        continue
+      }
+      if (specifier !== version) {
+        errors.push(
+          `Cannot accept ${tarball}: optionalDependencies pins "${name}" to "${specifier}", not "${version}": pack the packages again`,
+        )
+      }
+      if (!published.some(({ manifest: workspace }) => workspace.name === name)) {
+        optional.set(name, tarball)
+      }
+    }
+  }
+
+  const seen = new Set()
+  for (const { tarball, file, manifest } of tarballs) {
     const pkg = published.find(candidate => candidate.manifest.name === manifest.name)
-    if (pkg === undefined) {
+    if (pkg === undefined && !optional.has(manifest.name)) {
       errors.push(
-        `Cannot accept ${tarball}: "${manifest.name}" is not a published workspace: remove it from ${tarballDir}`,
+        `Cannot accept ${tarball}: "${manifest.name}" is neither a published workspace nor in the optionalDependencies of another tarball: remove it from ${tarballDir}`,
       )
       continue
     }
@@ -513,7 +555,9 @@ function checkTarballs(tarballDir, published, version) {
 
     // A file the build project lists by name, such as a fixture the package exports, ships on purpose.
     const listed = new Set(
-      (readJSON(join(pkg.dir, 'tsconfig.build.json')).files ?? []).map(path => `package/dist/${posix(path)}`),
+      pkg === undefined
+        ? []
+        : (readJSON(join(pkg.dir, 'tsconfig.build.json')).files ?? []).map(path => `package/dist/${posix(path)}`),
     )
     const entries = execFileSync('tar', ['-tzf', file], { encoding: 'utf8' }).split('\n').filter(Boolean)
     for (const entry of entries) {
@@ -537,11 +581,10 @@ function checkTarballs(tarballDir, published, version) {
     }
   }
 
-  for (const { manifest } of published) {
-    if (!seen.has(manifest.name)) {
-      errors.push(
-        `Cannot accept ${tarballDir}: it holds no tarball of "${manifest.name}": pack every published package`,
-      )
+  for (const name of [...published.map(({ manifest }) => manifest.name), ...optional.keys()]) {
+    if (!seen.has(name)) {
+      const why = optional.has(name) ? `, which ${optional.get(name)} names in optionalDependencies` : ''
+      errors.push(`Cannot accept ${tarballDir}: it holds no tarball of "${name}"${why}: pack every published package`)
     }
   }
 
@@ -565,10 +608,13 @@ function main() {
     .toSorted()
     .map(file => ({ dir: join(root, dirname(file)), manifest: readJSON(join(root, file)) }))
   const packages = workspaces.filter(({ manifest }) => manifest.private !== true)
+  const unpublished = new Set(
+    workspaces.filter(({ manifest }) => manifest.private === true).map(({ manifest }) => manifest.name),
+  )
 
   const errors = [
     ...checkLockstep(workspaces, rootManifest),
-    ...packages.flatMap(pkg => check(pkg, rootManifest)),
+    ...packages.flatMap(pkg => check(pkg, rootManifest, unpublished)),
     ...(tarballDir === undefined ? [] : checkTarballs(tarballDir, packages, rootManifest.version)),
   ]
 
