@@ -71,8 +71,8 @@ describe('a route schema with hide: true', () => {
       })
 
     expect((await post('/notes', { text: 'hello' })).status).toBe(200)
-    expect((await post('/notes', {})).status).toBe(400)
+    expect((await post('/notes', {})).status).toBe(422)
     expect((await post('/drafts', { text: 'hello' })).status).toBe(200)
-    expect((await post('/drafts', {})).status).toBe(400)
+    expect((await post('/drafts', {})).status).toBe(422)
   })
 })

@@ -1,7 +1,7 @@
 import { createApplication } from '@caffeinejs/application'
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Day, Minute, Second, type Duration } from '@caffeinejs/std/duration'
+import { Day, Millisecond, Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
@@ -11,6 +11,7 @@ import { CaffeineDistLock, type DistLock } from './distlock.js'
 import { ErrDistLockConfiguration, ErrInvalidLockKey, ErrLockBackendTimeout, ErrLockNotAcquired } from './errors.js'
 import { kDistLock } from './keys.js'
 import { RecordingLogger } from './log.testkit.js'
+import type { AcquireContext } from './observability/channels.js'
 import { DEFAULT_DIST_LOCK_OPTIONS } from './options.js'
 import { DistributedLock } from './plugin.js'
 
@@ -74,6 +75,14 @@ class FirstAttemptHangsBackend implements Backend {
 
   release(lease: LockLease): Promise<void> {
     return this.#inner.release(lease)
+  }
+}
+
+class ConditionallyRotatingBackend extends RotatingBackend {
+  keptTTL = 1 * Minute
+
+  override extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    return ttl === this.keptTTL ? this.inner.extend(lease, ttl) : super.extend(lease, ttl)
   }
 }
 
@@ -393,7 +402,7 @@ describe('distributed lock against a backend that does not answer', () => {
     await stale
 
     backend.late = []
-    expect(await held.extend(10 * Minute)).toBe(true)
+    expect(await held.extend(10 * Minute)).toBe(false)
     backend.answerLate()
     await vi.advanceTimersByTimeAsync(0)
 
@@ -456,7 +465,7 @@ describe('distributed lock against a backend that does not answer', () => {
 
     backend.late = []
     const sentNext = Date.now()
-    expect(await held.extend(next)).toBe(true)
+    expect(await held.extend(next)).toBe(false)
     expect(held.lost).toBe(true)
 
     backend.answerLate()
@@ -490,11 +499,499 @@ describe('distributed lock against a backend that does not answer', () => {
       ;(which === 'short' ? short : long)!.answer()
       await vi.advanceTimersByTimeAsync(0)
     }
-    expect(await lengthening).toBe(true)
+    expect(await lengthening).toBe(order[0] === 'short')
 
     await vi.advanceTimersByTimeAsync(2 * Second)
     expect(await backend.inner.tryAcquire('orders:rebuild', 1 * Minute)).toBeDefined()
     expect(held.lost).toBe(true)
+  })
+
+  it('does not forget an overlapping write when its expiry leaves the current cap unchanged', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild')
+    const first = held.extend(10 * Second)
+    const delayed = held.extend(10 * Second).catch((error: unknown) => error)
+    const [firstWrite, delayedWrite] = backend.extends
+    await firstWrite!.write()
+    firstWrite!.answer()
+    expect(await first).toBe(false)
+    expect(held.lost).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await delayed).toBeInstanceOf(ErrLockBackendTimeout)
+
+    const last = held.extend(1 * Minute)
+    const lastWrite = backend.extends[2]!
+    await lastWrite.write()
+    await delayedWrite!.write()
+    delayedWrite!.answer()
+    await vi.advanceTimersByTimeAsync(0)
+    lastWrite.answer()
+    expect(await last).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(10 * Second)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+    expect(held.lost).toBe(true)
+  })
+
+  it('releases a rotated token even after an earlier same-token reply changed the lease', async () => {
+    const backend = new StagedBackend(new ConditionallyRotatingBackend())
+    const lock = await newLock(backend)
+    const held = await lock.acquire('orders:rebuild')
+    const originalToken = held.token
+
+    const keeping = held.extend(1 * Minute)
+    const rotating = held.extend(30 * Second)
+    const [keep, rotate] = backend.extends
+    await keep!.write()
+    keep!.answer()
+    expect(await keeping).toBe(true)
+    await rotate!.write()
+    rotate!.answer()
+    expect(await rotating).toBe(true)
+
+    expect(held.token).not.toBe(originalToken)
+    await held.release()
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+  })
+
+  it('keeps the current lease when a timed-out extension rejects under its old token', async () => {
+    const inner = new FaultyBackend(new RotatingBackend())
+    const backend = new StagedBackend(inner)
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild')
+    const delayed = held.extend(10 * Second).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(5 * Second)
+    expect(await delayed).toBeInstanceOf(ErrLockBackendTimeout)
+
+    const rotating = held.extend(1 * Minute)
+    const [old, rotate] = backend.extends
+    await rotate!.write()
+    rotate!.answer()
+    expect(await rotating).toBe(true)
+
+    inner.failExtend = true
+    await expect(old!.write()).rejects.toThrow('backend down')
+    old!.answer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(held.lost).toBe(false)
+  })
+
+  it('reads as lost before a late renewal frees the key', async () => {
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    try {
+      const lostAtRelease: boolean[] = []
+      const backend = new (class extends MemoryLockBackend {
+        override extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+          now += 6 * Second
+          return super.extend(lease, ttl)
+        }
+
+        override release(lease: LockLease): Promise<void> {
+          lostAtRelease.push(held.lost)
+          return super.release(lease)
+        }
+      })()
+      const lock = await newLock(backend)
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+      const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+
+      await vi.advanceTimersByTimeAsync(10 * Second)
+      expect(lostAtRelease).toEqual([true])
+      expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('reports the winning backend error if the caller aborts before its handler runs', async () => {
+    const error = new Error('backend failed first')
+    const backend = new (class extends MemoryLockBackend {
+      override tryAcquire(): Promise<LockLease | undefined> {
+        throw error
+      }
+    })()
+    const lock = await newLock(backend)
+    const outcomes: AcquireContext[] = []
+    lock.events.on('acquire', outcome => outcomes.push(outcome))
+
+    const controller = new AbortController()
+    const acquiring = lock.tryAcquire('orders:rebuild', { signal: controller.signal })
+    queueMicrotask(() => controller.abort(new Error('caller stopped later')))
+
+    await expect(acquiring).rejects.toBe(error)
+    expect(outcomes).toEqual([expect.objectContaining({ outcome: 'error', failures: { timeout: 0, other: 1 } })])
+  })
+
+  it('releases the token from an explicit extension already on the wire', async () => {
+    const backend = new StagedBackend(new RotatingBackend())
+    const lock = await newLock(backend)
+    const held = await lock.acquire('orders:rebuild')
+    const extending = held.extend(1 * Minute)
+    const write = backend.extends[0]!
+    await write.write()
+
+    const releasing = held.release()
+    await Promise.resolve()
+    write.answer()
+    expect(await extending).toBe(true)
+    await releasing
+
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+  })
+
+  it('keeps a rotated lease when an old-token refusal arrives first', async () => {
+    const backend = new StagedBackend(new RotatingBackend())
+    const lock = await newLock(backend)
+    const losses: unknown[] = []
+    lock.events.on('lost', loss => losses.push(loss))
+    const held = await lock.acquire('orders:rebuild')
+
+    const rotating = held.extend(1 * Minute)
+    const refused = held.extend(1 * Minute)
+    const [rotate, old] = backend.extends
+    await rotate!.write()
+    await old!.write()
+    old!.answer()
+    expect(await refused).toBe(false)
+
+    rotate!.answer()
+    expect(await rotating).toBe(true)
+    expect(held.lost).toBe(false)
+    expect(losses).toEqual([])
+  })
+
+  it('refuses a shortened extension whose lease already expired before the reply', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild')
+    const extending = held.extend(1 * Second)
+    const write = backend.extends[0]!
+    await write.write()
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    write.answer()
+
+    expect(await extending).toBe(false)
+    expect(held.lost).toBe(true)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+  })
+
+  it('preserves a timed-out once window without restarting renewal after a late rotation', async () => {
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const action = Promise.withResolvers<void>()
+    try {
+      const backend = new (class extends RotatingBackend {
+        extensions = 0
+
+        override extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+          this.extensions += 1
+          now += 6 * Second
+          return super.extend(lease, ttl)
+        }
+      })()
+      const lock = await newLock(backend)
+      const losses: unknown[] = []
+      lock.events.on('lost', loss => losses.push(loss))
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+      const running = lock.once('orders:rebuild', () => action.promise, { renew: true })
+
+      await vi.advanceTimersByTimeAsync(25 * Second)
+      expect(backend.extensions).toBe(1)
+      expect(losses).toEqual([expect.objectContaining({ reason: 'error', renewal: true })])
+      expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
+
+      action.resolve()
+      await running
+    } finally {
+      action.resolve()
+      clock.mockRestore()
+    }
+  })
+
+  it('moves the renewal timer forward when an explicit extension shortens the lease', async () => {
+    const lock = await newLock()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+
+    expect(await held.extend(3 * Second)).toBe(true)
+    await vi.advanceTimersByTimeAsync(4 * Second)
+
+    expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
+    expect(held.lost).toBe(false)
+    await held.release()
+  })
+
+  it('preserves the last store timeout when backoff uses the remaining wait budget', async () => {
+    const backend = new FirstAttemptHangsBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const acquiring = lock
+      .acquire('orders:rebuild', { wait: 6 * Second, retryDelay: 2 * Second })
+      .catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(6 * Second)
+
+    expect(await acquiring).toBeInstanceOf(ErrLockBackendTimeout)
+    expect(backend.attempts).toBe(1)
+  })
+
+  it('reports loss instead of success when renewal timed out before a rotation was confirmed', async () => {
+    const backend = new StagedBackend(new RotatingBackend())
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild', { renew: true })
+
+    await vi.advanceTimersByTimeAsync(11 * Second)
+    const extending = held.extend(1 * Minute)
+    const rotate = backend.extends[1]!
+    await rotate.write()
+    await vi.advanceTimersByTimeAsync(4 * Second)
+    expect(held.lost).toBe(true)
+
+    rotate.answer()
+    expect(await extending).toBe(false)
+    await held.release()
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+  })
+
+  it('publishes a single loss when a renewal failure settles a deferred refusal', async () => {
+    const inner = new FaultyBackend()
+    const backend = new StagedBackend(inner)
+    const lock = await newLock(backend)
+    const losses: unknown[] = []
+    lock.events.on('lost', loss => losses.push(loss))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild', { renew: true })
+
+    await vi.advanceTimersByTimeAsync(10 * Second)
+    inner.stolen = true
+    const extending = held.extend(1 * Minute)
+    const [renew, refuse] = backend.extends
+    await refuse!.write()
+    refuse!.answer()
+    expect(await extending).toBe(false)
+
+    inner.failExtend = true
+    await expect(renew!.write()).rejects.toThrow('backend down')
+    renew!.answer()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(losses).toEqual([expect.objectContaining({ reason: 'taken', renewal: false })])
+  })
+
+  it('does not advertise ownership while an unanswered extension can shorten it', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild')
+    const extending = held.extend(1 * Second).catch((error: unknown) => error)
+    const shorten = backend.extends[0]!
+    await shorten.write()
+    await vi.advanceTimersByTimeAsync(1 * Second)
+
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+    expect(held.lost).toBe(true)
+    shorten.answer()
+    expect(await extending).toBe(false)
+  })
+
+  it('discards an earlier expiry once every possible latest write supersedes it', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild')
+    const started = Date.now()
+
+    const short = held.extend(10 * Second)
+    const concurrent = held.extend(1 * Minute)
+    const [shortWrite, concurrentWrite] = backend.extends
+    await shortWrite!.write()
+    shortWrite!.answer()
+    expect(await short).toBe(true)
+
+    const last = held.extend(1 * Minute)
+    const lastWrite = backend.extends[2]!
+    await concurrentWrite!.write()
+    concurrentWrite!.answer()
+    expect(await concurrent).toBe(true)
+    await lastWrite.write()
+    lastWrite.answer()
+    expect(await last).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(10 * Second)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
+    expect(held.expiresAt).toBe(started + 1 * Minute)
+    expect(held.lost).toBe(false)
+  })
+
+  it('reports loss if the current rotated lease expired before an older successful reply', async () => {
+    const backend = new StagedBackend(new ConditionallyRotatingBackend())
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild')
+
+    const older = held.extend(1 * Minute).catch((error: unknown) => error)
+    const newer = held.extend(1 * Second)
+    const [old, rotated] = backend.extends
+    await old!.write()
+    await rotated!.write()
+    rotated!.answer()
+    expect(await newer).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+    old!.answer()
+    expect(await older).toBe(false)
+  })
+
+  it('renews a live rotation even if an older reply temporarily showed an expired lease', async () => {
+    const inner = new ConditionallyRotatingBackend()
+    inner.keptTTL = 1 * Second
+    const backend = new StagedBackend(inner)
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild', { renew: true })
+
+    const shortening = held.extend(1 * Second)
+    const rotating = held.extend(6 * Second)
+    const [short, rotated] = backend.extends
+    await short!.write()
+    await rotated!.write()
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    short!.answer()
+    expect(await shortening).toBe(false)
+    rotated!.answer()
+    expect(await rotating).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(2 * Second)
+    expect(backend.extends).toHaveLength(3)
+    const renewal = backend.extends[2]!
+    await renewal.write()
+    renewal.answer()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(held.expiresAt).toBe(Date.now() + 6 * Second)
+    await held.release()
+  })
+
+  it('waits for a rotating renewal when the backend starts release synchronously', async () => {
+    const reply = Promise.withResolvers<void>()
+    const written = Promise.withResolvers<void>()
+    let releasing: Promise<void> | undefined
+    const backend = new (class extends RotatingBackend {
+      override extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+        const writing = super.extend(lease, ttl).then(async next => {
+          written.resolve()
+          await reply.promise
+          return next
+        })
+        releasing = held.release()
+        return writing
+      }
+    })()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild', { renew: true })
+
+    await vi.advanceTimersByTimeAsync(10 * Second)
+    await written.promise
+    reply.resolve()
+    expect(releasing).toBeDefined()
+    await releasing
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+  })
+
+  it('does not report success while an unanswered shortening may have freed the key', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild')
+
+    const lengthening = held.extend(1 * Minute)
+    const shortening = held.extend(1 * Second).catch((error: unknown) => error)
+    const [long, short] = backend.extends
+    await long!.write()
+    await short!.write()
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+
+    long!.answer()
+    expect(await lengthening).toBe(false)
+    short!.answer()
+    expect(await shortening).toBe(false)
+  })
+
+  it('can resume renewal after an explicit write replaces an expired conservative bound', async () => {
+    const backend = new StagedBackend()
+    const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const held = await lock.acquire('orders:rebuild', { renew: true })
+
+    const shortening = held.extend(1 * Second)
+    const lengthening = held.extend(1 * Minute)
+    const [short, long] = backend.extends
+    await short!.write()
+    await long!.write()
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    long!.answer()
+    await lengthening
+    short!.answer()
+    expect(await shortening).toBe(false)
+    expect(held.lost).toBe(true)
+
+    const recovering = held.extend(30 * Second)
+    const recovery = backend.extends[2]!
+    await recovery.write()
+    recovery.answer()
+    expect(await recovering).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(10 * Second)
+    expect(backend.extends).toHaveLength(4)
+    const renewal = backend.extends[3]!
+    await renewal.write()
+    renewal.answer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(held.expiresAt).toBe(Date.now() + 30 * Second)
+    await held.release()
+  })
+
+  it('reads as lost when an overlapping store deadline passed before timer delivery', async () => {
+    let monotonic = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => monotonic)
+    try {
+      const backend = new StagedBackend()
+      const lock = await newLock(backend)
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+      const started = Date.now()
+      const held = await lock.acquire('orders:rebuild', { ttl: 100 * Millisecond })
+
+      const delayed = held.extend(200 * Millisecond).catch((error: unknown) => error)
+      const lengthening = held.extend(1 * Minute)
+      const [short, long] = backend.extends
+      await long!.write()
+      long!.answer()
+      expect(await lengthening).toBe(true)
+      await short!.write()
+
+      // Advancing these clocks without dispatching timers models a callback blocking the overdue deadline.
+      monotonic = 200
+      vi.setSystemTime(started + 200 * Millisecond)
+      expect(await backend.inner.tryAcquire('orders:rebuild', 1 * Minute)).toBeDefined()
+      expect(held.lost).toBe(true)
+
+      short!.answer()
+      expect(await delayed).toBeInstanceOf(ErrLockBackendTimeout)
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   // A backend that cancels a command it had not sent yet rejects with the reason it was handed: the extend never

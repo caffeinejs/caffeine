@@ -103,7 +103,7 @@ describe('a $t schema on a live route', () => {
 
     const res = await app.request('/pets', json({ name: '', ageMonths: 1 }))
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
   })
 
   it('accepts a valid body', async () => {
@@ -164,8 +164,8 @@ describe('a Standard Schema on a live route', () => {
     const app = await boot()
 
     expect((await app.request('/pets/zod', json({ title: 'x', count: 1 }))).status).toBe(200)
-    expect((await app.request('/pets/zod', json({ title: '', count: 1 }))).status).toBe(400)
-    expect((await app.request('/pets/zod', json({ title: 'x', count: 1.5 }))).status).toBe(400)
+    expect((await app.request('/pets/zod', json({ title: '', count: 1 }))).status).toBe(422)
+    expect((await app.request('/pets/zod', json({ title: 'x', count: 1.5 }))).status).toBe(422)
   })
 })
 

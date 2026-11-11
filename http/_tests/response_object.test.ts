@@ -16,7 +16,7 @@ const BYTES = patterned(0, 1000)
 const helpers = [
   ['badRequest', 400],
   ['notFound', 404],
-  ['unprocessableEntity', 422],
+  ['unprocessableContent', 422],
   ['internalServerError', 500],
 ] as const
 
