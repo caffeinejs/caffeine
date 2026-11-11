@@ -3,11 +3,10 @@
 ## Installation
 
 ```sh
-npm install @caffeinejs/di
+npm install -E @caffeinejs/di
 ```
 
-CaffeineIoC requires Node.js 20 or later and ships as an ES module with full CommonJS
-support.
+CaffeineIoC requires Node.js 24 or later and ships as ES modules only.
 
 ## Your first container
 

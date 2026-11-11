@@ -19,6 +19,9 @@ interface CommandOpts {
 
 type CommandRunner = (opts: CommandOpts) => Promise<void>
 
+// Set by tools/compile.ts to the version in package.json; undefined when Bun runs this file unbundled.
+declare const CAFFEINE_VERSION: string | undefined
+
 const commands: Record<string, CommandRunner> = {
   generate,
   scaffold,
@@ -37,9 +40,15 @@ const { values, positionals } = parseArgs({
     flavor: { type: 'string', short: 'f' },
     arch: { type: 'string', short: 'a' },
     'no-agents-md': { type: 'boolean', default: false },
+    version: { type: 'boolean', short: 'v', default: false },
   },
   allowPositionals: true,
 })
+
+if (values.version) {
+  console.log(typeof CAFFEINE_VERSION === 'string' ? CAFFEINE_VERSION : 'development')
+  process.exit(0)
+}
 
 const commandName = positionals[0] ?? ''
 const command = commands[aliases[commandName] ?? commandName]

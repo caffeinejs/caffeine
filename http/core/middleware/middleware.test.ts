@@ -660,7 +660,7 @@ describe('application middleware registration with a path', () => {
 
       const denied = await server.request('/private/data')
       expect(denied.status).toBe(403)
-      expect(await denied.json()).toMatchObject({ message: 'Access denied' })
+      expect(await denied.json()).toMatchObject({ detail: 'Access denied' })
       expect(reached).toEqual([])
       const allowed = await server.request('/public')
       expect(allowed.status).toBe(200)
