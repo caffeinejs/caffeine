@@ -203,7 +203,8 @@ describe('distlock configuration', () => {
     await vi.advanceTimersByTimeAsync(100 * Millisecond)
     await contended
 
-    expect(backend.ttls.length - before).toBe(11)
+    // One attempt every 10ms from 0 to 90ms: the pause that reaches the 100ms deadline ends the wait.
+    expect(backend.ttls.length - before).toBe(10)
   })
 
   it('refuses a negative retryDelay', async () => {

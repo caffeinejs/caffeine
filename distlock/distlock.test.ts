@@ -845,7 +845,7 @@ describe('distributed lock against a backend that does not answer', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
     const acquiring = lock
-      .acquire('orders:rebuild', { wait: 6 * Second, retryDelay: 2 * Second })
+      .acquire('orders:rebuild', { wait: 6 * Second, retryDelay: 2 * Second, maxRetryDelay: 2 * Second })
       .catch((error: unknown) => error)
     await vi.advanceTimersByTimeAsync(6 * Second)
 
