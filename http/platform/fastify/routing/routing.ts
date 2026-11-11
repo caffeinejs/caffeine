@@ -158,32 +158,36 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
               res.code(compiled.status)
             }
 
+            // A rejection after the timeout is the late result too, the handler's or a `Responder`'s it returned:
+            // the 503 is what answers the request.
+            const late = (err: unknown): typeof res => {
+              if (timed && req.signal.aborted && isHandlerTimeout(req.signal.reason)) {
+                req.log.error({ err }, 'Handler rejected after its timeout; the 503 stands')
+                return res
+              }
+
+              throw err
+            }
+
+            // Only an answer still settling, a `Responder`'s, can fail late: a value is caught where it is returned.
+            const lateSafe = (answering: unknown): unknown =>
+              answering instanceof Promise ? answering.catch(late) : answering
+
             const result = handle(req as REQ, res)
 
             if (result instanceof Promise) {
-              return result.then(
-                // The handler outlived its timeout, and Fastify has answered 503 and is sending it; or the handler
-                // answered the request itself, `ctx.redirect(...)` and then whatever it returned. Either way `answer`
-                // hands back the reply, so the server waits on the send in flight instead of starting a second over
-                // it, which is what `undefined` here would do, and what a value or a `Responder` would do too, while
-                // an `onSend` hook that awaits keeps `reply.sent` false. On a reply already out it returns at once.
-                r => answer(res, req.httpContext, r, answered),
-                (err: unknown) => {
-                  // A rejection after the timeout is the late result too: the 503 is what answers the request.
-                  if (timed && req.signal.aborted && isHandlerTimeout(req.signal.reason)) {
-                    req.log.error({ err }, 'Handler rejected after its timeout; the 503 stands')
-                    return res
-                  }
-
-                  throw err
-                },
-              )
+              // The handler outlived its timeout, and Fastify has answered 503 and is sending it; or the handler
+              // answered the request itself, `ctx.redirect(...)` and then whatever it returned. Either way `answer`
+              // hands back the reply, so the server waits on the send in flight instead of starting a second over
+              // it, which is what `undefined` here would do, and what a value or a `Responder` would do too, while
+              // an `onSend` hook that awaits keeps `reply.sent` false. On a reply already out it returns at once.
+              return result.then(r => lateSafe(answer(res, req.httpContext, r, answered)), late)
             }
 
             // As above, minus the reply: the server sends nothing of its own over a handler that returned
             // synchronously, so there is no second send to make it wait for. Fastify sends nothing for a synchronous
             // `undefined` either, so `answer` sends an answer with no body itself.
-            const answering = answer(res, req.httpContext, result, answered)
+            const answering = lateSafe(answer(res, req.httpContext, result, answered))
             return answering === res ? undefined : answering
           },
         }

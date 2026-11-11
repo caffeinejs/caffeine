@@ -1,8 +1,12 @@
+import { cp, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { ErrHTTPNotFound, type IContext, Authentication, Authorization } from '@caffeinejs/http'
 import { newRouter, authentication } from '@caffeinejs/http/fastify'
-import { isDocumentRequest, sendFile, spaMount, staticFiles } from '@caffeinejs/static'
+import { isDocumentRequest, sendFile, staticFiles } from '@caffeinejs/static'
+import { buildStatic } from '@caffeinejs/static/build'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -13,7 +17,10 @@ import { startStubProvider, type StubProvider } from './internal/stub_provider.j
 const PORT = 9977
 const ORIGIN = `http://localhost:${PORT}`
 const SESSION_SECRET = 'spa-bff-e2e-session-secret-of-32-bytes!!'
-const dist = fileURLToPath(new URL('../../static/_tests/_testdata/spa', import.meta.url))
+// The static package's fixture, copied out and built, so its variants and manifest are never written into the tree.
+const dist = await mkdtemp(join(tmpdir(), 'caffeine-spa-bff-'))
+await cp(fileURLToPath(new URL('../../static/_tests/_testdata/spa', import.meta.url)), dist, { recursive: true })
+await buildStatic({ root: dist })
 
 const SCRIPT = { accept: '*/*', 'sec-fetch-mode': 'no-cors', 'sec-fetch-dest': 'script' }
 
@@ -37,13 +44,14 @@ function pages(gated: boolean) {
  * The built site.
  *
  * Public: an ordinary mount whose files are anonymous, because the page that has not signed in yet still has
- * to load its scripts. Gated: no file routes at all (`serve: false` leaves only the decoration), and the
- * bundle is served from a compiled route carrying the same policy as the page.
+ * to load its scripts, and whose shell is answered by the page routes alone. Gated: no file routes at all
+ * (`unrouted: ['**']` leaves the files to `sendFile`), and the bundle is served from a compiled route carrying
+ * the same policy as the page.
  */
 function site(gated: boolean) {
   return gated
-    ? staticFiles(s => s.serve(dist, { serve: false }))
-    : staticFiles(s => s.serve(dist, spaMount(), { anonymous: true }))
+    ? staticFiles(s => s.serve(dist, { unrouted: ['**'] }))
+    : staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] }))
 }
 
 function assets() {
@@ -111,6 +119,7 @@ describe('BFF: a browser signs in through the provider and lands on the shell', 
 
   afterAll(async () => {
     await provider.close()
+    await rm(dist, { recursive: true, force: true })
   })
 
   describe('gated shell', () => {

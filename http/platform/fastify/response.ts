@@ -1,4 +1,5 @@
 import { Blob } from 'node:buffer'
+import { Readable } from 'node:stream'
 import * as zlib from 'node:zlib'
 
 import { errorCodes } from 'fastify'
@@ -30,7 +31,9 @@ interface Reply {
   header(name: string, value: string): unknown
   hasHeader(name: string): boolean
   type(contentType: string): unknown
-  send(): unknown
+  send(payload?: Readable): unknown
+  readonly statusCode: number
+  readonly request: { readonly method: string }
 }
 
 /**
@@ -65,7 +68,13 @@ export function answer(reply: Reply, ctx: Context, result: unknown, answered: An
   const payload = payloadOf(reply, result)
 
   if (payload === undefined) {
-    reply.send()
+    // Fastify's HEAD route writes `Content-Length: 0` for a send with no body, and a 204 or a 304 carries none: a
+    // stream, which it drains instead, leaves the length out.
+    reply.send(
+      reply.request.method === 'HEAD' && (reply.statusCode === 204 || reply.statusCode === 304)
+        ? Readable.from([])
+        : undefined,
+    )
     return reply
   }
 

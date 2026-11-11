@@ -1,4 +1,5 @@
 import type { WebApplication } from '@caffeinejs/http'
+import { readManifest } from '@caffeinejs/static'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
@@ -12,13 +13,14 @@ import {
   signIn,
   type Session,
 } from '../util/testing/harness.js'
+import { SITE } from './site.js'
 
 /**
  * The single-page application: client routes, the bundle, and the two plugins in front of them.
  *
  * Everything here is asserted against the **real build output** — hashed names, root-level public files, and
- * the `.br`/`.gz` siblings `web/build.mjs` emits — rather than a hand-written fixture, because the parts most
- * easily got wrong (`preCompressed`, `globIgnore`, `immutableAssets`) only misbehave against a real one.
+ * the `.br`/`.gz` variants and the manifest `web/build.mjs` emits — rather than a hand-written fixture, because the
+ * parts most easily got wrong (the negotiated variants, `unrouted`, `immutable`) only misbehave against a real one.
  */
 describe('the single-page application', () => {
   let app: WebApplication
@@ -177,7 +179,8 @@ describe('the single-page application', () => {
 
       expect(res.status).toBe(200)
       expect(res.headers.get('content-encoding')).toBe('br')
-      expect(res.headers.get('vary') ?? '').toContain('accept-encoding')
+      // A field name is case-insensitive.
+      expect((res.headers.get('vary') ?? '').toLowerCase()).toContain('accept-encoding')
       expect(res.headers.get('content-type') ?? '').toContain('javascript')
     })
 
@@ -189,8 +192,8 @@ describe('the single-page application', () => {
       expect(plain.headers.get('content-encoding')).toBeNull()
     })
 
-    // `sendFile` reads `preCompressed` off the plugin's registration closure, so a compiled route serving the
-    // shell gets it without asking for it.
+    // `sendFile` serves the variants the manifest lists, so a compiled route serving the shell gets them without
+    // asking for them.
     it('compresses the shell served from a compiled route', async () => {
       const res = await app.request('/', { headers: { ...NAVIGATION, 'accept-encoding': 'br' } })
 
@@ -199,11 +202,13 @@ describe('the single-page application', () => {
       expect(res.headers.get('content-type') ?? '').toContain('text/html')
     })
 
-    // What `spaMount()`'s globIgnore is for: reachable as its own URL, this would answer with raw brotli under
-    // application/octet-stream and no content-encoding.
-    it('does not expose the compressed siblings as URLs of their own', async () => {
-      for (const suffix of ['.br', '.gz']) {
-        await expectNotFoundJSON(await app.request(`${bundle}${suffix}`, { headers: NAVIGATION }))
+    // The variants are representations of the bundle, not files of their own: reachable as their own URL, one would
+    // answer with raw brotli and no content-encoding.
+    it('does not expose the compressed variants as URLs of their own', async () => {
+      const { variants } = (await readManifest(SITE)).files[bundle.slice(1)]!
+
+      for (const path of [`/${variants.br!.path}`, `/${variants.gzip!.path}`, `${bundle}.br`, `${bundle}.gz`]) {
+        await expectNotFoundJSON(await app.request(path, { headers: NAVIGATION }))
       }
     })
   })

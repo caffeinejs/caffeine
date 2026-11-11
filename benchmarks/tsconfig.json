@@ -22,6 +22,7 @@
     "authn/caffeine/**",
     "caching/caffeine/**",
     "testing/caffeine/**",
+    "static/**",
     "aspect/**",
     "fetchy/**",
     "di/**"

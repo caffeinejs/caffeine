@@ -114,6 +114,7 @@ bench\:%: ## build and run a benchmark (e.g. bench:helloworld)
 .PHONY: devtools
 devtools: ## build and run the devtools UI, reading the devtools at CAFFEINE_DEVTOOLS_TARGET__URL
 	@npm run build
+	@npm run build:static -w @caffeinejs/devtools-ui
 	@npm start -w @caffeinejs/devtools-ui
 
 # .
