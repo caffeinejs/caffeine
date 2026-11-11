@@ -86,17 +86,17 @@ export interface CaffeineRouteConfig<R = FastifyRequest> {
  * ```
  */
 export function authenticationExempt(): { $caffeine: CaffeineRouteConfig } {
-  // A fresh object every call: the adapter and `@caffeinejs/static` both stamp in place, and Fastify hands a
-  // GET route's automatic HEAD twin the very same config object.
+  // A fresh object every call: the adapter stamps it in place, and Fastify hands a GET route's automatic HEAD twin
+  // the very same config object.
   return { $caffeine: { skipAuthentication: true } }
 }
 
 /**
  * Marks a route the authentication gate must leave alone, from an `onRoute` hook.
  *
- * For a plugin that does not register the route itself and can only reach it as it registers — `@fastify/static`
- * forwards no route config of its own. Where the caller owns the registration, hand {@link authenticationExempt}
- * to `config` instead.
+ * For a plugin that does not register the route itself and can only reach it as it registers, such as a
+ * third-party plugin that forwards no route config of its own. Where the caller owns the registration, hand
+ * {@link authenticationExempt} to `config` instead.
  */
 export function exemptFromAuthentication(route: RouteOptions): void {
   const config = (route.config ??= {})

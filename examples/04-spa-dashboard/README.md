@@ -17,8 +17,9 @@ else, and every client route is a route the application wrote.
 - **CSRF protection by Fetch Metadata** — the framework's `csrf()`, which judges every unsafe request by
   `Sec-Fetch-Site` and `Origin`, so the client sends no token — and **security headers** with `@fastify/helmet`, an
   official Fastify plugin the application registers itself, because `@caffeinejs/http` ships no wrapper for it.
-- **A real front-end build**: esbuild, content-hashed asset names, and a `.br`/`.gz` beside every file for
-  `preCompressed`.
+- **A real front-end build**: esbuild, content-hashed asset names, then `buildStatic()`, which writes `br` and
+  `gzip` variants of each file worth compressing to `.static-variants/`, and the manifest the static mount serves
+  from.
 - **OpenAPI** for the API, with the client routes deliberately absent from it.
 
 ## Architecture

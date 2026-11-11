@@ -1,8 +1,4 @@
-import { isAbsolute, relative, sep } from 'node:path'
-
 import { isNavigation } from '@caffeinejs/http'
-
-import type { StaticMount } from './config.js'
 
 /** The slice of an `IContext` {@link isDocumentRequest} reads. */
 export interface DocumentRequestContext {
@@ -70,65 +66,4 @@ function namesAFile(url: string): boolean {
   }
 
   return lastSegment.slice(dot + 1).toLowerCase() !== 'html'
-}
-
-/**
- * The `@fastify/static` options a mount serving a single-page application's files needs.
- *
- * `wildcard: false` is load-bearing rather than a tuning knob: the default installs a catch-all
- * `GET <prefix>*`, which both answers its own 404 for a miss — leaving the application's client-route
- * wildcard nothing to fall back from — and collides with that wildcard outright. With it off, the plugin
- * enumerates the real files at start-up and registers a route per file.
- *
- * `index` and `globIgnore` keep the shell document off the mount, so one route of the application's own
- * serves every spelling of it and they all carry the same `ETag`.
- *
- * `globIgnore` also drops the compressed siblings `preCompressed` serves. That option resolves them on the
- * file system rather than through the router, so a route per `.br` costs nothing and gains nothing — and
- * leaving them enumerated would triple the route count and make `GET /assets/app-HASH.js.br` answer with raw
- * brotli under `application/octet-stream` and no `Content-Encoding`. A mount that means to serve a compressed
- * file as its own URL spells `globIgnore` out itself.
- *
- * Spread it and override whatever else the mount needs. Overriding `globIgnore` **replaces** this list, so
- * restate the entries that still apply.
- *
- * @example
- * ```ts
- * s.serve(DIST, { ...spaMount(), preCompressed: true }, { anonymous: true })
- * ```
- */
-export function spaMount(index = 'index.html'): Pick<StaticMount, 'wildcard' | 'index' | 'globIgnore'> {
-  return { wildcard: false, index: false, globIgnore: [index, '**/*.br', '**/*.gz', '**/*.deflate'] }
-}
-
-/**
- * A `setHeaders` callback pinning content-hashed files and revalidating everything else within the hour.
- *
- * `@fastify/static`'s `maxAge` is per **mount**, so one mount cannot say "the shell must be revalidated but
- * the hashed assets never expire" — which is exactly what a single-page application needs.
- *
- * Prefix-based rather than sniffing a hash out of the file name: a name like `my-component.js` looks hashed
- * to any such pattern, and a false positive pins a mutable file in every visitor's browser for a year with no
- * way to recall it. `prefixes` default to `['/assets']`, Vite's `build.assetsDir`, and are compared against
- * the path *within* `root`, so `/assets` means the site's assets directory rather than any directory of that
- * name higher up the filesystem.
- *
- * @param root - The mount root, so a file outside it is left alone
- */
-export function immutableAssets(
-  root: string,
-  prefixes: readonly string[] = ['/assets'],
-): NonNullable<StaticMount['setHeaders']> {
-  return (reply, path) => {
-    const rel = relative(root, path)
-
-    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
-      return
-    }
-
-    const within = `/${rel.split(sep).join('/')}`
-    const hashed = prefixes.some(prefix => within === prefix || within.startsWith(`${prefix}/`))
-
-    reply.header('cache-control', hashed ? 'public, max-age=31536000, immutable' : 'public, max-age=3600')
-  }
 }

@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, openAsBlob, rmSync, statSync, writeFileSync } from 'node:fs'
+import { stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { Attachment, Router } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import { download, staticFiles } from '@caffeinejs/static'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
@@ -13,8 +13,9 @@ import { brewer } from '../index.js'
  * Downloads read the way the platform reads any response: whole, as a `File`, in ranges, or as a stream that arrives
  * chunk by chunk and can be stopped part-way.
  *
- * The file is served from disk by `@caffeinejs/static`, so its range, validator and naming headers are the ones a
- * real file server writes. Streams are tested over a socket, as a browser reads them.
+ * The file is read from disk and sent by `Attachment()`, with the validators a file server derives from its `stat`, so
+ * its range, validator and naming headers are the ones a real file server writes. Streams are tested over a socket,
+ * as a browser reads them.
  */
 
 const dir = mkdtempSync(join(tmpdir(), 'brewer-downloads-'))
@@ -109,7 +110,16 @@ function bundle(): FormData {
 
 const downloads = new Router('/downloads')
   .get('/report')
-  .handler(ctx => download(ctx, 'report.pdf', 'résumé 2026.pdf', { root: dir }))
+  .handler(async () => {
+    const path = join(dir, 'report.pdf')
+    const { mtime, size } = await stat(path)
+
+    return Attachment(await openAsBlob(path, { type: 'application/pdf' }), {
+      name: 'résumé 2026.pdf',
+      etag: `"${size}-${mtime.getTime()}"`,
+      lastModified: mtime,
+    })
+  })
   .get('/feed')
   .handler(() => new Response(feeding, { headers: { 'content-type': 'application/octet-stream' } }))
   .get('/events')
@@ -144,7 +154,6 @@ const downloads = new Router('/downloads')
 // graceful close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
 const app = createWebApplication()
   .server(() => ({ factory: { forceCloseConnections: true } }))
-  .with(staticFiles(s => s.serve(dir, { prefix: '/files' })))
   .mount(downloads)
 
 let origin: string

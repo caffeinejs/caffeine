@@ -88,9 +88,9 @@ jobs:
             exclude=
             case "$TAG" in *-*) ;; *) exclude='*-*' ;; esac
             previous=$(git describe --tags --abbrev=0 --match 'v*' --exclude "$TAG" ${exclude:+--exclude "$exclude"} "$GITHUB_SHA" 2> /dev/null || true)
-            npx git-cliff --tag "$TAG" ${exclude:+--ignore-tags '-'} --output notes.md "${previous:+$previous..}$GITHUB_SHA"
+            ./node_modules/.bin/git-cliff --tag "$TAG" ${exclude:+--ignore-tags '-'} --output notes.md "${previous:+$previous..}$GITHUB_SHA"
           else
-            npx git-cliff --unreleased --output notes.md
+            ./node_modules/.bin/git-cliff --unreleased --output notes.md
           fi
           cat notes.md >> "$GITHUB_STEP_SUMMARY"
 

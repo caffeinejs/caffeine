@@ -33,7 +33,8 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** specificat
 ## Architecture
 
 ```text
-public/site.css                    static assets, served at /static
+public/site.css                    static assets, served at /static from the manifest scripts/build_static.ts writes
+scripts/build_static.ts            the static build, run by build, start and the test suite
 src/main.ts                        bootstrap: builds the container from the generated graph and runs the app
 src/app.ts                         the whole wiring, in install order
 src/app.config.ts                  the entire configuration schema, its token, and the cookie names

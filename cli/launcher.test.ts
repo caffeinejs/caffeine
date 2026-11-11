@@ -131,11 +131,13 @@ describe('the caffeine launcher', () => {
     expect(result.status).toBe(1)
   })
 
-  // A binary built for another platform, or one that lost its mode, must be reported in a line, not a stack trace.
+  // A file the platform cannot start, or one that lost its mode, must be reported in a line, not a stack trace. A file
+  // with no format is not one of them: glibc runs it through /bin/sh and the launcher sees only the shell's exit, so the
+  // case names a missing interpreter, which every platform reports as ENOENT.
   test.each([
     ['is not executable', 0o644, '#!/bin/sh\nexit 0\n'],
-    ['is in no format this platform runs', 0o755, '\u007fELF\u0002\u0001\u0001'],
-  ])('reports a binary that %s, and exits 1', async (_, mode, content) => {
+    ['names an interpreter this platform does not have', 0o755, '#!/nonexistent/interpreter\n'],
+  ])('reports a file that %s, and exits 1', async (_, mode, content) => {
     const { launcher, platformBinary } = await install(dir, { platform: 'exit 0' })
     await writeFile(platformBinary, content)
     await chmod(platformBinary, mode)
