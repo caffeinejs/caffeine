@@ -19,6 +19,7 @@ export default defineConfig({
     name: 'static',
     pool: 'threads',
     include: ['**/*.test.ts'],
+    globalSetup: ['_tests/global_setup.ts'],
     environment: 'node',
   },
 })

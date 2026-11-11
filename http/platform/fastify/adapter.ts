@@ -56,6 +56,7 @@ import { fetchInProcess } from './fetch.js'
 import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
+import { recordRouterFlags, starParameterRefusal, trackPrefixedRootURL } from './router.js'
 import { routeRecordsOf } from './routing/inventory.js'
 import { installNotFoundHandler } from './routing/not_found.js'
 import { compileArgs, compileHandler } from './routing/parameters.js'
@@ -241,11 +242,11 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // afterwards, and the configured logger exists only once every feature has configured.
     const { factory = {}, listener } = input.server
     // Fastify's HTTP/1 overload whatever `factory` asks for: the instance is one type whichever server it builds.
-    const fastify = Fastify(
-      withValidationFormatter(
-        withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath),
-      ) as FastifyHttpOptions<Server>,
-    )
+    const options = withValidationFormatter(
+      withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath),
+    ) as FastifyHttpOptions<Server>
+    const fastify = Fastify(options)
+    recordRouterFlags(fastify, options)
 
     // Node's `close()` waits on what it does not end itself, so the adapter keeps what the server has open. An HTTP/1
     // server ends its idle connections once. Node 24 counts one that has not sent a request as active, never idle, so a
@@ -281,7 +282,12 @@ export class Adapter implements IAdapter<AdapterTypes> {
     const { factory = {} } = input.server
 
     // Every route that registers, with the context it registered on, for the gate check once they all have.
-    const registered: RegisteredRoute[] = []
+    const registered: Array<RegisteredRoute & { readonly firstURL?: () => string | undefined }> = []
+
+    // What `$route` refused while the route table was closing. Throwing inside a callback-style plugin would
+    // escape the boot as an uncaught exception, so the `onReady` hook throws it instead.
+    let routeTable: 'open' | 'closing' | 'closed' = 'open'
+    let refusedRoute: ErrConfiguration | undefined
 
     // Ahead of `customize` below — this and the `onReady` hook after it are the only things that are: Fastify runs
     // `onRoute` synchronously as a route is declared, so a raw route written in a customizer would otherwise
@@ -291,13 +297,9 @@ export class Adapter implements IAdapter<AdapterTypes> {
       const config = (route.config ??= {})
       config.$caffeine ??= { skipAuthentication: false }
 
-      registered.push({ route, url: route.url, method: route.method, context: this })
+      const firstURL = trackPrefixedRootURL(route)
+      registered.push({ route, url: route.url, method: route.method, context: this, firstURL })
     })
-
-    // What `$route` refused while the route table was closing: thrown by the `onReady` hook below, since thrown on
-    // the spot inside a callback-style plugin it would escape the boot as an uncaught exception.
-    let routeTable: 'open' | 'closing' | 'closed' = 'open'
-    let refusedRoute: ErrConfiguration | undefined
 
     // Also ahead of `customize`, so it is the first `onReady` hook to run: every route has registered and every
     // gate has stamped the ones it owns, and no plugin's own `onReady` work has started yet.
@@ -305,6 +307,17 @@ export class Adapter implements IAdapter<AdapterTypes> {
       try {
         if (refusedRoute !== undefined) {
           throw refusedRoute
+        }
+
+        // A later onRoute hook may change the URL before Fastify registers the route.
+        for (const { route, firstURL } of registered) {
+          const first = firstURL?.()
+          const refused =
+            (first === undefined ? undefined : starParameterRefusal(first)) ?? starParameterRefusal(route.url)
+
+          if (refused !== undefined) {
+            throw refused
+          }
         }
 
         assertRoutesGated(container, registered)

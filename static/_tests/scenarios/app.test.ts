@@ -1,5 +1,3 @@
-import { fileURLToPath } from 'node:url'
-
 import {
   Args,
   AuthenticationService,
@@ -18,10 +16,18 @@ import {
 import { createWebApplication, newRouter, authentication, healthProbes } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { immutableAssets, isDocumentRequest, sendFile, spaMount, staticFiles } from '../../index.js'
-import { CURL, NAVIGATION, PROBE, SCRIPT, XHR, expectNotFoundJSON, principal, sessionCookie } from './_headers.js'
-
-const DIST = fileURLToPath(new URL('../_testdata/spa', import.meta.url))
+import { isDocumentRequest, sendFile, staticFiles } from '../../index.js'
+import {
+  CURL,
+  dist as DIST,
+  NAVIGATION,
+  PROBE,
+  SCRIPT,
+  XHR,
+  expectNotFoundJSON,
+  principal,
+  sessionCookie,
+} from './_headers.js'
 const SECRET = 'app-scenario-session-secret-of-at-least-32-bytes'
 
 // Declared at module scope: the container snapshots the controller registry when it is constructed.
@@ -112,7 +118,7 @@ const auth = () =>
 function application(): WebApplication {
   return createWebApplication({})
     .with(healthProbes())
-    .with(staticFiles(s => s.serve(DIST, { ...spaMount(), setHeaders: immutableAssets(DIST) }, { anonymous: true })))
+    .with(staticFiles(s => s.serve(DIST, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
     .install(Authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login'))))
     .with(authentication())
     .install(Authorization(z => z.requireAuthenticatedByDefault()))

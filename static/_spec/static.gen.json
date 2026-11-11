@@ -6,27 +6,61 @@
     "mounts": {
       "type": "array",
       "items": {
-        "additionalProperties": {},
         "type": "object",
         "required": [
           "root"
         ],
         "properties": {
           "root": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "anonymous": {
+            "type": "boolean"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "const": "manifest",
+                "type": "string"
+              },
+              {
+                "const": "scan",
+                "type": "string"
+              }
+            ]
+          },
+          "index": {
             "anyOf": [
               {
                 "type": "string"
               },
               {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
+                "const": false,
+                "type": "boolean"
               }
             ]
           },
-          "anonymous": {
-            "type": "boolean"
+          "unrouted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cacheControl": {
+            "type": "string"
+          },
+          "immutableMaxAge": {
+            "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+            "type": "string"
+          },
+          "immutable": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }

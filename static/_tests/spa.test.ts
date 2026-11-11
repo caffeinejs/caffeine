@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { immutableAssets, isDocumentRequest, spaMount } from '../spa.js'
+import { isDocumentRequest } from '../spa.js'
 
 /** A request as `isDocumentRequest` reads one: a URL and whatever headers the client sent. */
 const request = (url: string, headers: Record<string, string> = {}) => ({
@@ -61,57 +61,5 @@ describe('isDocumentRequest', () => {
   it('answers anything that names no file when navigationOnly is off', () => {
     expect(isDocumentRequest(request('/settings', CURL), false)).toBe(true)
     expect(isDocumentRequest(request('/assets/app.js', CURL), false)).toBe(false)
-  })
-})
-
-describe('spaMount', () => {
-  // `wildcard: false` is load-bearing: the default catch-all collides with the application's own.
-  it('turns the wildcard off and keeps the shell document off the mount', () => {
-    expect(spaMount()).toEqual({
-      wildcard: false,
-      index: false,
-      globIgnore: ['index.html', '**/*.br', '**/*.gz', '**/*.deflate'],
-    })
-  })
-
-  it('ignores the document it was told about', () => {
-    expect(spaMount('app.html').globIgnore).toContain('app.html')
-    expect(spaMount('app.html').globIgnore).not.toContain('index.html')
-  })
-
-  // `preCompressed` finds these on the file system, so routing them would only expose the raw bytes.
-  it('keeps the compressed siblings off the mount, for every encoding @fastify/static tries', () => {
-    expect(spaMount().globIgnore).toEqual(expect.arrayContaining(['**/*.br', '**/*.gz', '**/*.deflate']))
-  })
-})
-
-describe('immutableAssets', () => {
-  const header = (root: string, path: string, prefixes?: readonly string[]) => {
-    let value: string | undefined
-    immutableAssets(root, prefixes)(
-      { header: (_: string, v: string) => (value = v) } as never,
-      path,
-      undefined as never,
-    )
-
-    return value
-  }
-
-  it('pins a content-hashed asset and revalidates everything else', () => {
-    expect(header('/site', '/site/assets/app-eZr2sdaR.js')).toBe('public, max-age=31536000, immutable')
-    expect(header('/site', '/site/index.html')).toBe('public, max-age=3600')
-  })
-
-  // `/assets` means the site's assets directory, not any directory of that name higher up the filesystem.
-  it('compares within the root', () => {
-    expect(header('/srv/assets/site', '/srv/assets/site/main.js')).toBe('public, max-age=3600')
-  })
-
-  it('leaves a file outside the root alone', () => {
-    expect(header('/site', '/elsewhere/app.js')).toBeUndefined()
-  })
-
-  it('takes the prefixes it is given', () => {
-    expect(header('/site', '/site/static/app.js', ['/static'])).toBe('public, max-age=31536000, immutable')
   })
 })

@@ -31,7 +31,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc --build tsconfig.build.json",
+    "build": "tsc --build tsconfig.build.json && npm run build:static",
+    "build:static": "node -e \"import('@caffeinejs/static/build').then(({ buildStatic }) => buildStatic({ root: 'public' }))\"",
     "clean:dist": "rm -rf dist",
     "start": "node dist/main.js",
     "test": "vitest run"

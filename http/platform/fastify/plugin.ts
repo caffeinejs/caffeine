@@ -19,8 +19,8 @@ export type AnyPlugin = FastifyPluginCallback | FastifyPluginAsync
  *
  * The plugin's own options type is not carried across to `options`, since `.with(...)` is not generic in it and
  * making it so would decide the application's configuration type from the wrong argument. Write
- * `options satisfies FastifyStaticOptions` where the exact shape matters. This is also the only form that takes
- * a plugin whose options are *required*, such as `@fastify/static` and its `root`: {@link AnyPlugin}
+ * `options satisfies FastifyCompressOptions` where the exact shape matters. This is also the only form that takes
+ * a plugin whose options are *required*, such as `@fastify/view` and its `engine`: {@link AnyPlugin}
  * describes one that can be registered with none.
  */
 export type PluginWithOptions = readonly [

@@ -24,6 +24,7 @@
     "caching/caffeine/**/*.ts",
     "caching/payload.ts",
     "startup/caffeine/**/*.ts",
+    "static/**/*.ts",
     "testing/caffeine/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]

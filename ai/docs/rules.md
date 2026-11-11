@@ -58,8 +58,8 @@ import { duration, Minute, Second, seconds } from '@caffeinejs/std/duration'
 app.shutdown(s => s.drainDelay(5 * Second))
 auth.addJWTBearer(b => b.secret(secret).expiresIn(15 * Minute))
 
-// An option Caffeine does not type keeps its library's unit: milliseconds for @fastify/static, seconds for jose.
-staticFiles(s => s.serve(dir, { maxAge: duration('7d') }))
+// An option Caffeine does not type keeps its library's unit: milliseconds for lru-cache, seconds for jose.
+new LRUCache({ max: 500, ttl: duration('7d') })
 jwtVerify(token, key, { clockTolerance: seconds(duration('30s')) })
 ```
 

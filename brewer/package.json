@@ -44,7 +44,6 @@
     "@caffeinejs/di": "0.0.0",
     "@caffeinejs/http": "0.0.0",
     "@caffeinejs/multipart": "0.0.0",
-    "@caffeinejs/static": "0.0.0",
     "fastify": "^5.12.8"
   }
 }

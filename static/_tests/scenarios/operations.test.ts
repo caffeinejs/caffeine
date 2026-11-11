@@ -1,27 +1,16 @@
+import { createHash } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
 
-import { type WebApplication, Authentication, Authorization } from '@caffeinejs/http'
-import { authenticationExempt, newRouter, authentication, healthProbes } from '@caffeinejs/http/fastify'
+import { type WebApplication } from '@caffeinejs/http'
+import { authenticationExempt, compress, newRouter, healthProbes } from '@caffeinejs/http/fastify'
 import fastifyCompress from '@fastify/compress'
 import fastifyCors from '@fastify/cors'
-import fastifyStatic from '@fastify/static'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { spaMount, staticFiles } from '../../index.js'
-import {
-  clientRouteOf,
-  dist,
-  expectNotFoundJSON,
-  fixtures,
-  HeaderAuthenticationHandler,
-  isolated,
-  NAVIGATION,
-  notFound,
-  PROBE,
-  shellOf,
-} from './_headers.js'
+import { staticFiles } from '../../index.js'
+import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, notFound, PROBE, shellOf } from './_headers.js'
 
 const api = () =>
   newRouter('/api')
@@ -30,13 +19,14 @@ const api = () =>
 
 const pages = () =>
   newRouter()
+    .extend(compress(false))
     .detail('http', { internal: true })
     .authorize({ allowAnonymous: true })
     .get('/', shellOf(dist))
     .get('/index.html', shellOf(dist))
     .get('/*', clientRouteOf(dist))
 
-const files = () => staticFiles(s => s.serve(dist, spaMount(), { anonymous: true }))
+const files = () => staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true }))
 
 describe('a single-page application next to the plugins an application runs in production', () => {
   let app: WebApplication
@@ -92,23 +82,55 @@ describe('a single-page application next to the plugins an application runs in p
     expect(await page.text()).toContain('<div id="root">')
   })
 
-  it('is compressed by a compression plugin like any response', async () => {
-    app = isolated()
-      .with(() =>
-        fp(async (instance: FastifyInstance) => instance.register(fastifyCompress, { threshold: 0 }), {
-          name: 'compress',
-        }),
-      )
-      .with(files())
-      .mount(api(), pages()) as WebApplication
-    await app.bootstrap()
+  it.each(['manifest', 'scan'] as const)(
+    'keeps the selected file representation with a global compression plugin in %s mode',
+    async mode => {
+      app = isolated()
+        .with(() =>
+          fp(
+            async (instance: FastifyInstance) =>
+              instance.register(fastifyCompress, {
+                threshold: 0,
+                onUnsupportedEncoding: (_encoding, _request, reply) => {
+                  reply.code(406)
+                  return 'Unsupported response encoding'
+                },
+              }),
+            { name: 'compress' },
+          ),
+        )
+        .with(staticFiles(s => s.serve(dist, { mode, unrouted: ['index.html'], anonymous: true })))
+        .mount(api(), pages()) as WebApplication
+      await app.bootstrap()
 
-    const res = await app.request('/dashboard', { headers: { ...NAVIGATION, 'accept-encoding': 'gzip' } })
+      const headers = { ...NAVIGATION, 'accept-encoding': 'gzip' }
+      for (const path of ['/assets/app-eZr2sdaR.js', '/dashboard']) {
+        const res = await app.request(path, { headers })
+        const head = await app.request(path, { method: 'HEAD', headers })
+        const bytes = Buffer.from(await res.arrayBuffer())
 
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-encoding')).toBe('gzip')
-    expect(gunzipSync(Buffer.from(await res.arrayBuffer())).toString()).toContain('<div id="root">')
-  })
+        expect(res.status).toBe(200)
+        expect(res.headers.get('etag')).toBe(`"${createHash('sha256').update(bytes).digest('base64')}"`)
+        expect(res.headers.get('content-encoding')).toBe(mode === 'manifest' ? 'gzip' : null)
+        expect(head.status).toBe(200)
+        expect(head.headers.get('content-encoding')).toBe(res.headers.get('content-encoding'))
+        expect(head.headers.get('content-length')).toBe(String(bytes.length))
+        expect(head.headers.get('etag')).toBe(res.headers.get('etag'))
+
+        if (mode === 'manifest') {
+          const resumed = await app.request(path, {
+            headers: { ...headers, range: 'bytes=6-10', 'if-range': res.headers.get('etag')! },
+          })
+          expect(resumed.status).toBe(200)
+          expect(Buffer.from(await resumed.arrayBuffer())).toEqual(gunzipSync(bytes))
+        }
+      }
+
+      const pets = await app.request('/api/pets', { headers: { 'accept-encoding': 'gzip' } })
+      expect(pets.headers.get('content-encoding')).toBe('gzip')
+      expect(gunzipSync(Buffer.from(await pets.arrayBuffer())).toString()).toBe('{"pets":[]}')
+    },
+  )
 
   // The client routes are ordinary routes, so the one not-found handler a Fastify context allows stays the
   // application's own.
@@ -152,56 +174,5 @@ describe('a single-page application next to the plugins an application runs in p
     // An exact URL that matched a route never reaches the client-route wildcard; a miss beside it does, and
     // a probe is not a browser.
     await expectNotFoundJSON(await app.request('/metrics/x', { headers: PROBE }))
-  })
-
-  // `@fastify/static`'s default wildcard registers `GET /*`, which is the application's own client-route
-  // path. That used to make the shell silently unreachable; now it is a duplicate route at start-up. This is
-  // what `spaMount()` turns off, and why it is not a tuning knob.
-  it('refuses to start next to a catch-all static mount the application registered itself', async () => {
-    app = isolated()
-      .with(() =>
-        fp(
-          async (instance: FastifyInstance) => instance.register(fastifyStatic, { root: dist, decorateReply: false }),
-          {
-            name: 'my-static',
-          },
-        ),
-      )
-      .with(files())
-      .mount(api(), pages()) as WebApplication
-
-    await expect(app.bootstrap()).rejects.toThrow(/already declared/)
-  })
-
-  // `@fastify/static` forwards a route config only on the per-file routes it registers: the wildcard it
-  // registers by default, and the redirect beside it, arrive without one. Marking an `anonymous` mount from an
-  // `onRoute` hook has to reach those too, or a mount serving on the default `wildcard: true` — where the
-  // wildcard *is* every route it has — is exempt in name only and answers 401 for the whole bundle.
-  it('exempts the wildcard route of an anonymous mount, not only its per-file routes', async () => {
-    app = isolated()
-      .install(Authentication(auth => auth.addStrategy('header', new HeaderAuthenticationHandler())))
-      .with(authentication())
-      .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
-      .with(staticFiles(s => s.serve(fixtures, { prefix: '/bundle' }, { anonymous: true }))) as WebApplication
-    await app.bootstrap()
-
-    const asset = await app.request('/bundle/hello.txt', { headers: PROBE })
-
-    expect(asset.status).toBe(200)
-    expect(await asset.text()).toContain('hello static world')
-  })
-
-  // A second mount that also wants the decoration is refused earlier still, by Fastify itself.
-  it('refuses a second mount that also asks to decorate the reply', async () => {
-    app = isolated()
-      .with(() =>
-        fp(async (instance: FastifyInstance) => instance.register(fastifyStatic, { root: dist, prefix: '/mine' }), {
-          name: 'my-static',
-        }),
-      )
-      .with(files())
-      .mount(api(), pages()) as WebApplication
-
-    await expect(app.bootstrap()).rejects.toThrow(/has already been added/)
   })
 })
