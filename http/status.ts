@@ -1,3 +1,5 @@
+import { STATUS_CODES } from 'node:http'
+
 export type HTTPStatusCode = (typeof HTTPStatus)[keyof typeof HTTPStatus]
 
 export const HTTPStatus = {
@@ -43,14 +45,14 @@ export const HTTPStatus = {
   GONE: 410,
   LENGTH_REQUIRED: 411,
   PRECONDITION_FAILED: 412,
-  PAYLOAD_TOO_LARGE: 413,
+  CONTENT_TOO_LARGE: 413,
   URI_TOO_LONG: 414,
   UNSUPPORTED_MEDIA_TYPE: 415,
   RANGE_NOT_SATISFIABLE: 416,
   EXPECTATION_FAILED: 417,
   IM_A_TEAPOT: 418,
   MISDIRECTED_REQUEST: 421,
-  UNPROCESSABLE_ENTITY: 422,
+  UNPROCESSABLE_CONTENT: 422,
   LOCKED: 423,
   FAILED_DEPENDENCY: 424,
   TOO_EARLY: 425,
@@ -73,3 +75,19 @@ export const HTTPStatus = {
   NOT_EXTENDED: 510,
   NETWORK_AUTHENTICATION_REQUIRED: 511,
 } as const
+
+// RFC 9110 renamed these; Node's table keeps the earlier phrases.
+const RFC9110_PHRASES: Readonly<Record<number, string>> = {
+  413: 'Content Too Large',
+  422: 'Unprocessable Content',
+}
+
+/**
+ * The reason phrase of `status`, or `undefined` for a status that has none.
+ *
+ * Node's `STATUS_CODES`, except where RFC 9110 renamed one: "Content Too Large" for 413 and "Unprocessable Content"
+ * for 422. The status line Node writes keeps Node's phrase.
+ */
+export function statusPhrase(status: number): string | undefined {
+  return RFC9110_PHRASES[status] ?? STATUS_CODES[status]
+}

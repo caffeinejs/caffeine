@@ -89,18 +89,22 @@ describe('circuitBreaker options', () => {
     [{ failureRateThreshold: 150 }, 'failureRateThreshold must be greater than 0 and at most 100, got 150'],
     [{ slowCallRateThreshold: 0 }, 'slowCallRateThreshold must be greater than 0 and at most 100, got 0'],
     [{ slowCallDurationThreshold: 0 }, 'slowCallDurationThreshold must be a finite Duration of at least 1ms, got 0s'],
-    [{ slidingWindow: { type: 'count', size: 0 } }, 'slidingWindow.size must be an integer of at least 1, got 0'],
+    [{ slidingWindow: { type: 'count', size: 0 } }, 'slidingWindow.size must be an integer from 1 to 16777216, got 0'],
     [
-      { slidingWindow: { type: 'time', duration: 1.5 * Second } },
-      'slidingWindow.duration must be a whole number of seconds and at least 1s, got 1.5s',
+      { slidingWindow: { type: 'count', size: 2 ** 24 + 1 } },
+      'slidingWindow.size must be an integer from 1 to 16777216, got 16777217',
     ],
     [
       { slidingWindow: { type: 'count', size: Number.MAX_SAFE_INTEGER } },
-      'slidingWindow.size is too large to allocate',
+      'slidingWindow.size must be an integer from 1 to 16777216, got 9007199254740991',
     ],
     [
-      { slidingWindow: { type: 'time', duration: Number.MAX_SAFE_INTEGER * Second } },
-      'slidingWindow.duration is too large to allocate',
+      { slidingWindow: { type: 'time', duration: 1.5 * Second } },
+      'slidingWindow.duration must be a whole number of seconds from 1s to 194d4h20m16s, got 1.5s',
+    ],
+    [
+      { slidingWindow: { type: 'time', duration: (2 ** 24 + 1) * Second } },
+      'slidingWindow.duration must be a whole number of seconds from 1s to 194d4h20m16s, got 194d4h20m17s',
     ],
     [
       { slidingWindow: { type: 'calls' } },
@@ -110,11 +114,11 @@ describe('circuitBreaker options', () => {
     [{ waitDurationInOpenState: -1 }, 'waitDurationInOpenState must be a finite Duration of at least 0s, got -1ms'],
     [
       { permittedNumberOfCallsInHalfOpenState: 0 },
-      'permittedNumberOfCallsInHalfOpenState must be an integer of at least 1, got 0',
+      'permittedNumberOfCallsInHalfOpenState must be an integer from 1 to 16777216, got 0',
     ],
     [
       { permittedNumberOfCallsInHalfOpenState: Number.MAX_SAFE_INTEGER },
-      'permittedNumberOfCallsInHalfOpenState is too large to allocate',
+      'permittedNumberOfCallsInHalfOpenState must be an integer from 1 to 16777216, got 9007199254740991',
     ],
     [
       { maxWaitDurationInHalfOpenState: Infinity },
@@ -132,6 +136,15 @@ describe('circuitBreaker options', () => {
     expect(() => circuitBreaker({ name: 'inventory', ...(options as object) })).toThrow(
       `Cannot create circuit breaker "inventory": ${reason}`,
     )
+  })
+
+  // The maximum is a window the breaker builds: only a larger one is refused, before anything is allocated.
+  it.each([
+    [{ slidingWindow: { type: 'count', size: 2 ** 24 } }],
+    [{ slidingWindow: { type: 'time', duration: 2 ** 24 * Second } }],
+    [{ permittedNumberOfCallsInHalfOpenState: 2 ** 24 }],
+  ] as const)('accepts the largest window, %o', options => {
+    expect(circuitBreaker({ name: 'inventory', ...options }).state).toBe('closed')
   })
 
   it('requires a name, since events and metrics are keyed on it', () => {

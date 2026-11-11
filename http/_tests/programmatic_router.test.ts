@@ -87,7 +87,7 @@ describe('programmatic router', () => {
         body: JSON.stringify({ quantity: 'two' }),
       })
 
-      expect(bad.status).toBe(400)
+      expect(bad.status).toBe(422)
 
       await app.close()
     })
@@ -167,7 +167,7 @@ describe('programmatic router', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ quantity: 'two' }),
       })
-      expect(bad.status).toBe(400)
+      expect(bad.status).toBe(422)
 
       await app.close()
     })

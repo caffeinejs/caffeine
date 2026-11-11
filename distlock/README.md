@@ -5,8 +5,10 @@ election, over Redis or Valkey, PostgreSQL, or memory for tests. Scoped work ren
 lease aborts a signal when it is lost, and carries a fencing token a resource can check.
 
 ```sh
-npm install @caffeinejs/distlock @caffeinejs/resilience @caffeinejs/std
+npm install -E @caffeinejs/distlock @caffeinejs/resilience @caffeinejs/std
 ```
+
+Install every `@caffeinejs/*` package at the same exact version: [Versioning](https://github.com/caffeinejs/caffeine/blob/main/docs/versioning.md).
 
 | Import from                               | What                                                                      |
 | ----------------------------------------- | ------------------------------------------------------------------------- |
@@ -60,3 +62,7 @@ const campaign = lock.campaign('scheduler', {
 
 The usage guide covers losing a lease, fencing tokens, deadlines, shutdown, backends and telemetry:
 [`ai/docs/distlock.md`](../ai/docs/distlock.md).
+
+## License
+
+[MIT](LICENSE)
