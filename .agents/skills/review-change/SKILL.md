@@ -1,13 +1,13 @@
 ---
 name: review-change
-description: "Review a standard change to the caffeinejs monorepo, a change to its agent docs, or any diff you are asked to review, against AGENTS.md, CONVENTIONS.md and FEATURES.md, after implementing and before reporting it done, committing or pushing. On your own diff, a sub-agent with a fresh context runs the review and you fix what it finds; on someone else's diff, run the review yourself."
+description: "Review a standard change to the caffeinejs monorepo, a change to its agent docs or skills, or any diff you are asked to review, against AGENTS.md, CONVENTIONS.md and FEATURES.md, after implementing and before reporting it done, committing or pushing. On your own diff, a sub-agent with a fresh context runs the review and you fix what it finds; on someone else's diff, run the review yourself."
 ---
 
 # Review a change
 
-Use before handing over a standard change or a change to an agent doc (`AGENTS.md` § Size the change), and whenever you
-are asked to review a diff. It finds what the author read past: a rule broken, an existing type duplicated, a test in
-another file's test file.
+Use before handing over a standard change, or a change to an agent doc or a skill (`AGENTS.md` § Size the change), and
+whenever you are asked to review a diff. It finds what the author read past: a rule broken, an existing type
+duplicated, a test in another file's test file.
 
 The author's own checks do not replace the review: an author reads the rules through their own reasons for bending
 them. On your own diff, follow **Author**, which hands the review to a sub-agent. On someone else's diff, or as that
@@ -18,7 +18,7 @@ sub-agent, follow **Reviewer**.
 1. **Run the checks** `CONVENTIONS.md` § Checks names for the scope of the diff, and fix them until they
    pass.
 2. **Run your tool's own review commands** where it has them, such as `/simplify` and then `/code-review` in Claude
-   Code. Apply what they find, then rerun the checks. Skip them when the diff changes only tests and agent docs, and
+   Code. Apply what they find, then rerun the checks. Skip them when the diff changes only tests and `*.md` files, and
    say so in the reviewer's prompt.
 3. **Start one reviewer sub-agent with a fresh context.** In Claude Code: the Agent tool with `general-purpose`, never
    `fork`, which inherits your context. Its prompt holds only:

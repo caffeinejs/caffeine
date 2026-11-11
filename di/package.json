@@ -63,10 +63,7 @@
     "test:browser": "esbuild dist/index.js --bundle --platform=browser --format=esm --outfile=/dev/null",
     "test:deno": "npm run build && docker compose -f _tests/deno/docker-compose.yml up --build --abort-on-container-exit --exit-code-from deno",
     "lint:markdown": "markdownlint-cli2",
-    "docs:llms-full": "node tools/generate-llms-full.mjs",
-    "example:javascript": "npm run start -w @caffeinejs/example-javascript",
-    "example:fastify-functions": "npm run start -w @caffeinejs/example-fastify-functions",
-    "example:cats-complete": "npm run start -w @caffeinejs/example-fastify-cats-complete"
+    "docs:llms-full": "node tools/generate-llms-full.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

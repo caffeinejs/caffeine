@@ -16,7 +16,6 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const NO_MODULE_LAYOUT = [
   'benchmarks/**',
   'examples/**',
-  'di/examples/**',
   'devtools-ui/**',
   'cli/**',
   '**/node_modules/**',

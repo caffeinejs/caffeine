@@ -46,6 +46,7 @@ check: ## run all checks
 	@npm run spec:check
 	@$(MAKE) cli/dist/caffeine
 	@npm run build:examples
+	@npm run build -w @caffeinejs/benchmarks
 	@npm run test:typecheck
 	@npm run test:memory
 	@npm test
@@ -91,7 +92,7 @@ lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 
 # make matches a pattern with no slash against only the part of a goal after its last slash, so lint:% never matches a
 # nested workspace such as lint:fetchy/fetchy. A pattern that names the parent directory is matched whole.
-NESTED_WORKSPACE_PARENTS := integrations fetchy di/examples examples plugins
+NESTED_WORKSPACE_PARENTS := integrations fetchy examples plugins
 
 define lint_nested
 lint\:$(1)/%:

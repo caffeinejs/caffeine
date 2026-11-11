@@ -28,7 +28,7 @@ Run the checks when the change is complete, and again after every fix that follo
   3. `npm test -w <pkg>`
   4. `make lint:<pkg-path>` — zero errors (warnings are pre-existing and acceptable). Not `npm run lint:fix -- <pkg-path>`: npm appends the path only to `oxfmt`, so oxlint would run on the whole repo.
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
-  1. `make check`, and nothing else. It builds, fixes lint and formatting in place, and runs every check, type-check and test this file names, so running any of them first only runs it twice.
+  1. `make check`, and nothing else. It builds, fixes lint and formatting in place, type-checks and runs the tests, so running any of those first only runs it twice. It does not run the license check or the end-to-end tests.
 
 One non-md file means the task is not docs-only: TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, and a README next to a TypeScript change all count as code. When in doubt on code scope, run `make check`.
 
@@ -89,7 +89,7 @@ async upload(stream: import('node:stream').Readable) { ... }
 
 ### Module layout
 
-A module is a directory of source files in a library package (not `benchmarks/`, `examples/`, `di/examples/` or `devtools-ui/`).
+A module is a directory of source files in a library package (not `benchmarks/`, `examples/` or `devtools-ui/`).
 
 - It has a main file named after it (`logger/logger.ts`, `circuitbreaker/circuitbreaker.ts`) and an `index.ts` barrel that only re-exports.
 - A directory of independent files with no main one (`decorators/`, `internal/`, `provider/`) has the barrel alone.

@@ -77,12 +77,6 @@
       "path": "./plugins/vite"
     },
     {
-      "path": "./di/examples/02-fastify-functions"
-    },
-    {
-      "path": "./di/examples/04-fastify-cats-complete"
-    },
-    {
       "path": "./test"
     }
   ]

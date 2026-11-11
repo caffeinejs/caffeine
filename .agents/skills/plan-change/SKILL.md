@@ -73,7 +73,8 @@ installed per user, so check for its agents (`egm:egm-implementation-readiness`,
      `egm:egm-codebase-details`, step 8 under § What a plan holds and § Plan template; for `egm:egm-design`, steps 2,
      3 and 7 under § What a plan holds; `egm:egm-zoom-out` uses its own standard;
    - "Read the root `AGENTS.md` (give its absolute path) and the rule sections the plan quotes. Check every claim
-     against the code. Never use `docs/`, `<package>/docs/**`, a `README.md` or `ai/` as evidence: they may be stale."
+     against the code. Never use `docs/`, `<package>/docs/**`, a `README.md` other than `.agents/skills/README.md`, or
+     `ai/` as evidence: they may be stale."
 3. Fix the plan for each finding, or tell the user why you reject it.
 4. Repeat until a round reports no Blocker or Major finding. After two rounds that still do, stop and ask (Working
    rules: Two attempts).

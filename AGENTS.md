@@ -30,10 +30,10 @@ A change is **small** when every line below holds, and **standard** otherwise:
 
 ## Working rules
 
-- **Look, then ask.** Ask only what neither the code nor these files answer: what the request leaves open, or why code you must change is built the way it is. Ask before the first edit when you can see the question then, otherwise as soon as it shows. Never guess a requirement. An option you offer states a choice, never a requirement the user did not give; recommend one. State any other assumption you went ahead on.
+- **Look, then ask.** Ask only what neither the code nor these files answer: what the request leaves open, or why code you must change is built the way it is, when the change depends on the answer. Ask before the first edit when you can see the question then, otherwise as soon as it shows. Never guess a requirement. An option you offer states a choice, never a requirement the user did not give; recommend one. State any other assumption you went ahead on.
 - **Minimum change.** Build what was asked and nothing beside it: no extra option, no abstraction for a single use, no refactor, reformat or comment fix in code the task does not need. Match the style around your change, and clean up only what your own change left behind. When a simpler approach than the one asked for exists, say so before you build.
 - **Reuse first.** Before adding code, read the exports, callers and shared utilities around it. Before adding a type, a helper or a context object, use the one that exists, because two names for one concept split every caller. A new one states why none fits.
-- **Facts from the code.** Take an API shape, a constraint or a design decision from the code and these files, never from the docs the project delivers (`docs/`, `<package>/docs/**`, a `README.md`, `ai/`): they may describe the code as it once was.
+- **Facts from the code.** Take an API shape, a constraint or a design decision from the code and these files, never from the docs the project delivers (`docs/`, `<package>/docs/**`, a `README.md` other than `.agents/skills/README.md`, `ai/`): they may describe the code as it once was.
 - **Legacy is not precedent.** Follow these files even where you disagree, and say so when you do. Code that contradicts them is legacy, even when it sits next to yours: do not copy it, because copying is how it spreads.
 - **Conflicts.** Where two patterns contradict, follow these files; where they are silent, the more recent and better-tested one. Say which you followed and flag the other; never blend them. When a rule blocks what the task needs, stop and name the rule; do not work around it.
 - **Two attempts.** After two failed attempts at the same failure, stop, say what you tried and ask. Never retry silently.
@@ -47,18 +47,18 @@ Work goes to the first of these that does it right:
 2. **A cheaper model**, in a sub-agent, where your tool lets you choose a sub-agent's model, for the work the table gives it.
 3. **Your own model**, for everything else.
 
-| Work                                                                                                                                             | Model                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
-| Find where something is, list callers, read a log, run the checks and report each command's exit status and what failed                          | the smallest your tool offers |
-| Carry out the steps of a finished plan, edit docs only, rename across callers, apply one decided pattern to many files                           | a mid-tier one                |
-| Size and plan a change, design a public API or a type, the work the `security-audit` row names, a bug of unknown cause, an agent doc, the review | yours, never a cheaper one    |
+| Work                                                                                                                                                        | Model                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Find where something is, list callers, read a log, run the checks and report each command's exit status and what failed                                     | the smallest your tool offers |
+| Carry out the steps of a finished plan, edit docs only, rename across callers, apply one decided pattern to many files                                      | a mid-tier one                |
+| Size and plan a change, design a public API or a type, the work the `security-audit` row names, a bug of unknown cause, an agent doc or a skill, the review | yours, never a cheaper one    |
 
-- Where two rows fit, the lower one wins.
+- The last row wins over the two above it.
 - A cheaper model takes no design decision. Its brief says to stop and report where a step leaves one open; you decide, then send it back. One that fails twice at a step hands the step back to you.
 - A sub-agent knows only its brief. Give it the goal, the exact files, the plan steps that are its own, the checks to run and what to return. One that edits files also gets the rule sections to read first: this file and the ones the Rule map names for its files. Tell it to take its facts from the code, not from the docs the project delivers.
 - You stay the author. Read the diff a sub-agent returns before you build on it, and size, check and review the whole change as your own.
 - Do not delegate what a few tool calls with short output finish: the brief costs more than the work. A search or a check run is delegated for the output it keeps out of your context.
-- When you are a sub-agent handed a plan, carry it out as written, take no design decision it does not make, and stop and report where it leaves one open. Sizing, planning and `review-change` stay with the agent that started you.
+- When you are handed a finished plan to carry out, as a sub-agent or when the user asks you to carry out only named steps of a plan, carry it out as written, take no design decision it does not make, and stop and report where it leaves one open. Sizing, planning and `review-change` stay with the agent or the user that handed it to you.
 - Where your tool cannot choose a sub-agent's model, end a standard plan by telling the user which steps a cheaper model can carry out, so they can switch for those and switch back for the review.
 
 ## Rule map
@@ -85,7 +85,7 @@ Before the first file of a kind below that you create or edit in a task, re-read
 | Before you…                                                                                   | Load                     |
 | --------------------------------------------------------------------------------------------- | ------------------------ |
 | plan a standard change                                                                        | `plan-change`            |
-| hand over a standard change or a change to an agent doc, or review a diff when asked          | `review-change`          |
+| hand over a standard change, or a change to an agent doc or a skill; review a diff when asked | `review-change`          |
 | design or change a public API: an option, a default, a method, a callback, a type users write | `sharp-edges`            |
 | write a generic, conditional or mapped type, or fight a type error                            | `typescript-magician`    |
 | use a Node.js runtime API: streams, `process`, `node:*` modules, signals, workers             | `node`                   |

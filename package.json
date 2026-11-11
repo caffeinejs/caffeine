@@ -41,7 +41,6 @@
     "testing",
     "brewer",
     "benchmarks",
-    "di/examples/*",
     "examples/*",
     "plugins/*"
   ],
