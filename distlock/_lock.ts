@@ -21,6 +21,14 @@ export interface LockHost extends DistLock {
   giveBack(lease: LockLease): void
 }
 
+// A write whose effect on the key is not known yet.
+interface PossibleWrite {
+  sentAt: number
+  ttl: Duration
+  shortening: boolean
+  settled?: number
+}
+
 // Process-wide rather than per service, so a lease ID is unique across every lock service in the process.
 let nextLeaseID = 0
 
@@ -68,10 +76,13 @@ export class HeldLock implements Lock {
   readonly #window: boolean
   // Shortening extensions and abandoned explicit extensions whose writes have not been confirmed.
   #unsettled = 0
-  // Each extension still unanswered under the current token: when it was sent, the ttl it asked for, and whether it
-  // was shorter than what was left of the lease then. One that looked longer when it left can land after a longer
-  // one answered, so the deadline also watches every one that asks for less than the write behind the lease.
-  readonly #unanswered = new Map<object, { sentAt: number; ttl: Duration; shortening: boolean }>()
+  // Each extension under the current token that may still land or may have landed unseen: when it was sent, the ttl
+  // it asked for, and whether it was shorter than what was left of the lease then. One that looked longer when it
+  // left can land after a longer one answered, so the deadline also watches every one that asks for less than the
+  // write behind the lease. A write that failed with its outcome unknown stays, with `settled` set to the number of
+  // writes sent by then, until a write sent after it succeeds and so landed after it.
+  readonly #unanswered = new Map<object, PossibleWrite>()
+  #writes = 0
   // The reason the signal aborts with, set by the loss before anyone is told, so a release a `lost` listener
   // makes keeps it.
   #lossReason: ErrLockLost | undefined
@@ -174,8 +185,9 @@ export class HeldLock implements Lock {
       return
     }
 
-    this.#expireIfDue()
+    // Claimed before an overdue loss is published, so a `lost` listener that releases finds it released.
     this.#released = true
+    this.#expireIfDue()
     this.stopRenewal()
     this.#clearDeadline()
     // The holder lets go here, not once the backend answers: the key may change hands as soon as the release
@@ -389,7 +401,8 @@ export class HeldLock implements Lock {
     const sent = this.#lease
     const version = this.#leaseVersion
     // A shortening write can expire the lease before its reply, even inside the store deadline.
-    const call = { answered: false, uncertain: ttl < remaining }
+    this.#writes += 1
+    const call = { answered: false, uncertain: ttl < remaining, seq: this.#writes }
     this.#waitingExtends.set(call, performance.now() + timeout)
     this.#pendingExtends += 1
     this.#unanswered.set(call, { sentAt: Date.now(), ttl, shortening: call.uncertain })
@@ -419,11 +432,11 @@ export class HeldLock implements Lock {
           // token. A retry that attempt left behind is not waited for: the reply supersedes the token it carries.
           await attempt
           this.#answered(call, sent.token)
-          this.#adoptLate(late, sent, ttl, version, renewal)
+          this.#adoptLate(late, sent, ttl, version, call.seq, renewal)
           this.#finishRefusal()
         },
         (error: unknown, cancelled: boolean) => {
-          this.#answered(call, sent.token)
+          this.#answered(call, sent.token, !cancelled)
           this.#host.log.debug(
             { err: error, key: this.key, leaseID: this.leaseID, operation: 'extend' },
             'lock backend failed late',
@@ -447,7 +460,8 @@ export class HeldLock implements Lock {
           this.#unsettled += 1
         }
       } else {
-        this.#answered(call, sent.token)
+        // A backend that lost its connection may have applied the write before it could answer.
+        this.#answered(call, sent.token, true)
         this.#finishRefusal()
       }
 
@@ -468,7 +482,7 @@ export class HeldLock implements Lock {
 
     // Taken even when this lock was released or stopped mid-flight: a release waiting behind this
     // renewal has to send the lease the renewal left behind, not the one it superseded.
-    const current = this.#reconcile(next, sent, ttl, version, renewal)
+    const current = this.#reconcile(next, sent, ttl, version, call.seq, renewal)
     this.#finishRefusal()
 
     // Every renewal from here on runs on what an explicit extend asked for. A renewal leaves it alone: one
@@ -518,9 +532,17 @@ export class HeldLock implements Lock {
     }
   }
 
-  #answered(call: { answered: boolean; uncertain: boolean }, token: string): void {
+  // Records that an extension completed. Its write's bound goes, unless it failed with its outcome unknown. A lease
+  // that ran out before the completion could run is reported first: nothing answering afterwards revives it.
+  #answered(call: { answered: boolean; uncertain: boolean }, token: string, unknown = false): void {
+    this.#expireIfDue()
     this.#waitingExtends.delete(call)
-    if (this.#unanswered.delete(call)) {
+    const write = this.#unanswered.get(call)
+    if (write !== undefined) {
+      this.#unanswered.delete(call)
+      if (unknown) {
+        this.#keepUnknown(write)
+      }
       this.#rearmDeadline()
     }
     if (!call.answered && token === this.token) {
@@ -530,6 +552,23 @@ export class HeldLock implements Lock {
       }
     }
     call.answered = true
+  }
+
+  // Keeps the bound of a write that failed without saying whether it landed, unless one already kept bounds the
+  // lease at least as early in every case, as an earlier failed renewal does a later one.
+  #keepUnknown(write: PossibleWrite): void {
+    for (const kept of this.#unanswered.values()) {
+      if (
+        kept.settled !== undefined &&
+        kept.ttl <= write.ttl &&
+        kept.sentAt <= write.sentAt &&
+        (kept.shortening || !write.shortening)
+      ) {
+        return
+      }
+    }
+
+    this.#unanswered.set({}, { ...write, settled: this.#writes })
   }
 
   #refuse(token: string, renewal: boolean): void {
@@ -566,7 +605,14 @@ export class HeldLock implements Lock {
   // A renewal still retrying, or an explicit extend, under the current token is reconciled while the lock is still
   // held. Other replies are given back, so a backend that rotates the token cannot leave the key under a token
   // nobody holds.
-  #adoptLate(late: LockLease | undefined, sent: LockLease, ttl: Duration, version: number, renewal: boolean): void {
+  #adoptLate(
+    late: LockLease | undefined,
+    sent: LockLease,
+    ttl: Duration,
+    version: number,
+    seq: number,
+    renewal: boolean,
+  ): void {
     const held = !this.#released && !this.#taken
 
     if (late === undefined) {
@@ -577,7 +623,7 @@ export class HeldLock implements Lock {
     }
 
     if (this.#window && !this.#released) {
-      this.#reconcile(late, sent, ttl, version, renewal)
+      this.#reconcile(late, sent, ttl, version, seq, renewal)
       return
     }
 
@@ -586,7 +632,7 @@ export class HeldLock implements Lock {
       return
     }
 
-    if (held && this.#reconcile(late, sent, ttl, version, renewal)) {
+    if (held && this.#reconcile(late, sent, ttl, version, seq, renewal)) {
       return
     }
 
@@ -595,9 +641,16 @@ export class HeldLock implements Lock {
 
   // A successful rotation supersedes every write on the old token. For same-token writes, only the replies
   // already known when this call was sent are definitely older than its write.
-  #reconcile(next: LockLease, sent: LockLease, ttl: Duration, version: number, renewal: boolean): boolean {
+  #reconcile(next: LockLease, sent: LockLease, ttl: Duration, version: number, seq: number, renewal: boolean): boolean {
     if (sent.token !== this.token) {
       return false
+    }
+
+    // This write landed after every failed one settled before it was sent: whatever those did, it overrode.
+    for (const [key, write] of this.#unanswered) {
+      if (write.settled !== undefined && write.settled < seq) {
+        this.#unanswered.delete(key)
+      }
     }
 
     const previousExpiry = this.expiresAt
