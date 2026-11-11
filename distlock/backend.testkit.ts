@@ -114,6 +114,9 @@ export interface StagedExtend {
 
   /** Hands the caller what the write returned. */
   answer(): void
+
+  /** Rejects the caller with `error` once the write has landed, as a connection lost after the command ran does. */
+  fail(error: Error): void
 }
 
 /**
@@ -161,6 +164,9 @@ export class StagedBackend implements Backend {
       },
       answer: () => {
         written!.then(resolve, reject)
+      },
+      fail: (error: Error) => {
+        written!.then(() => reject(error), reject)
       },
     })
 
