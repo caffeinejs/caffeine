@@ -1,6 +1,6 @@
 # ERR_LOCK_LOST
 
-The reason `lock.signal` from `@caffeinejs/distlock` aborts with when a lease is gone without its holder releasing it. `err.reason` says how: `taken` (another holder has the key), `expired` (the lease lapsed by the clock), or `error` (renewals could not reach the backend while the lease had time).
+The reason `lock.signal` from `@caffeinejs/distlock` aborts with when a lease is gone without its holder releasing it. `err.reason` says how: `taken` (another holder has the key), `expired` (the lease lapsed by the clock), or `error` (an extension, a renewal or an explicit `extend`, failed against the backend and the lease was not kept).
 
 ## Do
 
