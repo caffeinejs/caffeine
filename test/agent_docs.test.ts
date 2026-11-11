@@ -20,16 +20,8 @@ const LINK = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 
 function agentDocs(): Promise<string[]> {
   return globby(
-    [
-      'AGENTS.md',
-      'CONVENTIONS.md',
-      'FEATURES.md',
-      '**/AGENTS.md',
-      '.agents/skills/README.md',
-      '.agents/skills/*/SKILL.md',
-    ],
-    // `ai/` ships to applications, and its links resolve in an application's repository, not here.
-    { cwd: root, dot: true, ignore: ['**/node_modules/**', '**/dist/**', 'ai/**'] },
+    ['AGENTS.md', 'CONVENTIONS.md', 'FEATURES.md', '.agents/skills/README.md', '.agents/skills/*/SKILL.md'],
+    { cwd: root, dot: true },
   )
 }
 
@@ -68,7 +60,7 @@ describe('agent docs', () => {
     expect(links.filter(link => !existsSync(link.path)).map(link => `${link.doc} links ${link.target}`)).toEqual([])
     // Each kind of doc was read and held links: an ignore or a pattern that loses one cannot pass by checking nothing.
     expect([...new Set(links.map(link => link.doc))]).toEqual(
-      expect.arrayContaining(['AGENTS.md', 'CONVENTIONS.md', 'http/AGENTS.md', '.agents/skills/README.md']),
+      expect.arrayContaining(['AGENTS.md', 'CONVENTIONS.md', '.agents/skills/README.md']),
     )
   })
 

@@ -6,8 +6,9 @@ Claude Code reads `.claude/skills`, which is a symlink to it.
 These are not the skills shipped to applications. Those live in [`ai/skills/`](../../ai/skills/) and are copied into
 apps by `caffeine scaffold`.
 
-Where a skill here conflicts with [`CONVENTIONS.md`](../../CONVENTIONS.md) or a package `AGENTS.md`, the repository
-wins. See "Skills" in [`AGENTS.md`](../../AGENTS.md), which also says which skill to load for which work.
+Where a skill here conflicts with [`AGENTS.md`](../../AGENTS.md), [`CONVENTIONS.md`](../../CONVENTIONS.md) or
+[`FEATURES.md`](../../FEATURES.md), the repository wins. See "Skills" in [`AGENTS.md`](../../AGENTS.md), which also
+says which skill to load for which work.
 
 ## First-party skills
 

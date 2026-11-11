@@ -32,7 +32,7 @@ make check          # full quality gate
 ```
 
 Docs-only changes (`*.md` and nothing else) need `make lint-markdown`, not `make check`. The per-scope check chain agents follow is
-"After every edit" in [`CONVENTIONS.md`](CONVENTIONS.md); `make check` is the full gate CI runs. `make build` is a forced
+"Checks" in [`CONVENTIONS.md`](CONVENTIONS.md); `make check` is the full gate CI runs. `make build` is a forced
 rebuild (`npm run build:force`), while `npm run build` is incremental.
 
 End-to-end tests are not part of `make check`. `make test-e2e` needs Docker: it starts the services under
