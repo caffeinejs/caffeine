@@ -65,6 +65,9 @@ export class HeldLock implements Lock {
   readonly #window: boolean
   // Shortening extensions and abandoned explicit extensions whose writes have not been confirmed.
   #unsettled = 0
+  // When each shortening extension still unanswered could end the lease: `ttl` from when it was sent, since the
+  // backend cannot apply it earlier. The deadline watches the earliest of them along with the lease.
+  readonly #shortening = new Map<object, number>()
   #timer: ReturnType<typeof setTimeout> | undefined
   #deadline: ReturnType<typeof setTimeout> | undefined
   #renewal: Promise<void> | undefined
@@ -165,28 +168,26 @@ export class HeldLock implements Lock {
     this.#released = true
     this.stopRenewal()
     this.#clearDeadline()
+    // The holder lets go here, not once the backend answers: the key may change hands as soon as the release
+    // lands, and work bound to the signal must not outlive that. A lease already lost keeps its loss as the reason.
+    if (!this.#controller.signal.aborted) {
+      this.#controller.abort(new ErrLockReleased(this.key))
+    }
 
     // Wait for bounded extensions already on the wire before choosing the token to release. A backend that
     // rotates it after the deadline hands it back through the late callback.
     await Promise.all([this.settled(), ...this.#extending])
 
-    try {
-      await traced(
-        releaseChannel,
-        (): Writable<ReleaseContext> => ({
-          service: this.#host,
-          key: this.key,
-          leaseID: this.leaseID,
-          parent: this.within,
-        }),
-        ctx => this.#releaseLease(ctx),
-      )
-    } finally {
-      // A lease already lost keeps its loss as the reason.
-      if (!this.#controller.signal.aborted) {
-        this.#controller.abort(new ErrLockReleased(this.key))
-      }
-    }
+    await traced(
+      releaseChannel,
+      (): Writable<ReleaseContext> => ({
+        service: this.#host,
+        key: this.key,
+        leaseID: this.leaseID,
+        parent: this.within,
+      }),
+      ctx => this.#releaseLease(ctx),
+    )
   }
 
   [Symbol.asyncDispose](): Promise<void> {
@@ -220,12 +221,14 @@ export class HeldLock implements Lock {
     return this.#renewal ?? Promise.resolve()
   }
 
-  // Arms the timer that notices the lease lapsing by the clock when nothing else does. A deadline beyond what
-  // `setTimeout` honours is reached in steps.
+  // Arms the timer that notices the lease lapsing by the clock when nothing else does: at its expiry, or earlier
+  // when a shortening extension still unanswered could end it first. A deadline beyond what `setTimeout`
+  // honours is reached in steps.
   #armDeadline(): void {
     this.#clearDeadline()
 
-    const remaining = Math.max(0, this.#lease.expiresAt - Date.now())
+    const expiry = Math.min(this.#lease.expiresAt, ...this.#shortening.values())
+    const remaining = Math.max(0, expiry - Date.now())
     this.#deadline = setTimeout(
       () => {
         this.#deadline = undefined
@@ -354,6 +357,8 @@ export class HeldLock implements Lock {
     this.#pendingExtends += 1
     if (call.uncertain) {
       this.#unsettled += 1
+      this.#shortening.set(call, Date.now() + ttl)
+      this.#armDeadline()
     }
     let storeSignal: AbortSignal | undefined
 
@@ -477,6 +482,9 @@ export class HeldLock implements Lock {
 
   #answered(call: { answered: boolean; uncertain: boolean }, token: string): void {
     this.#waitingExtends.delete(call)
+    if (this.#shortening.delete(call)) {
+      this.#rearmDeadline()
+    }
     if (!call.answered && token === this.token) {
       this.#pendingExtends -= 1
       if (call.uncertain) {
@@ -565,6 +573,7 @@ export class HeldLock implements Lock {
       this.#unsettled = 0
       this.#refusedRenewal = undefined
       this.#leaseReplies = undefined
+      this.#shortening.clear()
       this.#lease = next
     } else if (version === previousVersion) {
       this.#leaseReplies = undefined

@@ -472,11 +472,24 @@ describe('distributed lock against a backend that does not answer', () => {
     const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
     backend.late = ['extend']
     const extending = held.extend(2 * Second).catch((e: unknown) => e)
-    await vi.advanceTimersByTimeAsync(5 * Second)
+
+    // The work bound to the signal stops when the shorter lease could end, not at the old expiry 28s later.
+    await vi.advanceTimersByTimeAsync(2 * Second)
+    expect(held.signal.reason).toBeInstanceOf(ErrLockLost)
+    const reason: unknown = held.signal.reason
+
+    await vi.advanceTimersByTimeAsync(3 * Second)
     expect(await extending).toBeInstanceOf(ErrLockBackendTimeout)
 
     expect(held.lost).toBe(true)
     expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
+
+    // An answer arriving now does not hand the holder back a lease another replica already took.
+    backend.late = []
+    backend.answerLate()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(held.lost).toBe(true)
+    expect(held.signal.reason).toBe(reason)
   })
 
   it('reads as held again once the extend that timed out answers with the lease', async () => {
@@ -528,34 +541,37 @@ describe('distributed lock against a backend that does not answer', () => {
   })
 
   // Two extends under one token can land in one order and answer in the other. Here the shorter one lands last, so
-  // the key runs out after it. Whichever order the answers come in, the lock must read as lost by the time another
-  // replica can take the key.
+  // the key runs out after it. The lock must read as lost, and its signal abort, by the time another replica can
+  // take the key, and whichever order the answers come in after that, the loss stands.
   it.each([
-    { name: 'the timed-out extend answers first', order: ['short', 'long'] as const },
-    { name: 'the on-time extend answers first', order: ['long', 'short'] as const },
+    { name: 'the shorter extend answers first', order: ['short', 'long'] as const },
+    { name: 'the longer extend answers first', order: ['long', 'short'] as const },
   ])('reads as lost when a shorter extend landed last and $name', async ({ order }) => {
     const backend = new StagedBackend()
     const lock = await newLock(backend)
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
     const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second })
-    const shortening = held.extend(2 * Second).catch((e: unknown) => e)
-    await vi.advanceTimersByTimeAsync(5 * Second)
-    expect(await shortening).toBeInstanceOf(ErrLockBackendTimeout)
-
+    const shortening = held.extend(2 * Second)
     const lengthening = held.extend(1 * Minute)
     const [short, long] = backend.extends
     await long!.write()
     await short!.write()
-    for (const which of order) {
-      ;(which === 'short' ? short : long)!.answer()
-      await vi.advanceTimersByTimeAsync(0)
-    }
-    expect(await lengthening).toBe(order[0] === 'short')
 
     await vi.advanceTimersByTimeAsync(2 * Second)
     expect(await backend.inner.tryAcquire('orders:rebuild', 1 * Minute)).toBeDefined()
     expect(held.lost).toBe(true)
+    const reason: unknown = held.signal.reason
+    expect(reason).toBeInstanceOf(ErrLockLost)
+
+    for (const which of order) {
+      ;(which === 'short' ? short : long)!.answer()
+      await vi.advanceTimersByTimeAsync(0)
+    }
+    expect(await shortening).toBe(false)
+    expect(await lengthening).toBe(false)
+    expect(held.lost).toBe(true)
+    expect(held.signal.reason).toBe(reason)
   })
 
   it('does not forget an overlapping write when its expiry leaves the current cap unchanged', async () => {
@@ -914,7 +930,9 @@ describe('distributed lock against a backend that does not answer', () => {
     expect(await older).toBe(false)
   })
 
-  it('renews a live rotation even if an older reply temporarily showed an expired lease', async () => {
+  // Until the shortening extend answers, nothing says the rotation landed after it: the key may be free once its
+  // ttl runs out. The signal aborts then, and answers arriving afterwards cannot hand the holder its lease back.
+  it('stays lost once an unanswered shortening extend could have let the key go, whatever answers later', async () => {
     const inner = new ConditionallyRotatingBackend()
     inner.keptTTL = 1 * Second
     const backend = new StagedBackend(inner)
@@ -928,20 +946,17 @@ describe('distributed lock against a backend that does not answer', () => {
     await short!.write()
     await rotated!.write()
     await vi.advanceTimersByTimeAsync(1 * Second)
+    expect(held.signal.reason).toBeInstanceOf(ErrLockLost)
     short!.answer()
     expect(await shortening).toBe(false)
     rotated!.answer()
-    expect(await rotating).toBe(true)
+    expect(await rotating).toBe(false)
 
     await vi.advanceTimersByTimeAsync(2 * Second)
-    expect(backend.extends).toHaveLength(3)
-    const renewal = backend.extends[2]!
-    await renewal.write()
-    renewal.answer()
-    await vi.advanceTimersByTimeAsync(0)
-
-    expect(held.expiresAt).toBe(Date.now() + 6 * Second)
+    expect(backend.extends).toHaveLength(2)
+    expect(held.lost).toBe(true)
     await held.release()
+    expect(await lock.tryAcquire('orders:rebuild')).toBeDefined()
   })
 
   it('waits for a rotating renewal when the backend starts release synchronously', async () => {
@@ -991,7 +1006,7 @@ describe('distributed lock against a backend that does not answer', () => {
     expect(await shortening).toBe(false)
   })
 
-  it('can resume renewal after an explicit write replaces an expired conservative bound', async () => {
+  it('does not resume renewal once the lease read as lost by its conservative bound', async () => {
     const backend = new StagedBackend()
     const lock = await newLock(backend)
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
@@ -1009,19 +1024,10 @@ describe('distributed lock against a backend that does not answer', () => {
     expect(await shortening).toBe(false)
     expect(held.lost).toBe(true)
 
-    const recovering = held.extend(30 * Second)
-    const recovery = backend.extends[2]!
-    await recovery.write()
-    recovery.answer()
-    expect(await recovering).toBe(true)
-
+    expect(await held.extend(30 * Second)).toBe(false)
     await vi.advanceTimersByTimeAsync(10 * Second)
-    expect(backend.extends).toHaveLength(4)
-    const renewal = backend.extends[3]!
-    await renewal.write()
-    renewal.answer()
-    await vi.advanceTimersByTimeAsync(0)
-    expect(held.expiresAt).toBe(Date.now() + 30 * Second)
+    expect(backend.extends).toHaveLength(2)
+    expect(held.signal.reason).toBeInstanceOf(ErrLockLost)
     await held.release()
   })
 
@@ -1466,6 +1472,38 @@ describe('lock signal', () => {
     expect(lossOf(lapsed).reason).toBe('expired')
   })
 
+  // The key may change hands as soon as the release lands, which can be long before its answer arrives: work bound
+  // to the signal stops when the holder lets go, not when the backend confirms it.
+  it.each([
+    { name: 'before the release reaches the backend', deletes: false },
+    { name: 'when the backend deleted the key but has not answered', deletes: true },
+  ])('aborts lock.signal with ErrLockReleased $name', async ({ deletes }) => {
+    const answer = Promise.withResolvers<void>()
+    const backend = new (class extends MemoryLockBackend {
+      override async release(lease: LockLease): Promise<void> {
+        if (deletes) {
+          await super.release(lease)
+        }
+        await answer.promise
+      }
+    })()
+    const lock = await newLock(backend)
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 1 * Second })
+    const releasing = held.release()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(held.signal.reason).toBeInstanceOf(ErrLockReleased)
+    expect((await lock.tryAcquire('orders:rebuild')) !== undefined).toBe(deletes)
+
+    // A release still unanswered when the lease runs out leaves the reason the holder let go with.
+    await vi.advanceTimersByTimeAsync(2 * Second)
+    expect(held.signal.reason).toBeInstanceOf(ErrLockReleased)
+    answer.resolve()
+    await releasing
+  })
+
   it('publishes exactly one lost message per lease when the clock and a renewal both notice', async () => {
     const lock = await newLock(new TakenAtExpiryBackend())
     const lost: LostMessage[] = []
@@ -1558,6 +1596,47 @@ describe('lock signal', () => {
     await vi.advanceTimersByTimeAsync(3 * Second)
     expect(held.lost).toBe(false)
     expect(held.signal.aborted).toBe(false)
+    await held.release()
+  })
+
+  // The retry still carries the token the first renewal rotated away from, so the backend refuses it. That refusal
+  // says nothing about the lease the first renewal moved the key to, which the lock adopts and keeps renewing.
+  it('keeps the rotated lease when a retry under the old token is refused after the first renewal answered late', async () => {
+    const backend = new StagedBackend(new RotatingBackend())
+    const lock = await newLock(backend)
+    const losses: LostMessage[] = []
+    lock.events.on('lost', message => losses.push(message))
+    fake()
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 30 * Second, renew: true })
+    // The renewal leaves at 10s and rotates the token, but its answer is held past the 15s timeout.
+    await vi.advanceTimersByTimeAsync(10 * Second)
+    const [rotating] = backend.extends
+    await rotating!.write()
+    await vi.advanceTimersByTimeAsync(5 * Second)
+
+    // The retry leaves under the old token and is refused; the first answer lands before the refusal does.
+    await vi.advanceTimersByTimeAsync(DEFAULT_DIST_LOCK_OPTIONS.retryDelay)
+    expect(backend.extends).toHaveLength(2)
+    const retry = backend.extends[1]!
+    await retry.write()
+    rotating!.answer()
+    await vi.advanceTimersByTimeAsync(0)
+    retry.answer()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(held.lost).toBe(false)
+    expect(held.signal.aborted).toBe(false)
+    expect(losses).toEqual([])
+
+    await vi.advanceTimersByTimeAsync(10 * Second)
+    expect(backend.extends).toHaveLength(3)
+    const next = backend.extends[2]!
+    await next.write()
+    next.answer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(held.expiresAt).toBe(Date.now() + 30 * Second)
+    expect(held.lost).toBe(false)
     await held.release()
   })
 
