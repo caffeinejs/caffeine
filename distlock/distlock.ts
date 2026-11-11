@@ -67,8 +67,9 @@ export interface Lock {
    * Aborts when the lease is gone: taken by another holder, expired by the clock, lost to a backend failure, or
    * released, as soon as `release()` is called rather than once the backend answers. An extend to a shorter `ttl`
    * that has not answered aborts it once that `ttl` runs out, since the key may be free from then on; nothing
-   * answering later revives it. `signal.reason` is an {@link ErrLockLost} or an {@link ErrLockReleased}. A `once` lock whose action returned has
-   * left its holder's hands: the window lapsing aborts nothing and publishes no `lost`.
+   * answering later revives it. `signal.reason` is an {@link ErrLockLost} or an {@link ErrLockReleased}. A `once`
+   * lock whose action returned has left its holder's hands: the window lapsing aborts nothing and publishes no
+   * `lost`.
    *
    * Cancellation is cooperative: pass the signal to the I/O the critical section does, such as `fetch` or a
    * database query, so the work stops with the lease.
