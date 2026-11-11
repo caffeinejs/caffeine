@@ -15,6 +15,10 @@ import { TimeWindow } from './_time_window.js'
 /** The circuit breaker states in which a call can be refused. */
 export type NotPermittedState = 'open' | 'forced_open' | 'half_open'
 
+// The most outcomes a count window holds, and the most seconds a time window spans: a window is allocated whole when
+// the breaker is created, and an allocation the runtime cannot make ends a worker thread on Node 26 instead of throwing.
+const MAX_WINDOW = 2 ** 24
+
 const refusals: Record<NotPermittedState, string> = {
   open: 'circuit breaker is open',
   forced_open: 'circuit breaker is forced open',
@@ -51,7 +55,10 @@ function notPermittedMessage(breaker: string, state: NotPermittedState): string 
 
 export type CircuitBreakerState = 'closed' | 'open' | 'half_open' | 'forced_open' | 'disabled' | 'metrics_only'
 
-/** The last `size` calls, or the calls of the last `duration`, a whole number of seconds. */
+/**
+ * The last `size` calls, or the calls of the last `duration`, a whole number of seconds. Either is at most 2^24: 16,777,216
+ * calls, or 194d4h20m16s.
+ */
 export type SlidingWindow = { type: 'count'; size: number } | { type: 'time'; duration: Duration }
 
 export interface CircuitBreakerOptions {
@@ -80,7 +87,10 @@ export interface CircuitBreakerOptions {
    * `onError()`, and `transitionToOpen()` throw.
    */
   waitDurationInOpenState?: Duration | Backoff
-  /** Trial calls let through while half open; their outcome closes or re-opens the breaker. Defaults to 10. */
+  /**
+   * Trial calls let through while half open; their outcome closes or re-opens the breaker. Defaults to 10, and is at
+   * most 2^24.
+   */
   permittedNumberOfCallsInHalfOpenState?: number
   /**
    * Longest time trial calls may hold every trial slot. Once all slots are taken and the last trial admitted has
@@ -258,18 +268,6 @@ export class CircuitBreaker implements Wrapper {
   constructor(options: CircuitBreakerOptions) {
     const o = new Options('circuit breaker', options)
 
-    // A length the runtime cannot allocate is an option out of range, not a crash inside a typed array.
-    const allocate = <W>(key: string, create: () => W): W => {
-      try {
-        return create()
-      } catch (error) {
-        if (error instanceof RangeError) {
-          throw o.invalid(`${key} is too large to allocate`)
-        }
-        throw error
-      }
-    }
-
     this.#name = o.name
     this.#failureRateThreshold = o.percent('failureRateThreshold', options.failureRateThreshold ?? 50)
     this.#slowCallRateThreshold = o.percent('slowCallRateThreshold', options.slowCallRateThreshold ?? 100)
@@ -282,18 +280,18 @@ export class CircuitBreaker implements Wrapper {
     const window = options.slidingWindow ?? { type: 'count', size: 100 }
     let minimum = o.integer('minimumNumberOfCalls', options.minimumNumberOfCalls ?? 100, 1)
     if (window.type === 'count') {
-      const size = o.integer('slidingWindow.size', window.size, 1)
-      this.#window = allocate('slidingWindow.size', () => new CountWindow(size))
+      const size = o.integerIn('slidingWindow.size', window.size, 1, MAX_WINDOW)
+      this.#window = new CountWindow(size)
       minimum = Math.min(minimum, size)
     } else if (window.type === 'time') {
       // One bucket per second.
       const seconds = window.duration / Second
-      if (!Number.isInteger(seconds) || seconds < 1) {
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > MAX_WINDOW) {
         throw o.invalid(
-          `slidingWindow.duration must be a whole number of seconds and at least 1s, got ${formatDuration(window.duration)}`,
+          `slidingWindow.duration must be a whole number of seconds from 1s to ${formatDuration(MAX_WINDOW * Second)}, got ${formatDuration(window.duration)}`,
         )
       }
-      this.#window = allocate('slidingWindow.duration', () => new TimeWindow(seconds))
+      this.#window = new TimeWindow(seconds)
     } else {
       throw o.invalid(`slidingWindow must be { type: 'count', size } or { type: 'time', duration }`)
     }
@@ -301,15 +299,13 @@ export class CircuitBreaker implements Wrapper {
 
     const wait = options.waitDurationInOpenState ?? 1 * Minute
     this.#waitDurationInOpenState = typeof wait === 'function' ? wait : o.duration('waitDurationInOpenState', wait, 0)
-    this.#permittedCalls = o.integer(
+    this.#permittedCalls = o.integerIn(
       'permittedNumberOfCallsInHalfOpenState',
       options.permittedNumberOfCallsInHalfOpenState ?? 10,
       1,
+      MAX_WINDOW,
     )
-    this.#halfOpenWindow = allocate(
-      'permittedNumberOfCallsInHalfOpenState',
-      () => new CountWindow(this.#permittedCalls),
-    )
+    this.#halfOpenWindow = new CountWindow(this.#permittedCalls)
     this.#maxWaitInHalfOpenMs = o.duration(
       'maxWaitDurationInHalfOpenState',
       options.maxWaitDurationInHalfOpenState ?? 0,

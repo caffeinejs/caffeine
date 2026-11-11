@@ -15,8 +15,8 @@ const built = (dir: string, file: string): Pick<ServerConfig, 'args' | 'builtPat
 const servers: ServerConfig[] = [
   { name: 'caffeine', port: 3050, ...built('caffeine', 'caffeine.js') },
   { name: 'caffeine (no cache)', port: 3051, env: { BENCH_CACHE: 'off' }, ...built('caffeine', 'caffeine.js') },
-  { name: 'nestjs', port: 3052, ...built('nestjs', 'nestjs.js') },
-  { name: 'nestjs (no cache)', port: 3053, env: { BENCH_CACHE: 'off' }, ...built('nestjs', 'nestjs.js') },
+  { name: 'nestjs (node)', port: 3052, ...built('nestjs', 'nestjs.js') },
+  { name: 'nestjs (node, no cache)', port: 3053, env: { BENCH_CACHE: 'off' }, ...built('nestjs', 'nestjs.js') },
   { name: 'hono', port: 3054, ...built('hono', 'hono.js') },
   { name: 'hono (no cache)', port: 3055, env: { BENCH_CACHE: 'off' }, ...built('hono', 'hono.js') },
 ]
@@ -27,6 +27,7 @@ await runLoadBenchmark({
   request: { path: '/api/products' },
   versions: [
     '@nestjs/core',
+    '@nestjs/platform-node',
     '@nestjs/cache-manager',
     'cache-manager',
     'hono',

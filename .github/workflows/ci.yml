@@ -6,8 +6,6 @@ on:
     branches:
       - main
       - '[0-9]+.x'
-    tags:
-      - '*'
     paths-ignore:
       - '.vscode/**'
       - 'docs/**'
@@ -41,6 +39,7 @@ jobs:
         include:
           - node-version: '24'
             primary: true
+          - node-version: '26'
 
     steps:
       - name: Checkout
@@ -58,7 +57,7 @@ jobs:
       - name: Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: latest
+          bun-version-file: package.json
 
       - name: Install
         run: npm ci --ignore-scripts
@@ -150,7 +149,7 @@ jobs:
           github.actor != 'dependabot[bot]' &&
           (github.event_name != 'pull_request' ||
            github.event.pull_request.head.repo.full_name == github.repository)
-        uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304 # v8.4.0
+        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -233,6 +232,12 @@ jobs:
           docker compose -f test/services/configserver/docker-compose.yml logs
           docker compose -f test/services/oauthserver/docker-compose.yml logs
           docker compose -f test/services/redis/docker-compose.yml logs
+
+  package:
+    name: Package
+    uses: ./.github/workflows/package.yml
+    permissions:
+      contents: read
 
   devtools-ui-image:
     name: DevTools UI Image

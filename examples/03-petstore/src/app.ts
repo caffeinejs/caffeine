@@ -168,8 +168,6 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             // The reverse also holds, and the UI cannot paper over it: GitHub sign-in is a browser round trip that
             // ends in a cookie, so it happens at /login/github, not in the documentation's authentication panel.
             .secure(s => s.schemes('Basic'))
-            // The fallback error handler answers 422 for a body that fails validation, not Fastify's default 400.
-            .errors({ validation: 422 })
             .errorSchema(APIErrorSchema),
         ),
       )

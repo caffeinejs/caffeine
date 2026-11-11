@@ -489,7 +489,7 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
 
         // And nobody outside is told why: what went wrong names the issuer this deployment is configured with,
         // and with a provider that is down it would name the address it could not be reached at.
-        expect(page.json()).toMatchObject({ statusCode: 502, message: 'Authentication provider is unavailable' })
+        expect(page.json()).toMatchObject({ status: 502, detail: 'Authentication provider is unavailable' })
         expect(page.text()).not.toContain('not-the-issuer')
         expect(page.text()).not.toContain('localhost:9000')
       } finally {
