@@ -133,8 +133,8 @@ export interface ContendedMessage extends LockEventBase {
 
 /**
  * How a lease was lost. `taken`: the backend holds the key under another token, or not at all. `expired`: the
- * lease lapsed by the clock with no renewal keeping it. `error`: a renewal could not reach the backend while the
- * lease still had time.
+ * lease lapsed by the clock with no renewal keeping it. `error`: an extension, a renewal or an explicit
+ * extend, failed against the backend and the lease was not kept.
  */
 export type LostReason = 'taken' | 'expired' | 'error'
 
@@ -142,7 +142,7 @@ export type LostReason = 'taken' | 'expired' | 'error'
 export interface LostMessage extends LockEventBase {
   readonly leaseID: number
   readonly reason: LostReason
-  /** Whether a background renewal noticed it, rather than the deadline or an explicit extend. */
+  /** Whether background renewal noticed the loss or caused it by failing, rather than an explicit extend or the clock. */
   readonly renewal: boolean
 }
 
