@@ -50,6 +50,14 @@ export class Options {
     return value
   }
 
+  /** An integer from `min` to `max`, both included. */
+  integerIn(key: string, value: number, min: number, max: number): number {
+    if (!Number.isInteger(value) || value < min || value > max) {
+      throw this.invalid(`${key} must be an integer from ${min} to ${max}, got ${String(value)}`)
+    }
+    return value
+  }
+
   /** A finite span of at least `min`. */
   duration(key: string, value: Duration, min: Duration): Duration {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < min) {

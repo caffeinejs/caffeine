@@ -8,8 +8,10 @@
 
 ## Prerequisites
 
-- Node.js ^22.19 or >= 24 (CI runs 22 and 24)
+- Node.js 24 or later (CI runs 24 and 26)
 - npm >= 10
+- [Bun](https://bun.sh), at the version root `package.json` names in `engines.bun`: it builds and tests the CLI
+  (`cli/`), and `make check` runs those tests
 
 ## Setup
 
@@ -45,7 +47,8 @@ Commits must follow [Conventional Commits](https://www.conventionalcommits.org/)
 <type>(<optional scope>): <description>
 ```
 
-Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`.
+Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`, `build`, `ci`, `bench`. A `!` before the colon
+marks a breaking change: `feat(http)!: rename the body limit option`.
 
 Examples:
 
@@ -60,6 +63,8 @@ Keep the description short (under 72 characters), imperative mood, no trailing p
 ## Pull requests
 
 - Keep PRs focused — one concern per PR
+- Title the PR as a commit (the PR title check enforces it): it becomes the squashed commit, and its line in the
+  release notes. A `!` lists it under "Breaking changes"
 - Add or update tests for any changed behaviour
 - All checks must pass before requesting review (`make check`, or `make lint-markdown` when every changed file is `*.md`)
 - AI-assisted PRs must follow [`AI_POLICY.md`](AI_POLICY.md)

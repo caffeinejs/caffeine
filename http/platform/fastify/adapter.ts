@@ -51,6 +51,7 @@ import { CONSTRAINTS_PLUGIN } from './constraints/constraints.js'
 import { Context } from './context.js'
 import { cookiePlugin } from './cookie/cookie.js'
 import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './error/error.js'
+import { validationFormatter } from './error/validation.js'
 import { fetchInProcess } from './fetch.js'
 import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
@@ -241,12 +242,15 @@ export class Adapter implements IAdapter<AdapterTypes> {
     const { factory = {}, listener } = input.server
     // Fastify's HTTP/1 overload whatever `factory` asks for: the instance is one type whichever server it builds.
     const fastify = Fastify(
-      withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath) as FastifyHttpOptions<Server>,
+      withValidationFormatter(
+        withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath),
+      ) as FastifyHttpOptions<Server>,
     )
 
     // Node's `close()` waits on what it does not end itself, so the adapter keeps what the server has open. An HTTP/1
-    // server ends its idle connections once, and counts one that has not sent a request as active, never idle: a
-    // client that connects and stays silent (a browser's preconnect, a load balancer's TCP check) holds it. A TLS
+    // server ends its idle connections once. Node 24 counts one that has not sent a request as active, never idle, so a
+    // client that connects and stays silent (a browser's preconnect, a load balancer's TCP check) holds it; Node 26
+    // resets it. A TLS
     // server's HTTP layer meets a connection only once its handshake ends, so not even `closeAllConnections()` reaches
     // one still handshaking. Node 22's HTTP/2 server leaves its sessions open, an idle one until
     // `http2SessionTimeout`.
@@ -333,6 +337,10 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // One lookup for the whole server: each context takes its own snapshot off the store, on first read.
     const store = container.get(ConfigStore)
 
+    // The error handler makes the context itself when an `onRequest` hook ahead of this one failed.
+    const contextOf = (req: FastifyRequest, reply: FastifyReply): Context =>
+      (req.httpContext ??= new Context(req, reply, store))
+
     fastify.addHook('onRequest', (req, reply, done) => {
       req.httpContext = new Context(req, reply, store)
 
@@ -412,7 +420,10 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // Error handling first, so every route and hook registered afterwards is covered by it; then cookies, whose
     // `Set-Cookie` writer leads every later plugin's `onSend` hook. Each server gets its own.
     const errorHandler = new GlobalErrorHandlerRef()
-    await installExtension(fastify, globalErrorHandlerPlugin(errorHandler, container.get(kErrorHandlingOptions)))
+    await installExtension(
+      fastify,
+      globalErrorHandlerPlugin(errorHandler, container.get(kErrorHandlingOptions), contextOf),
+    )
     await installExtension(fastify, cookiePlugin(container.get(kCookieSettings)))
 
     for (const extension of input.extensions.root()) {
@@ -519,7 +530,7 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
     // never began its handshake, or a TLS one that finished it and fell silent, an HTTP/2 one that never sent its
     // preface included. Each is destroyed, whether open when closing began or opening after, before the server stops
     // listening or from a handshake that ends after. Judged once Node has read what had arrived, so a request already
-    // on its way is answered: with a 503 once Fastify is closing.
+    // on its way is answered.
     const endIfSilent = (socket: Socket) =>
       afterIO(() => {
         if (socket.bytesRead === 0) {
@@ -550,6 +561,9 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
 
     subscribe(RESPONSE_FINISH, closeIdle)
     try {
+      // Node 26's `close()` resets a connection that has not delivered a request yet, bytes already arrived included:
+      // the server reads them first, and the silent connections above are judged by then.
+      await new Promise<void>(resolve => afterIO(resolve))
       await this.#fastify.close()
     } finally {
       unsubscribe(RESPONSE_FINISH, closeIdle)
@@ -625,6 +639,20 @@ function withApplicationLogger(factory: FactoryOptions, logger: Logger): Factory
     loggerInstance: logger,
     logController: factory.logController ?? new LogController({ disableRequestLogging: true }),
   }
+}
+
+/**
+ * Writes a request validation error's message as its slot and its count, such as `Invalid request body: 31 errors`,
+ * unless the factory settings name a formatter of their own. Fastify's own formatter joins every message the validator
+ * reported, so one request could fill that message, and every log line printing it, with each of its failures.
+ *
+ * One set later, through `setSchemaErrorFormatter` in a server callback, replaces this one, and a route's own wins
+ * over both. Whichever formats it, the error handler answers with the same problem.
+ */
+function withValidationFormatter(factory: FactoryOptions): FactoryOptions {
+  return factory.schemaErrorFormatter === undefined
+    ? { ...factory, schemaErrorFormatter: validationFormatter }
+    : factory
 }
 
 /**

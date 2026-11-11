@@ -3,6 +3,7 @@
 .DEFAULT_GOAL := help
 
 CLI_SRCS := $(shell find cli -name '*.ts' ! -path '*/dist/*' ! -name '*.test.ts' ! -path '*/templates/*')
+CLI_ASSETS := $(shell find cli/command/scaffold/templates ai -type f)
 
 -include Makefile.overrides # allow user specific optional overrides
 -include .env # allow user specific optional environment variables
@@ -17,7 +18,7 @@ build: ## build all packages
 build\:cli: ## build the caffeine CLI binary and link node_modules/.bin/caffeine
 	@npm run build:cli
 
-cli/dist/caffeine: $(CLI_SRCS) cli/package.json
+cli/dist/caffeine: $(CLI_SRCS) $(CLI_ASSETS) cli/package.json
 	@npm run build:cli
 
 build\:%: ## build a single package and its local deps (e.g. build:http)

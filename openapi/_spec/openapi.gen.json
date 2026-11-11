@@ -135,7 +135,10 @@
     "errors": {
       "type": "object",
       "properties": {
-        "validation": {
+        "bodyValidation": {
+          "type": "number"
+        },
+        "parameterValidation": {
           "type": "number"
         },
         "unauthorized": {

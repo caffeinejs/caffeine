@@ -206,7 +206,7 @@ newRouter('/hooks').extend(csrfExempt()) // the programmatic form; csrfExempt(fa
   being another origin. Without the header, `Origin` decides: absent, the request is a non-browser client's and
   passes; `null` or unreadable is refused; one naming the request's host passes and any other is refused, as is an
   `http:` origin on a request the server knows came over HTTPS.
-- A refusal is a 403 with the code `ERR_CSRF_CROSS_ORIGIN`, in the standard error envelope, logged at `warn` with
+- A refusal is a 403 with the code `ERR_CSRF_CROSS_ORIGIN`, in the standard problem body, logged at `warn` with
   what decided it and the path, never the query; the message never repeats a header value.
   `@Catch(ErrCSRFCrossOrigin)`, or a handler enrolled with `.errorHandling(e => e.globalHandlers(...))`, answers it
   differently.
@@ -478,8 +478,10 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
   skips the store and reaches the handler, and a part is never stored. With `Cache-Control: only-if-cached`, which
   forbids reaching the handler, a `Range` gets the stored whole body, or `504` when none is stored, and a
   precondition gets `504`.
-- `If-Range` resumes only the same content: it must match `etag` exactly, or `lastModified` to the second. A weak
-  `etag` never resumes. Otherwise the whole current body goes out, so a client never splices two versions together.
+- `If-Range` resumes only the same content: it must match `etag` exactly, or `lastModified` to the second when
+  `lastModifiedStrong: true` says the content cannot change twice within one second. A weak `etag`, or a date without
+  that flag, never resumes. Otherwise the whole current body goes out, so a client never splices two versions
+  together.
 - An `etag` is quoted, `'"v42"'`. An unquoted one, or a `lastModified` that is not a valid date, throws
   `ErrConfiguration`: either would be a validator no client can match. So does a `type` holding a control
   character, which no header value may.
@@ -648,7 +650,7 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   it. A router nested in a bound one is served where its parent is: binding it to another server is refused at
   start-up, and so is a name no installed server has. `group.boundTo` on `app.routeGroups` names the server.
 - **What it gets.** A listener is built through the same path as the application's own server: the same request
-  context, error handlers, not-found envelope, cookies, global guards and start-up checks. What a router asks for
+  context, error handlers, not-found problem, cookies, global guards and start-up checks. What a router asks for
   itself follows it: `router.with(...)` or `@Use(...)`, and `router.guards(...)` or `@UseGuards(...)`.
 - **Plugins and middleware are per server.** `l.with(...)`, `l.use(...)` and `l.useFn(...)` take what the
   application's `.with(...)`, `.use(...)` and `.useFn(...)` take, and install on that server alone, after the same
