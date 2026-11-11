@@ -8,7 +8,7 @@ export interface DistLockOptions {
   /** How long `acquire` spends retrying when a call does not say. */
   wait: Duration
 
-  /** The pause between two attempts, before jitter. */
+  /** The pause between two acquisition attempts, before jitter, and before a failed renewal is retried. */
   retryDelay: Duration
 
   /**

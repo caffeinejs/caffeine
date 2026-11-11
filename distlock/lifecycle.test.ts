@@ -193,6 +193,34 @@ describe('distlock lifecycle', () => {
     expect(settled).toBe(true)
   })
 
+  // A lease can be lost by its deadline while a renewal is still on the wire. That renewal can still write, so close
+  // waits for it as it would for any other.
+  it('waits on close for a renewal still on the wire after the lease was lost by its deadline', async () => {
+    const backend = new FaultyBackend()
+    const { lock, close } = await newApp(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    const held = await lock.acquire('orders:rebuild', { ttl: 3 * Second, renew: true })
+    backend.hang.add('extend')
+    // The renewal leaves at 1s and never answers; an extend shortening the lease to 200ms ends it at 1.3s.
+    await vi.advanceTimersByTimeAsync(1 * Second)
+    await vi.advanceTimersByTimeAsync(100)
+    void held.extend(200).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(200)
+    expect(held.signal.aborted).toBe(true)
+
+    let settled = false
+    void close()
+      .finally(() => (settled = true))
+      .catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(settled).toBe(false)
+
+    // The renewal waits at most the 2s its lease had left when it left.
+    await vi.advanceTimersByTimeAsync(1700)
+    expect(settled).toBe(true)
+  })
+
   // The release went out with the token the lock knew; the renewal that rotated it answered too late for the
   // release to use. Unless the late lease is given back, the key stays taken under a token nobody holds.
   it('gives back a renewal that lands after the lock was released, so a backend that rotates the token on extend leaves the key free', async () => {
