@@ -86,7 +86,7 @@
     "fast-check": "^4.10.2",
     "git-cliff": "^2.14.2",
     "globby": "^16.2.4",
-    "markdownlint-cli2": "^0.24.0",
+    "markdownlint-cli2": "^0.24.1",
     "oxfmt": "^0.76.0",
     "oxlint": "^1.91.0",
     "oxlint-tsgolint": "^7.0.2002",
