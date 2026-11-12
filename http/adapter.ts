@@ -1,4 +1,4 @@
-import type { BootstrapKit } from '@caffeinejs/application'
+import type { BootstrapKit, RunInfo } from '@caffeinejs/application'
 import type { Container } from '@caffeinejs/di'
 
 import type {
@@ -61,6 +61,9 @@ export interface IAdapterTypes {
 
   /** What `app.run(...)` takes and hands `IAdapterServer.run(...)` untouched. `[]` when the server takes nothing. */
   runArgs: readonly unknown[]
+
+  /** What `app.run()` resolves with. */
+  runInfo: RunInfo
 }
 
 /**
@@ -177,7 +180,7 @@ export interface IAdapterServer<T extends IAdapterTypes> extends IServer<T> {
    * Starts listening on the settings the server was built with. The application hands its own server what
    * {@link WebApplication.run} was given, untouched, and any other server nothing.
    *
-   * Once it resolves, `address` is set until {@link teardown}.
+   * Once it resolves, a server that listens has its `address` set until {@link teardown}.
    */
   run(...args: T['runArgs']): Promise<void>
 

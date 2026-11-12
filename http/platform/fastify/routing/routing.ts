@@ -11,6 +11,7 @@ import {
   type RawServerBase,
 } from 'fastify'
 
+import { joinPaths } from '../../../core/routing/paths.js'
 import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../../core/routing/route.js'
 import type { Context } from '../context.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../error/error.js'
@@ -270,12 +271,6 @@ function answeredOrTimedOut(ctx: Context): boolean {
   // Fastify's signal, which a timed route has already: the context's would build a second controller to ask the same.
   const signal = ctx.platform.request.signal
   return ctx.sent || (signal.aborted && isHandlerTimeout(signal.reason))
-}
-
-/** Joins a router base path and a route path, trimming a trailing slash (but never to empty). */
-function joinPaths(base: string, path: string): string {
-  const joined = `${base}${path}`
-  return joined.length > 1 ? joined.replace(/\/$/, '') : joined
 }
 
 /** The body as it is read, failed with a 413 once more than `limit` bytes have passed. */

@@ -43,6 +43,7 @@ import { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './core/routing/programmatic/source.js'
 import type { IRouteGroup } from './core/routing/route.js'
 import { AuthorizationBuilder } from './core/security/authz/index.js'
+import { fetchAdapterFactory, type FetchAdapterTypes } from './core/server/adapter.js'
 import { getRouteGroup } from './decorators/registrar/registrar.js'
 import type { HTTPPlugin } from './plugin.js'
 import { assertPluginFactory } from './plugin_factory.js'
@@ -179,6 +180,15 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    */
   readonly request = async (request: Request | string | URL, options?: RequestInit): Promise<Response> =>
     this.#ownServer().request(request, options)
+
+  /**
+   * Answers `request` as the application's own server does, as {@link IServer.fetch} describes: what a fetch runtime
+   * is handed, `export default { fetch: app.fetch }`. Bound to the application, so it can be handed on alone.
+   *
+   * @throws ErrApplicationNotReady before {@link ready} has built the server.
+   */
+  readonly fetch = (request: Request, ...runtime: unknown[]): Response | Promise<Response> =>
+    this.#ownServer().fetch(request, ...runtime)
 
   /**
    * Adds a middleware to the request pipeline. Order matters, and it is the order these calls are written
@@ -557,9 +567,12 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     await this.#servers?.run(this.#runArgs!)
   }
 
-  protected override runInfo(): WebRunInfo {
-    // Read once `start()` has resolved, and a server that has run has an address until it is torn down.
-    return { ...super.runInfo(), address: this.address! }
+  protected override runInfo(): RunInfo & { address?: ServerAddress } {
+    // Read once `start()` has resolved: a server that listens has an address until it is torn down, one that does not
+    // has none.
+    const address = this.address
+
+    return address === undefined ? super.runInfo() : { ...super.runInfo(), address }
   }
 
   /**
@@ -572,11 +585,11 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * @throws ErrApplicationRunning when `run()` has already been called, whatever became of that call.
    * @throws ErrApplicationClosed once {@link close} has been called, including while `run()` was still booting.
    */
-  override run(...args: T['runArgs']): Promise<WebRunInfo> {
+  override run(...args: T['runArgs']): Promise<T['runInfo']> {
     // The first call's: a second one is refused, and must not change what the first listens with while it boots.
     this.#runArgs ??= args
-    // runInfo() is overridden, so what base run() resolves to is already a WebRunInfo.
-    return super.run() as Promise<WebRunInfo>
+    // runInfo() is overridden, so what base run() resolves to carries the address of a server that listens.
+    return super.run() as Promise<T['runInfo']>
   }
 
   // Tolerates a server that was never built: `close()` runs `stop()` whether or not `bootstrap()` got that far.
@@ -619,3 +632,24 @@ type RoutesOfRouter<T> = T extends Router<any, any, any, any, infer R, any> ? R 
  * application that mounted one report `undefined` as its dependencies. It contributes nothing instead.
  */
 type DepsOfRouter<T> = T extends Router<any, any, infer D, any, any, any> ? (D extends undefined ? never : D) : never
+
+/**
+ * Creates the fetch application: served by the web-standards engine, with no socket of its own. Hand `app.fetch` to
+ * the runtime once it is ready:
+ *
+ * ```ts
+ * const app = createWebApplication({ config }).mount(pets)
+ * await app.run()
+ *
+ * export default { fetch: app.fetch }
+ * ```
+ *
+ * What the engine cannot serve yet is refused at start-up, pointing at `createWebApplication()` from
+ * `@caffeinejs/http/fastify`. A handler typed with a plain `IContext` sees Fastify's `raw` and `platform` types; read
+ * them through `ctx.platform.name === 'fetch'`.
+ */
+export function createWebApplication<TConfig = unknown>(
+  options?: WebApplicationOptions<TConfig>,
+): WebApplication<FetchAdapterTypes, never, never, TConfig> {
+  return new WebApplication(fetchAdapterFactory(), options)
+}

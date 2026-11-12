@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { ErrApplicationNotReady } from '@caffeinejs/application'
+import { afterEach, describe, expect, it, expectTypeOf } from 'vitest'
 
-import type { WebApplication } from './application.js'
+import { createWebApplication as createFetchApplication, type WebApplication, type WebRunInfo } from './application.js'
 import { Router } from './index.js'
 import { createWebApplication } from './platform/fastify/index.js'
 
@@ -22,5 +23,42 @@ describe('WebApplication', () => {
     const { request } = app
 
     expect(await (await request(new Request('http://localhost/detached'))).json()).toEqual({ ok: true })
+  })
+})
+
+describe('the fetch application', () => {
+  it('builds from the package root and answers app.fetch', async () => {
+    const app = createFetchApplication().mount(new Router('/hello').get('/').handler(() => 'hi'))
+    await app.bootstrap()
+
+    try {
+      expect(await (await app.fetch(new Request('http://x/hello'))).text()).toBe('hi')
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('throws ErrApplicationNotReady from app.fetch before bootstrap', () => {
+    const app = createFetchApplication()
+
+    expect(() => app.fetch(new Request('http://x/'))).toThrow(ErrApplicationNotReady)
+  })
+
+  // Code expecting a listener's address does not compile against an application that opens no socket.
+  it('resolves run() with no address', async () => {
+    const app = createFetchApplication()
+
+    const info = await app.run()
+
+    try {
+      expect('address' in info).toBe(false)
+      expectTypeOf(info).not.toHaveProperty('address')
+    } finally {
+      await app.close()
+    }
+  })
+
+  it("keeps address on the Fastify application's run()", () => {
+    expectTypeOf<Awaited<ReturnType<ReturnType<typeof createWebApplication>['run']>>>().toEqualTypeOf<WebRunInfo>()
   })
 })

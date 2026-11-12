@@ -43,4 +43,14 @@ export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
    * read as `options`: `Bun.serve({ fetch: request => app.request(request) })`.
    */
   request(request: Request | string | URL, options?: RequestInit): Promise<Response>
+
+  /**
+   * The runtime entry, as a fetch runtime calls it: Bun's and a worker's `fetch`, `Deno.serve`. What the runtime hands
+   * after the request reaches `ctx.platform.runtime`.
+   *
+   * Unlike {@link request}, it takes no `RequestInit`, and the request keeps the connection it came on. A server that
+   * listens itself answers it as `request` does. On a server that does not, a streamed body holds `app.close()` until
+   * it has been read or cancelled.
+   */
+  fetch(request: Request, ...runtime: unknown[]): Response | Promise<Response>
 }

@@ -21,6 +21,7 @@ export default defineConfig({
       './std/vitest.config.ts',
       './application/vitest.config.ts',
       './http/vitest.config.ts',
+      './http/vitest.engine.config.ts',
       './caching/vitest.config.ts',
       './html/vitest.config.ts',
       './multipart/vitest.config.ts',

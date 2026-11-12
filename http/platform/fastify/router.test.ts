@@ -2,9 +2,10 @@ import Fastify, { type FastifyPluginAsync, type FastifyServerOptions } from 'fas
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrConfiguration } from '../../core/error/common.js'
+import { starParameterRefusal } from '../../core/matcher/find_my_way.js'
 import type { WebApplication } from '../../index.js'
 import { createWebApplication, newRouter } from './index.js'
-import { routerFlagsOf, starParameterRefusal } from './router.js'
+import { routerFlagsOf } from './router.js'
 
 let app: WebApplication | undefined
 

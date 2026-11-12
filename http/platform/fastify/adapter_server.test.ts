@@ -54,6 +54,19 @@ describe('the server .server(...) configures', () => {
     expect(await res.json()).toEqual({ ok: true })
   })
 
+  // The server listens itself: a request handed to it in-process has no connection to keep.
+  it('answers fetch as request on the Fastify application', async () => {
+    app = createWebApplication()
+    await app.bootstrap()
+
+    const fetched = await app.fetch(new Request('http://localhost/adapter-server/ping'))
+    const requested = await app.request('/adapter-server/ping')
+
+    expect(fetched.status).toBe(200)
+    expect(await fetched.json()).toEqual({ ok: true })
+    expect(requested.status).toBe(200)
+  })
+
   it('binds once when bootstrap() precedes run()', async () => {
     app = createWebApplication().server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
 

@@ -35,12 +35,14 @@ import type {
   IContextPlatform,
   ServerAddress,
 } from '../../adapter.js'
+import type { WebRunInfo } from '../../application.js'
 import { kRawBasePath, stripBasePath, type BasePathCarrier } from '../../base_path.js'
 import { kRouteConstraints } from '../../core/constraints/keys.js'
 import { kCookieSettings } from '../../core/cookie/keys.js'
 import type { CookieSerializeOptions } from '../../core/cookie/options.js'
 import { ErrCaffeineWebApplication, ErrConfiguration } from '../../core/error/common.js'
 import { kErrorHandlingOptions } from '../../core/error/keys.js'
+import { starParameterRefusal } from '../../core/matcher/find_my_way.js'
 import { RouteGroupBuilder } from '../../core/routing/builder.js'
 import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../core/routing/route.js'
 import { assertAuthorizationConfigured } from '../../core/security/authz/index.js'
@@ -56,7 +58,7 @@ import { fetchInProcess } from './fetch.js'
 import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
-import { recordRouterFlags, starParameterRefusal, trackPrefixedRootURL } from './router.js'
+import { recordRouterFlags, trackPrefixedRootURL } from './router.js'
 import { routeRecordsOf } from './routing/inventory.js'
 import { installNotFoundHandler } from './routing/not_found.js'
 import { compileArgs, compileHandler } from './routing/parameters.js'
@@ -130,6 +132,7 @@ export interface AdapterTypes<
   platform: ContextPlatform<RES>
   serverOptions: ServerSettings
   runArgs: [options?: FastifyListenOptions]
+  runInfo: WebRunInfo
 }
 
 /**
@@ -622,6 +625,11 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
 
   request(input: string | URL | Request, options?: RequestInit): Promise<Response> {
     return fetchInProcess(this.#fastify, input, options)
+  }
+
+  /** As {@link request}: the server listens itself, so a request handed to it here has no connection to keep. */
+  fetch(request: Request): Promise<Response> {
+    return this.request(request)
   }
 }
 

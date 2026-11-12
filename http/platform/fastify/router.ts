@@ -2,25 +2,9 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance, RouteOptions } from 'fastify'
 
 import { ErrConfiguration } from '../../core/error/common.js'
-
-/** How a server's router matches a request's path. */
-export interface RouterFlags {
-  readonly caseSensitive: boolean
-  readonly ignoreTrailingSlash: boolean
-  readonly ignoreDuplicateSlashes: boolean
-  /** Whether `;` starts the query, as `?` does. */
-  readonly useSemicolonDelimiter: boolean
-}
+import { DEFAULT_ROUTER_FLAGS, type RouterFlags } from '../../core/matcher/matcher.js'
 
 const kRouterFlags = Symbol('@caffeinejs/http:router-flags')
-
-// find-my-way's own defaults, which Fastify keeps.
-const DEFAULTS: RouterFlags = {
-  caseSensitive: true,
-  ignoreTrailingSlash: false,
-  ignoreDuplicateSlashes: false,
-  useSemicolonDelimiter: false,
-}
 
 /**
  * How the router of `server` matches a request's path, as Fastify resolved its options.
@@ -48,7 +32,7 @@ export function recordRouterFlags(server: FastifyInstance, options: object): voi
   const top = options as Partial<Record<keyof RouterFlags, boolean>> & { routerOptions?: object | null }
   const nested = (top.routerOptions ?? {}) as Partial<Record<keyof RouterFlags, boolean>>
   const flag = (name: keyof RouterFlags): boolean =>
-    (Object.hasOwn(nested, name) ? nested[name] : top[name]) ?? DEFAULTS[name]
+    (Object.hasOwn(nested, name) ? nested[name] : top[name]) ?? DEFAULT_ROUTER_FLAGS[name]
 
   server.decorate(kRouterFlags, {
     caseSensitive: flag('caseSensitive'),
@@ -105,63 +89,6 @@ export function trackPrefixedRootURL(
 
     return route.routePath === '/' ? first : undefined
   }
-}
-
-/**
- * Why the route `url` cannot register, when it declares a parameter named `*`: find-my-way gives the wildcard's value
- * that name, so whoever reads `params['*']` could not tell the two apart. `::` is an escaped colon, and the regular
- * expression a parameter may carry, in parentheses, is not read for parameters.
- */
-export function starParameterRefusal(url: string): ErrConfiguration | undefined {
-  // The router registers the full form of a terminal optional parameter with the question mark removed.
-  const path = url.replace(/(\/:[^/()]*?)\?(\/?)$/, '$1$2')
-
-  for (let i = 0; i < path.length; i++) {
-    if (path[i] !== ':') {
-      continue
-    }
-
-    if (path[i + 1] === ':') {
-      i++
-      continue
-    }
-
-    let end = i + 1
-
-    while (end < path.length && !'/-.('.includes(path[end]!)) {
-      end++
-    }
-
-    if (path.slice(i + 1, end) === '*') {
-      return new ErrConfiguration(
-        errMessage(`Cannot register "${url}": a parameter named "*" reads as a wildcard, whose value has that name`)
-          .solutions('Name the parameter, such as ":name"', 'Write a wildcard as "*", without ":"')
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
-    }
-
-    i = path[end] === '(' ? closingParenthesis(path, end) : end - 1
-  }
-
-  return undefined
-}
-
-/** The index of the `)` closing the `(` at `open`, nested ones and escaped ones aside, or the end of `url`. */
-function closingParenthesis(url: string, open: number): number {
-  let depth = 0
-
-  for (let i = open; i < url.length; i++) {
-    if (url[i] === '\\') {
-      i++
-    } else if (url[i] === '(') {
-      depth++
-    } else if (url[i] === ')' && --depth === 0) {
-      return i
-    }
-  }
-
-  return url.length
 }
 
 function notBuilt(action: string): ErrConfiguration {

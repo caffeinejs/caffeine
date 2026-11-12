@@ -2,6 +2,10 @@ import { ErrApplicationNotReady } from '@caffeinejs/application'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
+import { SAFE_METHODS } from '../csrf/origin.js'
+import { csrfMarkOf } from '../csrf/route.js'
+import type { IRoute, IRouteGroup } from './route.js'
+
 /** Adds one server's routes. The adapter's, through `AdapterIn.recordRoutes`; nothing else writes the inventory. */
 export const kRecordServer: unique symbol = Symbol('@caffeinejs/http:inventory.record')
 /** Marks the inventory complete, once every server is built. */
@@ -115,4 +119,52 @@ export interface RouteSecurityRecord {
    * - `uncovered`: no `csrf()` covers it
    */
   readonly csrf: 'protected' | 'exempt' | 'excluded' | 'safe' | 'uncovered'
+}
+
+/**
+ * The record of a compiled route a server registered with no authentication gate and no cross-origin protection: the
+ * web-standards engine's, whose routes needing either are refused at start-up. A GET's automatic HEAD route is folded
+ * into `methods`.
+ */
+// `any`, as every core helper taking groups of any adapter does: a route is invariant in the request it compiles for.
+export function routeRecord(
+  route: IRoute<any>,
+  group: IRouteGroup<any>,
+  methods: readonly string[],
+  url: string,
+): RouteRecord {
+  const authorization = route.authorization
+  const schema = route.schema
+  const mark = csrfMarkOf(Object.fromEntries(route.config))
+
+  return {
+    methods: [...methods],
+    url,
+    kind: 'compiled',
+    handler: String(route.name),
+    group: group.name,
+    produces: route.contentType || undefined,
+    consumes: [...route.accept],
+    status: typeof route.statusCode === 'number' && route.statusCode > 0 ? route.statusCode : undefined,
+    timeout: route.timeout,
+    bodyLimit: route.bodyLimit,
+    schema: {
+      params: schema?.params !== undefined,
+      querystring: schema?.querystring !== undefined,
+      headers: schema?.headers !== undefined,
+      body: schema?.body !== undefined,
+      response: schema?.response !== undefined,
+    },
+    security: {
+      authentication: {
+        skipped: false,
+        schemes: [...authorization.schemes],
+        allowAnonymous: authorization.options?.allowAnonymous === true,
+        gate: undefined,
+      },
+      authorization: { protected: false, fallback: false, policies: [], roleGroups: [], defaultPolicy: false },
+      guards: (route.guards ?? []).map(guard => guard.name),
+      csrf: mark === true ? 'exempt' : methods.every(method => SAFE_METHODS.has(method)) ? 'safe' : 'uncovered',
+    },
+  }
 }

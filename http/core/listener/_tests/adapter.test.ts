@@ -42,6 +42,10 @@ class IdleServer implements IAdapterServer<AdapterTypes> {
     return Promise.resolve(new Response(null, { status: 501 }))
   }
 
+  fetch(): Promise<Response> {
+    return Promise.resolve(new Response(null, { status: 501 }))
+  }
+
   teardown(): Promise<void> {
     return Promise.resolve()
   }

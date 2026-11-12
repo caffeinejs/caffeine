@@ -1,13 +1,12 @@
 import { validateHeaderName, validateHeaderValue } from 'node:http'
 import { join, posix, relative } from 'node:path'
 
-import { ErrConfiguration, ErrHTTPNotFound } from '@caffeinejs/http'
+import { ErrConfiguration, ErrHTTPNotFound, type RouterFlags } from '@caffeinejs/http'
 import {
   authenticationExempt,
   routerFlagsOf,
   type HTTPPluginConfigurer,
   type HTTPPluginFactory,
-  type RouterFlags,
 } from '@caffeinejs/http/fastify'
 import { Day, Second, formatDuration, truncate } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
