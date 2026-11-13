@@ -3,7 +3,6 @@ name: 'Caffeine CodeQL config'
 paths-ignore:
   - benchmarks
   - examples
-  - di/examples
   - docs
   - test
   - tools

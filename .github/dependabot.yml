@@ -17,7 +17,6 @@ updates:
     directories:
       - '/devtools-ui'
       - '/di/_tests/deno'
-      - '/di/examples/04-fastify-cats-complete'
       - '/examples/03-petstore'
       - '/examples/04-spa-dashboard'
       - '/examples/06-ad-exchange'

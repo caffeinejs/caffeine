@@ -69,9 +69,8 @@ all: ## run the whole build and quality checks
 @npm run test:deno
 
 .PHONY: rebuild
-rebuild: ## rebuild main library and typecheck all examples
+rebuild: ## rebuild main library
 	@npm run build
-	@npm run typecheck --workspaces --if-present
 
 .PHONY: site
 site: ## start the documentation site locally

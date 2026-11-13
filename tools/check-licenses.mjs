@@ -16,13 +16,7 @@ const ALLOWED = new Set([
   'OFL-1.1',
 ])
 
-const SKIP_WORKSPACE_PREFIXES = [
-  'examples/',
-  'di/examples/',
-  'benchmarks',
-  'cli/command/scaffold/templates/',
-  'di/_tests/deno',
-]
+const SKIP_WORKSPACE_PREFIXES = ['examples/', 'benchmarks', 'cli/command/scaffold/templates/', 'di/_tests/deno']
 
 function shouldSkipWorkspace(dir) {
   const rel = relative(root, dir).replaceAll('\\', '/')

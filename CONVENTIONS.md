@@ -16,9 +16,9 @@ This is not NestJS, Express, or Spring Boot.
 
 Package names (`@caffeinejs/kafka`, …) are the npm names; each workspace's `package.json` gives its own. Workspace membership is the root [`package.json`](package.json) `workspaces` list. Cross-package imports use the package name (`@caffeinejs/di`), not a relative path into another package.
 
-## After every edit
+## Checks
 
-Run checks in this order and fix failures before considering the task complete. First match wins.
+Run the checks when the change is complete, and again after every fix that follows, not after each file you touch. Run them in this order and fix failures before considering the task complete. First match wins.
 
 - **Docs-only** — every file edited in the task is `*.md`, and nothing else:
   1. `npm run lint:markdown` (or `make lint-markdown`)
@@ -28,7 +28,7 @@ Run checks in this order and fix failures before considering the task complete. 
   3. `npm test -w <pkg>`
   4. `make lint:<pkg-path>` — zero errors (warnings are pre-existing and acceptable). Not `npm run lint:fix -- <pkg-path>`: npm appends the path only to `oxfmt`, so oxlint would run on the whole repo.
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
-  1. `make check`, and nothing else. It runs the pin check, the error message copies, `build`, the package manifest check, `lint:fix`, `lint:markdown`, `spec:check`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
+  1. `make check`, and nothing else. It builds, fixes lint and formatting in place, type-checks and runs the tests, so running any of those first only runs it twice. It does not run the license check or the end-to-end tests.
 
 One non-md file means the task is not docs-only: TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, and a README next to a TypeScript change all count as code. When in doubt on code scope, run `make check`.
 
@@ -89,9 +89,9 @@ async upload(stream: import('node:stream').Readable) { ... }
 
 ### Module layout
 
-A module is a directory of source files in a library package (not `benchmarks/`, `examples/`, `di/examples/` or `devtools-ui/`).
+A module is a directory of source files in a library package (not `benchmarks/`, `examples/` or `devtools-ui/`).
 
-- It has a main file named after it (`cache/cache.ts`, `circuitbreaker/circuitbreaker.ts`) and an `index.ts` barrel that only re-exports.
+- It has a main file named after it (`logger/logger.ts`, `circuitbreaker/circuitbreaker.ts`) and an `index.ts` barrel that only re-exports.
 - A directory of independent files with no main one (`decorators/`, `internal/`, `provider/`) has the barrel alone.
 - A barrel publishes what the package offers. A helper only the package's own code uses stays out of it and is imported by its path.
 - One capability's code and public types live in one module, and other modules call into it rather than hold parts of it, so the capability is found and changed in one place. A package that splits a capability across layers keeps each layer's half whole, as `http/` does between `core/` and `platform/fastify/`.
@@ -101,10 +101,6 @@ A module is a directory of source files in a library package (not `benchmarks/`,
 ### Renames
 
 Until 1.0.0 every release may break callers ([`docs/versioning.md`](docs/versioning.md)). A rename updates every caller in the same change and leaves no alias, re-export or deprecation shim behind.
-
-## Features and plugins
-
-Before writing or changing a feature, a plugin factory or a feature's configuration schema, read [`FEATURES.md`](FEATURES.md).
 
 ## Durations and byte sizes
 
@@ -203,7 +199,7 @@ Before relying on the API of a third-party library, call the Context7 MCP server
 2. `query-docs` with the chosen `/org/project` id. One concept per call.
 3. Answer from those docs. Prefer Context7 over web search for a library API.
 
-Skip Context7 for `@caffeinejs/*`, language builtins, and code already in the conversation. First-party behavior is in this file, [`FEATURES.md`](FEATURES.md), [`AGENTS.md`](AGENTS.md), and the package `AGENTS.md`.
+Skip Context7 for `@caffeinejs/*`, language builtins, code already in the conversation, and a call the package already makes the same way: the type-check holds that one to the installed version. First-party behavior is in this file, [`FEATURES.md`](FEATURES.md) and [`AGENTS.md`](AGENTS.md).
 
 ## Analysis servers
 

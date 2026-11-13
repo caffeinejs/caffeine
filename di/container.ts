@@ -14,6 +14,7 @@ import {
   OverrideOps,
   ScopeCheckMode,
 } from './container_interface.js'
+import { ContextStorage, newContextStorage } from './context.js'
 import { getBindingConfigurations, providedBindingConfigurations, hasInjectable } from './decorators/registrar/index.js'
 import {
   ErrDuplicateBinding,
@@ -25,6 +26,7 @@ import {
   ErrMultiplePrimary,
   ErrInvalidContainerState,
   ErrInjectableBase,
+  ErrNoContextStorage,
   ErrNoValuesProvider,
   ErrNotRefreshable,
 } from './errors.js'
@@ -45,7 +47,7 @@ import { Provider } from './provider.js'
 import { type Annotation, isAnnotated } from './reflect.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
-import { Scopes, scopeEntries, Scope, ScopedInstance } from './scope.js'
+import { Scopes, scopeEntries, scopeLabel, Scope, ScopedInstance } from './scope.js'
 import { Declaration, Snapshot } from './snapshot.js'
 import { Keys } from './symbols.js'
 import { Ctor } from './types.js'
@@ -115,6 +117,7 @@ export class CaffeineIoC implements Container {
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
   private _aspectScopeCache: Set<NamedToken<Scope>> | null = null
   private _hasRequestScope = false
+  private _contextStorage: ContextStorage | undefined
   private _hasAsync = false
   private _values: unknown
   private _scopedConfig: Provider<unknown> | undefined
@@ -139,6 +142,7 @@ export class CaffeineIoC implements Container {
     this.scopes = new Map<NamedToken<Scope>, Scope>()
     this.modules = [...(opts.modules ?? [])]
     this._decorators = opts.decorators ?? true
+    this._contextStorage = newContextStorage()
 
     for (const [id, factory] of scopeEntries()) {
       this.scopes.set(id, factory(this))
@@ -147,23 +151,18 @@ export class CaffeineIoC implements Container {
     // Binding internal components to the container to facilitate their usage across components.
     // Calling .size will consider these bindings as well.
 
-    if (this.scopes.has(Scopes.REFRESH)) {
-      const refresher = { refresh: this.refresh.bind(this) }
+    // Built-in scopes are always registered: `unbindScope` refuses them.
+    const refresher = { refresh: this.refresh.bind(this) }
+    this.refresher = refresher
+    this.bind(Keys.kRefresher, t => t.toValue(refresher).byPassPostProcessors().internal())
 
-      this.refresher = refresher
-      this.bind(Keys.kRefresher, t => t.toValue(refresher).byPassPostProcessors().internal())
+    // Refuses until the container initializes with a context storage, which points it at its request scope.
+    const requestScopeManager: RequestScopeManager = {
+      run: () => this.refuseRequestScope(),
+      enter: () => this.refuseRequestScope(),
     }
-
-    if (this.scopes.has(Scopes.REQUEST)) {
-      const requestScope = this.scopes.get(Scopes.REQUEST) as RequestScope
-      const requestScopeManager: RequestScopeManager = {
-        run: requestScope.run.bind(requestScope),
-        setStorage: requestScope.setStorage.bind(requestScope),
-      }
-
-      this.requestScopeManager = requestScopeManager
-      this.bind(Keys.kRequestScopeManager, t => t.toValue(requestScopeManager).byPassPostProcessors().internal())
-    }
+    this.requestScopeManager = requestScopeManager
+    this.bind(Keys.kRequestScopeManager, t => t.toValue(requestScopeManager).byPassPostProcessors().internal())
 
     this.ownDeclarations = this.declared.length
   }
@@ -828,6 +827,31 @@ export class CaffeineIoC implements Container {
   }
 
   /**
+   * Replaces the context storage the container took from the registered `ContextStorageFactory`. When the container
+   * initializes, its request scope is built on it and it is bound under {@link ContextStorage}. A second call before
+   * then replaces the first.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container has started compiling, when the request scope has
+   * already been decided
+   *
+   * @example
+   * ```ts
+   * import { AsyncLocalStorage } from 'node:async_hooks'
+   *
+   * di.bindContextStorage(new AsyncLocalStorage())
+   * ```
+   */
+  bindContextStorage(storage: ContextStorage): this {
+    notNil(storage, 'Parameter storage must not be null or undefined')
+    this.assertNotDeciding('Cannot bind the context storage')
+    this.assertOpen('Cannot bind the context storage')
+
+    this._contextStorage = storage
+
+    return this
+  }
+
+  /**
    * Replaces whatever answers to the given key with a new binding: the binding registered under it, however it was
    * made, and the bindings answering to it through a name or a base, which stay registered under their own keys.
    *
@@ -955,7 +979,7 @@ export class CaffeineIoC implements Container {
    * Captures what the container was told to hold: the bindings declared with {@link bind}, {@link rebind} and
    * {@link aspect}, its modules, its profiles, whether it registers decorated bindings, the values bound with
    * {@link bindConfig} and the provider bound with {@link bindScopedConfig}. The container's own bindings
-   * (`Keys.kRefresher`, `Keys.kRequestScopeManager`) are left out: every container binds its own.
+   * (`Keys.kRefresher`, `Keys.kRequestScopeManager`, `ContextStorage`) are left out: every container binds its own.
    *
    * Restored with {@link restore}, it gives the same bindings whether it was taken before or after {@link init}.
    * For testing purposes.
@@ -1080,14 +1104,14 @@ export class CaffeineIoC implements Container {
       await this.resolveAsyncBindings()
 
       const eagerResolutions: Promise<void>[] = []
-      for (const [, binding] of this.registry.entries()) {
+      for (const [key, binding] of this.registry.entries()) {
         if (binding.async) {
           continue
         }
 
         const scope = this.scopes.get(binding.scopeID)
         if (scope === undefined && binding.scopeID !== Scopes.TRANSIENT) {
-          throw new ErrScopeNotRegistered(binding.scopeID)
+          throw this.scopeNotRegistered(key, binding.scopeID)
         }
 
         if (binding.lazy || (scope?.lazy ?? true)) {
@@ -1285,7 +1309,7 @@ export class CaffeineIoC implements Container {
 
     const scope = this.scopes.get(scopeID)
     if (scope === undefined && scopeID !== Scopes.TRANSIENT) {
-      throw new ErrScopeNotRegistered(scopeID)
+      throw this.scopeNotRegistered(key, scopeID)
     }
 
     binding.scopeID = scopeID
@@ -1399,7 +1423,7 @@ export class CaffeineIoC implements Container {
     const scope = this.scopes.get(binding.scopeID)
     if (scope === undefined) {
       if (binding.scopeID !== Scopes.TRANSIENT) {
-        throw new ErrScopeNotRegistered(binding.scopeID)
+        throw this.scopeNotRegistered(binding.ctx?.key, binding.scopeID)
       }
       return
     }
@@ -1620,6 +1644,16 @@ export class CaffeineIoC implements Container {
   private async registerOnce(): Promise<void> {
     this._compiling = true
 
+    // One storage for the request scope and for whatever injects ContextStorage.
+    const storage = this._contextStorage
+    if (storage !== undefined) {
+      this.bind(ContextStorage, t => t.toValue(storage).byPassPostProcessors().internal())
+      const requestScope = new RequestScope(storage)
+      this.scopes.set(Scopes.REQUEST, requestScope)
+      this.requestScopeManager.run = requestScope.run.bind(requestScope)
+      this.requestScopeManager.enter = requestScope.enter.bind(requestScope)
+    }
+
     if (this._decorators) {
       this.autoWire()
     }
@@ -1813,6 +1847,38 @@ export class CaffeineIoC implements Container {
       },
       unbind: key => this.unbind(key),
     }
+  }
+
+  private scopeNotRegistered(key: InjectionToken | undefined, scopeID: NamedToken<Scope>): ErrScopeNotRegistered {
+    if (scopeID === Scopes.REQUEST) {
+      return new ErrScopeNotRegistered(
+        key,
+        scopeLabel(scopeID),
+        'the container has no context storage',
+        'Bind a context storage before init() with container.bindContextStorage(storage)',
+        'Register a factory before constructing the container with bindContextStorageFactory(factory)',
+      )
+    }
+
+    return new ErrScopeNotRegistered(
+      key,
+      scopeLabel(scopeID),
+      'it is not registered',
+      'Register the scope with bindScope() before constructing the container',
+    )
+  }
+
+  private refuseRequestScope(): never {
+    if (!(this._compiling || this._compiled || this._ready)) {
+      throw new ErrInvalidContainerState(
+        errMessage('Cannot open a request scope: the container has not initialized')
+          .solutions('Call container.init() first')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
+    }
+
+    throw new ErrNoContextStorage('open a request scope')
   }
 
   private assertOpen(action: string): void {

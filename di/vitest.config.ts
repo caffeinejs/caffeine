@@ -20,7 +20,7 @@ export default defineConfig({
     name: 'core',
     pool: 'threads',
     include: ['**/*.test.ts'],
-    exclude: ['node_modules/**', 'dist/**', '_tests/memory/**', '_tests/deno/**', 'examples/**'],
+    exclude: ['node_modules/**', 'dist/**', '_tests/memory/**', '_tests/deno/**'],
     environment: 'node',
     passWithNoTests: true,
   },

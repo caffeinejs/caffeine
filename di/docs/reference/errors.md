@@ -50,12 +50,31 @@ all of them.
 
 **Code:** `ERR_SCOPE_NOT_REGISTERED`
 
-Thrown during `init()` when a binding uses a scope identifier that is not
-registered.
+Thrown when a binding uses a scope the container does not have: when the
+binding registers, during `init()`, or when its instance is destroyed. The
+message reads `Cannot use scope "<scope>" for "<key>": it is not registered`,
+where `<scope>` is the scope's label. For `Scopes.REQUEST` it ends with
+`the container has no context storage` instead.
+`.lifetime()` does not check the scope when the binding is declared.
 
-**Fix:** Call `bindScope(id, factory)` before creating the container. For the
-built-in `REQUEST` scope, ensure you are importing from `@caffeinejs/di`
-in a Node.js environment (which auto-registers it).
+**Fix:** For `Scopes.REQUEST`, bind a context storage before `init()` with
+`container.bindContextStorage(storage)`, or register a factory before
+constructing the container with `bindContextStorageFactory(factory)`. For any
+other scope, register it with `bindScope()` before constructing the container.
+
+---
+
+### ErrNoContextStorage
+
+**Code:** `ERR_NO_CONTEXT_STORAGE`
+
+Thrown when a request scope opens, or code reads the storage, and the container
+has no context storage. The message reads
+`Cannot <action>: no context storage is bound`.
+
+**Fix:** Bind a storage before `init()` with `container.bindContextStorage(storage)`,
+or register a factory before constructing the container with
+`bindContextStorageFactory(factory)`.
 
 ---
 
@@ -66,7 +85,8 @@ in a Node.js environment (which auto-registers it).
 Thrown by `bindScope()` when the scope identifier is already bound.
 
 **Fix:** Check with `hasScope(id)` before calling `bindScope()`, or call
-`unbindScope(id)` first.
+`unbindScope(id)` first. A built-in scope cannot be unbound: register yours
+under a token of its own.
 
 ---
 

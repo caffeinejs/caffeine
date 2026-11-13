@@ -27,6 +27,5 @@
 **/vitest.config.ts
 **/vitest.*.config.ts
 **/*.md
-di/examples
 devtools-ui/Dockerfile
 devtools-ui/Dockerfile.dockerignore

@@ -4,24 +4,30 @@ interface RegisteredDestroy {
 }
 
 export class RequestScopeContext {
-  private readonly _cachedInstances = new Map<number, unknown>()
-  private _destroys = new Array<RegisteredDestroy>()
+  // Created on first use: a request that resolves nothing request-scoped allocates neither.
+  private _cachedInstances: Map<number, unknown> | undefined
+  private _destroys: RegisteredDestroy[] | undefined
   private _destroyed = false
 
   get destroyed(): boolean {
     return this._destroyed
   }
 
+  /** Whether a destroy hook was registered and not yet run. */
+  get hasHooks(): boolean {
+    return this._destroys !== undefined && this._destroys.length > 0
+  }
+
   get<T>(id: number): T | undefined {
-    return this._cachedInstances.get(id) as T | undefined
+    return this._cachedInstances?.get(id) as T | undefined
   }
 
   set(id: number, instance: unknown): void {
-    this._cachedInstances.set(id, instance)
+    ;(this._cachedInstances ??= new Map()).set(id, instance)
   }
 
   registerDestroy<T>(instance: T, destroy: (value: T) => void | Promise<void>): void {
-    this._destroys.push({ instance, destroy: destroy as (value: never) => void | Promise<void> })
+    ;(this._destroys ??= []).push({ instance, destroy: destroy as (value: never) => void | Promise<void> })
   }
 
   /**
@@ -30,20 +36,27 @@ export class RequestScopeContext {
    * Sequential because a dependency must outlive the hook of whatever depends on it, and an instance reached
    * through more than one binding is destroyed once. A hook that throws does not stop the rest; the failures
    * surface together as an `AggregateError`.
+   *
+   * Returns `undefined`, having run nothing, when no hook was registered or the context is already destroyed; a
+   * promise otherwise.
    */
-  async destroy(): Promise<void> {
+  destroy(): void | Promise<void> {
     if (this._destroyed) {
       return
     }
 
     this._destroyed = true
+    const registered = this._destroys
 
-    if (this._destroys.length === 0) {
-      this._cachedInstances.clear()
+    if (registered === undefined || registered.length === 0) {
+      this._cachedInstances = undefined
       return
     }
 
-    const registered = this._destroys
+    return this.#runHooks(registered)
+  }
+
+  async #runHooks(registered: RegisteredDestroy[]): Promise<void> {
     const seen = new Set<object>()
     const errors: unknown[] = []
 
@@ -66,8 +79,8 @@ export class RequestScopeContext {
         }
       }
     } finally {
-      this._cachedInstances.clear()
-      this._destroys = []
+      this._cachedInstances = undefined
+      this._destroys = undefined
     }
 
     if (errors.length > 0) {

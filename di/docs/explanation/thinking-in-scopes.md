@@ -85,9 +85,12 @@ new CaffeineIoC({ checks: { scopes: 'off' } })
 
 ## Request scope and async context
 
-`Scopes.REQUEST` creates one instance per `AsyncLocalStorage` context. Two
-concurrent requests each get their own instance of a request-scoped binding,
-even though they resolve the same key.
+`Scopes.REQUEST` creates one instance per execution context of the container's
+context storage. Two concurrent requests each get their own instance of a
+request-scoped binding, even though they resolve the same key. Under Node each
+container has an `AsyncLocalStorage` of its own as that storage; off Node,
+register a factory with `bindContextStorageFactory()` before constructing the
+container. Open a scope around each request:
 
 ```ts
 app.use((req, res, next) => {

@@ -15,7 +15,6 @@
     "**/*.testkit.ts",
     "**/*.e2e.ts",
     "vitest.config.ts",
-    "**/examples/",
     "**/tools/",
     "*.config.ts"
   ]
