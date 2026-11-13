@@ -72,7 +72,7 @@ describe('CaffeineIoC', function () {
   it('should return the number of registered components when calling size()', async function () {
     const di = new CaffeineIoC()
     const userDefined = 3 // all injectables in this file
-    const internal = 1 // the internal components (request scope manager is not enabled in this test)
+    const internal = 2 // the internal components: the refresher and the request scope manager
     const expected = userDefined + internal
 
     await di.compile()

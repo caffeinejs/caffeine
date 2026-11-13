@@ -49,12 +49,18 @@ export class ErrNoResolutionForKey extends CaffeineIoCError {
 }
 
 /**
- * ErrScopeNotRegistered is an error that is thrown when binding to a scope that is not registered.
+ * Thrown when a binding names a scope the container does not have: when the binding registers, while the container
+ * initializes, or when its instance is destroyed.
  */
 export class ErrScopeNotRegistered extends CaffeineIoCError {
-  constructor(scopeID: Identifier) {
+  /**
+   * @param scope - The scope's label, such as `Request`.
+   * @param reason - Why the container does not have it, such as `it is not registered`.
+   */
+  constructor(key: InjectionToken | undefined, scope: string, reason: string, ...solutions: string[]) {
     super(
-      errMessage(`Scope "${scopeID.toString()}" is not registered: use bindScope() to register it`)
+      errMessage(`Cannot use scope "${scope}" for "${keyStr(key)}": ${reason}`)
+        .solutions(...solutions)
         .reference('@caffeinejs/di', ErrScopeNotRegistered)
         .build(),
       'ERR_SCOPE_NOT_REGISTERED',
@@ -480,21 +486,23 @@ export class ErrScopeMismatch extends CaffeineIoCError {
 }
 
 /**
- * ErrNoRequestStorageSet is an error that is thrown when attempting to use the request scope feature
- * without setting its request scope storage.
+ * Thrown where a context storage is needed and the container has none: no `ContextStorageFactory` was registered
+ * when it was constructed, and none was bound before it initialized. It is thrown when a request scope opens, and by
+ * code that reads the storage where the container has none.
  */
-export class ErrNoRequestStorageSet extends CaffeineIoCError {
-  constructor() {
+export class ErrNoContextStorage extends CaffeineIoCError {
+  /** @param action - What could not be done, such as `open a request scope`. */
+  constructor(action: string) {
     super(
-      errMessage(
-        'No request scope storage has been set.\n' +
-          'Request scope is platform specific and must be manually set.\n' +
-          'See the documentation for more information.',
-      )
-        .reference('@caffeinejs/di', ErrNoRequestStorageSet)
+      errMessage(`Cannot ${action}: no context storage is bound`)
+        .solutions(
+          'Bind one before init() with container.bindContextStorage(storage)',
+          'Register a factory before constructing the container with bindContextStorageFactory(factory)',
+        )
+        .reference('@caffeinejs/di', ErrNoContextStorage)
         .build(),
-      'ERR_NO_REQUEST_SCOPE_STORAGE_SET',
+      'ERR_NO_CONTEXT_STORAGE',
     )
-    this.name = 'ErrNoRequestScopeStorageSet'
+    this.name = 'ErrNoContextStorage'
   }
 }

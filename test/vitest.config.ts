@@ -19,7 +19,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@caffeinejs/di': fileURLToPath(new URL('../di/index.ts', import.meta.url)),
+      '@caffeinejs/di': fileURLToPath(new URL('../di/index.nodejs.ts', import.meta.url)),
     },
   },
   test: {

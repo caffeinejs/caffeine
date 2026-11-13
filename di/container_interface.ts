@@ -2,6 +2,7 @@ import type { MethodAspect } from './aop.js'
 import type { AspectSpec } from './aspect_spec.js'
 import { Binding } from './binding.js'
 import { BindingSpec } from './binding_spec.js'
+import type { ContextStorage } from './context.js'
 import { HookListener } from './hooks.js'
 import { Injection, ResolveInjection } from './injection.js'
 import { InjectionToken, NamedToken, TokenValue } from './key.js'
@@ -158,6 +159,8 @@ export interface Container extends AsyncDisposable {
   bindConfig<T = unknown>(values: T): this
 
   bindScopedConfig<T = unknown>(provider: Provider<T>): this
+
+  bindContextStorage(storage: ContextStorage): this
 
   rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 

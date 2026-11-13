@@ -24,12 +24,12 @@ Every binding has exactly one scope.
 import { Scopes } from '@caffeinejs/di'
 ```
 
-| Identifier         | Decorator                     | Description                                                 |
-| ------------------ | ----------------------------- | ----------------------------------------------------------- |
-| `Scopes.SINGLETON` | `@Lifetime(Scopes.SINGLETON)` | One instance per container. **Default.**                    |
-| `Scopes.TRANSIENT` | `@Lifetime(Scopes.TRANSIENT)` | New instance on every resolution.                           |
-| `Scopes.REQUEST`   | `@Lifetime(Scopes.REQUEST)`   | One instance per `AsyncLocalStorage` context. Node.js only. |
-| `Scopes.REFRESH`   | `@Lifetime(Scopes.REFRESH)`   | Singleton that can be refreshed via `container.refresher`.  |
+| Identifier         | Decorator                     | Description                                                |
+| ------------------ | ----------------------------- | ---------------------------------------------------------- |
+| `Scopes.SINGLETON` | `@Lifetime(Scopes.SINGLETON)` | One instance per container. **Default.**                   |
+| `Scopes.TRANSIENT` | `@Lifetime(Scopes.TRANSIENT)` | New instance on every resolution.                          |
+| `Scopes.REQUEST`   | `@Lifetime(Scopes.REQUEST)`   | One instance per request scope, on the context storage.    |
+| `Scopes.REFRESH`   | `@Lifetime(Scopes.REFRESH)`   | Singleton that can be refreshed via `container.refresher`. |
 
 Set a scope with the `@Lifetime` decorator or the fluent binder:
 
@@ -84,8 +84,13 @@ class EmailMessage {
 
 ## Request scope
 
-One instance per asynchronous execution context. This scope relies on Node.js
-`AsyncLocalStorage` and is only available in Node.js environments.
+One instance per asynchronous execution context. This scope keeps its instances
+in the container's context storage, which a binding injects as `ContextStorage`:
+under Node each container has an `AsyncLocalStorage` of its own, and off Node a
+factory registered with `bindContextStorageFactory()` supplies it. Each container
+builds its own request scope when it initializes; it is not in the `bindScope()`
+registry. With no storage, a binding in it is refused at start-up with
+`ErrScopeNotRegistered`.
 
 ```ts
 @Injectable()
@@ -277,7 +282,8 @@ bindScope(id, factory)
 ```
 
 Registers a scope under `id`. Throws `ErrScopeAlreadyRegistered` if `id` is
-already bound.
+already bound, and `ErrIllegalScopeState` for `Scopes.REQUEST`: each container
+builds its own request scope on its context storage.
 
 A scope identifier is an ordinary injection token that resolves a `Scope` —
 `token<Scope>(...)`. There is no separate scope-key type; the token's invariant
@@ -297,7 +303,8 @@ bindScope(MY_SCOPE, container => new MyCustomScope())
 hasScope(id)
 ```
 
-Returns `true` if a scope is registered for `id`.
+Returns `true` if a scope is registered for `id`. It returns `false` for
+`Scopes.REQUEST`, which no factory registers: each container builds its own.
 
 ### unbindScope
 
@@ -305,4 +312,6 @@ Returns `true` if a scope is registered for `id`.
 unbindScope(id)
 ```
 
-Removes the scope registered under `id`.
+Removes the scope registered under `id`. Throws `ErrIllegalScopeState` for the
+built-in `Scopes.SINGLETON` and `Scopes.REFRESH`, which every container relies
+on.
