@@ -102,7 +102,7 @@ class RequestLogger { ... }
 class RemoteConfig { ... }
 
 @Injectable()
-@Lifetime(Scopes.REQUEST)     // one instance per async context (Node.js only)
+@Lifetime(Scopes.REQUEST)     // one instance per async context (runs on the container's context storage)
 class RequestContext { ... }
 ```
 

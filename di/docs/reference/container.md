@@ -13,6 +13,7 @@
   - [rebind](#rebind)
   - [bindConfig](#bindconfig)
   - [bindScopedConfig](#bindscopedconfig)
+  - [bindContextStorage](#bindcontextstorage)
   - [addProfiles](#addprofiles)
   - [overrides](#overrides)
 - [Inspection](#inspection)
@@ -244,6 +245,26 @@ di.bindScopedConfig<AppConfig>({ get: () => store.current })
 Calling it again replaces the provider. Once the container has compiled, it throws
 `ErrInvalidContainerState`. Read it back with `scopedConfig`, which throws `ErrNoValuesProvider` when
 none was bound, and ask `hasScopedConfig` first when that is a possibility.
+
+### bindContextStorage
+
+```ts
+bindContextStorage(storage: ContextStorage): this
+```
+
+Replaces the storage the request scope and the framework keep their frames in.
+A container takes its storage from the registered `ContextStorageFactory` when
+it is constructed: under Node, an `AsyncLocalStorage` of its own. The call
+declares no binding: the container binds the storage when it initializes.
+
+```ts
+di.bindContextStorage(new AsyncLocalStorage())
+```
+
+Calling it again replaces the storage. Once the container has started
+compiling, it throws `ErrInvalidContainerState`. When the container
+initializes, it binds the storage under the key `ContextStorage`: inject it to
+read it. See [Request Scope Manager](./request-scope-manager.md#context-storage).
 
 ### addProfiles
 

@@ -1,4 +1,13 @@
-import { $aop, type AnyClass, type JoinPoint, type MethodAspect, type Pointcut, reflect } from '@caffeinejs/di'
+import {
+  $aop,
+  type AnyClass,
+  type ContextStorage,
+  ExecutionContext,
+  type JoinPoint,
+  type MethodAspect,
+  type Pointcut,
+  reflect,
+} from '@caffeinejs/di'
 import { formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -7,12 +16,18 @@ import { described, ErrInvalidOption } from '../errors.js'
 import { fallback } from '../fallback/fallback.js'
 import type { Operation, PolicyLike } from '../policy.js'
 import { ANNOTATIONS, Fallback } from './annotations.js'
-import { Attempt, type ResilienceContextStorage } from './context.js'
+import { Attempt, kResilienceAttempt } from './context.js'
 import { kAddFallback, labelOf, type ResilienceKind, type ResilienceRegistry } from './registry.js'
 import { checkClassPresets, stagesOf, woven, wovenMembers } from './stages.js'
 import type { ResilienceTransport } from './transport.js'
 
 type Member = string | symbol
+
+// One call of an annotated method: the frame it was made in, and how many attempts it has started.
+interface Call {
+  readonly frame: ExecutionContext | undefined
+  attempt: number
+}
 
 // The instance of each kind a method names.
 type Stage<K extends ResilienceKind> = ReturnType<ResilienceRegistry[K]>
@@ -90,24 +105,20 @@ interface Plans {
 export class ResilienceAspect implements MethodAspect {
   readonly #registry: ResilienceRegistry
   readonly #order: readonly ResilienceKind[]
-  readonly #storage: ResilienceContextStorage | undefined
-  // How many attempts each call has started, kept only with a storage.
-  readonly #attempts = new WeakMap<JoinPoint, number>()
+  readonly #storage: ContextStorage | undefined
+  // Each call's frame, read when it is made, and how many attempts it has started: kept only with a storage.
+  readonly #calls = new WeakMap<JoinPoint, Call>()
   readonly #plans = new WeakMap<AnyClass, Plans>()
 
   /**
-   * `order` lists the policy kinds outermost first, each once. With `storage`, each attempt runs inside
-   * `storage.run(...)`, where a `ResilienceContext` reads it.
+   * `order` lists the policy kinds outermost first, each once. With `storage`, each attempt runs in a frame of it that
+   * extends the caller's, where a `ResilienceContext` reads it.
    *
    * @throws {@link ErrInvalidOption} when `order` leaves a kind out, names one twice or names anything else.
    */
-  constructor(
-    registry: ResilienceRegistry,
-    order: readonly ResilienceKind[] = ORDER,
-    storage?: ResilienceContextStorage,
-  ) {
+  constructor(registry: ResilienceRegistry, order?: readonly ResilienceKind[], storage?: ContextStorage) {
     this.#registry = registry
-    this.#order = checkedOrder(order)
+    this.#order = checkedOrder(order ?? ORDER)
     this.#storage = storage
   }
 
@@ -173,20 +184,21 @@ export class ResilienceAspect implements MethodAspect {
       return Promise.reject(error)
     }
 
+    // The caller's frame, read now: a bulkhead or a rate limiter may run the attempt later, from another call's
+    // continuation, and the attempt must still see its own caller's request.
+    const frame = this.#storage?.getStore()
+    if (this.#storage !== undefined) {
+      this.#calls.set(jp, { frame, attempt: 0 })
+    }
+
     const i = signalIndex(jp.args)
     // Never `args[-1]`: reading a negative index leaves the fast element path and slows every call. A method given no
     // signal runs under the attempt it is called from, so a deadline set above still reaches the code below it.
-    const signal = (i === -1 ? this.#enclosing() : jp.args[i]) as AbortSignal | undefined
+    const signal = (i === -1 ? frame?.get(kResilienceAttempt)?.signal : jp.args[i]) as AbortSignal | undefined
     if (signal !== undefined && signal.aborted) {
       return Promise.reject(signal.reason)
     }
     return plan({ signal, isClientError: plans.isClientError }, jp)
-  }
-
-  // The signal of the attempt the current code runs in, when the aspect stores attempts.
-  #enclosing(): AbortSignal | undefined {
-    const store = this.#storage?.getStore()
-    return store instanceof Attempt ? store.signal : undefined
   }
 
   #plansOf(cls: AnyClass): Plans {
@@ -234,10 +246,10 @@ export class ResilienceAspect implements MethodAspect {
             (ctx, jp) => jp.proceed(...withSignal(jp.args as unknown[], ctx.signal, undefined)) as Promise<unknown>,
           )
         : lift<unknown, JoinPoint>((ctx, jp) => {
-            const attempt = (this.#attempts.get(jp) ?? 0) + 1
-            this.#attempts.set(jp, attempt)
+            const call = this.#calls.get(jp)!
+            call.attempt++
             return storage.run(
-              new Attempt(ctx.signal, attempt),
+              (call.frame ?? ExecutionContext.ROOT).with(kResilienceAttempt, new Attempt(ctx.signal, call.attempt)),
               () => jp.proceed(...withSignal(jp.args as unknown[], ctx.signal, undefined)) as Promise<unknown>,
             )
           })

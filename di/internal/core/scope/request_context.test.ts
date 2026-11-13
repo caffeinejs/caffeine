@@ -95,4 +95,39 @@ describe('RequestScopeContext', function () {
     expect(after).toHaveBeenCalledTimes(1)
     expect(context.destroyed).toBe(true)
   })
+
+  // A request that resolved nothing with a hook needs no promise to end.
+  it('destroys at once, with nothing to wait for, when no hook was registered', function () {
+    const context = new RequestScopeContext()
+    context.set(1, {})
+
+    expect(context.destroy()).toBe(undefined)
+    expect(context.destroyed).toBe(true)
+    expect(context.get(1)).toBe(undefined)
+  })
+
+  it('returns a promise that settles after a synchronous hook ran', async function () {
+    const order: string[] = []
+    const context = new RequestScopeContext()
+    const instance = {}
+    context.registerDestroy(instance, () => {
+      order.push('hook')
+    })
+
+    const ending = context.destroy()
+    order.push('returned')
+    await ending
+
+    expect(ending).toBeInstanceOf(Promise)
+    expect(order).toEqual(['hook', 'returned'])
+  })
+
+  it('returns nothing from a second destroy', async function () {
+    const context = new RequestScopeContext()
+    context.registerDestroy({}, () => undefined)
+
+    await context.destroy()
+
+    expect(context.destroy()).toBe(undefined)
+  })
 })

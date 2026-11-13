@@ -13,7 +13,7 @@ export {
   type RetryAnnotationOptions,
   TimeLimiter,
 } from './annotations.js'
-export { ResilienceContext, type ResilienceContextStorage } from './context.js'
+export { ResilienceContext } from './context.js'
 export {
   type BackoffConfig,
   type BulkheadConfig,

@@ -1,6 +1,8 @@
 import {
   $aop,
+  $i,
   CaffeineIoC,
+  ContextStorage,
   Injectable,
   type JoinPoint,
   type MethodAspect,
@@ -55,14 +57,18 @@ function onFakeClock(definitions: ResilienceDefinitions): ResilienceDefinitions 
 async function containerWith(
   bind: (di: CaffeineIoC) => void,
   definitions: ResilienceDefinitions = DEFINITIONS,
-  options: { profiles?: string[]; order?: readonly ResilienceKind[] } = {},
+  options: { profiles?: string[]; order?: readonly ResilienceKind[]; storage?: boolean } = {},
 ) {
   const di = new CaffeineIoC(options.profiles === undefined ? { decorators: false } : { profiles: options.profiles })
   const registry = new ResilienceRegistry(onFakeClock(definitions))
   di.bind(ResilienceRegistry, t => t.toValue(registry))
   di.aspect(ResilienceAspect, s =>
     s
-      .toValue(new ResilienceAspect(registry, options.order))
+      .toSelf([
+        ResilienceRegistry,
+        $i.just(options.order),
+        options.storage === true ? ContextStorage : $i.just(undefined),
+      ])
       .pointcuts(resiliencePointcut)
       .order(RESILIENCE_ASPECT_ORDER),
   )
@@ -840,6 +846,100 @@ describe('the signal argument', () => {
     expect((inventory.received[1]![1] as AbortSignal).aborted).toBe(false)
     two.abort()
     await second
+  })
+})
+
+// One per request scope: what an attempt resolves tells which request it runs in.
+class Session {}
+
+class Requested {
+  di!: CaffeineIoC
+  sessions: Session[] = []
+  entered: () => void = () => undefined
+
+  @Retry('retried')
+  async flaky(): Promise<void> {
+    this.sessions.push(this.di.get(Session))
+    if (this.sessions.length < 3) {
+      throw new Error('blip')
+    }
+  }
+
+  // Holds a slot of a bulkhead that admits one call and queues the next.
+  @Bulkhead('queued')
+  async hold(latch: Promise<void>): Promise<void> {
+    this.sessions.push(this.di.get(Session))
+    this.entered()
+    await latch
+  }
+}
+
+describe('attempts on the container’s context storage', () => {
+  const definitions: ResilienceDefinitions = {
+    retried: { retry: { maxAttempts: 3, backoff: 0 } },
+    queued: { bulkhead: { maxConcurrentCalls: 1, maxWaitDuration: 1 * Second } },
+  }
+
+  beforeEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function requested() {
+    const { di } = await containerWith(
+      c => {
+        c.bind(Session, t => t.toSelf().lifetime(Scopes.REQUEST))
+        c.bind(Requested, t => t.toSelf())
+      },
+      definitions,
+      { storage: true },
+    )
+    const target = di.get(Requested)
+    target.di = di
+    return { di, target }
+  }
+
+  // An attempt that hid the request would resolve a request-scoped service outside it, or another request's.
+  it('keeps the caller’s request scope inside every attempt', async () => {
+    const { di, target } = await requested()
+
+    const own = await di.requestScopeManager.run(async () => {
+      const session = di.get(Session)
+      await target.flaky()
+      return session
+    })
+
+    expect(target.sessions.length).toBe(3)
+    expect(target.sessions.every(session => session === own)).toBe(true)
+  })
+
+  // A bulkhead admits a queued call from the continuation of the call that frees its slot: the attempt must still
+  // run in its own caller's request.
+  it('runs a call a bulkhead queued in its own caller’s request', async () => {
+    const { di, target } = await requested()
+    const latch = Promise.withResolvers<void>()
+    const entered = Promise.withResolvers<void>()
+    target.entered = entered.resolve
+
+    const first = di.requestScopeManager.run(async () => {
+      const session = di.get(Session)
+      await target.hold(latch.promise)
+      return session
+    })
+    const second = di.requestScopeManager.run(async () => {
+      const session = di.get(Session)
+      await target.hold(Promise.resolve())
+      return session
+    })
+    // The second call waits in the bulkhead until the first frees its slot.
+    await entered.promise
+    expect(target.sessions.length).toBe(1)
+    latch.resolve()
+    const [own1, own2] = await Promise.all([first, second])
+
+    expect(target.sessions).toEqual([own1, own2])
+    expect(target.sessions[0]).toBe(own1)
+    expect(target.sessions[1]).toBe(own2)
+    expect(own1).not.toBe(own2)
   })
 })
 

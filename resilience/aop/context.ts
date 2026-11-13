@@ -1,15 +1,4 @@
-import { errMessage } from '@caffeinejs/std/err'
-
-import { described, ErrInvalidOption } from '../errors.js'
-
-/**
- * What `Resilience(r => r.context(...))` takes: an `AsyncLocalStorage` from `node:async_hooks`, or any object with
- * the same `run` and `getStore`. Give it one of its own: the aspect stores every attempt in it.
- */
-export interface ResilienceContextStorage {
-  run<R>(store: object, callback: () => R): R
-  getStore(): unknown
-}
+import { contextKey, type ContextStorage, ErrNoContextStorage } from '@caffeinejs/di'
 
 /** One attempt of an annotated method, as the aspect stores it. */
 export class Attempt {
@@ -19,28 +8,15 @@ export class Attempt {
   ) {}
 }
 
-/** @throws {@link ErrInvalidOption} when `storage` has no `run` or no `getStore` method. */
-export function checkedStorage(storage: unknown): ResilienceContextStorage {
-  const { run, getStore } = (typeof storage === 'object' && storage !== null ? storage : {}) as Record<string, unknown>
-  if (typeof run !== 'function' || typeof getStore !== 'function') {
-    throw new ErrInvalidOption(
-      errMessage(
-        `Cannot use the resilience context storage: it must have run(store, callback) and getStore() methods, got ${described(storage)}`,
-      )
-        .solutions('Pass an AsyncLocalStorage, such as r.context(new AsyncLocalStorage())')
-        .reference('@caffeinejs/resilience', ErrInvalidOption)
-        .build(),
-    )
-  }
-  return storage as ResilienceContextStorage
-}
+/** The slot of the container's context storage that holds the attempt the current code runs in. */
+export const kResilienceAttempt = contextKey<Attempt>('@caffeinejs/resilience:attempt')
 
 /**
  * The attempt of the annotated method the current code runs in, for code anywhere below it: a service the method
  * calls reads the attempt's signal without the method passing it down. Inside nested annotated methods, the
  * innermost attempt is the one read; outside every attempt, both fields are `undefined`.
  *
- * `Resilience()` binds it; it needs a storage, given with `r.context(new AsyncLocalStorage())`.
+ * `Resilience()` binds it; it reads the attempt wherever the container has a context storage, as in an application.
  *
  * ```ts
  * @Injectable([ResilienceContext])
@@ -54,9 +30,9 @@ export function checkedStorage(storage: unknown): ResilienceContextStorage {
  * ```
  */
 export class ResilienceContext {
-  readonly #storage: ResilienceContextStorage | undefined
+  readonly #storage: ContextStorage | undefined
 
-  constructor(storage?: ResilienceContextStorage) {
+  constructor(storage?: ContextStorage) {
     this.#storage = storage
   }
 
@@ -65,32 +41,26 @@ export class ResilienceContext {
    * limiter gives the attempt one of its own. A method called with no signal inside another attempt takes that
    * attempt's signal as its caller's.
    *
-   * @throws {@link ErrInvalidOption} when `Resilience()` was given no storage.
+   * @throws {@link ErrNoContextStorage} when the container has no context storage.
    */
   get signal(): AbortSignal | undefined {
-    return this.#current()?.signal
+    return this.#current('ResilienceContext.signal')?.signal
   }
 
   /**
    * The attempt's number, from 1: the first call is 1, the first retry 2.
    *
-   * @throws {@link ErrInvalidOption} when `Resilience()` was given no storage.
+   * @throws {@link ErrNoContextStorage} when the container has no context storage.
    */
   get attempt(): number | undefined {
-    return this.#current()?.attempt
+    return this.#current('ResilienceContext.attempt')?.attempt
   }
 
-  #current(): Attempt | undefined {
+  #current(read: string): Attempt | undefined {
     if (this.#storage === undefined) {
-      throw new ErrInvalidOption(
-        errMessage('Cannot read the resilience context: Resilience() was given no context storage')
-          .solutions('Pass one with Resilience(r => r.context(new AsyncLocalStorage()))')
-          .reference('@caffeinejs/resilience', ErrInvalidOption)
-          .build(),
-      )
+      throw new ErrNoContextStorage(`read ${read}`)
     }
 
-    const store = this.#storage.getStore()
-    return store instanceof Attempt ? store : undefined
+    return this.#storage.getStore()?.get(kResilienceAttempt)
   }
 }

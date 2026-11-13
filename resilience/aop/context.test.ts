@@ -1,12 +1,9 @@
-import { AsyncLocalStorage } from 'node:async_hooks'
-
 import { createApplication, type Feature } from '@caffeinejs/application'
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, ErrNoContextStorage } from '@caffeinejs/di'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { fakeTimersClock } from '../clock.testkit.js'
-import { ErrInvalidOption } from '../errors.js'
 import { ErrTimeLimitExceeded } from '../timelimiter/timelimiter.js'
 import { Resilient } from './annotations.js'
 import { ResilienceContext } from './context.js'
@@ -96,7 +93,7 @@ async function boot(feature: Feature) {
 describe('ResilienceContext', () => {
   // A service several calls below the annotated method must still stop at the attempt's deadline, and can tag it.
   it('gives code below an annotated method the attempt’s number and signal, on every retry', async () => {
-    const { http, client } = await boot(Resilience(r => presets(r).context(new AsyncLocalStorage())))
+    const { http, client } = await boot(Resilience(presets))
 
     await expect(client.stock()).resolves.toBe('ok')
 
@@ -107,7 +104,7 @@ describe('ResilienceContext', () => {
   })
 
   it('reads the innermost attempt inside nested annotated methods', async () => {
-    const { http, ledger, client } = await boot(Resilience(r => presets(r).context(new AsyncLocalStorage())))
+    const { http, ledger, client } = await boot(Resilience(presets))
 
     await expect(client.nested()).resolves.toBe('posted')
 
@@ -122,7 +119,6 @@ describe('ResilienceContext', () => {
     const { context, ledger, client } = await boot(
       Resilience(r =>
         r
-          .context(new AsyncLocalStorage())
           .preset('inventory', p => p.timeLimiter({ timeoutDuration: 50 * Millisecond, clock: fakeTimersClock }))
           .preset('ledger', p => p.retry({ maxAttempts: 1 })),
       ),
@@ -145,30 +141,19 @@ describe('ResilienceContext', () => {
   })
 
   it('reads undefined outside every attempt', async () => {
-    const { context } = await boot(Resilience(r => presets(r).context(new AsyncLocalStorage())))
+    const { context } = await boot(Resilience(presets))
 
     expect(context.attempt).toBe(undefined)
     expect(context.signal).toBe(undefined)
   })
 
-  // Reading it unconfigured would always answer undefined, which looks like "not in an attempt": fail instead.
-  it('refuses a read when Resilience() was given no storage', async () => {
-    const { context } = await boot(Resilience(presets))
+  // Off Node there is no storage to give it. Reading would always answer undefined, which looks like "not in an
+  // attempt": fail instead.
+  it('refuses a read when it was given no context storage', () => {
+    const context = new ResilienceContext()
 
-    expect(() => context.attempt).toThrow(ErrInvalidOption)
-    expect(() => context.signal).toThrow(
-      'Cannot read the resilience context: Resilience() was given no context storage',
-    )
-  })
-
-  it('refuses a storage without run and getStore', async () => {
-    const error = await boot(Resilience(r => presets(r).context({ run: () => undefined } as never))).catch(
-      (reason: unknown) => reason,
-    )
-
-    expect(error).toBeInstanceOf(ErrInvalidOption)
-    expect((error as Error).message.split('\n')[0]).toBe(
-      'Cannot use the resilience context storage: it must have run(store, callback) and getStore() methods, got an object',
-    )
+    expect(() => context.attempt).toThrow(ErrNoContextStorage)
+    expect(() => context.attempt).toThrow('Cannot read ResilienceContext.attempt: no context storage is bound')
+    expect(() => context.signal).toThrow('Cannot read ResilienceContext.signal: no context storage is bound')
   })
 })
