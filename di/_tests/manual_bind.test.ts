@@ -8,7 +8,13 @@ import { Conditional } from '../decorators/conditional.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
-import { ErrDuplicateBinding, ErrInvalidBinding, ErrMultiplePrimary, ErrNoResolutionForKey } from '../errors.js'
+import {
+  ErrDuplicateBinding,
+  ErrInvalidBinding,
+  ErrMultiplePrimary,
+  ErrNoResolutionForKey,
+  ErrScopeNotRegistered,
+} from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { Provider } from '../provider.js'
@@ -512,11 +518,15 @@ describe('Manual Binding', function () {
       ).toThrow(ErrInvalidBinding)
     })
 
-    it('should only accept previously registered scopes', function () {
+    it('should refuse a scope the container does not have when it initializes', async function () {
       const di = new CaffeineIoC()
-      expect(() =>
-        di.bind(token<string>('test'), t => t.toValue('value').lifetime(token<Scope>('nonexistent-scope'))),
-      ).toThrow(ErrInvalidBinding)
+      di.bind(token<string>('test'), t => t.toValue('value').lifetime(token<Scope>('nonexistent-scope')))
+
+      const err = await di.init().catch((e: unknown) => e)
+
+      expect(err).toBeInstanceOf(ErrScopeNotRegistered)
+      expect((err as Error).message).toContain('for "test": it is not registered')
+      expect((err as Error).message).toContain('bindScope()')
     })
 
     describe('toClass() injection count mismatch', function () {

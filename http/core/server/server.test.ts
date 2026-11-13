@@ -1,6 +1,7 @@
 import { newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
-import { Injectable } from '@caffeinejs/di'
+import { CaffeineIoC, Injectable, Scopes } from '@caffeinejs/di'
+import { KiB } from '@caffeinejs/std/bytes'
 import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -395,6 +396,67 @@ describe('HTTPServer', () => {
     expect(same).toBe(true)
   })
 
+  // A field that describes the connection is the platform's to write, never the handler's.
+  it.each<[string, Record<string, string>, string[], string[]]>([
+    [
+      'the fixed list',
+      { 'keep-alive': 'timeout=5', 'transfer-encoding': 'chunked', 'x-kept': '1' },
+      ['x-kept'],
+      ['keep-alive', 'transfer-encoding'],
+    ],
+    [
+      'what Connection names',
+      { connection: 'x-hop', 'x-hop': '1', 'x-kept': '1' },
+      ['x-kept'],
+      ['connection', 'x-hop'],
+    ],
+  ])('drops the headers that describe a connection: %s', async (_case, set, kept, dropped) => {
+    const served = await serve(new Router('/s').get('/').handler(ctx => ctx.headers(set).body('ok')))
+
+    const res = await fetchOn(served, '/s')
+
+    expect(kept.map(name => res.headers.get(name))).toEqual(kept.map(() => '1'))
+    expect(dropped.map(name => res.headers.get(name))).toEqual(dropped.map(() => null))
+  })
+
+  // The answer has left when the scope ends: a destroy hook that fails is reported, not answered.
+  it('logs a request scope whose destroy hook fails, and still answers', async () => {
+    class Session {}
+    const logger = capturing()
+    const container = new CaffeineIoC()
+    container.bind(Session, t =>
+      t
+        .toSelf()
+        .lifetime(Scopes.REQUEST)
+        .preDestroy(() => {
+          throw new Error('the session would not close')
+        }),
+    )
+    const router = new Router('/s')
+    router
+      .get('/')
+      .inject(i => ({ session: i.provide(Session) }))
+      .handler((_ctx, deps) => {
+        deps.session.get()
+        return 'ok'
+      })
+    app = createWebApplication({ container })
+      .logger(b => b.use(logger))
+      .mount(router)
+    await app.bootstrap()
+
+    const res = await fetchOn(app, '/s')
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('ok')
+    await vi.waitFor(() =>
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(AggregateError) }),
+        'Cannot tear down the request scope',
+      ),
+    )
+  })
+
   it.each<[string, (router: AnyRouter) => void]>([
     [
       'a schema',
@@ -410,6 +472,15 @@ describe('HTTPServer', () => {
         void r
           .post('/x')
           .extend(bodyAsStream())
+          .handler(() => 'x'),
+    ],
+    // A limit the engine does not enforce yet would let any body through.
+    [
+      '@BodyLimit',
+      r =>
+        void r
+          .post('/x')
+          .bodyLimit(1 * KiB)
           .handler(() => 'x'),
     ],
     [
@@ -631,7 +702,8 @@ describe('HTTPServer', () => {
     app = undefined
   })
 
-  it('throws from app.fetch called inside a request of the same application, and close() still resolves', async () => {
+  it('throws from app.fetch called inside a request of the same application, logs it, and close() still resolves', async () => {
+    const error = vi.fn()
     let inner: unknown
     const router = new Router('/s')
     router.get('/inner').handler(() => 'inner')
@@ -643,11 +715,12 @@ describe('HTTPServer', () => {
       }
       return 'outer'
     })
-    const served = await serve(router)
+    const served = await serve(router, a => a.logger(b => b.use({ ...newNoopLogger(), error })))
 
     await (await fetchOn(served, '/s/outer')).text()
 
     expect((inner as Error).name).toBe('ErrIllegalScopeState')
+    expect(error.mock.calls.map(call => call[1])).toEqual(['Cannot serve the request'])
     await served.close()
     app = undefined
   })

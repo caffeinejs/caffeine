@@ -1,10 +1,11 @@
 import { Binding } from './binding.js'
 import { Container } from './container_interface.js'
-import { ErrScopeAlreadyRegistered } from './errors.js'
+import { ErrIllegalScopeState, ErrScopeAlreadyRegistered } from './errors.js'
 import { Factory } from './factory.js'
 import { RefreshScope } from './internal/core/scope/refresh.js'
 import { SingletonScope } from './internal/core/scope/singleton.js'
 import { notNil } from './internal/util/assert/index.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import { NamedToken, token } from './key.js'
 import { ResolutionContext } from './resolution_context.js'
 
@@ -131,6 +132,9 @@ const Registry = new Map<NamedToken<Scope>, ScopeFactory>()
   .set(Scopes.SINGLETON, singletonFactory)
   .set(Scopes.REFRESH, refreshFactory)
 
+// What every container relies on: never unbound.
+const BUILT_IN = new Set(Registry.keys())
+
 /**
  * Binds a {@link ScopeFactory} to the given scope identifier.
  *
@@ -148,6 +152,18 @@ export function bindScope(scopeID: NamedToken<Scope>, factory: ScopeFactory): vo
   notNil(scopeID)
   notNil(factory)
 
+  if (scopeID === Scopes.REQUEST) {
+    throw new ErrIllegalScopeState(
+      errMessage('Cannot bind scope "Request": each container builds it on its context storage')
+        .solutions(
+          'Bind a context storage before init() with container.bindContextStorage(storage)',
+          'Register a factory before constructing the container with bindContextStorageFactory(factory)',
+        )
+        .reference('@caffeinejs/di', ErrIllegalScopeState)
+        .build(),
+    )
+  }
+
   if (Registry.has(scopeID)) {
     throw new ErrScopeAlreadyRegistered(scopeID)
   }
@@ -159,13 +175,24 @@ export function bindScope(scopeID: NamedToken<Scope>, factory: ScopeFactory): vo
  * Removes the {@link ScopeFactory} bound to the given scope identifier from the registry.
  *
  * @param scopeID - The scope identifier to unbind the factory from.
+ * @throws {@link ErrIllegalScopeState} for a built-in scope: `Scopes.SINGLETON` or `Scopes.REFRESH`.
  */
 export function unbindScope(scopeID: NamedToken<Scope>): void {
-  Registry.delete(notNil(scopeID))
+  if (BUILT_IN.has(notNil(scopeID))) {
+    throw new ErrIllegalScopeState(
+      errMessage(`Cannot unbind scope "${scopeLabel(scopeID)}": it is built in`)
+        .solutions('Register a scope of your own under a token of its own with bindScope()')
+        .reference('@caffeinejs/di', ErrIllegalScopeState)
+        .build(),
+    )
+  }
+
+  Registry.delete(scopeID)
 }
 
 /**
- * Checks if the given scope identifier exists in the registry.
+ * Checks if the given scope identifier exists in the registry. `Scopes.REQUEST` never does: each container builds its
+ * own request scope on its context storage.
  *
  * @param scopeID - The scope identifier to check.
  */
@@ -183,5 +210,5 @@ export function scopeLabel(scopeID: NamedToken<Scope>): string {
     return factory[kScopeName] as string
   }
 
-  return String(scopeID)
+  return scopeID === Scopes.REQUEST ? 'Request' : String(scopeID)
 }

@@ -88,7 +88,7 @@ After `init()`, the container is ready. `get()`, `getOptional()`, `getMany()`,
 
 - **Singleton** — returns the cached instance created during init.
 - **Transient** — constructs and returns a fresh instance on every call.
-- **Request** — returns the instance for the current `AsyncLocalStorage` context.
+- **Request** — returns the instance for the current execution context of the container's context storage.
 - **Refresh** — returns the cached instance; a new one is created after `refresher.refresh()`.
 
 Resolution is synchronous for most scopes. Async factories are only awaited

@@ -179,6 +179,9 @@ function asIContext(ctx: Context): IContext {
 /** The solution every refusal of what the fetch application cannot serve yet offers. */
 export const USE_FASTIFY = 'Build the application with createWebApplication() from "@caffeinejs/http/fastify"'
 
+/** The solution that sends a reader to the Node application. */
+export const USE_NODE = 'Build the application with createWebApplication() from "@caffeinejs/http/node"'
+
 /** An `ErrConfiguration` with its solutions and reference, as the engine writes every start-up refusal. */
 export function configurationError(message: string, ...solutions: string[]): ErrConfiguration {
   return new ErrConfiguration(

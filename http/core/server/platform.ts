@@ -9,6 +9,14 @@ export interface ResponseHead {
   readonly headers: Readonly<Record<string, string | readonly string[]>>
 }
 
+/** What the engine hands `respond`: how to say the answer has left, and how to cut it while it streams. */
+export interface SendHooks {
+  /** The answer has left: called once, at once for a whole body, when a streamed one ends. Safe to pass detached. */
+  readonly sent: () => void
+  /** Registers how to cut a streamed answer still being sent, for a forced close. */
+  cancelWith(cancel: (reason: Error) => void): void
+}
+
 /**
  * How the engine reads one request of a runtime and answers it. `N` is what the runtime hands per request, `P` is
  * `ctx.platform`, `R` is what its entry returns.
@@ -30,10 +38,9 @@ export interface ServerPlatform<N, P extends IContextPlatform, R> {
   remoteAddress(native: N): string | undefined
   /** `extra` is what the runtime handed its entry after the request. */
   context(native: N, extra: unknown): P
-  /** Sends the answer; a list-valued header goes out as one field line per value. */
-  respond(native: N, head: ResponseHead, payload: SendPayload): R
-  /** Calls `done` once the answer has left; may hand back a wrapped `R`. */
-  whenSent(native: N, answer: R, done: () => void): R
-  /** Cuts an answer still being sent: a reader of its body fails with `reason`. A no-op once it has left. */
-  cancel(native: N, answer: R, reason: Error): void
+  /**
+   * Sends the answer; a list-valued header goes out as one field line per value. Calls `hooks.sent` once it has left,
+   * and, for a stream, registers with `hooks.cancelWith` how to cut it: a reader of its body then fails with the reason.
+   */
+  respond(native: N, head: ResponseHead, payload: SendPayload, hooks: SendHooks): R
 }

@@ -1,7 +1,9 @@
+import type { RunInfo } from '@caffeinejs/application'
 import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
 import { errMessage } from '@caffeinejs/std/err'
 
+import type { IAdapterTypes, IContextPlatform } from '../../adapter.js'
 import { resolveAppURL } from '../../base_path.js'
 import { ContextState, type IContext } from '../../context.js'
 import type { InferBody, IRequest, UnsignedCookie } from '../../request.js'
@@ -15,20 +17,34 @@ import { newProblem } from '../error/problem.js'
 import { isThenable } from '../lifecycle/lifecycle.js'
 import type { AuthenticationState } from '../security/auth/authentication_state.js'
 import type { Principal } from '../security/identity.js'
-import type { FetchAdapterTypes } from './adapter.js'
-import { shapeAnswer } from './answer.js'
+import { isHopByHop, shapeAnswer } from './answer.js'
 import { configurationError, sendProblem, USE_FASTIFY } from './error.js'
-import type { FetchContextPlatform } from './fetch.js'
 import type { SendPayload, ServerPlatform } from './platform.js'
 import { parseQuery } from './query.js'
+import type { ResolvedServerSettings } from './settings.js'
 
 /** What every context of one server shares. Built once per server by `HTTPServer`. */
-export interface ServerShared {
+export interface ServerShared extends Pick<ResolvedServerSettings, 'application' | 'trustProxy' | 'requestIDHeader'> {
   readonly store: ConfigStore<unknown>
   readonly logger: Logger
   readonly errors: ErrorHandlerProvider
   readonly options: Required<GlobalErrorHandlerOptions>
   readonly encodeProblem: ProblemEncoder
+}
+
+/** What a context of the engine is typed with on every platform: `ctx.req.raw` is a `Request`. */
+export interface EngineContextTypes extends IAdapterTypes {
+  instance: unknown
+  request: unknown
+  extension: never
+  hook: never
+  raw: Request
+  cookieOptions: CookieSerializeOptions
+  asyncCookies: true
+  platform: IContextPlatform
+  serverOptions: object
+  runArgs: readonly unknown[]
+  runInfo: RunInfo
 }
 
 type Params = Readonly<Record<string, string | undefined>>
@@ -37,7 +53,7 @@ type Params = Readonly<Record<string, string | undefined>>
  * The {@link IContext} the engine builds for every request. Also what routes compile against, and what a group's
  * `onRequest` hook is handed as both its request and its reply.
  */
-export class Context implements IContext<Record<never, never>, Record<never, never>, FetchAdapterTypes> {
+export class Context implements IContext<Record<never, never>, Record<never, never>, EngineContextTypes> {
   /** @see {@link IContext.auth} */
   auth?: AuthenticationState
 
@@ -48,8 +64,8 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   routeTarget: Record<string | symbol, (...args: unknown[]) => unknown> | null = null
 
   readonly #shared: ServerShared
-  readonly #platform: ServerPlatform<Request, FetchContextPlatform, unknown>
-  readonly #native: Request
+  readonly #platform: ServerPlatform<unknown, IContextPlatform, unknown>
+  readonly #native: unknown
   readonly #extra: unknown
   readonly #id: number
   readonly #method: string
@@ -59,7 +75,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   readonly #query: string
 
   #req?: ContextRequest
-  #context?: FetchContextPlatform
+  #context?: IContextPlatform
   #state?: ContextState
   #config?: ConfigSnapshot<Record<never, never>>
 
@@ -70,14 +86,15 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   #responded = false
   #expired = false
   #onAnswered: (() => void) | undefined
+  #connectionFields = false
 
   #signal?: AbortController
   #abortReason?: Error
 
   constructor(
     shared: ServerShared,
-    platform: ServerPlatform<Request, FetchContextPlatform, unknown>,
-    native: Request,
+    platform: ServerPlatform<unknown, IContextPlatform, unknown>,
+    native: unknown,
     extra: unknown,
     id: number,
     method: string,
@@ -100,6 +117,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   get req(): ContextRequest {
     return (this.#req ??= new ContextRequest(
+      this.#shared,
       this.#platform,
       this.#native,
       this.#id,
@@ -112,7 +130,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   }
 
   /** Where the request came from. See {@link IContext.platform}. */
-  get platform(): FetchContextPlatform {
+  get platform(): IContextPlatform {
     return (this.#context ??= this.#platform.context(this.#native, this.#extra))
   }
 
@@ -128,6 +146,11 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   /** This context, for a custom pick written as `req => req.httpContext…`. */
   get httpContext(): this {
     return this
+  }
+
+  /** Whether a header that describes the connection was set, which the engine drops before sending. */
+  get hasConnectionFields(): boolean {
+    return this.#connectionFields
   }
 
   /** Where the request came from, as the runtime says: `127.0.0.1` for `request()`, `undefined` when it says nothing. */
@@ -183,7 +206,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
     if (!Number.isInteger(code) || code < 200 || code > 599) {
       throw configurationError(
-        `Cannot set status "${code}": the fetch application sends a status from 200 to 599`,
+        `Cannot set status "${code}": the ${this.#shared.application} sends a status from 200 to 599`,
         'Pass an HTTP status such as 200, 404 or 503',
       )
     }
@@ -202,6 +225,10 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     // A cookie is a value of its own, never a replacement for another, as Fastify's `reply.header` treats it.
     if (name === 'set-cookie' && this.#headers[name] !== undefined) {
       return this.#append(name, value)
+    }
+
+    if (isHopByHop(name)) {
+      this.#connectionFields = true
     }
 
     this.#headers[name] = value
@@ -234,11 +261,11 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   }
 
   cookie(_name: string, _value: string, _opts?: CookieSerializeOptions): this {
-    throw cookiesDisabled('set cookies')
+    throw cookiesDisabled('set cookies', this.#shared.application)
   }
 
   deleteCookie(_name: string, _opts?: CookieSerializeOptions): this {
-    throw cookiesDisabled('delete cookies')
+    throw cookiesDisabled('delete cookies', this.#shared.application)
   }
 
   body(body?: unknown): this {
@@ -331,6 +358,10 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   }
 
   #append(name: string, value: string): this {
+    if (isHopByHop(name)) {
+      this.#connectionFields = true
+    }
+
     const current = this.#headers[name]
 
     if (current === undefined) {
@@ -426,8 +457,9 @@ export class ContextRequest implements IRequest<
   true,
   unknown
 > {
-  readonly #platform: ServerPlatform<Request, FetchContextPlatform, unknown>
-  readonly #native: Request
+  readonly #shared: ServerShared
+  readonly #platform: ServerPlatform<unknown, IContextPlatform, unknown>
+  readonly #native: unknown
   readonly #id: number
   readonly #method: string
   readonly #url: string
@@ -437,10 +469,14 @@ export class ContextRequest implements IRequest<
 
   #parsedQuery?: Record<string, string | string[]>
   #headers?: Record<string, string>
+  #requestID?: string
+  #trusted?: boolean
+  #raw?: Request
 
   constructor(
-    platform: ServerPlatform<Request, FetchContextPlatform, unknown>,
-    native: Request,
+    shared: ServerShared,
+    platform: ServerPlatform<unknown, IContextPlatform, unknown>,
+    native: unknown,
     id: number,
     method: string,
     url: string,
@@ -448,6 +484,7 @@ export class ContextRequest implements IRequest<
     params: Params,
     query: string,
   ) {
+    this.#shared = shared
     this.#platform = platform
     this.#native = native
     this.#id = id
@@ -459,12 +496,20 @@ export class ContextRequest implements IRequest<
   }
 
   get raw(): Request {
-    return this.#platform.request(this.#native)
+    return (this.#raw ??= this.#platform.request(this.#native))
   }
 
+  /** The value of the server's `requestIDHeader` when the request carries one, else a number in Fastify's form. */
   get id(): string {
-    // Fastify's default form, so log lines read the same on either server.
-    return `req-${this.#id.toString(36)}`
+    if (this.#requestID === undefined) {
+      const name = this.#shared.requestIDHeader
+      const given = name === undefined ? undefined : this.#platform.header(this.#native, name)
+
+      // Fastify's default form, so log lines read the same on either server.
+      this.#requestID = given === undefined || given === '' ? `req-${this.#id.toString(36)}` : given
+    }
+
+    return this.#requestID
   }
 
   get url(): string {
@@ -479,18 +524,21 @@ export class ContextRequest implements IRequest<
     return this.#method
   }
 
-  /** The `Host` header, else the host of the request's URL. */
+  /** `X-Forwarded-Host` from a trusted proxy, else the `Host` header, else the host of the request's URL. */
   get host(): string {
-    return this.#platform.header(this.#native, 'host') ?? new URL(this.raw.url).host
+    return (
+      this.#forwarded('x-forwarded-host') ?? this.#platform.header(this.#native, 'host') ?? new URL(this.raw.url).host
+    )
   }
 
+  /** `X-Forwarded-Proto` from a trusted proxy, lower-cased, else the scheme of the connection. */
   get protocol(): string {
-    return this.#platform.protocol(this.#native)
+    return this.#forwarded('x-forwarded-proto')?.toLowerCase() ?? this.#platform.protocol(this.#native)
   }
 
-  /** @throws ErrConfiguration: the fetch application reads no request body yet. */
+  /** @throws ErrConfiguration: the engine reads no request body yet. */
   body(): InferBody<Record<never, never>> {
-    throw configurationError('Cannot read the request body on the fetch application yet', USE_FASTIFY)
+    throw configurationError(`Cannot read the request body on the ${this.#shared.application} yet`, USE_FASTIFY)
   }
 
   query(): Record<string, string>
@@ -535,23 +583,44 @@ export class ContextRequest implements IRequest<
   cookie(): Record<string, string>
   cookie(name: string): string | undefined
   cookie(_name?: string): never {
-    throw cookiesDisabled('read cookies')
+    throw cookiesDisabled('read cookies', this.#shared.application)
   }
 
   signedCookie(): Promise<Record<string, UnsignedCookie>>
   signedCookie(name: string, secret?: CookieSecret): Promise<UnsignedCookie>
   signedCookie(_name?: string, _secret?: CookieSecret): never {
-    throw cookiesDisabled('read cookies')
+    throw cookiesDisabled('read cookies', this.#shared.application)
   }
 
   unsignCookie(_value: string, _secret?: CookieSecret): Promise<CookieUnsignResult> {
-    throw cookiesDisabled('unsign a cookie')
+    throw cookiesDisabled('unsign a cookie', this.#shared.application)
+  }
+
+  // The last entry of a forwarding header, read only when the peer is a proxy the server trusts.
+  #forwarded(name: string): string | undefined {
+    const trust = this.#shared.trustProxy
+    if (trust === undefined) {
+      return undefined
+    }
+
+    const value = this.#platform.header(this.#native, name)
+    if (value === undefined) {
+      return undefined
+    }
+
+    // Judged once per request: `host` and `protocol` ask about the same peer.
+    if (!(this.#trusted ??= trust(this.#platform.remoteAddress(this.#native)))) {
+      return undefined
+    }
+
+    const last = value.slice(value.lastIndexOf(',') + 1).trim()
+    return last === '' ? undefined : last
   }
 }
 
-function cookiesDisabled(action: string): ErrCookiesDisabled {
+function cookiesDisabled(action: string, application: string): ErrCookiesDisabled {
   return new ErrCookiesDisabled(
-    errMessage(`Cannot ${action}: the fetch application handles no cookies yet`)
+    errMessage(`Cannot ${action}: the ${application} handles no cookies yet`)
       .solutions(`${USE_FASTIFY} to use cookies`)
       .reference('@caffeinejs/http', ErrCookiesDisabled)
       .build(),

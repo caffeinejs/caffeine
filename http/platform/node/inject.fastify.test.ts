@@ -5,7 +5,9 @@ import { Byte, KiB, MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Router, bodyAsStream, type IContext, type WebApplication } from '../../index.js'
-import { createWebApplication } from './index.js'
+// The Fastify application sends its in-process requests through this module too, with the bodies the engine does not
+// read yet.
+import { createWebApplication } from '../fastify/index.js'
 
 /**
  * A server's `request` is a pass-through: the request reaches the server as its `(input, init)` describes it, and the

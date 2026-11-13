@@ -172,7 +172,9 @@ lifetime(scopeID)
 ```
 
 Sets the lifecycle scope for the binding. See [Scopes](./scopes.md) for
-available scope identifiers.
+available scope identifiers. The container checks the scope when it
+initializes: a binding whose scope the container does not have is refused with
+`ErrScopeNotRegistered`.
 
 ```ts
 di.bind(CacheService, t => t.toSelf().lifetime(Scopes.SINGLETON))

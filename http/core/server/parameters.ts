@@ -69,7 +69,7 @@ function basePicker(p: ParameterPickOptions<Context>): Picker {
       return ctx => ctx.remoteAddress
     default:
       throw configurationError(
-        `Cannot compile a parameter of type "${String(p.type)}": the fetch application does not read it`,
+        `Cannot compile a parameter of type "${String(p.type)}": the web-standards engine does not read it`,
         USE_FASTIFY,
       )
   }

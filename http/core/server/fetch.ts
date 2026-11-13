@@ -1,5 +1,5 @@
 import type { IContextPlatform } from '../../adapter.js'
-import type { ResponseHead, SendPayload, ServerPlatform } from './platform.js'
+import type { ResponseHead, SendHooks, SendPayload, ServerPlatform } from './platform.js'
 
 /** What `ctx.platform` is on the fetch application. */
 export interface FetchContextPlatform extends IContextPlatform {
@@ -13,9 +13,6 @@ interface Tracked {
   readonly ended: Promise<void>
   abort(reason: Error): void
 }
-
-// The streamed answers still being sent, so `whenSent` waits for their end and `cancel` can cut them.
-const TRACKED = new WeakMap<Response, Tracked>()
 
 /** The fetch runtime's platform: a `Request` in, a `Response` out. */
 export const fetchPlatform: ServerPlatform<Request, FetchContextPlatform, Response> = {
@@ -33,32 +30,22 @@ export const fetchPlatform: ServerPlatform<Request, FetchContextPlatform, Respon
   signal: request => request.signal,
   remoteAddress: () => undefined,
   context: (_request, extra) => ({ name: 'fetch', runtime: (extra as readonly unknown[] | undefined) ?? [] }),
-  respond: (_request, head, payload) => {
+  respond: (_request, head, payload, hooks) => {
     const tracked = payload instanceof ReadableStream ? trackEnd(payload) : undefined
     const answer = new Response(tracked?.stream ?? (payload as Exclude<SendPayload, ReadableStream>), {
       status: head.status,
       headers: headersOf(head),
     })
 
-    if (tracked !== undefined) {
-      TRACKED.set(answer, tracked)
-    }
-
-    return answer
-  },
-  whenSent: (_request, answer, done) => {
-    const tracked = TRACKED.get(answer)
-
+    // Registered once the `Response` exists, so one that refuses its head leaves nothing to cut.
     if (tracked === undefined) {
-      done()
+      hooks.sent()
     } else {
-      void tracked.ended.then(done)
+      hooks.cancelWith(reason => tracked.abort(reason))
+      void tracked.ended.then(hooks.sent)
     }
 
     return answer
-  },
-  cancel: (_request, answer, reason) => {
-    TRACKED.get(answer)?.abort(reason)
   },
 }
 
@@ -67,6 +54,33 @@ export const inProcessPlatform: ServerPlatform<Request, FetchContextPlatform, Re
   ...fetchPlatform,
   protocol: () => 'http',
   remoteAddress: () => '127.0.0.1',
+  // `request()` is the one caller whose abort must fail a body already handed over: its signal cuts the stream.
+  respond: (request, head, payload, hooks) =>
+    fetchPlatform.respond(request, head, payload, linkedTo(request.signal, hooks)),
+}
+
+/** `hooks`, with a streamed answer cut when `signal` aborts, until it has been sent. */
+function linkedTo(signal: AbortSignal, hooks: SendHooks): SendHooks {
+  let onAbort: (() => void) | undefined
+
+  return {
+    sent: () => {
+      if (onAbort !== undefined) {
+        signal.removeEventListener('abort', onAbort)
+      }
+      hooks.sent()
+    },
+    cancelWith(cancel) {
+      hooks.cancelWith(cancel)
+
+      if (signal.aborted) {
+        cancel(signal.reason as Error)
+      } else {
+        onAbort = () => cancel(signal.reason as Error)
+        signal.addEventListener('abort', onAbort, { once: true })
+      }
+    },
+  }
 }
 
 function headersOf(head: ResponseHead): Headers {

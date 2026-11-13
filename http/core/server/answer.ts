@@ -137,6 +137,11 @@ function unwrap(target: AnswerTarget, response: Response, keepStatus: boolean): 
   return response.body
 }
 
+/** Whether `name`, lower-case, is a field RFC 9110 §7.6.1 says describes one connection. */
+export function isHopByHop(name: string): boolean {
+  return HOP_BY_HOP.has(name)
+}
+
 /**
  * Whether a field of `headers` describes the one connection it came over, and so is never forwarded: a field RFC 9110
  * §7.6.1 names, or one the `Connection` field lists.

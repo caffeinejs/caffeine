@@ -12,6 +12,9 @@ describe('resolveServerSettings', () => {
       handlerTimeout: undefined,
       router: DEFAULT_ROUTER_FLAGS,
       matcher: findMyWayMatcher,
+      trustProxy: undefined,
+      requestIDHeader: undefined,
+      application: 'fetch application',
     })
   })
 
@@ -58,6 +61,71 @@ describe('resolveServerSettings', () => {
   it('refuses a matcher that is not a function', () => {
     expect(() => resolveServerSettings({ matcher: 'find-my-way' })).toThrow(
       'Cannot use the matcher setting: it must be a function, got string',
+    )
+  })
+
+  it('trusts any peer under trustProxy: true', () => {
+    expect(resolveServerSettings({ trustProxy: true }).trustProxy?.(undefined)).toBe(true)
+  })
+
+  // The fetch runtime gives no peer address, so a list could never match.
+  it('refuses a trustProxy list on the fetch application', () => {
+    expect(() => resolveServerSettings({ trustProxy: 'loopback' })).toThrow(
+      'Cannot set trustProxy to a list of addresses on the fetch application',
+    )
+  })
+
+  it('refuses a trustProxy hop count', () => {
+    expect(() => resolveServerSettings({ trustProxy: 1 })).toThrow('a hop count cannot tell a proxy from a client')
+  })
+
+  // The fetch application cannot name proxies by address, so the refusal offers true or the Node application instead.
+  it('refuses a hop count on the fetch application, offering true or the Node application', () => {
+    let message = ''
+    try {
+      resolveServerSettings({ trustProxy: 1 })
+    } catch (err) {
+      message = (err as Error).message
+    }
+
+    expect(message).toContain('Write trustProxy: true when only trusted proxies can reach the application')
+    expect(message.includes("Name the proxy's addresses")).toBe(false)
+  })
+
+  // A list is refused there, so the refusal of any other value offers only what the fetch application takes.
+  it('refuses a trustProxy of another type on the fetch application, offering only a boolean', () => {
+    let message = ''
+    try {
+      resolveServerSettings({ trustProxy: {} })
+    } catch (err) {
+      message = (err as Error).message
+    }
+
+    expect(message.split('\n')[0]).toBe('Cannot set trustProxy to "[object Object]": it must be true or false')
+    expect(message).toContain('Write trustProxy: true when only trusted proxies can reach the application')
+    expect(message.includes('a list such as')).toBe(false)
+  })
+
+  it('reads requestIDHeader lower-cased', () => {
+    expect(resolveServerSettings({ requestIDHeader: 'X-Request-ID' }).requestIDHeader).toBe('x-request-id')
+  })
+
+  it.each(['', 'x y', 5])('refuses a requestIDHeader of %j', value => {
+    expect(() => resolveServerSettings({ requestIDHeader: value })).toThrow(
+      `Cannot set requestIDHeader to "${String(value)}": it is not a header name`,
+    )
+  })
+
+  it('refuses listen on the fetch application and names the Node entry', () => {
+    const resolve = () => resolveServerSettings({ listen: { port: 3000 } })
+
+    expect(resolve).toThrow('"listen" is not a setting of the fetch application')
+    expect(resolve).toThrow('"@caffeinejs/http/node"')
+  })
+
+  it('lists every setting the application takes when refusing an unknown one', () => {
+    expect(() => resolveServerSettings({ port: 3000 })).toThrow(
+      'Return only handlerTimeout, router, matcher, trustProxy, requestIDHeader from ".server(...)"',
     )
   })
 })

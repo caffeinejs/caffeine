@@ -2,7 +2,7 @@ import { Readable } from 'node:stream'
 import { buffer } from 'node:stream/consumers'
 
 import { errMessage } from '@caffeinejs/std/err'
-import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fastify'
+import type { InjectOptions, Response as InjectedResponse } from 'light-my-request'
 
 import { connectionFields } from '../../core/server/answer.js'
 
@@ -14,12 +14,15 @@ const EXPECTS_PAYLOAD = new Set(['POST', 'PUT', 'PATCH', 'QUERY', 'PROPFIND', 'P
 
 const FIX_LENGTH = 'Set Content-Length to the length of the body in bytes, or leave it out for the call to measure it'
 
+/** How one in-process request is sent: `fastify.inject`, or `light-my-request` over a Node request listener. */
+export type Inject = (options: InjectOptions) => Promise<InjectedResponse>
+
 /**
- * Sends `input` to `fastify` without a socket: the request as `fetch(input, init)` describes it, the answer as the
+ * Sends `input` with `inject`, without a socket: the request as `fetch(input, init)` describes it, the answer as the
  * server wrote it, handed over at its headers with its body streaming. `IServer.request` is the contract.
  */
 export async function fetchInProcess(
-  fastify: FastifyInstance,
+  inject: Inject,
   input: string | URL | Request,
   init?: RequestInit,
 ): Promise<Response> {
@@ -85,7 +88,7 @@ export async function fetchInProcess(
   const onAbort = (): void => call.abort(signal.reason)
   signal.addEventListener('abort', onAbort, { once: true })
 
-  const send = async (): Promise<LightMyRequestResponse> => {
+  const send = async (): Promise<InjectedResponse> => {
     if (source !== undefined && upload === undefined) {
       const whole = await buffer(source)
       headers['content-length'] = String(whole.byteLength)
@@ -94,7 +97,7 @@ export async function fetchInProcess(
       call.signal.throwIfAborted()
     }
 
-    return fastify.inject({
+    return inject({
       method: request.method as InjectOptions['method'],
       url: request.url,
       headers,
@@ -104,7 +107,7 @@ export async function fetchInProcess(
     })
   }
 
-  let result: LightMyRequestResponse
+  let result: InjectedResponse
   try {
     // An injection left behind settles unwatched: none starts after the call's end, and that end has closed its answer.
     result = await Promise.race([send(), ended])

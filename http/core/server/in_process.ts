@@ -20,24 +20,10 @@ export function requestInProcess(
     signal.throwIfAborted()
 
     return new Promise<Response>((resolve, reject) => {
-      let answer: Response | undefined
+      // Once the answer is handed over this settles nothing: the platform fails the body being read instead.
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
 
-      signal.addEventListener(
-        'abort',
-        () => {
-          if (answer === undefined) {
-            reject(signal.reason)
-          } else {
-            inProcessPlatform.cancel(request, answer, signal.reason as Error)
-          }
-        },
-        { once: true },
-      )
-
-      Promise.resolve(server.serve(inProcessPlatform, request, [], true)).then(response => {
-        answer = response
-        resolve(response)
-      }, reject)
+      Promise.resolve(server.serve(inProcessPlatform, request, [], true)).then(resolve, reject)
     })
   } catch (err) {
     return Promise.reject(err)

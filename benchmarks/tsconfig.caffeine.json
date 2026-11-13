@@ -15,6 +15,7 @@
     "fetchy/**/*.ts",
     "helloworld/caffeine/**/*.ts",
     "helloworld/caffeine-router/**/*.ts",
+    "helloworld/caffeine-web/**/*.ts",
     "request/caffeine/**/*.ts",
     "request/caffeine-request-scope/**/*.ts",
     "request/caffeine-router/**/*.ts",

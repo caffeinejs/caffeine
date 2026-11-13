@@ -143,3 +143,93 @@ describe('Context', () => {
     expect(await (await get('/config')).json()).toEqual({ same: true })
   })
 })
+
+describe('ContextRequest behind a proxy and with a request ID', () => {
+  const opened: Array<{ close(): Promise<void> }> = []
+
+  afterAll(async () => {
+    await Promise.all(opened.map(app => app.close()))
+  })
+
+  async function serve(settings: object) {
+    const probe = new Router('/p')
+    probe.get('/').handler(ctx => ({ host: ctx.req.host, protocol: ctx.req.protocol, id: ctx.req.id }))
+
+    const served = createWebApplication()
+      .logger(b => b.use(newNoopLogger()))
+      .server(() => settings as never)
+      .mount(probe)
+    opened.push(served)
+    await served.bootstrap()
+
+    return served
+  }
+
+  async function seen(res: Response): Promise<{ host: string; protocol: string; id: string }> {
+    return (await res.json()) as { host: string; protocol: string; id: string }
+  }
+
+  const forwarded = { 'x-forwarded-host': 'a.example, b.example', 'x-forwarded-proto': 'http, HTTPS' }
+
+  it('ignores the forwarding headers without trustProxy', async () => {
+    const served = await serve({})
+    const res = await served.request('/p', {
+      headers: { 'x-forwarded-host': 'a.example', 'x-forwarded-proto': 'https' },
+    })
+
+    expect(await seen(res)).toMatchObject({ host: 'localhost', protocol: 'http' })
+  })
+
+  it('reads the last entry of each forwarding header under trustProxy: true, the scheme lower-cased', async () => {
+    const served = await serve({ trustProxy: true })
+
+    expect(await seen(await served.request('/p', { headers: forwarded }))).toMatchObject({
+      host: 'b.example',
+      protocol: 'https',
+    })
+  })
+
+  // A runtime that says nothing of the peer: `true` trusts whoever it is.
+  it('reads them under trustProxy: true on a request with no peer address', async () => {
+    const served = await serve({ trustProxy: true })
+
+    expect(await seen(await served.fetch(new Request('http://x/p', { headers: forwarded })))).toMatchObject({
+      host: 'b.example',
+      protocol: 'https',
+    })
+  })
+
+  it('takes an empty forwarded host as absent', async () => {
+    const served = await serve({ trustProxy: true })
+
+    expect(await seen(await served.request('/p', { headers: { 'x-forwarded-host': '' } }))).toMatchObject({
+      host: 'localhost',
+    })
+  })
+
+  it('reads the host of the request URL when no Host header names one', async () => {
+    const served = await serve({})
+
+    expect(await seen(await served.fetch(new Request('http://x/p')))).toMatchObject({ host: 'x' })
+  })
+
+  it('takes the request ID from the requestIDHeader the request carries', async () => {
+    const served = await serve({ requestIDHeader: 'x-request-id' })
+
+    expect(await seen(await served.request('/p', { headers: { 'x-request-id': 'edge-91' } }))).toMatchObject({
+      id: 'edge-91',
+    })
+  })
+
+  it('numbers a request that does not carry the requestIDHeader', async () => {
+    const served = await serve({ requestIDHeader: 'x-request-id' })
+
+    expect(await seen(await served.request('/p'))).toMatchObject({ id: 'req-1' })
+  })
+
+  it('numbers a request whose requestIDHeader is empty', async () => {
+    const served = await serve({ requestIDHeader: 'x-request-id' })
+
+    expect(await seen(await served.request('/p', { headers: { 'x-request-id': '' } }))).toMatchObject({ id: 'req-1' })
+  })
+})

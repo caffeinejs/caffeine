@@ -1,7 +1,5 @@
-import { AsyncLocalStorage } from 'node:async_hooks'
-
 import type { RunInfo } from '@caffeinejs/application'
-import { Scopes, type Container } from '@caffeinejs/di'
+import { contextKey, ContextStorage, Scopes, type Container, type ContextKey } from '@caffeinejs/di'
 
 import type {
   AdapterFactory,
@@ -12,28 +10,23 @@ import type {
   IAdapterTypes,
   ServerAddress,
 } from '../../adapter.js'
-import type { CookieSerializeOptions } from '../cookie/options.js'
+import type { IRouteGroup } from '../routing/route.js'
 import { assertAuthorizationConfigured } from '../security/authz/index.js'
 import { assertAuthenticationConfigured, assertRouteSchemesResolve } from '../security/security.js'
-import { Context } from './context.js'
+import { Context, type EngineContextTypes } from './context.js'
 import { configurationError, USE_FASTIFY } from './error.js'
 import { fetchPlatform, type FetchContextPlatform } from './fetch.js'
 import { requestInProcess } from './in_process.js'
 import { HTTPServer } from './server.js'
-import { resolveServerSettings, type ServerSettings } from './settings.js'
+import { resolveServerSettings, type ResolvedServerSettings, type ServerSettings } from './settings.js'
 
 /**
  * The fetch application's adapter types. They are not in `AdapterRegistry`, so a plain `IContext` keeps Fastify's
  * types.
  */
-export interface FetchAdapterTypes extends IAdapterTypes {
+export interface FetchAdapterTypes extends EngineContextTypes {
   instance: never
   request: Context
-  extension: never
-  hook: never
-  raw: Request
-  cookieOptions: CookieSerializeOptions
-  asyncCookies: true
   platform: FetchContextPlatform
   serverOptions: ServerSettings
   runArgs: []
@@ -47,17 +40,11 @@ export function fetchAdapterFactory(): AdapterFactory<FetchAdapterTypes> {
 
 class FetchAdapter implements IAdapter<FetchAdapterTypes> {
   readonly #container: Container
-  readonly #storage = new AsyncLocalStorage<Context>()
+  readonly #contextKey: ContextKey<Context>
 
   constructor(kit: AdapterFactoryIn) {
     this.#container = kit.container
-    this.#container.bind(Context, t =>
-      t
-        .toFactory(() => this.#storage.getStore()!)
-        .lifetime(Scopes.REQUEST)
-        .byPassPostProcessors()
-        .internal(),
-    )
+    this.#contextKey = bindContext(kit.container)
   }
 
   async setup(input: AdapterIn<FetchAdapterTypes>): Promise<IAdapterServer<FetchAdapterTypes>> {
@@ -68,44 +55,78 @@ class FetchAdapter implements IAdapter<FetchAdapterTypes> {
       )
     }
 
-    const scopes = input.routeGroups.flatMap(group => group.scopes ?? [])
-
-    if (input.extensions.root().length > 0 || scopes.some(scope => input.extensions.of(scope.key).length > 0)) {
-      throw configurationError(
-        'Cannot install a server plugin on the fetch application: only an HTTPPlugin is supported yet',
-        USE_FASTIFY,
-      )
-    }
-
-    if (
-      input.middlewares.resolve(input.context).length > 0 ||
-      scopes.some(scope => input.extensions.middlewaresOf(scope.key).length > 0)
-    ) {
-      throw configurationError(
-        'Cannot install middleware on the fetch application: it runs no middleware yet',
-        USE_FASTIFY,
-      )
-    }
-
-    const settings = resolveServerSettings(input.server)
-
-    assertAuthenticationConfigured(this.#container, input.routeGroups)
-    assertRouteSchemesResolve(this.#container, input.routeGroups)
-    assertAuthorizationConfigured(this.#container, input.routeGroups)
-
-    const server = new HTTPServer({
-      routeGroups: input.routeGroups,
-      settings,
-      basePath: input.basePath,
-      container: this.#container,
-      storage: this.#storage,
-      logger: input.context.logger,
-    })
-
-    input.recordRoutes(server.routes)
-
-    return new FetchServer(server)
+    return new FetchServer(
+      buildEngine(this.#container, this.#contextKey, input.routeGroups, input, resolveServerSettings(input.server)),
+    )
   }
+}
+
+/**
+ * Binds `Context` request-scoped, read from the slot the engine sets in each request's frame, and returns that slot's
+ * key. The key is this binding's own, so two applications on one storage never read each other's request.
+ */
+export function bindContext(container: Container): ContextKey<Context> {
+  const key = contextKey<Context>('@caffeinejs/http:context')
+
+  container.bind(Context, t =>
+    t
+      .toFunction((storage: ContextStorage) => storage.getStore()?.get(key) as Context, [ContextStorage])
+      .lifetime(Scopes.REQUEST)
+      .byPassPostProcessors()
+      .internal(),
+  )
+
+  return key
+}
+
+/**
+ * Builds the engine for one server: refuses server plugins and middleware, checks authentication and authorization,
+ * registers the routes and records them.
+ *
+ * @throws ErrConfiguration for what the engine cannot serve yet.
+ */
+export function buildEngine<T extends IAdapterTypes>(
+  container: Container,
+  key: ContextKey<Context>,
+  routeGroups: IRouteGroup<Context>[],
+  input: AdapterIn<T>,
+  settings: ResolvedServerSettings,
+): HTTPServer {
+  const scopes = routeGroups.flatMap(group => group.scopes ?? [])
+
+  if (input.extensions.root().length > 0 || scopes.some(scope => input.extensions.of(scope.key).length > 0)) {
+    throw configurationError(
+      `Cannot install a server plugin on the ${settings.application}: only an HTTPPlugin is supported yet`,
+      USE_FASTIFY,
+    )
+  }
+
+  if (
+    input.middlewares.resolve(input.context).length > 0 ||
+    scopes.some(scope => input.extensions.middlewaresOf(scope.key).length > 0)
+  ) {
+    throw configurationError(
+      `Cannot install middleware on the ${settings.application}: it runs no middleware yet`,
+      USE_FASTIFY,
+    )
+  }
+
+  assertAuthenticationConfigured(container, routeGroups)
+  assertRouteSchemesResolve(container, routeGroups)
+  assertAuthorizationConfigured(container, routeGroups)
+
+  const server = new HTTPServer({
+    routeGroups,
+    settings,
+    basePath: input.basePath,
+    container,
+    contextKey: key,
+    logger: input.context.logger,
+  })
+
+  input.recordRoutes(server.routes)
+
+  return server
 }
 
 /** One server the fetch adapter built: no socket of its own, answering what the runtime hands `fetch`. */

@@ -75,6 +75,31 @@ describe('requestInProcess', () => {
     release()
   })
 
+  // The answer is the caller's once handed over, but the caller can still hang up: the body it is reading fails, as a
+  // client's body does when its connection drops, and the server lets the request go.
+  it('fails the body being read with the reason when the signal aborts after the answer was handed over', async () => {
+    const served = await serve(
+      new Router('/s').get('/').handler(
+        () =>
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('a'))
+            },
+          }),
+      ),
+    )
+    const controller = new AbortController()
+    const reason = new Error('client left')
+
+    const response = await served.request('/s', { signal: controller.signal })
+    const reader = response.body!.getReader()
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('a')
+    controller.abort(reason)
+
+    await expect(reader.read()).rejects.toBe(reason)
+    await served.close()
+  })
+
   // Every chunk is produced after the handler returned, re-resolving the request-scoped binding: a scope torn down
   // at hand-off would show up as a destroyed or a different instance.
   it('keeps the request scope alive while the response streams', async () => {

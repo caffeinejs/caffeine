@@ -16,8 +16,8 @@ export interface IRequest<
   get raw(): RAW
 
   /**
-   * The ID the server gave this request, the one its log lines carry. Fastify's `genReqId` and `requestIdHeader`
-   * server options decide where it comes from.
+   * The ID the server gave this request, the one its log lines carry: the value of the request header the server was
+   * told to read it from (Fastify's `requestIdHeader`, the engine's `requestIDHeader`), else one the server generates.
    */
   get id(): string
 

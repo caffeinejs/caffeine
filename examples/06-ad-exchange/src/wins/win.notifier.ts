@@ -13,7 +13,7 @@ import type { WinNotice } from '../dsps/dsp.schemas.js'
  * limit of preset `win-notice`; nobody waits for it, so the retries cost the auction nothing.
  *
  * No caller has a signal to pass, so each attempt's signal, which the time limit aborts, is read from the
- * `ResilienceContext` that `r.context(...)` in `app.ts` enables.
+ * `ResilienceContext` the container's context storage gives it.
  */
 @Injectable([DSPFleet, ResilienceContext, logToken()])
 export class WinNotifier {

@@ -1,11 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
-import { RequestScope } from './internal/core/scope/index.js'
-import { bindScope, kScopeName, Scopes } from './scope.js'
+import { bindContextStorageFactory, type ExecutionContext } from './context.js'
 
 export * from './index.js'
 
-const requestScopeFactory = () => new RequestScope(new AsyncLocalStorage())
-requestScopeFactory[kScopeName] = 'Request'
-
-bindScope(Scopes.REQUEST, requestScopeFactory)
+bindContextStorageFactory(() => new AsyncLocalStorage<ExecutionContext>())

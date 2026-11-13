@@ -1,11 +1,10 @@
-import type { AsyncLocalStorage } from 'node:async_hooks'
-
 import { ConfigStore } from '@caffeinejs/application/config'
 import { runGuards } from '@caffeinejs/application/framework'
 import type { Logger } from '@caffeinejs/application/logger'
-import type { Container, Ctor } from '@caffeinejs/di'
+import { ExecutionContext, type Container, type ContextKey, type Ctor } from '@caffeinejs/di'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
+import type { IContextPlatform } from '../../adapter.js'
 import { stripBasePath } from '../../base_path.js'
 import { kRouteConstraints } from '../constraints/keys.js'
 import { kCSRFRoute } from '../csrf/route.js'
@@ -22,9 +21,8 @@ import type { IRoute, IRouteGroup } from '../routing/route.js'
 import { answer, byteLength, connectionFields } from './answer.js'
 import { Context, type ServerShared } from './context.js'
 import { answerError, asError, configurationError, defaultProblem, USE_FASTIFY } from './error.js'
-import type { FetchContextPlatform } from './fetch.js'
 import { engineCompilers } from './parameters.js'
-import type { SendPayload, ServerPlatform } from './platform.js'
+import type { SendHooks, SendPayload, ServerPlatform } from './platform.js'
 import { isTimeout, MAX_TIMEOUT, type ResolvedServerSettings } from './settings.js'
 
 /** What one route resolves to in the matcher. A miss resolves to the server's not-found store. */
@@ -48,13 +46,16 @@ export interface HTTPServerInput {
   readonly settings: ResolvedServerSettings
   readonly basePath: string | undefined
   readonly container: Container
-  readonly storage: AsyncLocalStorage<Context>
+  /** The slot of each request's frame that holds its context: what the container resolves `Context` from. */
+  readonly contextKey: ContextKey<Context>
   readonly logger: Logger
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, string | undefined>> = Object.freeze({})
 
 const CLOSED_BODY = 'Service Unavailable'
+// The 503 of a closed server is tracked by no request.
+const NO_HOOKS: SendHooks = { sent: () => undefined, cancelWith: () => undefined }
 
 /** One server of the engine: its routes, and the pipeline every request of every platform goes through. */
 export class HTTPServer {
@@ -66,10 +67,16 @@ export class HTTPServer {
   readonly #notFound: RouteStore
   readonly #basePath: string | undefined
   readonly #container: Container
-  readonly #storage: AsyncLocalStorage<Context>
+  readonly #contextKey: ContextKey<Context>
 
-  /** How to cut each request still in flight: abort its handler, or its answer once it has one. */
-  readonly #inFlight = new Set<(reason: Error) => void>()
+  /** Each request still in flight, to cut: abort its handler, or its answer once it has one. */
+  readonly #inFlight = new Set<InFlight>()
+  /** Stops counting one request toward the drain. */
+  readonly #uncountOne = (): void => {
+    this.#count--
+    this.#settleDrain()
+  }
+  readonly #settle = (): void => this.#settleDrain()
   #ids = 0
   #count = 0
   #closing = false
@@ -92,10 +99,13 @@ export class HTTPServer {
       errors: container.get(ErrorHandlerProvider),
       options,
       encodeProblem: problemEncoder(options),
+      application: settings.application,
+      trustProxy: settings.trustProxy,
+      requestIDHeader: settings.requestIDHeader,
     }
     this.#basePath = input.basePath
     this.#container = container
-    this.#storage = input.storage
+    this.#contextKey = input.contextKey
     this.#matcher = settings.matcher<RouteStore>(settings.router)
     this.#notFound = {
       route: undefined,
@@ -119,9 +129,9 @@ export class HTTPServer {
    * @param drainAtRespond - Stop counting the request toward {@link close} once its answer is handed back, rather than
    *   when it has left: `request()`'s, whose body a test may never read.
    */
-  serve<R>(
-    platform: ServerPlatform<Request, FetchContextPlatform, R>,
-    native: Request,
+  serve<N, R>(
+    platform: ServerPlatform<N, IContextPlatform, R>,
+    native: N,
     extra: unknown,
     drainAtRespond = false,
   ): R | Promise<R> {
@@ -134,52 +144,15 @@ export class HTTPServer {
           headers: { 'content-type': 'text/plain; charset=utf-8', 'content-length': String(CLOSED_BODY.length) },
         },
         CLOSED_BODY,
+        NO_HOOKS,
       )
     }
 
     this.#count++
     const id = ++this.#ids
 
-    let ctx: Context | undefined
-    let answered: { readonly value: R } | undefined
-    let scopeRelease: (() => void) | undefined
-    let finished = false
-    let uncounted = false
-    let fail: ((reason: Error) => void) | undefined
-
-    // A forced close cuts the request as Fastify's destroys its socket: an answer being sent fails its reader, and a
-    // request not yet answered fails its caller and aborts its handler, whose late result then goes nowhere.
-    const cut = (reason: Error): void => {
-      if (answered !== undefined) {
-        platform.cancel(native, answered.value, reason)
-        return
-      }
-
-      ctx?.expire()
-      ctx?.markResponded()
-      ctx?.abort(reason)
-      fail?.(reason)
-    }
-    const uncount = (): void => {
-      if (!uncounted) {
-        uncounted = true
-        this.#count--
-        this.#settleDrain()
-      }
-    }
-    const finish = (): void => {
-      if (finished) {
-        return
-      }
-
-      finished = true
-      scopeRelease?.()
-      this.#inFlight.delete(cut)
-      uncount()
-      this.#settleDrain()
-    }
-
-    this.#inFlight.add(cut)
+    const flight = new InFlight(this.#inFlight, this.#uncountOne, this.#settle, drainAtRespond)
+    this.#inFlight.add(flight)
 
     try {
       const method = platform.method(native)
@@ -214,42 +187,20 @@ export class HTTPServer {
         match?.params ?? EMPTY_PARAMS,
         match?.query ?? queryAfter(url),
       )
-      ctx = current
+      flight.ctx = current
 
-      const pipeline = new Pipeline<R>(this.#shared, platform, native, current, store, {
-        finish,
-        uncountEarly: drainAtRespond ? uncount : undefined,
-        keep: value => {
-          answered = { value }
+      const pipeline = new Pipeline<N, R>(this.#shared, platform, native, current, store, flight, method === 'HEAD')
+
+      // One frame per request, holding its context and its request scope, built from the root so no slot of the caller
+      // leaks into it. A request served inside an open request scope is still refused. The scope ends in `sent`, once
+      // the answer has left.
+      const result = this.#container.requestScopeManager.enter(
+        end => {
+          flight.scope = end
+          return pipeline.run(failure)
         },
-      })
-
-      let result!: R | Promise<R>
-      let thrown: { readonly err: unknown } | undefined
-
-      this.#storage.run(current, () => {
-        this.#container.requestScopeManager
-          .run(
-            () =>
-              new Promise<void>(release => {
-                scopeRelease = release
-
-                // A throw in a promise's executor would only reject this promise, so it is kept and thrown below.
-                try {
-                  result = pipeline.run(failure)
-                } catch (err) {
-                  thrown = { err }
-                }
-              }),
-          )
-          .catch((err: unknown) =>
-            this.#shared.logger.error({ reqId: current.req.id, err }, 'Cannot tear down the request scope'),
-          )
-      })
-
-      if (thrown !== undefined) {
-        throw thrown.err
-      }
+        ExecutionContext.ROOT.with(this.#contextKey, current),
+      )
 
       if (!isThenable(result)) {
         return result
@@ -257,16 +208,26 @@ export class HTTPServer {
 
       const pending = result
       return new Promise<R>((resolve, reject) => {
-        fail = reject
+        flight.fail = reject
         Promise.resolve(pending).then(resolve, reject)
       }).then(undefined, (err: unknown) => {
-        finish()
+        this.#failed(flight, err)
         throw err
       })
     } catch (err) {
-      finish()
+      this.#failed(flight, err)
       throw err
     }
+  }
+
+  // A failure that escapes the pipeline. One past respond was logged there, and a forced close's is no failure of the
+  // request: both marked the context responded. Anything else, such as a scope that cannot open, is logged here.
+  #failed(flight: InFlight, err: unknown): void {
+    const ctx = flight.ctx
+    if (ctx?.responded !== true) {
+      this.#shared.logger.error({ reqId: ctx?.req.id, err }, 'Cannot serve the request')
+    }
+    flight.sent()
   }
 
   /**
@@ -298,8 +259,8 @@ export class HTTPServer {
     this.#closed = true
 
     const reason = new ErrHTTPServiceUnavailable('The server was closed')
-    for (const cut of [...this.#inFlight]) {
-      cut(reason)
+    for (const flight of [...this.#inFlight]) {
+      flight.cut(reason)
     }
 
     this.#resolveDrained?.()
@@ -320,8 +281,8 @@ export class HTTPServer {
     if (!this.#cutting) {
       this.#cutting = true
       const reason = new ErrHTTPServiceUnavailable('The server was closed')
-      for (const cut of [...this.#inFlight]) {
-        cut(reason)
+      for (const flight of [...this.#inFlight]) {
+        flight.cut(reason)
       }
     }
   }
@@ -341,7 +302,7 @@ export class HTTPServer {
         const methods = [...new Set(route.method.map(method => method.toUpperCase()))]
         const paths = pathsOf(group.prefix, joinPaths(group.path, route.path), settings.router.ignoreTrailingSlash)
 
-        assertServable(route, methods, paths[0])
+        assertServable(route, methods, paths[0], settings.application)
 
         const store = storeOf(group, route, settings.handlerTimeout)
 
@@ -383,32 +344,110 @@ export class HTTPServer {
   }
 }
 
-/** What the request path calls back into the server for. */
-interface PipelineHooks<R> {
-  /** Releases the request scope and the drain count, once. */
-  readonly finish: () => void
-  /** For `request()`: stops counting toward `close()` at respond. */
-  readonly uncountEarly: (() => void) | undefined
-  /** Keeps the answer, so a forced close can cut it. */
-  readonly keep: (answer: R) => void
+/** One request in flight: what a forced close cuts, and what releases it once its answer has left. */
+class InFlight implements SendHooks {
+  ctx: Context | undefined
+  /** Ends the request scope: set as the request enters it. */
+  scope: (() => void | Promise<void>) | undefined
+  fail: ((reason: Error) => void) | undefined
+
+  readonly #flights: Set<InFlight>
+  readonly #uncountOne: () => void
+  readonly #settle: () => void
+  readonly #drainAtRespond: boolean
+  #cancel: ((reason: Error) => void) | undefined
+  #finished = false
+  #uncounted = false
+
+  constructor(flights: Set<InFlight>, uncountOne: () => void, settle: () => void, drainAtRespond: boolean) {
+    this.#flights = flights
+    this.#uncountOne = uncountOne
+    this.#settle = settle
+    this.#drainAtRespond = drainAtRespond
+  }
+
+  /** Releases the request scope and the drain count, once. An arrow: a platform may call it detached. */
+  readonly sent = (): void => {
+    if (this.#finished) {
+      return
+    }
+
+    this.#finished = true
+    this.#endScope()
+    this.#flights.delete(this)
+
+    // Uncounting settles the drain; a request `request()` already uncounted still leaves the in-flight set.
+    if (!this.#uncount()) {
+      this.#settle()
+    }
+  }
+
+  cancelWith(cancel: (reason: Error) => void): void {
+    this.#cancel = cancel
+  }
+
+  /** For `request()`: stops counting toward `close()` at respond. A no-op otherwise. */
+  uncountEarly(): void {
+    if (this.#drainAtRespond) {
+      this.#uncount()
+    }
+  }
+
+  // A forced close cuts the request as Fastify's destroys its socket: an answer being sent fails its reader, and a
+  // request not yet answered fails its caller and aborts its handler, whose late result then goes nowhere.
+  cut(reason: Error): void {
+    if (this.#cancel !== undefined) {
+      this.#cancel(reason)
+      return
+    }
+
+    this.ctx?.expire()
+    this.ctx?.markResponded()
+    this.ctx?.abort(reason)
+    this.fail?.(reason)
+  }
+
+  // Whether this call stopped the count.
+  #uncount(): boolean {
+    if (this.#uncounted) {
+      return false
+    }
+
+    this.#uncounted = true
+    this.#uncountOne()
+    return true
+  }
+
+  // A destroy hook that fails is logged: the answer has left by now.
+  #endScope(): void {
+    const ending = this.scope?.()
+    if (isThenable(ending)) {
+      const ctx = this.ctx!
+      void ending.then(undefined, (err: unknown) =>
+        ctx.logger.error({ reqId: ctx.req.id, err }, 'Cannot tear down the request scope'),
+      )
+    }
+  }
 }
 
 /** One request through the engine: hooks, handler and answer, then respond, with no `async` function on the way. */
-class Pipeline<R> {
+class Pipeline<N, R> {
   readonly #shared: ServerShared
-  readonly #platform: ServerPlatform<Request, FetchContextPlatform, R>
-  readonly #native: Request
+  readonly #platform: ServerPlatform<N, IContextPlatform, R>
+  readonly #native: N
   readonly #ctx: Context
   readonly #store: RouteStore
-  readonly #hooks: PipelineHooks<R>
+  readonly #hooks: InFlight
+  readonly #head: boolean
 
   constructor(
     shared: ServerShared,
-    platform: ServerPlatform<Request, FetchContextPlatform, R>,
-    native: Request,
+    platform: ServerPlatform<N, IContextPlatform, R>,
+    native: N,
     ctx: Context,
     store: RouteStore,
-    hooks: PipelineHooks<R>,
+    hooks: InFlight,
+    head: boolean,
   ) {
     this.#shared = shared
     this.#platform = platform
@@ -416,6 +455,7 @@ class Pipeline<R> {
     this.#ctx = ctx
     this.#store = store
     this.#hooks = hooks
+    this.#head = head
   }
 
   run(failure: Error | undefined): R | Promise<R> {
@@ -579,22 +619,26 @@ class Pipeline<R> {
   // Sends what the context holds, under the length rules of Fastify's `reply.send` and HEAD route.
   #respond(): R {
     const ctx = this.#ctx
-    const { finish, uncountEarly, keep } = this.#hooks
+    const hooks = this.#hooks
 
     if (ctx.responded) {
       return undefined as R
     }
 
     const headers = ctx.responseHeaders
-    const isConnectionField = connectionFields({ get: name => ctx.getHeader(name) ?? null })
-    for (const name of Object.keys(headers)) {
-      if (isConnectionField(name)) {
-        delete headers[name]
+
+    // `Connection` is itself a field of the fixed list, so nothing to drop means no header to look at.
+    if (ctx.hasConnectionFields) {
+      const isConnectionField = connectionFields({ get: name => ctx.getHeader(name) ?? null })
+      for (const name of Object.keys(headers)) {
+        if (isConnectionField(name)) {
+          delete headers[name]
+        }
       }
     }
 
     const status = ctx.statusCode
-    const head = ctx.req.method === 'HEAD'
+    const head = this.#head
     let payload: SendPayload = ctx.payload ?? null
 
     if (payload !== null && status === 204) {
@@ -633,17 +677,16 @@ class Pipeline<R> {
 
     let sent: R
     try {
-      sent = this.#platform.respond(this.#native, { status, headers }, payload)
+      sent = this.#platform.respond(this.#native, { status, headers }, payload, hooks)
     } catch (err) {
       this.#shared.logger.error({ reqId: ctx.req.id, err }, 'Cannot send the answer')
-      finish()
+      hooks.sent()
       throw err
     }
 
-    uncountEarly?.()
-    keep(sent)
+    hooks.uncountEarly()
 
-    return this.#platform.whenSent(this.#native, sent, finish)
+    return sent
   }
 }
 
@@ -651,7 +694,7 @@ class Pipeline<R> {
  * Refuses what the engine cannot serve yet, at start-up rather than as a route that quietly never does what it
  * declares.
  */
-function assertServable(route: IRoute<Context>, methods: readonly string[], url: string): void {
+function assertServable(route: IRoute<Context>, methods: readonly string[], url: string, application: string): void {
   const types = new Set(route.parameters.map(parameter => parameter.type))
   const timeout = route.timeout
   const unreadConfig = [...route.config.keys()].filter(key => key !== kCSRFRoute).map(String)
@@ -670,6 +713,7 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
       'a request or response schema',
     ],
     [route.bodyAs !== undefined, '@BodyAsBuffer or @BodyAsStream'],
+    [route.bodyLimit !== undefined, '@BodyLimit'],
     [route.options.size > 0, `route options ("${[...route.options.keys()].map(String).join('", "')}")`],
     [route.config.has(kRouteConstraints), 'a route constraint'],
     [route.config.has('cache') || route.config.has('cacheInvalidate'), '@CacheControl or @CacheInvalidate'],
@@ -684,7 +728,7 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
 
   if (unsupported !== undefined) {
     throw configurationError(
-      `Cannot serve "${methods.join('|')} ${url}" on the fetch application: ${unsupported} is not supported yet`,
+      `Cannot serve "${methods.join('|')} ${url}" on the ${application}: ${unsupported} is not supported yet`,
       USE_FASTIFY,
     )
   }

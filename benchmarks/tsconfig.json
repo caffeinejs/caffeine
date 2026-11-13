@@ -15,6 +15,7 @@
     "startup/caffeine/**",
     "helloworld/caffeine/**",
     "helloworld/caffeine-router/**",
+    "helloworld/caffeine-web/**",
     "request/caffeine/**",
     "request/caffeine-request-scope/**",
     "request/caffeine-router/**",

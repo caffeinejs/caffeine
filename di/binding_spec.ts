@@ -10,7 +10,7 @@ import { notNil } from './internal/util/assert/index.js'
 import { errMessage } from './internal/util/errutil/index.js'
 import { InjectionToken, Identifier, NamedToken, TypedKey, isNamedKey, keyStr } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
-import { hasScope, type Scope } from './scope.js'
+import type { Scope } from './scope.js'
 import { AbstractCtor, Ctor } from './types.js'
 
 /**
@@ -311,7 +311,8 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
-   * Sets the scope that controls the instance lifecycle of this binding.
+   * Sets the scope that controls the instance lifecycle of this binding. A scope the container does not have is refused
+   * when it initializes, with `ErrScopeNotRegistered`.
    *
    * @example
    * ```ts
@@ -319,15 +320,7 @@ export class BindingSpec<TValue, K = unknown> {
    * ```
    */
   lifetime(scopeID: NamedToken<Scope>): this {
-    if (!hasScope(notNil(scopeID))) {
-      throw new ErrInvalidBinding(
-        errMessage(`Scope "${String(scopeID)}" is not registered: use bindScope() to register it before use`)
-          .reference('@caffeinejs/di', ErrInvalidBinding)
-          .build(),
-      )
-    }
-
-    this.binding.scopeID = scopeID
+    this.binding.scopeID = notNil(scopeID)
 
     return this
   }

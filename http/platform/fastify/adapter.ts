@@ -1,11 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { subscribe, unsubscribe } from 'node:diagnostics_channel'
-import type { EventEmitter } from 'node:events'
 import type { IncomingMessage, Server, ServerOptions } from 'node:http'
-import type { SecureServerOptions, ServerHttp2Session } from 'node:http2'
+import type { SecureServerOptions } from 'node:http2'
 import type { ServerOptions as HTTPSServerOptions } from 'node:https'
-import type { Socket } from 'node:net'
-import { Server as TLSServer, type TLSSocket } from 'node:tls'
 
 import { ConfigStore } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
@@ -49,12 +45,19 @@ import { assertAuthorizationConfigured } from '../../core/security/authz/index.j
 import type { Principal } from '../../core/security/identity.js'
 import { assertAuthenticationConfigured, assertRouteSchemesResolve } from '../../core/security/security.js'
 import { Keys } from '../../symbols.js'
+import {
+  closeServer,
+  destroyConnections,
+  serverAddress,
+  trackConnections,
+  type OpenConnections,
+} from '../node/connections.js'
+import { fetchInProcess } from '../node/inject.js'
 import { CONSTRAINTS_PLUGIN } from './constraints/constraints.js'
 import { Context } from './context.js'
 import { cookiePlugin } from './cookie/cookie.js'
 import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './error/error.js'
 import { validationFormatter } from './error/validation.js'
-import { fetchInProcess } from './fetch.js'
 import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
@@ -251,17 +254,8 @@ export class Adapter implements IAdapter<AdapterTypes> {
     const fastify = Fastify(options)
     recordRouterFlags(fastify, options)
 
-    // Node's `close()` waits on what it does not end itself, so the adapter keeps what the server has open. An HTTP/1
-    // server ends its idle connections once. Node 24 counts one that has not sent a request as active, never idle, so a
-    // client that connects and stays silent (a browser's preconnect, a load balancer's TCP check) holds it; Node 26
-    // resets it. A TLS
-    // server's HTTP layer meets a connection only once its handshake ends, so not even `closeAllConnections()` reaches
-    // one still handshaking. Node 22's HTTP/2 server leaves its sessions open, an idle one until
-    // `http2SessionTimeout`.
-    const open: OpenConnections = { sockets: new Set(), secured: new Set(), sessions: new Set() }
-    keepOpen(fastify.server, 'connection', open.sockets)
-    keepOpen(fastify.server, 'secureConnection', open.secured)
-    keepOpen(fastify.server, 'session', open.sessions)
+    // Node's `close()` waits on what it does not end itself, so the adapter keeps what the server has open.
+    const open = trackConnections(fastify.server)
 
     // Copied and read once: `listen()` writes into what it is handed, and a frozen configuration node refuses that.
     const server = new AdapterServer(fastify, listener === undefined ? undefined : { ...listener }, open)
@@ -490,25 +484,6 @@ export class Adapter implements IAdapter<AdapterTypes> {
   }
 }
 
-/**
- * What a server has open, kept by the adapter so that it can end it. A set whose event the server never emits stays
- * empty.
- */
-interface OpenConnections {
-  /**
-   * Every TCP connection: what {@link AdapterServer.forceTeardown} cuts, and {@link AdapterServer.teardown} ends when
-   * silent.
-   */
-  readonly sockets: Set<Socket>
-  /** Every TLS connection, the socket requests arrive on: what {@link AdapterServer.teardown} ends when silent. */
-  readonly secured: Set<TLSSocket>
-  /** Every HTTP/2 session: what {@link AdapterServer.teardown} closes. */
-  readonly sessions: Set<ServerHttp2Session>
-}
-
-/** Node's diagnostics channel for an HTTP/1 response that has finished, on any server: `{ server, socket, … }`. */
-const RESPONSE_FINISH = 'http.server.response.finish'
-
 /** One server {@link Adapter} built. */
 class AdapterServer implements IAdapterServer<AdapterTypes> {
   readonly #fastify: FastifyInstance
@@ -538,52 +513,10 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
     await this.#fastify.listen({ ...this.#listener, ...options })
   }
 
-  async teardown(): Promise<void> {
-    const server = this.#fastify.server
-    const { sockets, secured, sessions } = this.#open
-
-    // A connection that has not sent a byte carries no request, partial request or upgrade: a TCP connection that
-    // never began its handshake, or a TLS one that finished it and fell silent, an HTTP/2 one that never sent its
-    // preface included. Each is destroyed, whether open when closing began or opening after, before the server stops
-    // listening or from a handshake that ends after. Judged once Node has read what had arrived, so a request already
-    // on its way is answered.
-    const endIfSilent = (socket: Socket) =>
-      afterIO(() => {
-        if (socket.bytesRead === 0) {
-          socket.destroy()
-        }
-      })
-    server.on('connection', endIfSilent)
-    server.on('secureConnection', endIfSilent)
-    for (const socket of [...sockets, ...secured]) {
-      endIfSilent(socket)
-    }
-
-    // An HTTP/2 session, open or opening, is closed: `session.close()` refuses new streams and ends the session once
-    // those still open have. It does not end one that never read a preface, which the rule above sees to.
-    server.on('session', (session: ServerHttp2Session) => session.close())
-    for (const session of sessions) {
-      session.close()
-    }
-
-    // A request in flight that finishes after Node's one pass over the idle HTTP/1 connections leaves its own idle
-    // and kept alive for the client, so the idle ones are ended again as each response finishes. Subscribed only
-    // while closing: the channel reports every server's HTTP/1 responses, `allowHTTP1` ones included.
-    const closeIdle = (message: unknown) => {
-      if ((message as { server: unknown }).server === server) {
-        setImmediate(() => server.closeIdleConnections())
-      }
-    }
-
-    subscribe(RESPONSE_FINISH, closeIdle)
-    try {
-      // Node 26's `close()` resets a connection that has not delivered a request yet, bytes already arrived included:
-      // the server reads them first, and the silent connections above are judged by then.
-      await new Promise<void>(resolve => afterIO(resolve))
+  teardown(): Promise<void> {
+    return closeServer(this.#fastify.server, this.#open, async () => {
       await this.#fastify.close()
-    } finally {
-      unsubscribe(RESPONSE_FINISH, closeIdle)
-    }
+    })
   }
 
   /**
@@ -592,10 +525,7 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
    * so the pending `close()` can settle instead of being interrupted mid-request by the orchestrator.
    */
   forceTeardown(): Promise<void> {
-    for (const socket of this.#open.sockets) {
-      socket.destroy()
-    }
-
+    destroyConnections(this.#open)
     return Promise.resolve()
   }
 
@@ -604,27 +534,11 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
   }
 
   get address(): ServerAddress | undefined {
-    const server = this.#fastify.server
-    const bound = server.address()
-
-    // `null` when nothing is listening.
-    if (bound == null) {
-      return undefined
-    }
-
-    // A string when bound to a unix socket or a named pipe, which has a path and no host, port or origin.
-    if (typeof bound === 'string') {
-      return { host: '', port: 0, path: bound, origin: '' }
-    }
-
-    // Both HTTPS and HTTP/2 over TLS servers are TLS servers, whether `factory` or its `serverFactory` built them.
-    const scheme = server instanceof TLSServer ? 'https' : 'http'
-
-    return { host: bound.address, port: bound.port, path: '', origin: originOf(scheme, bound.address, bound.port) }
+    return serverAddress(this.#fastify.server)
   }
 
   request(input: string | URL | Request, options?: RequestInit): Promise<Response> {
-    return fetchInProcess(this.#fastify, input, options)
+    return fetchInProcess(options => this.#fastify.inject(options), input, options)
   }
 
   /** As {@link request}: the server listens itself, so a request handed to it here has no connection to keep. */
@@ -827,36 +741,4 @@ function assertRouteFeaturesInstalled(
         .build(),
     )
   }
-}
-
-/** Keeps in `open` what `server` hands over on `event`, until it closes. */
-function keepOpen<T extends EventEmitter>(server: Server, event: string, open: Set<T>): void {
-  server.on(event, (item: T) => {
-    open.add(item)
-    item.once('close', () => open.delete(item))
-  })
-}
-
-/**
- * Calls `fn` once Node has polled for I/O at least once more, so that what a socket had received when this was called
- * has been read. Node polls between two runs of its `setImmediate` callbacks.
- */
-function afterIO(fn: () => void): void {
-  setImmediate(() => setImmediate(fn))
-}
-
-/**
- * `0.0.0.0` and `::` are addresses to accept connections on, not addresses to dial, so an origin built from
- * them is not reliably reachable. Both map to their loopback equivalent; IPv6 is bracketed.
- */
-function originOf(scheme: 'http' | 'https', host: string, port: number): string {
-  if (host === '0.0.0.0') {
-    return `${scheme}://127.0.0.1:${port}`
-  }
-
-  if (host === '::' || host === '::1') {
-    return `${scheme}://[::1]:${port}`
-  }
-
-  return host.includes(':') ? `${scheme}://[${host}]:${port}` : `${scheme}://${host}:${port}`
 }
