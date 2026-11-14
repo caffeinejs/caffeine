@@ -12,6 +12,7 @@ import type {
 import { normalizeBasePath } from './base_path.js'
 import { boundTo, kBindTo } from './binding.js'
 import { ErrConfiguration } from './core/error/common.js'
+import type { HookBatch } from './core/lifecycle/batch.js'
 import type { RouteGroupCompiler, RouteGroupMeta } from './core/routing/compile.js'
 import { kCompleteInventory, kRecordServer, type RouteInventory } from './core/routing/inventory.js'
 import type { Router } from './core/routing/programmatic/programmatic.js'
@@ -123,7 +124,8 @@ export class ServerSet<T extends IAdapterTypes> {
 
     // Its own `.with(...)` factories, in the order they were written. The adapter installs the framework's head
     // slots ahead of them.
-    const root = await slot.during(() => registerPlugins<T>(definition.plugins, context))
+    const where = definition.name === undefined ? "on the application's own server" : `on listener "${definition.name}"`
+    const root = await slot.during(() => registerPlugins<T>(definition.plugins, context, slot, where))
 
     // What the plugins mounted: those routers' own plugins first, since they may nest more, then the groups. A group
     // the application already serves on this server is served once, as a router mounted twice in one place is.
@@ -229,20 +231,30 @@ function serverContext(base: HTTPSetupContext, name: string | undefined, app: Pl
 
 /**
  * Runs a server's `.with(...)` factories in the order written: an `HTTPPlugin` registers in its slot, and anything
- * else is the adapter's to install, after the head slots.
+ * else is the adapter's to install, after the head slots. The hooks each entry added keep its place in the list.
  */
 async function registerPlugins<T extends IAdapterTypes>(
   factories: readonly AdapterExtensionFactory<T['extension'] | HTTPPlugin<T>, unknown, T>[],
   context: HTTPSetupContext,
-): Promise<T['extension'][]> {
-  const root: T['extension'][] = []
+  slot: PluginSlot,
+  where: string,
+): Promise<(T['extension'] | HookBatch)[]> {
+  const root: (T['extension'] | HookBatch)[] = []
 
   for (const factory of factories) {
-    const extension = await factory(context as HTTPSetupContext<unknown, T>)
+    const { batch, extension } = await slot.run(
+      factory as (
+        context: HTTPSetupContext,
+      ) => T['extension'] | HTTPPlugin<T> | Promise<T['extension'] | HTTPPlugin<T>>,
+      context,
+      where,
+    )
 
-    if (extension instanceof HTTPPlugin) {
-      await extension.register(context)
-    } else {
+    if (!batch.empty) {
+      root.push(batch)
+    }
+
+    if (!(extension instanceof HTTPPlugin)) {
       root.push(extension)
     }
   }

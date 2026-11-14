@@ -215,6 +215,30 @@ describe('MiddlewarePipeline', () => {
     expect(() => pipeline.add(undefined, first)).toThrow('the application is already started')
   })
 
+  // The engine runs the context form itself; only a Node middleware has none, and runs through the platform.
+  it('hands the context form of every middleware but a Node one', () => {
+    const nodeForm: NodeMiddleware = (_req, _res, next) => next()
+    const fn: MiddlewareFn = (_ctx, next) => next()
+    const instance: Middleware = { handle: (_ctx, next) => next() }
+    const fromFactory = (): MiddlewareFn => fn
+
+    const resolved = new MiddlewarePipeline()
+      .add(undefined, nodeForm)
+      .add(undefined, fn)
+      .add(undefined, instance)
+      .addFactory(undefined, fromFactory)
+      .resolve(setupContext())
+
+    expect(resolved.map(middleware => typeof middleware.handle)).toEqual([
+      'undefined',
+      'function',
+      'function',
+      'function',
+    ])
+    expect(resolved[1]!.handle).toBe(fn)
+    expect(resolved[3]!.handle).toBe(fn)
+  })
+
   it('runs a middleware factory once at install with the setup context', async () => {
     const config = { origin: 'from-config' }
     let factoryRuns = 0

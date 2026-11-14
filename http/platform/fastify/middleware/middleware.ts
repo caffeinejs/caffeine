@@ -4,11 +4,13 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { ErrConfiguration } from '../../../core/error/common.js'
-import type { MiddlewarePath, Next } from '../../../core/middleware/middleware.js'
+import type { Next } from '../../../core/middleware/middleware.js'
+import type { PathFlags } from '../../../core/middleware/path.js'
 import type { ResolvedMiddleware } from '../../../core/middleware/pipeline.js'
 import { rawContext } from '../../../core/middleware/raw_context.js'
+import { sendFailed } from '../lifecycle/lifecycle.js'
 import { protocolOf } from '../protocol.js'
-import { type Engine, type NormalizationOptions, createEngine } from './_engine.js'
+import { type Engine, createEngine } from './_engine.js'
 
 /**
  * Where a middleware runs under the Fastify adapter: one of Fastify's request-lifecycle hooks.
@@ -86,6 +88,12 @@ export function installMiddlewares(server: FastifyInstance, resolved: readonly R
 
     if (HOOKS_WITH_PAYLOAD.has(hook)) {
       server.addHook(hook as 'onSend', (request, reply, _payload, done) => {
+        // Once an onSend hook failed, its 500 goes out as written: no later onSend runs over it.
+        if (hook === 'onSend' && sendFailed(request)) {
+          done()
+          return
+        }
+
         run(request, reply, done)
       })
     } else {
@@ -94,51 +102,6 @@ export function installMiddlewares(server: FastifyInstance, resolved: readonly R
       })
     }
   }
-}
-
-/**
- * A router's or a controller's middleware with each relative path rebased under `base`, that scope's full path:
- * `/jobs` added by a router at `/admin` matches `/admin/jobs`. A middleware with no path covers every route of the
- * scope already, and keeps none.
- *
- * A named parameter in `base` is kept and its regular expression dropped, which only widens a prefix the route
- * itself still checks.
- *
- * @throws ErrConfiguration when a path would be rebased under a wildcard or an optional parameter: neither has a
- *   prefix form.
- */
-export function rebaseMiddlewares(base: string, middlewares: readonly ResolvedMiddleware[]): ResolvedMiddleware[] {
-  return middlewares.map(middleware =>
-    middleware.path === undefined ? middleware : { ...middleware, path: rebase(base, middleware.path) },
-  )
-}
-
-function rebase(base: string, path: MiddlewarePath): MiddlewarePath {
-  // `:name(regex)` reads as `:name` to the engine; nothing else in a Fastify path differs from it but these two.
-  const prefix = base.replace(/:(\w+)\([^/]*\)/g, ':$1')
-
-  if (/[*?]/.test(prefix)) {
-    throw new ErrConfiguration(
-      errMessage(
-        `Cannot add middleware "${String(path)}" under "${base}": a relative path cannot start from a wildcard or ` +
-          'an optional parameter',
-      )
-        .solutions(
-          'Leave the path out, so the middleware covers every route of the router',
-          'Or register it on the application with an absolute path, ".use(path, ...)"',
-        )
-        .reference('@caffeinejs/http', ErrConfiguration)
-        .build(),
-    )
-  }
-
-  // `use('/')` joins to `/admin/`, which the engine reads as `/admin`, as it reads a trailing slash on any prefix.
-  const join = (relative: string): string => {
-    const rooted = relative.startsWith('/') ? relative : `/${relative}`
-    return `${prefix}${rooted}`
-  }
-
-  return typeof path === 'string' ? join(path) : path.map(join)
 }
 
 function toHook(hook: string | undefined): MiddlewareHook {
@@ -157,10 +120,10 @@ function toHook(hook: string | undefined): MiddlewareHook {
   )
 }
 
-function normalizationOptions(server: FastifyInstance): NormalizationOptions {
+function normalizationOptions(server: FastifyInstance): PathFlags {
   const config = server.initialConfig
   // find-my-way reads `useSemicolonDelimiter` from its options, but its types do not declare it.
-  const router: NormalizationOptions = config.routerOptions ?? {}
+  const router: PathFlags = config.routerOptions ?? {}
 
   return {
     ignoreDuplicateSlashes: router.ignoreDuplicateSlashes ?? config.ignoreDuplicateSlashes,

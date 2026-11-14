@@ -820,3 +820,70 @@ describe('what one unauthenticated request can cost', () => {
     })
   })
 })
+
+describe('onError hooks on Fastify', () => {
+  class ErrOther extends Error {}
+
+  @Catch(ErrOther)
+  class OtherHandler implements ErrorHandler<ErrOther> {
+    handle(ctx: IContext): void {
+      ctx.status(409).body({ other: true })
+    }
+  }
+
+  // A route a group's Fastify plugin registered was compiled by no one: it has no list of its own, and runs the
+  // application's onError hooks rather than none.
+  it("runs the application's onError for a route a group's Fastify plugin registered", async () => {
+    let calls = 0
+    const app = createWebApplication()
+      .hook('onError', () => {
+        calls += 1
+      })
+      .mount(
+        newRouter('/group')
+          .catchBy([OtherHandler])
+          .with(() => async (instance: { get(path: string, handler: () => never): void }) => {
+            instance.get('/raw', () => {
+              throw new Error('raw')
+            })
+          })
+          .get('/', () => 'compiled'),
+      )
+
+    try {
+      await app.bootstrap()
+      const res = await app.request('/raw')
+
+      expect(res.status).toBe(500)
+      expect(calls).toBe(1)
+    } finally {
+      await app.close()
+    }
+  })
+
+  // A group's handler that declines falls back to the global one: both start the error, and onError runs once.
+  it('runs onError once when the group handler falls back to the global one', async () => {
+    let calls = 0
+    const app = createWebApplication()
+      .hook('onError', () => {
+        calls += 1
+      })
+      .mount(
+        newRouter('/declining')
+          .catchBy([OtherHandler])
+          .get('/', () => {
+            throw new Error('boom')
+          }),
+      )
+
+    try {
+      await app.bootstrap()
+      const res = await app.request('/declining')
+
+      expect(res.status).toBe(500)
+      expect(calls).toBe(1)
+    } finally {
+      await app.close()
+    }
+  })
+})

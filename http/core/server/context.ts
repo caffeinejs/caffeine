@@ -14,17 +14,23 @@ import type { ProblemEncoder } from '../error/encode.js'
 import type { GlobalErrorHandlerOptions } from '../error/error.js'
 import type { ErrorHandlerProvider } from '../error/handler.js'
 import { newProblem } from '../error/problem.js'
-import { isThenable } from '../lifecycle/lifecycle.js'
+import { isThenable, type RequestHookName, type SendPayload } from '../lifecycle/lifecycle.js'
+import type { RouteDefinition } from '../lifecycle/route_definition.js'
+import type { Next, NodeMiddleware } from '../middleware/middleware.js'
+import { normalizePath, sanitizeURL } from '../middleware/path.js'
 import type { AuthenticationState } from '../security/auth/authentication_state.js'
 import type { Principal } from '../security/identity.js'
-import { isHopByHop, shapeAnswer } from './answer.js'
+import { isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
 import { configurationError, sendProblem, USE_FASTIFY } from './error.js'
-import type { SendPayload, ServerPlatform } from './platform.js'
+import type { ServerPlatform } from './platform.js'
 import { parseQuery } from './query.js'
 import type { ResolvedServerSettings } from './settings.js'
 
 /** What every context of one server shares. Built once per server by `HTTPServer`. */
-export interface ServerShared extends Pick<ResolvedServerSettings, 'application' | 'trustProxy' | 'requestIDHeader'> {
+export interface ServerShared extends Pick<
+  ResolvedServerSettings,
+  'application' | 'trustProxy' | 'requestIDHeader' | 'router'
+> {
   readonly store: ConfigStore<unknown>
   readonly logger: Logger
   readonly errors: ErrorHandlerProvider
@@ -37,7 +43,7 @@ export interface EngineContextTypes extends IAdapterTypes {
   instance: unknown
   request: unknown
   extension: never
-  hook: never
+  hook: RequestHookName
   raw: Request
   cookieOptions: CookieSerializeOptions
   asyncCookies: true
@@ -73,8 +79,10 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   readonly #basePath: string
   readonly #params: Params
   readonly #query: string
+  readonly #route: RouteDefinition | undefined
 
   #req?: ContextRequest
+  #normalized?: { path: string; error: Error | undefined }
   #context?: IContextPlatform
   #state?: ContextState
   #config?: ConfigSnapshot<Record<never, never>>
@@ -87,6 +95,9 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   #expired = false
   #onAnswered: (() => void) | undefined
   #connectionFields = false
+  /** While `onSend` runs: the status and headers may still be written. */
+  #sending = false
+  #outside = false
 
   #signal?: AbortController
   #abortReason?: Error
@@ -102,6 +113,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     basePath: string,
     params: Params,
     query: string,
+    route: RouteDefinition | undefined,
   ) {
     this.#shared = shared
     this.#platform = platform
@@ -113,6 +125,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     this.#basePath = basePath
     this.#params = params
     this.#query = query
+    this.#route = route
   }
 
   get req(): ContextRequest {
@@ -165,6 +178,16 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   /** @see {@link IContext.sent} */
   get sent(): boolean {
     return this.#answered
+  }
+
+  /** @see {@link IContext.route} */
+  get route(): RouteDefinition | undefined {
+    return this.#route
+  }
+
+  /** The request path as the router matches it, computed once: what a path-scoped middleware is matched against. */
+  normalizedPath(): { path: string; error: Error | undefined } {
+    return (this.#normalized ??= normalizePath(sanitizeURL(this.#url), this.#shared.router))
   }
 
   /** What the route declared lives on the route itself; there is no adapter config to hand out. */
@@ -339,6 +362,76 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     this.#expired = true
   }
 
+  /** Opens the `onSend` window: the status and headers may be written again, a body still may not. */
+  openSending(): void {
+    this.#sending = true
+  }
+
+  closeSending(): void {
+    this.#sending = false
+  }
+
+  /** Puts what `onSend` returned in place of the payload. A new payload's length is the engine's to write again. */
+  replacePayload(payload: SendPayload): void {
+    if (payload !== this.#payload) {
+      delete this.#headers['content-length']
+    }
+
+    this.#payload = payload
+  }
+
+  /**
+   * Takes the answer back, so the request can be answered again: what a failed `onSend` is answered over. What described
+   * the answer it replaces goes with it; the rest of the head, `Vary` and CORS among it, stays.
+   */
+  reopen(): void {
+    this.#payload = undefined
+    this.#answered = false
+    for (const name of REPRESENTATION_HEADERS) {
+      delete this.#headers[name]
+    }
+  }
+
+  /** Sets what `req.url` reads while a middleware mounted under a path runs; `undefined` restores the request's own. */
+  mount(url: string | undefined): void {
+    this.req.mount(url)
+  }
+
+  /** Runs a Node middleware through the platform. See {@link ServerPlatform.runNodeMiddleware}. */
+  runNodeMiddleware(fn: NodeMiddleware, url: string, next: Next, answered: () => void): void {
+    const req = this.req
+
+    this.#platform.runNodeMiddleware!(
+      this.#native,
+      fn,
+      url,
+      {
+        id: req.id,
+        hostname: req.host,
+        protocol: req.protocol,
+        ip: this.remoteAddress,
+        query: req.query() as Record<string, string | string[]>,
+      },
+      next,
+      () => {
+        this.answeredOutside()
+        answered()
+      },
+    )
+  }
+
+  /** A Node middleware ended the response itself: the request is answered, and the engine sends nothing. */
+  answeredOutside(): void {
+    this.#outside = true
+    this.#responded = true
+    this.#markAnswered()
+  }
+
+  /** Whether a Node middleware ended the response itself. */
+  get outside(): boolean {
+    return this.#outside
+  }
+
   /** Calls `callback` once the request is answered, at once if it already is. */
   onAnswered(callback: () => void): void {
     if (this.#answered) {
@@ -377,6 +470,8 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   #markAnswered(): void {
     this.#answered = true
+    // An answer ends a mounted middleware's view: what runs after it sees the request's own URL.
+    this.#req?.mount(undefined)
     const callback = this.#onAnswered
     this.#onAnswered = undefined
     callback?.()
@@ -384,7 +479,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   // A write once the request is answered cannot reach the answer: it is final at `ctx.body`, as on Fastify.
   #late(method: string): boolean {
-    if (!this.#answered) {
+    if (!this.#answered || this.#sending) {
       return false
     }
 
@@ -472,6 +567,7 @@ export class ContextRequest implements IRequest<
   #requestID?: string
   #trusted?: boolean
   #raw?: Request
+  #mounted?: string
 
   constructor(
     shared: ServerShared,
@@ -512,8 +608,14 @@ export class ContextRequest implements IRequest<
     return this.#requestID
   }
 
+  /** The URL as routed; while a middleware mounted under a path runs, the rest of it, as that middleware is mounted. */
   get url(): string {
-    return this.#url
+    return this.#mounted ?? this.#url
+  }
+
+  /** See {@link Context.mount}. */
+  mount(url: string | undefined): void {
+    this.#mounted = url
   }
 
   get basePath(): string {

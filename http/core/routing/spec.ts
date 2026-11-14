@@ -7,6 +7,8 @@ import type { Duration } from '@caffeinejs/std/duration'
 import type { AdapterExtensionFactory } from '../../adapter.js'
 import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
+import type { RequestHookName } from '../lifecycle/lifecycle.js'
+import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 
 /**
  * A group of routes, as authored. Inert: it describes routes, it does not know how any of them is called.
@@ -31,6 +33,10 @@ export interface RouteGroupSpec<R> {
   guards?: InjectionToken<Guard>[]
   /** A controller's `@Use(...)` factories, in the order written. */
   plugins?: AdapterExtensionFactory<unknown>[]
+  /** Hooks covering every route of the group, in the order written. */
+  hooks?: AuthoredHooks
+  /** A controller's methods that are hooks, `@OnRequest()` and its siblings, with the point each runs at. */
+  methodHooks?: Array<[RequestHookName, string | symbol]>
   /** What labelled the group, keyed by whoever reads it: which server serves it, for one. */
   labels?: Map<symbol, unknown>
 }
@@ -61,6 +67,8 @@ export interface RouteSpec<R> {
   detail?: RouteDetail
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
+  /** Hooks for this route alone, in the order written. */
+  hooks?: AuthoredHooks
 }
 
 /** The function a route ultimately calls, with the picked arguments spread into it. */

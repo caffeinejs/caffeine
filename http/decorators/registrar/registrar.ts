@@ -1,10 +1,12 @@
 import type { Ctor } from '@caffeinejs/di'
 
+import type { RequestHookName } from '../../core/lifecycle/lifecycle.js'
 import { RouteBuilder, RouteGroupBuilder } from '../../core/routing/builder.js'
 
 const RouteGroupRegistry = new WeakMap<Function, RouteGroupBuilder>()
 const RouteRegistry = new WeakMap<object, Map<string | symbol, RouteBuilder>>()
 const ControllerErrorHandlerRegistry = new WeakMap<object, Array<[Ctor<Error>, string | symbol]>>()
+const ControllerHookRegistry = new WeakMap<object, Array<[RequestHookName, string | symbol]>>()
 
 // Registers a controller method as the handler for the given error types. Duplicate detection is
 // deferred to build (buildRouting) — throwing here would run at class-decoration time and break
@@ -19,6 +21,23 @@ export function configureControllerErrorHandler(ctx: ClassMethodDecoratorContext
   for (const error of errors) {
     list.push([error, ctx.name])
   }
+}
+
+/** The decorator that adds a hook at `point`: `onRequest` is `OnRequest`. */
+export function hookDecoratorName(point: RequestHookName): string {
+  return point[0].toUpperCase() + point.slice(1)
+}
+
+// Registers a controller method as a hook at `point` for every route of the controller. A method that is also a route
+// is refused at build, as `@Catch` methods are: throwing here would break module import.
+export function configureControllerHook(ctx: ClassMethodDecoratorContext, point: RequestHookName) {
+  let list = ControllerHookRegistry.get(ctx.metadata)
+  if (!list) {
+    list = []
+    ControllerHookRegistry.set(ctx.metadata, list)
+  }
+
+  list.push([point, ctx.name])
 }
 
 export function configureRoute(ctx: ClassMemberDecoratorContext, mut: (spec: RouteBuilder) => void) {
@@ -76,6 +95,11 @@ export function configureRouteGroupAndRegisterRoutes(
     const errorHandlers = ControllerErrorHandlerRegistry.get(ctx.metadata)
     if (errorHandlers?.length) {
       cur.errorHandlers(errorHandlers)
+    }
+
+    const hooks = ControllerHookRegistry.get(ctx.metadata)
+    if (hooks?.length) {
+      cur.methodHooks(hooks)
     }
 
     mut(cur)

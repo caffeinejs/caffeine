@@ -171,7 +171,7 @@ describe('an application on an adapter that is not Fastify', () => {
 
     await app.bootstrap()
 
-    const root = (adapter.input?.extensions.root() ?? []).map(entry => entry.unit)
+    const root = (adapter.input?.extensions.root() ?? []).map(entry => (entry as FakeUnit).unit)
 
     expect(root).toEqual(['first', 'third'])
     expect(adapter.middlewares.map(middleware => middleware.hook)).toEqual(['after'])

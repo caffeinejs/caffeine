@@ -16,26 +16,39 @@ import { defineConfig } from 'vitest/config'
 // - _tests/request_host.test.ts -> core/server/context.test.ts, platform/node/platform.test.ts
 // - platform/fastify/context.test.ts (signal, id) -> platform/node/platform.test.ts, core/server/context.test.ts
 // - core/listener/_tests/tls.test.ts -> platform/node/node.test.ts
+// - core/middleware/pipeline.test.ts -> core/middleware/chain.test.ts, platform/node/platform.test.ts (Node middleware)
+// - _tests/http_plugin.test.ts (a Fastify plugin's slot) -> plugin_slot.test.ts, servers.test.ts, _tests/hooks.test.ts
+// - core/middleware/middleware.test.ts -> core/middleware/chain.test.ts, core/server/hooks.test.ts,
+//   core/server/server.test.ts (HTTPServer middleware), platform/node/platform.test.ts (Node middleware)
+// - _tests/http_plugin_controller.test.ts -> decorators/hooks.test.ts, core/routing/decorated.test.ts,
+//   core/server/hooks.test.ts (a router plugin's middleware)
+// - _tests/context_platform.test.ts -> platform/node/platform.test.ts (ctx.platform on Node)
+// - core/listener/_tests/{decorated,plugins,routers}.test.ts -> core/listener/listener.test.ts,
+//   core/server/adapter.test.ts (a listener's own routes and plugins)
 //
 // Not yet on Node, each with what keeps it off:
 // - _tests/body_limit.test.ts: reads a body, declares a schema or a @BodyLimit, which the engine refuses
-// - _tests/context_platform.test.ts: installs middleware, which the engine refuses
-// - _tests/context_variables.test.ts: installs middleware, which the engine refuses
+// - _tests/context_platform.test.ts: reads Fastify's ctx.platform.request and ctx.platform.reply
 // - _tests/create_web_application.test.ts: reads a Fastify-only member of app.instance
 // - _tests/fetch.test.ts: reads a Fastify-only member of app.instance
 // - _tests/graceful_shutdown.test.ts: needs healthProbes(), not on the Node entry yet
 // - _tests/health_collision.test.ts: needs healthProbes(), not on the Node entry yet
 // - _tests/health.test.ts: needs healthProbes(), not on the Node entry yet
+// - _tests/http_plugin.test.ts: installs a Fastify plugin with .with(...)
+// - _tests/http_plugin_controller.test.ts: installs a Fastify plugin with @Use(...)
 // - _tests/lifecycle.test.ts: expects request() to reject after close(); the engine answers a plain 503
 // - _tests/programmatic_router_parity.test.ts: needs authentication(), not on the Node entry yet
 // - _tests/query_method.test.ts: reads a body, declares a schema or a @BodyLimit, which the engine refuses
 // - _tests/register_router.test.ts: needs authentication(), not on the Node entry yet
-// - _tests/response_bodies.test.ts: installs middleware, which the engine refuses
 // - _tests/router_query_method.test.ts: reads a body, declares a schema or a @BodyLimit, which the engine refuses
 // - _tests/versioning_decorated.test.ts: needs constraints(), not on the Node entry yet
 // - _tests/versioning.test.ts: needs constraints(), not on the Node entry yet
 // - core/health/health.test.ts: needs healthProbes(), not on the Node entry yet
+// - core/listener/_tests/decorated.test.ts: passes Fastify's { listener } settings
 // - core/listener/_tests/health.test.ts: needs healthProbes(), not on the Node entry yet
+// - core/listener/_tests/plugins.test.ts: passes Fastify's { listener } settings
+// - core/listener/_tests/routers.test.ts: passes Fastify's { listener } settings
+// - core/middleware/middleware.test.ts: installs a Fastify plugin, and passes Fastify's { factory } settings
 // - core/security/_tests/authentication_gate_registration.test.ts: needs authentication(), not on the Node entry yet
 // - core/security/_tests/authentication_gate.test.ts: needs authentication(), not on the Node entry yet
 // - core/security/_tests/authorization_installation.test.ts: needs authentication(), not on the Node entry yet
@@ -79,15 +92,20 @@ export default defineConfig({
     name: 'http (node)',
     pool: 'threads',
     include: [
+      'core/routing/decorated.test.ts',
+      'decorators/hooks.test.ts',
       '_tests/args_builder.test.ts',
       '_tests/attachment.prop.test.ts',
       '_tests/attachment.test.ts',
       '_tests/context_headers.test.ts',
+      '_tests/context_variables.test.ts',
       '_tests/header.test.ts',
+      '_tests/hooks.test.ts',
       '_tests/http_plugin_controller_mount.test.ts',
       '_tests/not_found_catch.test.ts',
       '_tests/prefix.test.ts',
       '_tests/redirect.test.ts',
+      '_tests/response_bodies.test.ts',
       '_tests/status.test.ts',
       '_tests/timeout.test.ts',
       '_tests/versioning_decorated_prefix.test.ts',
@@ -103,6 +121,7 @@ export default defineConfig({
       'core/error/serializer.test.ts',
       'core/routing/inventory.test.ts',
       'core/security/_tests/route_scheme_assert.test.ts',
+      'plugin.test.ts',
       'response.test.ts',
     ],
     environment: 'node',

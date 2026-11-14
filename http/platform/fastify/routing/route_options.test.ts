@@ -78,3 +78,17 @@ describe('addRouteHook', () => {
     expect(routeDef.onSend).toBeUndefined()
   })
 })
+
+describe('addRouteHook — the points the lifecycle maps onto', () => {
+  // A route's preHandler and onResponse hooks go to their own slots, appended as onRequest's are.
+  it('appends to preHandler and onResponse', () => {
+    const routeDef = newRouteDef()
+
+    addRouteHook(routeDef, 'preHandler', a as never)
+    addRouteHook(routeDef, 'preHandler', b as never)
+    addRouteHook(routeDef, 'onResponse', c as never)
+
+    expect(routeDef.preHandler).toEqual([a, b])
+    expect(routeDef.onResponse).toBe(c)
+  })
+})

@@ -8,9 +8,8 @@ import { Responder } from '../../response.js'
 import type { VaryReply } from '../../vary.js'
 import { ErrCaffeineWebApplication } from '../error/common.js'
 import { withCharset } from '../error/encode.js'
-import { isThenable } from '../lifecycle/lifecycle.js'
+import { isThenable, type SendPayload } from '../lifecycle/lifecycle.js'
 import type { Context } from './context.js'
-import type { SendPayload } from './platform.js'
 
 // RFC 9110 §7.6.1: fields that describe one connection, never forwarded. A Node server writes its own, and HTTP/2
 // refuses `connection` outright.
@@ -28,6 +27,19 @@ const HOP_BY_HOP = new Set([
 // The codings `fetch` decodes, leaving `Content-Encoding` and the encoded `Content-Length` on the body it decoded:
 // `zstd` only where the bundled undici, from 7.11, and zlib both decode it (Node 24, not Node 22).
 const DECODED_BY_FETCH = new Set(['gzip', 'x-gzip', 'deflate', 'br', ...(fetchDecodesZstd() ? ['zstd'] : [])])
+
+/** The headers that describe an answer's body, which an answer put in its place must not carry over. */
+export const REPRESENTATION_HEADERS: readonly string[] = [
+  'content-type',
+  'content-length',
+  'content-encoding',
+  'content-language',
+  'content-location',
+  'content-range',
+  'content-disposition',
+  'etag',
+  'last-modified',
+]
 
 /** What answer shaping writes to: Fastify's reply and the engine's Context both fit. `header` replaces a value, except `set-cookie`, which gains one. */
 export interface AnswerTarget extends VaryReply {

@@ -10,6 +10,7 @@ import type { CookieSerializeOptions } from '../../core/cookie/options.js'
 import type { CookieSecret, CookieUnsignResult } from '../../core/cookie/signer.js'
 import { ErrConfiguration } from '../../core/error/common.js'
 import { newProblem } from '../../core/error/problem.js'
+import type { RouteDefinition } from '../../core/lifecycle/route_definition.js'
 import type { RouteValidationSchema } from '../../core/routing/spec.js'
 import type { AuthenticationState } from '../../core/security/auth/authentication_state.js'
 import { type Principal } from '../../core/security/identity.js'
@@ -96,6 +97,12 @@ export class Context<
   /** @see {@link IContext.sent} */
   get sent(): boolean {
     return this.#answered || this.#reply.sent
+  }
+
+  /** @see {@link IContext.route} */
+  get route(): RouteDefinition | undefined {
+    return (this.#fastifyRequest.routeOptions.config as Partial<FastifyContextConfig> | undefined)?.$caffeine?.compiled
+      ?.definition
   }
 
   /**

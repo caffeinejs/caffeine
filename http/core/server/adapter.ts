@@ -10,7 +10,9 @@ import type {
   IAdapterTypes,
   ServerAddress,
 } from '../../adapter.js'
-import type { IRouteGroup } from '../routing/route.js'
+import { HookBatch } from '../lifecycle/batch.js'
+import { rebaseMiddlewares } from '../middleware/path.js'
+import type { IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import { assertAuthorizationConfigured } from '../security/authz/index.js'
 import { assertAuthenticationConfigured, assertRouteSchemesResolve } from '../security/security.js'
 import { Context, type EngineContextTypes } from './context.js'
@@ -55,9 +57,17 @@ class FetchAdapter implements IAdapter<FetchAdapterTypes> {
       )
     }
 
-    return new FetchServer(
-      buildEngine(this.#container, this.#contextKey, input.routeGroups, input, resolveServerSettings(input.server)),
+    const engine = buildEngine(
+      this.#container,
+      this.#contextKey,
+      input.routeGroups,
+      input,
+      resolveServerSettings(input.server),
+      false,
     )
+    await engine.ready()
+
+    return new FetchServer(engine)
   }
 }
 
@@ -80,9 +90,10 @@ export function bindContext(container: Container): ContextKey<Context> {
 }
 
 /**
- * Builds the engine for one server: refuses server plugins and middleware, checks authentication and authorization,
- * registers the routes and records them.
+ * Builds the engine for one server: refuses a server plugin that is not an `HTTPPlugin`, checks authentication and
+ * authorization, registers the routes with their hooks and middleware, and records them.
  *
+ * @param nodeMiddleware - Whether the platform runs Node middleware; a Node middleware is refused otherwise.
  * @throws ErrConfiguration for what the engine cannot serve yet.
  */
 export function buildEngine<T extends IAdapterTypes>(
@@ -91,24 +102,32 @@ export function buildEngine<T extends IAdapterTypes>(
   routeGroups: IRouteGroup<Context>[],
   input: AdapterIn<T>,
   settings: ResolvedServerSettings,
+  nodeMiddleware: boolean,
 ): HTTPServer {
   const scopes = routeGroups.flatMap(group => group.scopes ?? [])
+  const batchesOf = (entries: readonly unknown[]): HookBatch[] => {
+    if (entries.some(entry => !(entry instanceof HookBatch))) {
+      throw configurationError(
+        `Cannot install a server plugin on the ${settings.application}: only an HTTPPlugin is supported yet`,
+        USE_FASTIFY,
+      )
+    }
 
-  if (input.extensions.root().length > 0 || scopes.some(scope => input.extensions.of(scope.key).length > 0)) {
-    throw configurationError(
-      `Cannot install a server plugin on the ${settings.application}: only an HTTPPlugin is supported yet`,
-      USE_FASTIFY,
-    )
+    return entries as HookBatch[]
   }
 
-  if (
-    input.middlewares.resolve(input.context).length > 0 ||
-    scopes.some(scope => input.extensions.middlewaresOf(scope.key).length > 0)
-  ) {
-    throw configurationError(
-      `Cannot install middleware on the ${settings.application}: it runs no middleware yet`,
-      USE_FASTIFY,
-    )
+  // Every scope a served group lists, checked before any route registers.
+  const root = { batches: batchesOf(input.extensions.root()), middlewares: input.middlewares.resolve(input.context) }
+  for (const scope of scopes) {
+    batchesOf(input.extensions.of(scope.key))
+  }
+
+  const levels = {
+    root,
+    of: (scope: RouteGroupScope) => ({
+      batches: input.extensions.of(scope.key) as HookBatch[],
+      middlewares: rebaseMiddlewares(scope.path, input.extensions.middlewaresOf(scope.key)),
+    }),
   }
 
   assertAuthenticationConfigured(container, routeGroups)
@@ -122,6 +141,8 @@ export function buildEngine<T extends IAdapterTypes>(
     container,
     contextKey: key,
     logger: input.context.logger,
+    levels,
+    nodeMiddleware,
   })
 
   input.recordRoutes(server.routes)

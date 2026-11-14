@@ -10,7 +10,9 @@ import type { Logger } from '@caffeinejs/application/logger'
 import type { IContextPlatform } from '../../adapter.js'
 import { ErrHTTPServiceUnavailable } from '../../core/error/http.js'
 import { isThenable } from '../../core/lifecycle/lifecycle.js'
-import type { ServerPlatform } from '../../core/server/platform.js'
+import { ErrNextCalledTwice } from '../../core/middleware/errors.js'
+import type { Next, NodeMiddleware } from '../../core/middleware/middleware.js'
+import type { NodeMiddlewareStamp, ServerPlatform } from '../../core/server/platform.js'
 import type { HTTPServer } from '../../core/server/server.js'
 
 /** The response of one request a Node server received, over HTTP/1.1 or HTTP/2. */
@@ -70,9 +72,91 @@ export function createNodePlatform(logger: Logger): NodePlatform {
         hooks.sent()
       }
     },
+    runNodeMiddleware,
   }
 
   return platform
+}
+
+/**
+ * Runs a Node middleware on the request with `url` as `req.url`, stamped with what a Node framework's middleware reads.
+ * The end is told as `signalOf` tells it, by `close`: `finish` is not reported for an in-process response before it
+ * closes, and is reported for an HTTP/2 stream the client cancelled.
+ */
+function runNodeMiddleware(
+  res: NodeResponse,
+  fn: NodeMiddleware,
+  url: string,
+  stamp: NodeMiddlewareStamp,
+  next: Next,
+  answered: () => void,
+): void {
+  const req = res.req as IncomingMessage & Record<string, unknown>
+  const own = req.url
+
+  // Kept when already set: the first middleware saw the URL as received.
+  req.originalUrl ??= own
+  req.id = stamp.id
+  req.hostname = stamp.hostname
+  req.protocol = stamp.protocol
+  req.ip = stamp.ip
+  req.query = stamp.query
+
+  // The answer has already left, as at `onResponse`: nothing the middleware does can answer the request. It runs, and
+  // the chain goes on once it returns, whatever it does with its own `next`.
+  if (res.writableEnded || destroyed(res)) {
+    req.url = url
+    try {
+      fn(req, res as ServerResponse, () => undefined)
+    } finally {
+      req.url = own
+    }
+    next()
+    return
+  }
+
+  let called = false
+  let ended = false
+
+  const onClose = (): void => {
+    if (!called) {
+      ended = true
+      answered()
+    }
+  }
+
+  // The middleware is done with the request: its URL back, and its end no longer the middleware's answer.
+  const release = (): void => {
+    called = true
+    req.url = own
+    ;(res as EventEmitter).off('close', onClose)
+  }
+
+  onceClose(res, onClose)
+  req.url = url
+
+  try {
+    fn(req, res as ServerResponse, err => {
+      if (called) {
+        throw new ErrNextCalledTwice()
+      }
+
+      release()
+
+      // An answer the middleware wrote stands, whatever it then hands on: the rest of the chain must not run over it.
+      if (!ended && (res.writableEnded || destroyed(res))) {
+        ended = true
+        answered()
+      } else if (!ended) {
+        next(err)
+      }
+    })
+  } catch (err) {
+    if (!called) {
+      release()
+    }
+    throw err
+  }
 }
 
 /**

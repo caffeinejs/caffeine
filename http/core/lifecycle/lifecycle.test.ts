@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
-import { andThen, callbackEntry, runHooks, type HookEntry } from './lifecycle.js'
+import { ErrConfiguration } from '../error/common.js'
+import {
+  andThen,
+  assertHookName,
+  callbackEntry,
+  isThenable,
+  REQUEST_HOOK_NAMES,
+  runAll,
+  runErrorHooks,
+  runHooks,
+  runSendHooks,
+  type ErrorEntry,
+  type HookEntry,
+  type SendEntry,
+} from './lifecycle.js'
 
 interface Ctx {
   sent: boolean
@@ -50,6 +64,14 @@ describe('runHooks', () => {
     const async = newCtx()
     await runHooks([step(1), c => Promise.resolve().then(() => void (c.sent = true)), step(3)], async)
     expect(async.log).toEqual([1])
+  })
+
+  // A request a timeout or a forced close already answered must not reach a hook that would act on it.
+  it('runs no entry on a request already answered', () => {
+    const ctx = { sent: true, log: [] as number[] }
+
+    expect(runHooks([step(1), step(2)], ctx)).toBe(undefined)
+    expect(ctx.log).toEqual([])
   })
 
   it('rejects with the error of an entry that throws after an asynchronous one', async () => {
@@ -108,5 +130,110 @@ describe('andThen', () => {
   it('hands a value on in the same tick and a thenable once it settles', async () => {
     expect(andThen(1, v => v + 1)).toBe(2)
     await expect(andThen(Promise.resolve(1), v => v + 1)).resolves.toBe(2)
+  })
+})
+
+describe('runSendHooks', () => {
+  const ctx = newCtx()
+
+  it('keeps the payload when an entry returns undefined', () => {
+    const keep: SendEntry<Ctx> = () => undefined
+
+    expect(runSendHooks([keep], ctx, 'body')).toBe('body')
+  })
+
+  // `null` is a payload of its own, no body, and must not read as "keep".
+  it('removes the body when an entry returns null', () => {
+    const drop: SendEntry<Ctx> = () => null
+
+    expect(runSendHooks([drop], ctx, 'body')).toBe(null)
+  })
+
+  it('settles without a promise when every entry is synchronous', () => {
+    const upper: SendEntry<Ctx> = (_ctx, payload) => (payload as string).toUpperCase()
+
+    const result = runSendHooks([upper, (_ctx, payload) => `${payload as string}!`], ctx, 'hi')
+
+    expect(isThenable(result)).toBe(false)
+    expect(result).toBe('HI!')
+  })
+
+  it('hands what an asynchronous entry resolves to on to the next', async () => {
+    const slow: SendEntry<Ctx> = (_ctx, payload) => Promise.resolve(`${payload as string}-1`)
+    const keep: SendEntry<Ctx> = () => Promise.resolve(undefined)
+
+    await expect(runSendHooks([slow, keep, (_ctx, payload) => `${payload as string}-2`], ctx, 'a')).resolves.toBe(
+      'a-1-2',
+    )
+  })
+})
+
+describe('runErrorHooks', () => {
+  const err = new Error('boom')
+
+  // onError observes every failure, including one after the answer was written.
+  it('runs every entry whether or not the request is answered', async () => {
+    const ctx = { sent: true, log: [] as number[] }
+    const seen: ErrorEntry<Ctx> = (c, e) => void c.log.push(e === err ? 1 : 0)
+
+    await runErrorHooks([seen, () => Promise.resolve(), seen], ctx, err, () => undefined)
+
+    expect(ctx.log).toEqual([1, 1])
+  })
+
+  // One broken observer must not silence the others: every onError hook sees every failure.
+  it('reports a throw and still runs the next entry', async () => {
+    const ctx = newCtx()
+    const failure = new Error('hook')
+    const failed: Error[] = []
+
+    void runErrorHooks<Ctx>(
+      [
+        () => {
+          throw failure
+        },
+        c => void c.log.push(2),
+      ],
+      ctx,
+      err,
+      e => failed.push(e),
+    )
+    await runErrorHooks<Ctx>([() => Promise.reject(failure), c => void c.log.push(3)], ctx, err, e => failed.push(e))
+
+    expect(failed).toEqual([failure, failure])
+    expect(ctx.log).toEqual([2, 3])
+  })
+})
+
+describe('runAll', () => {
+  // One failing onResponse hook must not keep the next from recording the request.
+  it('reports a throw and still runs the next entry', async () => {
+    const ctx = newCtx()
+    const failure = new Error('hook')
+    const failed: Error[] = []
+
+    await runAll<Ctx>(
+      [
+        () => {
+          throw failure
+        },
+        () => Promise.reject(failure),
+        step(3),
+      ],
+      ctx,
+      e => failed.push(e),
+    )
+
+    expect(failed).toEqual([failure, failure])
+    expect(ctx.log).toEqual([3])
+  })
+})
+
+describe('assertHookName', () => {
+  it('refuses a point that is not a hook, naming the ones that exist', () => {
+    expect(() => assertHookName('preValidation', REQUEST_HOOK_NAMES, 'on a route')).toThrow(ErrConfiguration)
+    expect(() => assertHookName('preValidation', REQUEST_HOOK_NAMES, 'on a route')).toThrow(
+      'Use one of "onRequest", "preHandler", "onSend", "onResponse", "onError"',
+    )
   })
 })

@@ -1,12 +1,15 @@
 import { errMessage } from '@caffeinejs/std/err'
 
-import type { WebApplicationOps } from './adapter.js'
+import type { HTTPSetupContext, WebApplicationOps } from './adapter.js'
 import { ErrConfiguration } from './core/error/common.js'
+import { HookBatch } from './core/lifecycle/batch.js'
+import { assertHookName, HOOK_NAMES, type HookFn, type HookName } from './core/lifecycle/lifecycle.js'
 import { parseUse } from './core/middleware/middleware.js'
 import { MiddlewarePipeline } from './core/middleware/pipeline.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
+import { HTTPPlugin } from './plugin.js'
 
-type Operation = 'mount' | 'use' | 'useFn'
+type Operation = 'mount' | 'use' | 'useFn' | 'hook' | 'hasPlugin'
 
 /**
  * `context.app` for one plugin slot. What is mounted is recorded in {@link mounted} for whoever owns the slot to
@@ -19,7 +22,11 @@ export class PluginSlot implements WebApplicationOps<any, any> {
 
   readonly #middlewares: MiddlewarePipeline<string>
   readonly #mountable: boolean
+  /** The names of the plugins claimed in this slot so far. */
+  readonly #names = new Set<string>()
   #open = false
+  /** Where `hook(...)` adds: the batch of the slot entry running now. */
+  #batch: HookBatch | undefined
 
   /** @param mountable - `false` for a controller's slot: a class has no children to nest routers under. */
   constructor(middlewares: MiddlewarePipeline<string> = new MiddlewarePipeline(), mountable = true) {
@@ -36,6 +43,83 @@ export class PluginSlot implements WebApplicationOps<any, any> {
     } finally {
       this.#open = false
     }
+  }
+
+  /**
+   * Runs one entry of the slot: the factory, and, when it produced an `HTTPPlugin`, its name claimed and its `register`.
+   * Resolves to the hooks the entry added, and to what the factory produced.
+   *
+   * @throws ErrConfiguration for a plugin name already claimed here.
+   */
+  async run<X>(
+    factory: (context: HTTPSetupContext) => X | Promise<X>,
+    context: HTTPSetupContext,
+    where: string,
+  ): Promise<{ readonly batch: HookBatch; readonly extension: X }> {
+    const batch = new HookBatch(context)
+    this.#batch = batch
+
+    try {
+      const extension = await factory(context)
+
+      if (extension instanceof HTTPPlugin) {
+        this.claim(extension, where)
+        await extension.register(context)
+      }
+
+      return { batch, extension }
+    } finally {
+      this.#batch = undefined
+    }
+  }
+
+  /**
+   * Records `plugin`'s name in this slot.
+   *
+   * @throws ErrConfiguration for an empty name, or one already claimed here.
+   */
+  claim(plugin: HTTPPlugin<any>, where: string): void {
+    const name = plugin.name
+
+    if (name === undefined) {
+      return
+    }
+
+    if (name === '') {
+      throw new ErrConfiguration(
+        errMessage(`Cannot register a plugin with an empty name ${where}`)
+          .solutions('Give it a name, or leave the name out')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    if (this.#names.has(name)) {
+      throw new ErrConfiguration(
+        errMessage(`Cannot register plugin "${name}" twice ${where}`)
+          .solutions(`Remove the second .with(...) that registers plugin "${name}" ${where}`)
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    this.#names.add(name)
+  }
+
+  hook<K extends HookName>(name: K, fn: HookFn<K, any, any>): this {
+    // Set only while an entry of an open slot runs.
+    if (this.#batch === undefined) {
+      throw slotClosed('hook')
+    }
+
+    assertHookName(name, HOOK_NAMES, 'with context.app.hook')
+    this.#batch.add(name, fn as HookFn<K>)
+    return this
+  }
+
+  hasPlugin(name: string): boolean {
+    this.#assertOpen('hasPlugin')
+    return this.#names.has(name)
   }
 
   mount(...routers: AnyRouter[]): this {

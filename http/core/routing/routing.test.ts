@@ -93,3 +93,33 @@ describe('route selection', () => {
     ])
   })
 })
+
+describe('route hooks', () => {
+  // The group's hooks wrap every route the same way; a route's own run inside them, last.
+  it("runs a route's own hooks after its group's, each handed the context", async () => {
+    const order: string[] = []
+    const group = new RouteGroupBuilder()
+      .path('/pets')
+      .hook('onRequest', () => void order.push('group'))
+      .routes([
+        new RouteBuilder()
+          .method('GET')
+          .path('/')
+          .handle(() => ({}))
+          .hook('onRequest', ctx => void order.push(`route:${String(ctx)}`)),
+      ])
+    const declaredGroup: DeclaredRouteGroup<unknown> = {
+      name: 'pets',
+      spec: group.toRouteGroup(),
+      meta: () => ({ name: 'pets' }),
+    }
+
+    const [compiled] = buildRouting([source(declaredGroup)], await container()).select(() => true)
+    const hooks = compiled.routes[0].hooks!.onRequest
+    for (const hook of hooks) {
+      await hook('req', 'ctx' as never)
+    }
+
+    expect(order).toEqual(['group', 'route:ctx'])
+  })
+})

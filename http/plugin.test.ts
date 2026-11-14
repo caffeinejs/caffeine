@@ -12,7 +12,7 @@ import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
-import { ErrConfiguration } from './index.js'
+import { ErrConfiguration, HTTPPlugin, Router } from './index.js'
 import { createWebApplication } from './platform/fastify/index.js'
 
 // A sentinel the feature's configurer binds into the container so a test can prove the feature rode
@@ -110,5 +110,38 @@ describe('WebApplication.with()', () => {
     expect(() => createWebApplication().with(undefined)).toThrow(
       'Cannot register an HTTP plugin: expected a plugin factory function, got undefined',
     )
+  })
+})
+
+describe('HTTPPlugin.name', () => {
+  class Named extends HTTPPlugin {
+    override readonly name = 'named'
+
+    register(): void {}
+  }
+
+  // A name is refused twice in one slot, not across slots: two routers may each want the same plugin.
+  it('allows one named plugin on each of two routers', async () => {
+    const app = createWebApplication()
+      .mount(new Router('/a').with(() => new Named()).get('/', () => 'a'))
+      .mount(new Router('/b').with(() => new Named()).get('/', () => 'b'))
+
+    try {
+      await app.bootstrap()
+      expect(await (await app.request('/b')).text()).toBe('b')
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('refuses one named plugin twice on one server', async () => {
+    const app = createWebApplication()
+      .with(() => new Named())
+      .with(() => new Named())
+
+    await expect(app.bootstrap()).rejects.toThrow(
+      `Cannot register plugin "named" twice on the application's own server`,
+    )
+    await app.close().catch(() => undefined)
   })
 })

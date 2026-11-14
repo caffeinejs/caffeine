@@ -46,7 +46,7 @@ export class ScopedPlugins<T extends IAdapterTypes> {
 
   /** Runs a controller's `@Use(...)` factories. Its plugins add middleware; they cannot mount. */
   async resolveController(key: Function, factories: readonly ScopeFactory[], context: HTTPSetupContext): Promise<void> {
-    await this.#resolve(key, factories, context, false)
+    await this.#resolve(key, factories, context, false, `on controller "${key.name}"`)
   }
 
   async #visit(state: RouterState, context: HTTPSetupContext): Promise<void> {
@@ -55,7 +55,10 @@ export class ScopedPlugins<T extends IAdapterTypes> {
     }
 
     this.#resolved.add(state)
-    this.#adopt(state, await this.#resolve(state, state.plugins, context, true))
+    this.#adopt(
+      state,
+      await this.#resolve(state, state.plugins, context, true, `on router "${state.name ?? state.path}"`),
+    )
 
     // After the router's own plugins, so the routers they mounted are visited too.
     for (const child of this.childrenOf(state)) {
@@ -69,6 +72,7 @@ export class ScopedPlugins<T extends IAdapterTypes> {
     factories: readonly ScopeFactory[],
     context: HTTPSetupContext,
     mountable: boolean,
+    where: string,
   ): Promise<readonly AnyRouter[]> {
     const middlewares = new MiddlewarePipeline()
     const slot = new PluginSlot(middlewares, mountable)
@@ -76,11 +80,14 @@ export class ScopedPlugins<T extends IAdapterTypes> {
 
     await slot.during(async () => {
       for (const factory of factories) {
-        const extension = await factory(scoped)
+        const { batch, extension } = await slot.run(factory, scoped, where)
 
-        if (extension instanceof HTTPPlugin) {
-          await extension.register(scoped)
-        } else {
+        // The hooks it added keep its place among the scope's plugins.
+        if (!batch.empty) {
+          this.extensions.add(batch, key)
+        }
+
+        if (!(extension instanceof HTTPPlugin)) {
           // Unchecked: the adapter refuses what it cannot install.
           this.extensions.add(extension as T['extension'], key)
         }

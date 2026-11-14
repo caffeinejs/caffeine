@@ -1,4 +1,5 @@
 import { once } from 'node:events'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { connect as http2Connect, constants as http2Constants } from 'node:http2'
 import { connect as netConnect, type Socket } from 'node:net'
 import { Readable } from 'node:stream'
@@ -8,6 +9,7 @@ import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { Next } from '../../core/middleware/middleware.js'
 import { $p } from '../../core/routing/picker.js'
 import { Args, Controller, Get } from '../../decorators/index.js'
 import { createWebApplication, newRouter } from './node.js'
@@ -537,5 +539,191 @@ describe('the Node platform', () => {
     apps.push(app)
 
     await expect(app.bootstrap()).rejects.toThrow('on the Node application')
+  })
+})
+
+describe('Node middleware', () => {
+  async function run(app: {
+    run(options: { host: string; port: number }): Promise<{ address: { origin: string } }>
+    close(): Promise<void>
+  }): Promise<string> {
+    apps.push(app)
+    const { address } = await app.run({ host: '127.0.0.1', port: 0 })
+    return address.origin
+  }
+
+  function latch(): { promise: Promise<void>; release: () => void } {
+    let release!: () => void
+    const promise = new Promise<void>(resolve => (release = resolve))
+    return { promise, release }
+  }
+
+  // Mounted under a path, a Node middleware sees the rest of the URL, as connect mounts it; the request gets its own
+  // URL back once it calls next.
+  it('hands a mounted middleware the rest of the URL and gives it back', async () => {
+    const seen: string[] = []
+    const origin = await run(
+      createWebApplication()
+        .use('/admin', (req: IncomingMessage, _res: ServerResponse, next: Next) => {
+          seen.push(req.url!)
+          next()
+        })
+        .mount(newRouter('/admin').get('/users', ctx => ctx.platform.incoming.url ?? '')),
+    )
+
+    const res = await fetch(`${origin}/admin/users?page=2`)
+
+    expect(seen).toEqual(['/users?page=2'])
+    expect(await res.text()).toBe('/admin/users?page=2')
+  })
+
+  // A middleware that answers on the response itself ends the request: nothing more is written, no onSend runs over
+  // what it sent, and onResponse still sees the request end.
+  it('answers the request when a middleware ends the response itself', async () => {
+    const onSend = vi.fn()
+    const ended = latch()
+    const origin = await run(
+      createWebApplication()
+        .use((_req: IncomingMessage, res: ServerResponse, _next: Next) => {
+          res.statusCode = 401
+          res.end('no')
+        })
+        .hook('onSend', onSend)
+        .hook('onResponse', () => ended.release())
+        .mount(newRouter('/x').get('/', () => 'handler')),
+    )
+
+    const res = await fetch(`${origin}/x`)
+
+    expect(res.status).toBe(401)
+    expect(await res.text()).toBe('no')
+    await ended.promise
+    expect(onSend).toHaveBeenCalledTimes(0)
+  })
+
+  // An answer the middleware wrote stands even when it calls next anyway: the handler behind it must not run.
+  it('runs no handler after a middleware ended the response and called next', async () => {
+    let handled = 0
+    const origin = await run(
+      createWebApplication()
+        .use((_req: IncomingMessage, res: ServerResponse, next: Next) => {
+          res.statusCode = 401
+          res.end('no')
+          next()
+        })
+        .mount(
+          newRouter('/x').get('/', () => {
+            handled += 1
+            return 'handler'
+          }),
+        ),
+    )
+
+    const res = await fetch(`${origin}/x`)
+
+    expect(res.status).toBe(401)
+    expect(await res.text()).toBe('no')
+    expect(handled).toBe(0)
+  })
+
+  it('keeps the headers a middleware set on the response', async () => {
+    const origin = await run(
+      createWebApplication()
+        .use((_req: IncomingMessage, res: ServerResponse, next: Next) => {
+          res.setHeader('x-frame-options', 'DENY')
+          next()
+        })
+        .mount(newRouter('/x').get('/', () => 'x')),
+    )
+
+    const res = await fetch(`${origin}/x`)
+
+    expect(res.headers.get('x-frame-options')).toBe('DENY')
+    expect(await res.text()).toBe('x')
+  })
+
+  // A client that leaves while a middleware waits must not keep the request in flight: close() would never drain.
+  it('settles the request when the client leaves during a middleware', async () => {
+    const entered = latch()
+    const app = createWebApplication()
+      .use((_req: IncomingMessage, _res: ServerResponse, _next: Next) => entered.release())
+      .mount(newRouter('/x').get('/', () => 'x'))
+    const origin = await run(app)
+    const controller = new AbortController()
+
+    const pending = fetch(`${origin}/x`, { signal: controller.signal }).catch(() => undefined)
+    await entered.promise
+    controller.abort()
+    await pending
+
+    await expect(app.close()).resolves.toBe(undefined)
+  })
+
+  // At onResponse the answer has left, a streamed one included: a Node middleware there still runs, as a logger would.
+  it('runs a Node middleware at onResponse after a streamed answer', async () => {
+    const ran = latch()
+    const origin = await run(
+      createWebApplication()
+        .use(
+          (_req: IncomingMessage, res: ServerResponse, next: Next) => {
+            ran.release()
+            next()
+            void res
+          },
+          { hook: 'onResponse' },
+        )
+        .mount(newRouter('/x').get('/', () => Readable.toWeb(Readable.from(['a'])))),
+    )
+
+    expect(await (await fetch(`${origin}/x`)).text()).toBe('a')
+    await ran.promise
+  })
+
+  // A Node middleware that throws hands the request its URL back, as one that calls next does.
+  it('gives the request its URL back when a mounted Node middleware throws', async () => {
+    const seen = latch()
+    let url: string | undefined
+    const origin = await run(
+      createWebApplication()
+        .use('/admin', (_req: IncomingMessage, _res: ServerResponse, _next: Next) => {
+          throw new Error('boom')
+        })
+        .hook('onResponse', ctx => {
+          url = (ctx.platform as { incoming: IncomingMessage }).incoming.url
+          seen.release()
+        })
+        .mount(newRouter('/admin').get('/users', () => 'users')),
+    )
+
+    expect((await fetch(`${origin}/admin/users`)).status).toBe(500)
+    await seen.promise
+    expect(url).toBe('/admin/users')
+  })
+
+  // A streamed answer ends in a `close` event, outside the request's own continuation: onResponse is run inside it.
+  it('lets onResponse resolve a request-scoped dependency after a streamed answer', async () => {
+    class Session {
+      readonly id = Math.random()
+    }
+    const ids: number[] = []
+    const ended = latch()
+    const container = new CaffeineIoC()
+    container.bind(Session, t => t.toSelf().lifetime(Scopes.REQUEST))
+
+    const origin = await run(
+      createWebApplication({ container })
+        .hook('onRequest', () => void ids.push(container.get(Session).id))
+        .hook('onResponse', () => {
+          ids.push(container.get(Session).id)
+          ended.release()
+        })
+        .mount(newRouter('/x').get('/', () => Readable.toWeb(Readable.from(['a', 'b'])))),
+    )
+
+    expect(await (await fetch(`${origin}/x`)).text()).toBe('ab')
+    await ended.promise
+
+    expect(ids).toHaveLength(2)
+    expect(ids[1]).toBe(ids[0])
   })
 })

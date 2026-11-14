@@ -8,11 +8,12 @@ import {
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
-import type { AdapterExtensionFactory, IAdapterTypes } from '../../../adapter.js'
+import type { AdapterExtensionFactory, ContextTypesOf, IAdapterTypes } from '../../../adapter.js'
 import type { HTTPPlugin } from '../../../plugin.js'
 import { assertPluginFactory } from '../../../plugin_factory.js'
 import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
+import type { RequestHookName, RequestHooks } from '../../lifecycle/lifecycle.js'
 import { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteGroupExtension } from '../extension.js'
 import type { RouteAuthzOptions, RouteGroupDetail, RouteValidationSchema } from '../spec.js'
@@ -440,6 +441,22 @@ export class Router<
   /** Where a package attaches its own per-group metadata, under the namespace it owns. */
   detail<K extends keyof RouteGroupDetail>(key: K, value: RouteGroupDetail[K]): this {
     this.#state.builder.detail(key, value)
+    return this
+  }
+
+  /**
+   * Adds a request hook covering every route of this router and the routers nested under it, after the hooks of the
+   * routers it is nested in and before each route's own. Unlike a middleware, a hook has no path and no `next`: it
+   * runs at its point, answers with `ctx.body(...)`, and fails by throwing.
+   *
+   * ```ts
+   * new Router('/pets').hook('onSend', (ctx, payload) => { ctx.header('x-served-by', 'pets') })
+   * ```
+   *
+   * @throws ErrConfiguration for a point that is not a request hook.
+   */
+  hook<K extends RequestHookName>(name: K, fn: RequestHooks<V, C, ContextTypesOf<T>>[K]): this {
+    this.#state.builder.hook(name, fn as RequestHooks[K])
     return this
   }
 

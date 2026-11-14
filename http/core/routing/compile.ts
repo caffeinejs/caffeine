@@ -6,6 +6,8 @@ import { boundTo } from '../../binding.js'
 import { buildCatchByMap, ErrConfiguration } from '../error/index.js'
 import type { Guard } from '../guards/index.js'
 import { kGlobalGuards } from '../guards/keys.js'
+import { REQUEST_HOOK_NAMES } from '../lifecycle/lifecycle.js'
+import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
 import {
   AuthorizationOptions,
@@ -18,7 +20,14 @@ import {
   PolicyEvaluator,
 } from '../security/authz/index.js'
 import { mergeAuthz } from './inherit.js'
-import { IRoute, IRouteGroup, RouteGroupErrorHandler, type RouteDispatch, type RouteGroupHook } from './route.js'
+import {
+  IRoute,
+  IRouteGroup,
+  RouteGroupErrorHandler,
+  type CompiledHooks,
+  type RouteDispatch,
+  type RouteGroupHook,
+} from './route.js'
 import type { RouteAuthz, RouteSpec, RouteGroupSpec } from './spec.js'
 
 /** What a route source contributes on top of the spec: identity, and how the routes are invoked. */
@@ -29,6 +38,8 @@ export interface RouteGroupMeta<R> {
   target?: Function
   onRequest?: RouteGroupHook<R, unknown>
   handleError?: RouteGroupErrorHandler<R>
+  /** Hooks the source adds to every route of the group, after the group's own: a controller's hook methods. */
+  hooks?: CompiledHooks<R>
   /**
    * The dispatch for one route. A source that leaves it undefined gets the spec's own `handle` called with the
    * picked arguments, which is all a plain function needs.
@@ -133,6 +144,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         detail: route.detail === undefined ? undefined : { ...route.detail },
         catchBy: buildCatchByMap(container, route.catchBy, { owner, declaredBy: '"@CatchWith"' }),
         guards: compileRouteGuardChain(container, compiledGuards, globalGuards, spec.guards, route.guards, owner),
+        hooks: compileHooks(spec.hooks, meta.hooks, route.hooks),
         authorization: (() => {
           // Always compiled, never gated on a decorator being present: an undecorated route is exactly
           // the one a configured fallback policy has to reach, and compileRoutePolicy is what knows
@@ -250,4 +262,35 @@ function effectiveSchemes(named: readonly string[] | undefined, defaultScheme: s
   }
 
   return defaultScheme === undefined ? [] : [defaultScheme]
+}
+
+/**
+ * A route's hooks as it carries them: the group's, then the source's, then the route's own, point by point.
+ * `undefined` when none of them has one.
+ */
+function compileHooks<R>(
+  group: AuthoredHooks | undefined,
+  source: CompiledHooks<R> | undefined,
+  route: AuthoredHooks | undefined,
+): CompiledHooks<R> | undefined {
+  if (group === undefined && source === undefined && route === undefined) {
+    return undefined
+  }
+
+  const compiled: Record<string, unknown[]> = {}
+  let any = false
+
+  // An authored hook takes the context and, at `onSend` and `onError`, one more argument: never the request.
+  const authored = (fns: readonly unknown[] | undefined): unknown[] =>
+    (fns ?? []).map(
+      fn => (_req: R, ctx: unknown, arg: unknown) => (fn as (ctx: unknown, arg: unknown) => unknown)(ctx, arg),
+    )
+
+  for (const name of REQUEST_HOOK_NAMES) {
+    const list = [...authored(group?.[name]), ...(source?.[name] ?? []), ...authored(route?.[name])]
+    compiled[name] = list
+    any ||= list.length > 0
+  }
+
+  return any ? (compiled as unknown as CompiledHooks<R>) : undefined
 }

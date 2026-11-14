@@ -7,10 +7,11 @@ import type { IContext } from '../../context.js'
 
 /**
  * Optional preferred hook for a Caffeine middleware, when `use()` does not pass `{ hook }`: one of the names the
- * application's adapter accepts, such as a `MiddlewareHook`.
+ * application's adapter accepts, a `MiddlewareHook` under Fastify, a request hook point (`RequestHookName`) on the fetch
+ * and Node applications.
  *
- * Omit it and the middleware runs at the adapter's default, `onRequest` under Fastify. On a class, declare it as a
- * static getter. On a function, set it as a property. The adapter refuses a name it does not know at start-up.
+ * Omit it and the middleware runs at `onRequest`. On a class, declare it as a static getter. On a function, set it as a
+ * property. The adapter refuses a name it does not know at start-up.
  */
 export const kMiddlewareHook = Symbol('@caffeinejs/http:middlewareHook')
 

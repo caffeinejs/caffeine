@@ -8,9 +8,10 @@ import {
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
-import type { IAdapterTypes } from '../../../adapter.js'
+import type { ContextTypesOf, IAdapterTypes } from '../../../adapter.js'
 import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
+import type { RequestHookName, RequestHooks } from '../../lifecycle/lifecycle.js'
 import type { RouteExtension } from '../extension.js'
 import type { RouteAuthzOptions, RouteDetail, RouteValidationSchema } from '../spec.js'
 import type { Router } from './programmatic.js'
@@ -151,6 +152,16 @@ export class RouteChain<
   /** Where a package attaches its own per-route metadata, under the namespace it owns. */
   detail<K extends keyof RouteDetail>(key: K, value: RouteDetail[K]): this {
     this.#state.builder.detail(key, value)
+    return this
+  }
+
+  /**
+   * Adds a request hook for this route alone, after its routers' hooks.
+   *
+   * @throws ErrConfiguration for a point that is not a request hook.
+   */
+  hook<K extends RequestHookName>(name: K, fn: RequestHooks<V, C, ContextTypesOf<T>>[K]): this {
+    this.#state.builder.hook(name, fn as RequestHooks[K])
     return this
   }
 

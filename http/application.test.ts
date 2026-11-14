@@ -1,8 +1,8 @@
-import { ErrApplicationNotReady } from '@caffeinejs/application'
+import { ErrApplicationNotReady, ErrApplicationStarted } from '@caffeinejs/application'
 import { afterEach, describe, expect, it, expectTypeOf } from 'vitest'
 
 import { createWebApplication as createFetchApplication, type WebApplication, type WebRunInfo } from './application.js'
-import { Router } from './index.js'
+import { ErrConfiguration, Router } from './index.js'
 import { createWebApplication } from './platform/fastify/index.js'
 
 let app: WebApplication | undefined
@@ -60,5 +60,25 @@ describe('the fetch application', () => {
 
   it("keeps address on the Fastify application's run()", () => {
     expectTypeOf<Awaited<ReturnType<ReturnType<typeof createWebApplication>['run']>>>().toEqualTypeOf<WebRunInfo>()
+  })
+})
+
+describe('WebApplication.hook()', () => {
+  // A hook added once the server is built would never be installed: refused so the caller finds out.
+  it('refuses a hook once bootstrap has started', async () => {
+    const fetchApp = createFetchApplication()
+    await fetchApp.bootstrap()
+
+    try {
+      expect(() => fetchApp.hook('onRequest', () => undefined)).toThrow(ErrApplicationStarted)
+    } finally {
+      await fetchApp.close()
+    }
+  })
+
+  it('refuses a point that is not a hook, for a caller the types did not stop', () => {
+    expect(() => createFetchApplication().hook('preValidation' as 'onRequest', () => undefined)).toThrow(
+      ErrConfiguration,
+    )
   })
 })

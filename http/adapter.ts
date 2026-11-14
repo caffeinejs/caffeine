@@ -1,6 +1,8 @@
 import type { BootstrapKit, RunInfo } from '@caffeinejs/application'
 import type { Container } from '@caffeinejs/di'
 
+import type { HookBatch } from './core/lifecycle/batch.js'
+import type { HookFn, HookName } from './core/lifecycle/lifecycle.js'
 import type {
   MiddlewareFactory,
   MiddlewareFn,
@@ -85,6 +87,9 @@ export interface AdapterRegistry {}
 
 /** Any registered adapter's types. */
 export type AnyAdapterTypes = AdapterRegistry[keyof AdapterRegistry]
+
+/** The adapter types a context is typed with: the router's or plugin's own, or any registered adapter's when it has none. */
+export type ContextTypesOf<T extends IAdapterTypes> = [T] extends [never] ? AnyAdapterTypes : T
 
 /** What any registered adapter installs. */
 export type AnyAdapterExtension = AnyAdapterTypes['extension']
@@ -258,6 +263,21 @@ export interface WebApplicationOps<T extends IAdapterTypes = never, C = unknown>
   /** Adds a factory that builds a middleware once at start-up, as `app.useFn(...)` does, where `use` would put it. */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
   useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
+
+  /**
+   * Adds a hook, in this plugin's place among the plugins of its slot. On a server a request hook covers every route
+   * that server serves; on a router or a controller, that one's routes. A server hook runs once per server, handed the
+   * context the plugin registered with.
+   *
+   * @throws ErrConfiguration for a point that is not a hook.
+   */
+  hook<K extends HookName>(name: K, fn: HookFn<K, C, T>): this
+
+  /**
+   * Whether a plugin of that name was registered earlier in this slot: this server's, router's or controller's. A
+   * router's plugins register once, before any server's, so they never see a server's plugins.
+   */
+  hasPlugin(name: string): boolean
 }
 
 /**
@@ -278,8 +298,8 @@ export interface HTTPSetupContext<C = unknown, T extends IAdapterTypes = never> 
   hasFeature(name: string): boolean
 
   /**
-   * What a plugin may do to the application while it registers: mount routers and add middleware. Every call
-   * outside a plugin's slot throws.
+   * What a plugin may do to the application while it registers: mount routers, add middleware and hooks, and ask
+   * `hasPlugin`. Every call outside a plugin's slot throws.
    */
   app: WebApplicationOps<T, C>
 }
@@ -304,12 +324,12 @@ export type AdapterExtensionFactory<X, C = unknown, T extends IAdapterTypes = ne
  * its plugins, then the middleware its plugins added.
  */
 export class AdapterExtensions<X> {
-  readonly #root: X[] = []
-  readonly #scoped = new Map<object, X[]>()
+  readonly #root: (X | HookBatch)[] = []
+  readonly #scoped = new Map<object, (X | HookBatch)[]>()
   readonly #middlewares = new Map<object, readonly ResolvedMiddleware[]>()
 
-  /** Adds an extension to the list of `scope`, a router or a controller class. */
-  add(extension: X, scope: object): void {
+  /** Adds an extension, or the hooks a plugin added, to the list of `scope`, a router or a controller class. */
+  add(extension: X | HookBatch, scope: object): void {
     let scoped = this.#scoped.get(scope)
     if (scoped === undefined) {
       scoped = []
@@ -319,13 +339,13 @@ export class AdapterExtensions<X> {
     scoped.push(extension)
   }
 
-  /** What the application installs on the root server, in the order it was written. */
-  root(): readonly X[] {
+  /** What the application installs on the root server, in the order it was written: extensions and plugins' hooks. */
+  root(): readonly (X | HookBatch)[] {
     return this.#root
   }
 
   /** What `scope`, a mounted router or a controller class, installs in front of its own routes. */
-  of(scope: object): readonly X[] {
+  of(scope: object): readonly (X | HookBatch)[] {
     return this.#scoped.get(scope) ?? []
   }
 
@@ -346,7 +366,7 @@ export class AdapterExtensions<X> {
    * The scoped extensions registered so far, in front of another root list: what one more server installs when it
    * serves groups of the same routers and controllers.
    */
-  withRoot(root: readonly X[]): AdapterExtensions<X> {
+  withRoot(root: readonly (X | HookBatch)[]): AdapterExtensions<X> {
     const extensions = new AdapterExtensions<X>()
     extensions.#root.push(...root)
 

@@ -60,7 +60,8 @@ class NodeAdapter implements IAdapter<NodeAdapterTypes> {
 
   async setup(input: AdapterIn<NodeAdapterTypes>): Promise<IAdapterServer<NodeAdapterTypes>> {
     const { engine: settings, listen, createServer } = resolveNodeServerSettings(input.server)
-    const engine = buildEngine(this.#container, this.#contextKey, input.routeGroups, input, settings)
+    const engine = buildEngine(this.#container, this.#contextKey, input.routeGroups, input, settings, true)
+    await engine.ready()
     const platform = createNodePlatform(input.context.logger)
     const server = createServer((_req, res) => serveNode(engine, platform, res, false))
     // Tracked first, as the Fastify adapter does: a callback may make the server listen, and every connection it then

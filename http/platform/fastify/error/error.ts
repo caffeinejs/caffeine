@@ -28,6 +28,7 @@ import { payloadOf } from '../../../core/server/answer.js'
 import { appendVary } from '../../../vary.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
+import { runOnErrorOnce, type FastifyErrorEntry } from '../lifecycle/lifecycle.js'
 import { answer } from '../response.js'
 import {
   isValidationSlot,
@@ -90,11 +91,17 @@ export function globalErrorHandlerPlugin(
   ref: GlobalErrorHandlerRef,
   options: Required<GlobalErrorHandlerOptions>,
   contextOf: ContextOf,
+  rootOnError: readonly FastifyErrorEntry[],
 ): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
     instance.decorate(kProblemEncoder, problemEncoder(options))
     instance.decorate(kContextOf, contextOf)
-    ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider), options.validation)
+    ref.handler = installGlobalErrorHandler(
+      instance,
+      instance.$container.get(ErrorHandlerProvider),
+      options.validation,
+      rootOnError,
+    )
   }
 
   return fp(plugin, { name: 'caffeine-error-handling' })
@@ -126,6 +133,7 @@ export function installGlobalErrorHandler(
   fastify: FastifyInstance,
   errorManager: ErrorHandlerProvider,
   validation: ValidationProblem,
+  rootOnError: readonly FastifyErrorEntry[],
 ): GlobalErrorHandler {
   // In the format the request asks for, so the response varies on Accept. Encoded here, so a route's error
   // response schema, written for the bodies the application sends, neither refuses a problem nor strips its members.
@@ -162,6 +170,10 @@ export function installGlobalErrorHandler(
   const globalErrorHandler: GlobalErrorHandler = async (error, request, reply) => {
     const err = error instanceof Error ? error : new Error(String(error))
     const ctx = contextOf(request, reply)
+
+    // The `onError` hooks observe first; a group's handler that fell back here already ran them.
+    await runOnErrorOnce(request, request.routeOptions.config?.$caffeine?.compiled?.onError ?? rootOnError, err)
+
     const handler = errorManager.provide(err)
 
     if (handler) {
@@ -237,6 +249,7 @@ export function installRouteGroupErrorHandler(
   server: FastifyInstance,
   router: IRouteGroup<any>,
   globalErrorHandler: GlobalErrorHandler,
+  rootOnError: readonly FastifyErrorEntry[],
 ): void {
   const routes = router.routes
 
@@ -256,6 +269,9 @@ export function installRouteGroupErrorHandler(
   server.setErrorHandler(async (error: FastifyError, req: FastifyRequest, reply: FastifyReply) => {
     const err = error instanceof Error ? error : new Error(String(error))
     const ctx = contextOf(req, reply)
+
+    // The `onError` hooks observe first, once: the global handler this falls back to does not run them again.
+    await runOnErrorOnce(req, req.routeOptions.config?.$caffeine?.compiled?.onError ?? rootOnError, err)
 
     // routeOptions is populated before validation, so route-level handlers also see schema errors.
     const routeCatchBy = req.routeOptions.config?.$caffeine?.compiled?.catchBy

@@ -7,7 +7,7 @@ import { codeForStatus, errorStatus, hasPublicMessage } from '../error/encode.js
 import { resolveByErrorChain } from '../error/handler.js'
 import { ErrHTTP } from '../error/http.js'
 import { newProblem, type Problem } from '../error/problem.js'
-import { andThen, isThenable } from '../lifecycle/lifecycle.js'
+import { andThen, asError, isThenable } from '../lifecycle/lifecycle.js'
 import { kErrorUnhandled, type CatchByMap } from '../routing/route.js'
 import { answer } from './answer.js'
 import type { Context, ServerShared } from './context.js'
@@ -190,9 +190,4 @@ export function configurationError(message: string, ...solutions: string[]): Err
       .reference('@caffeinejs/http', ErrConfiguration)
       .build(),
   )
-}
-
-/** What was thrown, as an `Error`: a thrown string or object is wrapped. */
-export function asError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value))
 }

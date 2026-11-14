@@ -1,5 +1,6 @@
 import type { IContextPlatform } from '../../adapter.js'
-import type { ResponseHead, SendHooks, SendPayload, ServerPlatform } from './platform.js'
+import type { SendPayload } from '../lifecycle/lifecycle.js'
+import type { ResponseHead, SendHooks, ServerPlatform } from './platform.js'
 
 /** What `ctx.platform` is on the fetch application. */
 export interface FetchContextPlatform extends IContextPlatform {

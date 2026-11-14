@@ -6,6 +6,7 @@ import type { Duration } from '@caffeinejs/std/duration'
 import type { IContext } from '../../context.js'
 import type { ErrorHandler } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
+import type { SendPayload } from '../lifecycle/lifecycle.js'
 import { AuthzRouteService } from '../security/authz/index.js'
 import type {
   BodyMode,
@@ -119,6 +120,27 @@ export interface IRoute<R = unknown> {
   catchBy?: CatchByMap
   guards?: readonly CompiledGuard<Guard>[]
   authorization: RouteAuthorization
+  /**
+   * The route's hooks: its groups', outermost first, then a controller's hook methods, then its own. `undefined` when
+   * none declared one.
+   */
+  hooks?: CompiledHooks<R>
+}
+
+/**
+ * Hooks as a route carries them: handed the request the route is compiled against and the context, as
+ * {@link RouteGroupErrorHandler} is, so a source that keeps per-request state on the request reaches it.
+ */
+export interface CompiledHooks<R = unknown> {
+  readonly onRequest: readonly ((req: R, ctx: IContext) => void | PromiseLike<void>)[]
+  readonly preHandler: readonly ((req: R, ctx: IContext) => void | PromiseLike<void>)[]
+  readonly onSend: readonly ((
+    req: R,
+    ctx: IContext,
+    payload: SendPayload,
+  ) => SendPayload | void | PromiseLike<SendPayload | void>)[]
+  readonly onResponse: readonly ((req: R, ctx: IContext) => void | PromiseLike<void>)[]
+  readonly onError: readonly ((req: R, ctx: IContext, err: Error) => void | PromiseLike<void>)[]
 }
 
 export interface RouteAuthorization {

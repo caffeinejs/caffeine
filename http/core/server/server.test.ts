@@ -725,3 +725,136 @@ describe('HTTPServer', () => {
     app = undefined
   })
 })
+
+describe('HTTPServer hooks', () => {
+  // A plugin reads a route's config through `ctx.route`: the engine serves a key it does not know itself.
+  it("serves a route whose config key is a plugin's own", async () => {
+    const served = await serve(
+      new Router('/s')
+        .get('/')
+        .config('greeting', 'hello')
+        .handler(() => 'ok'),
+      a => a.hook('onSend', ctx => void ctx.header('x-greeting', String(ctx.route?.config.get('greeting')))),
+    )
+
+    const res = await fetchOn(served, '/s')
+
+    expect(res.headers.get('x-greeting')).toBe('hello')
+  })
+
+  // `onRoute` reads the route; the guards it declared were taken before, so a hook cannot drop them.
+  it('keeps a guard an onRoute hook tried to drop', async () => {
+    const served = await serve(
+      new Router('/s')
+        .guards([DenyGuard])
+        .get('/')
+        .handler(() => 'ok'),
+      a =>
+        a.hook('onRoute', route => {
+          ;(route.route as { guards?: unknown[] }).guards = []
+        }),
+    )
+
+    const res = await fetchOn(served, '/s')
+
+    expect(res.status).toBe(403)
+  })
+
+  // Once the timeout answered 503, the request is over: a later point must not act on it.
+  it('runs no preHandler after the timeout answered', async () => {
+    const held = latch()
+    const preHandler = vi.fn()
+    const served = await serve(
+      new Router('/s')
+        .get('/')
+        .timeout(50 * Millisecond)
+        .hook('onRequest', () => held.promise)
+        .hook('preHandler', preHandler)
+        .handler(() => 'late'),
+    )
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    const pending = fetchOn(served, '/s')
+    await vi.advanceTimersByTimeAsync(50)
+    const res = await pending
+    held.release()
+    vi.useRealTimers()
+    await tick()
+
+    expect(res.status).toBe(503)
+    expect(preHandler).toHaveBeenCalledTimes(0)
+  })
+
+  // onResponse runs inside the request: what the request resolved is still there to read.
+  it('lets onResponse resolve a request-scoped dependency', async () => {
+    class Session {
+      readonly id = Math.random()
+    }
+    const ran = latch()
+    const ids: number[] = []
+    const container = new CaffeineIoC()
+    container.bind(Session, t => t.toSelf().lifetime(Scopes.REQUEST))
+
+    app = createWebApplication({ container })
+      .hook('onRequest', () => void ids.push(container.get(Session).id))
+      .hook('onResponse', () => {
+        ids.push(container.get(Session).id)
+        ran.release()
+      })
+      .mount(new Router('/s').get('/').handler(() => 'ok'))
+    await app.bootstrap()
+
+    await (await fetchOn(app, '/s')).text()
+    await ran.promise
+
+    expect(ids).toHaveLength(2)
+    expect(ids[1]).toBe(ids[0])
+  })
+
+  // onClose sees a server with nothing in flight: what it closes, nothing still serving needs.
+  it('runs onClose only once a held request is answered', async () => {
+    const held = latch()
+    const closed = vi.fn()
+    const served = await serve(
+      new Router('/s').get('/').handler(async () => {
+        await held.promise
+        return 'ok'
+      }),
+      a => a.hook('onClose', closed),
+    )
+
+    const pending = fetchOn(served, '/s')
+    const closing = served.close()
+    await tick()
+
+    expect(closed).toHaveBeenCalledTimes(0)
+
+    held.release()
+    await (await pending).text()
+    await closing
+    app = undefined
+
+    expect(closed).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('HTTPServer middleware', () => {
+  // A middleware mounted under a path sees the rest of the URL; once it answers, what runs after it sees the request's.
+  it('hands the request its URL back when a mounted middleware answers without next', async () => {
+    const seen: string[] = []
+    const served = await serve(
+      new Router('/admin').get('/users').handler(() => 'handler'),
+      a =>
+        a
+          .use('/admin', ctx => {
+            ctx.body('denied')
+          })
+          .hook('onSend', ctx => void seen.push(ctx.req.url)),
+    )
+
+    const res = await fetchOn(served, '/admin/users')
+
+    expect(await res.text()).toBe('denied')
+    expect(seen).toEqual(['/admin/users'])
+  })
+})

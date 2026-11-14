@@ -11,11 +11,14 @@ import {
   type RawServerBase,
 } from 'fastify'
 
-import { joinPaths } from '../../../core/routing/paths.js'
-import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../../core/routing/route.js'
+import { openDefinition, type AuthoredHooks, type RouteDefinition } from '../../../core/lifecycle/route_definition.js'
+import type { RouterFlags } from '../../../core/matcher/matcher.js'
+import { joinPaths, pathsOf } from '../../../core/routing/paths.js'
+import type { IRoute, IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../../core/routing/route.js'
 import type { Context } from '../context.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../error/error.js'
 import { attachGuardHook } from '../guards/guards.js'
+import { addRouteHooks, type FastifyErrorEntry, type SendFailure } from '../lifecycle/lifecycle.js'
 import { answer } from '../response.js'
 import { isHandlerTimeout } from '../timeout.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
@@ -36,6 +39,16 @@ export interface RouteGroupRegistration<REQ> {
   globalErrorHandler: GlobalErrorHandler
   /** The server's own `handlerTimeout`, when it set one. */
   handlerTimeout?: number
+  /** How the server's router matches, for the URL a route's definition reports. */
+  flags: RouterFlags
+  /** Calls every `onRoute` that reaches the group: the root plugins', then each scope's, outermost first. */
+  onRoute(group: IRouteGroup<REQ>, definition: RouteDefinition): void
+  /** Every `onError` the route runs, in order. */
+  onErrorOf(group: IRouteGroup<REQ>, route: IRoute<REQ>, added: AuthoredHooks): readonly FastifyErrorEntry[]
+  /** What answers a throw from an `onSend` hook. */
+  onSendFailed: SendFailure
+  /** The root plugins' `onError`: what a route no one compiled runs. */
+  rootOnError: readonly FastifyErrorEntry[]
 }
 
 /**
@@ -56,7 +69,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
 
   instance.register(
     async server => {
-      installRouteGroupErrorHandler(server, router, globalErrorHandler)
+      installRouteGroupErrorHandler(server, router, globalErrorHandler, registration.rootOnError)
 
       // What a mounted router or a controller installed with `router.with(...)` / `@Use(...)`. The same
       // plugin as an application-level one, registered in this group's context instead of on the root
@@ -209,6 +222,23 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
             handler: route.name,
           })
         }
+
+        // Everything the route declares has been read: `onRoute` adds hooks, which run after the guards.
+        const open = openDefinition(
+          route,
+          router,
+          routeDef.method as string[],
+          pathsOf(router.prefix, url, registration.flags.ignoreTrailingSlash)[0],
+        )
+        try {
+          registration.onRoute(router, open.definition as RouteDefinition)
+        } finally {
+          open.close()
+        }
+
+        addRouteHooks(routeDef, route.hooks as never, open.added, registration.onSendFailed)
+        compiled.definition = open.definition as RouteDefinition
+        compiled.onError = registration.onErrorOf(router, route, open.added)
 
         // BodyAsBuffer
         // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer. Fastify reads it, through

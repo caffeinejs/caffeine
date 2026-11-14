@@ -6,6 +6,7 @@ import type {
   RouteOptions,
 } from 'fastify'
 
+import type { RequestHookName } from '../../../core/lifecycle/lifecycle.js'
 import type { AnyRouteExtension } from '../../../core/routing/extension.js'
 
 /** Fastify route options parameterized for HTTP/1 and HTTP/2. */
@@ -29,7 +30,7 @@ export type AdapterRequest = Parameters<AdapterOnRequestFn>[0]
 export type AdapterReply = Parameters<AdapterOnRequestFn>[1]
 
 /** The route hook slots anything in this package writes to. */
-export type RouteHookKey = 'onRequest' | 'onSend'
+export type RouteHookKey = Exclude<RequestHookName, 'onError'>
 
 /**
  * Adds a hook to a route's hook slot, allocating as little as the slot needs.

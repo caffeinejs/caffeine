@@ -38,9 +38,12 @@ import { kCookieSettings } from '../../core/cookie/keys.js'
 import type { CookieSerializeOptions } from '../../core/cookie/options.js'
 import { ErrCaffeineWebApplication, ErrConfiguration } from '../../core/error/common.js'
 import { kErrorHandlingOptions } from '../../core/error/keys.js'
+import { HookBatch } from '../../core/lifecycle/batch.js'
+import { callOnRoute, type AuthoredHooks, type RouteDefinition } from '../../core/lifecycle/route_definition.js'
 import { starParameterRefusal } from '../../core/matcher/find_my_way.js'
+import { rebaseMiddlewares } from '../../core/middleware/path.js'
 import { RouteGroupBuilder } from '../../core/routing/builder.js'
-import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../core/routing/route.js'
+import type { IRoute, IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../core/routing/route.js'
 import { assertAuthorizationConfigured } from '../../core/security/authz/index.js'
 import type { Principal } from '../../core/security/identity.js'
 import { assertAuthenticationConfigured, assertRouteSchemesResolve } from '../../core/security/security.js'
@@ -59,9 +62,17 @@ import { cookiePlugin } from './cookie/cookie.js'
 import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './error/error.js'
 import { validationFormatter } from './error/validation.js'
 import { installFormBodyParser } from './form/index.js'
-import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
+import {
+  batchOnError,
+  installHookBatch,
+  installServerHooks,
+  routeOnError,
+  sendFailure,
+  type FastifyErrorEntry,
+} from './lifecycle/lifecycle.js'
+import { installMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
-import { recordRouterFlags, trackPrefixedRootURL } from './router.js'
+import { recordRouterFlags, routerFlagsOf, trackPrefixedRootURL } from './router.js'
 import { routeRecordsOf } from './routing/inventory.js'
 import { installNotFoundHandler } from './routing/not_found.js'
 import { compileArgs, compileHandler } from './routing/parameters.js'
@@ -427,17 +438,31 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // goes first, so every plugin registers onto a server that has it.
     installFormBodyParser(fastify)
 
+    // The hooks the plugins added, in their place among them. Every plugin registered before the server was built, so
+    // the root's `onError` list is whole here, for the global error handler.
+    const rootBatches = batchesOf(input.extensions.root())
+    const rootOnError = batchOnError(rootBatches)
+    const onErrorOf = (request: FastifyRequest): readonly FastifyErrorEntry[] =>
+      request.routeOptions.config?.$caffeine?.compiled?.onError ?? rootOnError
+    const onSendFailed = sendFailure(onErrorOf)
+    const installedServerHooks = new Set<HookBatch>()
+
     // Error handling first, so every route and hook registered afterwards is covered by it; then cookies, whose
     // `Set-Cookie` writer leads every later plugin's `onSend` hook. Each server gets its own.
     const errorHandler = new GlobalErrorHandlerRef()
     await installExtension(
       fastify,
-      globalErrorHandlerPlugin(errorHandler, container.get(kErrorHandlingOptions), contextOf),
+      globalErrorHandlerPlugin(errorHandler, container.get(kErrorHandlingOptions), contextOf, rootOnError),
     )
     await installExtension(fastify, cookiePlugin(container.get(kCookieSettings)))
 
     for (const extension of input.extensions.root()) {
-      await installExtension(fastify, extension)
+      if (extension instanceof HookBatch) {
+        installHookBatch(fastify, extension, onSendFailed)
+        installServerHooks(fastify, extension, installedServerHooks)
+      } else {
+        await installExtension(fastify, extension)
+      }
     }
 
     // The route table is complete: the scans below read it and the loop at the bottom registers it.
@@ -464,7 +489,12 @@ export class Adapter implements IAdapter<AdapterTypes> {
     const registration = {
       installScope: async (server: FastifyInstance, scope: RouteGroupScope): Promise<void> => {
         for (const extension of input.extensions.of(scope.key)) {
-          await installExtension(server, extension)
+          if (extension instanceof HookBatch) {
+            installHookBatch(server, extension, onSendFailed)
+            installServerHooks(fastify, extension, installedServerHooks)
+          } else {
+            await installExtension(server, extension)
+          }
         }
 
         // What the scope's plugins added with `context.app.use(...)`: in this group's context, so it covers the
@@ -474,6 +504,20 @@ export class Adapter implements IAdapter<AdapterTypes> {
       compilers: this.#compilers,
       globalErrorHandler,
       handlerTimeout: factory.handlerTimeout,
+      flags: routerFlagsOf(fastify),
+      onRoute: (group: IRouteGroup<FastifyRequest>, definition: RouteDefinition) => {
+        callOnRoute(rootBatches, definition)
+        for (const scope of group.scopes ?? []) {
+          callOnRoute(batchesOf(input.extensions.of(scope.key)), definition)
+        }
+      },
+      onErrorOf: (group: IRouteGroup<FastifyRequest>, route: IRoute<FastifyRequest>, added: AuthoredHooks) => [
+        ...rootOnError,
+        ...(group.scopes ?? []).flatMap(scope => batchOnError(batchesOf(input.extensions.of(scope.key)))),
+        ...routeOnError(route.hooks, added),
+      ],
+      onSendFailed,
+      rootOnError,
     }
 
     for (const router of routeGroups) {
@@ -689,6 +733,11 @@ function assertPluginNotRegistered(
   }
 }
 
+/** The hook batches among a slot's entries. */
+function batchesOf(entries: readonly unknown[]): HookBatch[] {
+  return entries.filter(entry => entry instanceof HookBatch)
+}
+
 /**
  * Refuses what the application declared and no installed feature can serve, as a start-up failure rather than
  * a route that quietly never does what its decorator says.
@@ -709,6 +758,10 @@ function assertRouteFeaturesInstalled(
       const cached = group.routes.some(route => route.config.has('cache') || route.config.has('cacheInvalidate'))
       const installed = (group.scopes ?? []).some(scope =>
         extensions.of(scope.key).some(extension => {
+          if (extension instanceof HookBatch) {
+            return false
+          }
+
           const { plugin } = resolveExtension(extension)
           return typeof plugin === 'function' && pluginName(plugin as AnyPlugin) === CACHING_PLUGIN
         }),

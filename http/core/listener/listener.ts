@@ -12,6 +12,8 @@ import type { HTTPPlugin } from '../../plugin.js'
 import { assertPluginFactory } from '../../plugin_factory.js'
 import { ServerDefinition } from '../../server_definition.js'
 import { ErrConfiguration } from '../error/common.js'
+import { HookRegistration } from '../lifecycle/batch.js'
+import { assertHookName, HOOK_NAMES, type HookFn, type HookName } from '../lifecycle/lifecycle.js'
 import {
   parseUse,
   type MiddlewareFactory,
@@ -74,6 +76,18 @@ export class ListenerBuilder<C = unknown> {
   with(factory: AdapterExtensionFactory<AnyAdapterExtension | HTTPPlugin<AnyAdapterTypes>, C, AnyAdapterTypes>): this {
     assertPluginFactory(factory)
     this.#definition.plugins.push(factory)
+    return this
+  }
+
+  /**
+   * Adds a hook to this server, in its place among its `.with(...)` plugins, as the application's `.hook(...)` adds one
+   * to its own: nothing the application adds there reaches this server.
+   *
+   * @throws ErrConfiguration for a point that is not a hook.
+   */
+  hook<K extends HookName>(name: K, fn: HookFn<K, C>): this {
+    assertHookName(name, HOOK_NAMES, 'with listener.hook')
+    this.#definition.plugins.push(() => new HookRegistration(name, fn as HookFn<HookName>))
     return this
   }
 

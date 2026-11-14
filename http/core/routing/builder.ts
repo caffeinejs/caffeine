@@ -6,6 +6,8 @@ import type { Duration } from '@caffeinejs/std/duration'
 import type { AdapterExtensionFactory } from '../../adapter.js'
 import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
+import { assertHookName, REQUEST_HOOK_NAMES, type RequestHookName, type RequestHooks } from '../lifecycle/lifecycle.js'
+import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 import { mergeValue } from './_merge.js'
 import { foldAuthz } from './inherit.js'
 import type {
@@ -38,6 +40,8 @@ export class RouteGroupBuilder {
   #guards?: InjectionToken<Guard>[]
   #plugins?: AdapterExtensionFactory<unknown>[]
   #labels?: Map<symbol, unknown>
+  #hooks?: Hooks
+  #methodHooks?: Array<[RequestHookName, string | symbol]>
 
   path(path: string) {
     this.#path = path
@@ -117,6 +121,29 @@ export class RouteGroupBuilder {
     return this
   }
 
+  /**
+   * Adds a hook covering every route of the group, after those already added.
+   *
+   * @throws ErrConfiguration for a point that is not a request hook.
+   */
+  hook<K extends RequestHookName>(name: K, fn: RequestHooks[K]): this {
+    this.#hooks = addHooks(this.#hooks, name, [fn], false)
+    return this
+  }
+
+  /** Puts hooks ahead of those already added: what a decorator, applied bottom-up, writes in the order read. */
+  prependHooks<K extends RequestHookName>(name: K, fns: readonly RequestHooks[K][]): this {
+    this.#hooks = addHooks(this.#hooks, name, fns, true)
+    return this
+  }
+
+  /** Records controller methods that are hooks, in declaration order. */
+  methodHooks(hooks: Array<[RequestHookName, string | symbol]>): this {
+    this.#methodHooks ??= []
+    this.#methodHooks.push(...hooks)
+    return this
+  }
+
   config<K extends string>(key: K, value: unknown): this
   config<K extends string>(config: Map<K, unknown>): this
   config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
@@ -181,6 +208,8 @@ export class RouteGroupBuilder {
       guards: this.#guards,
       plugins: this.#plugins,
       labels: this.#labels,
+      hooks: copyHooks(this.#hooks),
+      methodHooks: this.#methodHooks === undefined ? undefined : [...this.#methodHooks],
     }
   }
 }
@@ -205,6 +234,7 @@ export class RouteBuilder {
   #detail?: RouteDetail
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
+  #hooks?: Hooks
 
   header(name: string, value: string | string[]) {
     this.#header ??= new Map()
@@ -322,6 +352,22 @@ export class RouteBuilder {
     return this
   }
 
+  /**
+   * Adds a hook for this route alone, after those already added.
+   *
+   * @throws ErrConfiguration for a point that is not a request hook.
+   */
+  hook<K extends RequestHookName>(name: K, fn: RequestHooks[K]): this {
+    this.#hooks = addHooks(this.#hooks, name, [fn], false)
+    return this
+  }
+
+  /** Puts hooks ahead of those already added: what a decorator, applied bottom-up, writes in the order read. */
+  prependHooks<K extends RequestHookName>(name: K, fns: readonly RequestHooks[K][]): this {
+    this.#hooks = addHooks(this.#hooks, name, fns, true)
+    return this
+  }
+
   /** Where a package attaches its own per-route metadata, under the namespace it owns. */
   detail<K extends keyof RouteDetail>(key: K, value: RouteDetail[K]): this {
     this.#detail ??= {}
@@ -350,8 +396,48 @@ export class RouteBuilder {
       detail: this.#detail,
       catchBy: this.#catchBy,
       guards: this.#guards,
+      hooks: copyHooks(this.#hooks),
     }
   }
+}
+
+type Hooks = { [K in RequestHookName]?: RequestHooks[K][] }
+
+function addHooks<K extends RequestHookName>(
+  hooks: Hooks | undefined,
+  name: K,
+  fns: readonly RequestHooks[K][],
+  front: boolean,
+): Hooks {
+  assertHookName(name, REQUEST_HOOK_NAMES, 'on a route')
+
+  const all = hooks ?? {}
+  const list = (all[name] ??= []) as RequestHooks[K][]
+
+  if (front) {
+    list.unshift(...fns)
+  } else {
+    list.push(...fns)
+  }
+
+  return all
+}
+
+// Copied, so a spec taken from a builder does not change when the builder takes another hook.
+function copyHooks(hooks: Hooks | undefined): AuthoredHooks | undefined {
+  if (hooks === undefined) {
+    return undefined
+  }
+
+  const copy: Hooks = {}
+  for (const name of REQUEST_HOOK_NAMES) {
+    const list = hooks[name]
+    if (list !== undefined) {
+      ;(copy as Record<string, unknown[]>)[name] = [...list]
+    }
+  }
+
+  return copy
 }
 
 export function normalizeGroupPath(prefix: string): string {

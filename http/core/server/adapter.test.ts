@@ -37,19 +37,13 @@ describe('the fetch adapter', () => {
         ),
       'Cannot install a server plugin',
     ],
-    ['app.use(...)', a => a.use((_ctx, next) => next()), 'Cannot install middleware'],
     [
-      "a plugin's context.app.use(...)",
+      'a Node middleware',
       a =>
-        a.with(
-          () =>
-            new (class extends HTTPPlugin {
-              register(context: Parameters<HTTPPlugin['register']>[0]): void {
-                context.app.use((_ctx, next) => next())
-              }
-            })(),
-        ),
-      'Cannot install middleware',
+        a.use(function helmet(_req: unknown, _res: unknown, next: () => void) {
+          next()
+        } as never),
+      'Cannot install the Node middleware "helmet" on the fetch application: it has no Node request',
     ],
   ])('refuses %s at start-up', async (_what, configure, message) => {
     app = createWebApplication()
@@ -59,6 +53,34 @@ describe('the fetch adapter', () => {
 
     await expect(booting).rejects.toThrow(ErrConfiguration)
     await expect(booting).rejects.toThrow(message)
+  })
+
+  // The fetch application has no Node request, but a context middleware needs none.
+  it('runs a context middleware, from the application and from a plugin', async () => {
+    app = createWebApplication()
+      .use((ctx, next) => {
+        ctx.header('x-app', '1')
+        next()
+      })
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register(context: Parameters<HTTPPlugin['register']>[0]): void {
+              context.app.use((ctx, next) => {
+                ctx.header('x-plugin', '1')
+                next()
+              })
+            }
+          })(),
+      )
+      .mount(new Router('/x').get('/').handler(() => 'x'))
+    await app.bootstrap()
+
+    const res = await app.fetch(new Request('http://localhost/x'))
+
+    expect(res.headers.get('x-app')).toBe('1')
+    expect(res.headers.get('x-plugin')).toBe('1')
+    expect(await res.text()).toBe('x')
   })
 
   it('throws from app.instance', async () => {

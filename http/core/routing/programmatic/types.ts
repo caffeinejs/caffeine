@@ -1,6 +1,6 @@
 import type { AnySchema, InferSchema } from '@caffeinejs/application/schema'
 
-import type { IAdapterTypes, AnyAdapterTypes } from '../../../adapter.js'
+import type { ContextTypesOf, IAdapterTypes } from '../../../adapter.js'
 import type { IContext } from '../../../context.js'
 import type { InferBody, InferHeaders, InferParams, InferQuery } from '../../../request.js'
 import type { RouteValidationSchema } from '../spec.js'
@@ -106,9 +106,6 @@ export type RouteContext<
   C,
   T extends IAdapterTypes = never,
 > = IContext<V, C, ContextTypesOf<T>, ParamsOf<S, P>, InferQuery<S>, InferHeaders<S>, InferBody<S>>
-
-/** The adapter types a context is typed with: the router's own, or any registered adapter's when it has none. */
-type ContextTypesOf<T extends IAdapterTypes> = [T] extends [never] ? AnyAdapterTypes : T
 
 /**
  * What a route's handler is called with: the context, then the dependencies the route and its enclosing groups

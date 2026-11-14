@@ -139,3 +139,26 @@ describe('listeners', () => {
     await headless.close().catch(() => undefined)
   })
 })
+
+describe('ListenerBuilder.hook', () => {
+  // A listener's hooks are its own: the application's server never runs them.
+  it('runs a listener hook on that listener alone', async () => {
+    const app = createWebApplication()
+      .listener('admin', l => l.hook('onSend', ctx => void ctx.header('x-listener', 'admin')))
+      .mount(
+        newRouter('/jobs')
+          .extend(bindTo('admin'))
+          .get('/', () => 'jobs'),
+      )
+      .mount(newRouter('/own').get('/', () => 'own'))
+
+    try {
+      await app.bootstrap()
+
+      expect((await app.listeners.get('admin')!.request('/jobs')).headers.get('x-listener')).toBe('admin')
+      expect((await app.request('/own')).headers.get('x-listener')).toBe(null)
+    } finally {
+      await app.close()
+    }
+  })
+})

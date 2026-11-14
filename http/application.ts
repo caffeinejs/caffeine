@@ -23,6 +23,8 @@ import {
 import { CookieBuilder } from './core/cookie/cookie.js'
 import { ErrConfiguration } from './core/error/common.js'
 import { ErrorHandlingBuilder } from './core/error/error.js'
+import { HookRegistration } from './core/lifecycle/batch.js'
+import { assertHookName, HOOK_NAMES, type HookFn, type HookName } from './core/lifecycle/lifecycle.js'
 import { Listeners, type HTTPFeatureConfigureKit, type ListenerConfigurer } from './core/listener/listener.js'
 import { listenerServers } from './core/listener/servers.js'
 import {
@@ -198,9 +200,12 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * be a Node `(req, res, next)` function, a Caffeine `(ctx, next)` function, an instance, a class, or a
    * container key.
    *
-   * Which hooks exist is the adapter's: under Fastify, a `MiddlewareHook`, defaulting to `onRequest`. A
+   * Which hooks exist is the adapter's: under Fastify, a `MiddlewareHook`; on the fetch and Node applications, a
+   * request hook point (`onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`); `onRequest` by default. A
    * Caffeine middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call
-   * overrides that hint. Answer the request with `ctx.body()` and do not call `next`.
+   * overrides that hint. Answer the request with `ctx.body()` and do not call `next`. A Node `(req, res, next)`
+   * middleware runs on the Fastify and Node applications; the fetch application, which has no Node request, refuses
+   * one at start-up.
    *
    * ```ts
    * app.use(RequestLogger)
@@ -306,6 +311,30 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     assertPluginFactory(factory)
 
     this.#own.plugins.push(factory)
+    return this
+  }
+
+  /**
+   * Adds a hook to the application's own server, in its place among the `.with(...)` plugins: a request hook covers
+   * every route the server serves, a server hook runs once. A listener takes its own, `.listener(name, l =>
+   * l.hook(...))`. Unlike {@link use}'s middleware, a hook has no path and no `next`: it runs at its point, answers
+   * with `ctx.body(...)`, and fails by throwing.
+   *
+   * ```ts
+   * createWebApplication()
+   *   .hook('onRequest', ctx => { ctx.state.set('started', performance.now()) })
+   *   .hook('onResponse', ctx => metrics.observe(ctx))
+   *   .hook('onReady', ({ logger }) => logger.info('ready'))
+   * ```
+   *
+   * @throws ErrApplicationStarted when {@link bootstrap} has already started.
+   * @throws ErrConfiguration for a point that is not a hook.
+   */
+  hook<K extends HookName>(name: K, fn: HookFn<K, C, T>): this {
+    this.assertConfigurable()
+    assertHookName(name, HOOK_NAMES, 'with app.hook')
+
+    this.#own.plugins.push(() => new HookRegistration(name, fn as HookFn<HookName>))
     return this
   }
 

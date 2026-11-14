@@ -1,7 +1,9 @@
 import { type FastifyInstance, type FastifyRequest, type RouteOptions } from 'fastify'
 
+import type { RouteDefinition } from '../../../core/lifecycle/route_definition.js'
 import { type CatchByMap, type IRoute, type IRouteGroup } from '../../../core/routing/route.js'
 import { type AuthzRouteService } from '../../../core/security/authz/route_service.js'
+import type { FastifyErrorEntry } from '../lifecycle/lifecycle.js'
 
 /** What the authentication gate has to know about the route a request matched. */
 export interface GatedRoute {
@@ -26,6 +28,10 @@ export interface CompiledRouteMetadata<R = FastifyRequest> {
   hasHeader: boolean
   header: Array<[string, string | string[]]>
   catchBy?: CatchByMap
+  /** What `onRoute` hooks were handed for the route: what `ctx.route` reads. */
+  definition?: RouteDefinition
+  /** Every `onError` the route runs, in order: the root's, its scopes', its own, what `onRoute` added. */
+  onError?: readonly FastifyErrorEntry[]
 }
 
 /**

@@ -1,12 +1,13 @@
 import { Container, Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { getRouteGroup } from '../../decorators/registrar/registrar.js'
+import { getRouteGroup, hookDecoratorName } from '../../decorators/registrar/registrar.js'
 import { Keys } from '../../symbols.js'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../error/index.js'
+import { REQUEST_HOOK_NAMES } from '../lifecycle/lifecycle.js'
 import { normalizeGroupPath } from './builder.js'
 import type { RouteGroupMeta } from './compile.js'
-import { kErrorUnhandled, type RouteDispatch, type RouteGroupErrorHandler } from './route.js'
+import { kErrorUnhandled, type CompiledHooks, type RouteDispatch, type RouteGroupErrorHandler } from './route.js'
 import type { DeclaredRouteGroup, RouteSource } from './routing.js'
 import type { RouteSpec, RouteGroupSpec } from './spec.js'
 
@@ -79,11 +80,12 @@ function controllerMeta<R>(
 ): RouteGroupMeta<R> {
   const name = key.name
   const errorHandlers = buildErrorHandlerMap(spec.errorHandlers, name, new Set(spec.routes.map(route => route.name)))
+  const methodHooks = buildMethodHooks<R>(spec, name)
 
-  // The `@Catch` method form needs the controller instance that threw, so when it is in play the instance is
-  // resolved once per request (inside the live request scope) and reused by the route dispatch — correct for
-  // transient scope, where a second `get()` would be a second instance.
-  if (errorHandlers === undefined) {
+  // The `@Catch` and hook method forms need the controller instance the route runs on, so when either is in play the
+  // instance is resolved once per request (inside the live request scope) and reused by the route dispatch — correct
+  // for transient scope, where a second `get()` would be a second instance.
+  if (errorHandlers === undefined && methodHooks === undefined) {
     return {
       name,
       target: key,
@@ -100,7 +102,8 @@ function controllerMeta<R>(
       ;(req as RequestWithTarget).routeTarget = ref ?? provider.get()
       done()
     },
-    handleError: sharedTargetErrorHandler<R>(errorHandlers),
+    handleError: errorHandlers === undefined ? undefined : sharedTargetErrorHandler<R>(errorHandlers),
+    hooks: methodHooks,
     dispatch: route => sharedTargetDispatch<R>(route),
   }
 }
@@ -200,4 +203,56 @@ function buildErrorHandlerMap(
   }
 
   return map
+}
+
+/**
+ * A controller's hook methods as hooks every route of it runs, after its class-level ones. Each runs on the instance
+ * the group's `onRequest` resolved, and is skipped when there is none: a hook ahead of the group's answered, or the
+ * request failed, before the controller was reached.
+ *
+ * Refuses a hook method that is also a route, and a route method carrying a hook decorator but no verb. Runs at build
+ * (app.bootstrap()), so the throw is observable, not an import crash.
+ */
+function buildMethodHooks<R>(spec: RouteGroupSpec<R>, controller: string): CompiledHooks<R> | undefined {
+  const verbless = spec.routes.find(route => route.method.length === 0 && route.hooks !== undefined)
+  if (verbless !== undefined) {
+    throw new ErrConfiguration(
+      errMessage(`Method "${String(verbless.name)}" in "${controller}" has a hook decorator but is no route`)
+        .solutions(
+          'Add a route verb decorator such as @Get(...)',
+          'Or put the hook decorator on the class to cover every route',
+        )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
+
+  const methods = spec.methodHooks
+  if (!methods?.length) {
+    return undefined
+  }
+
+  const routes = new Set(spec.routes.filter(route => route.method.length > 0).map(route => route.name))
+  const hooks: Record<string, unknown[]> = {}
+  for (const point of REQUEST_HOOK_NAMES) {
+    hooks[point] = []
+  }
+
+  for (const [point, key] of methods) {
+    if (routes.has(key)) {
+      throw new ErrConfiguration(
+        errMessage(`Method "${String(key)}" in "${controller}" cannot be both a route and a hook`)
+          .solutions(`Move the "@${hookDecoratorName(point)}()" hook to a method without a route verb decorator`)
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    hooks[point].push((req: R, ctx: unknown, arg: unknown) => {
+      const instance = (req as RequestWithTarget).routeTarget
+      return instance === null ? undefined : instance[key].call(instance, ctx, arg)
+    })
+  }
+
+  return hooks as unknown as CompiledHooks<R>
 }

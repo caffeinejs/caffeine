@@ -24,10 +24,13 @@ interface Entry {
   readonly factory: boolean
 }
 
-interface Resolved {
+/** A middleware in both forms: Node's, which the Fastify adapter installs, and the context form the engine runs. */
+interface Forms {
   readonly fn: NodeMiddleware
-  readonly hint: unknown
+  readonly handle: MiddlewareFn | undefined
 }
+
+type Resolved = Forms & { readonly hint: unknown }
 
 /** One middleware as the adapter installs it: resolved, adapted to the Node signature, and placed. */
 export interface ResolvedMiddleware {
@@ -39,6 +42,8 @@ export interface ResolvedMiddleware {
    */
   readonly hook: string | undefined
   readonly fn: NodeMiddleware
+  /** The context form, `(ctx, next)`; `undefined` for a Node `(req, res, next)` middleware, which `fn` is as written. */
+  readonly handle: MiddlewareFn | undefined
 }
 
 /**
@@ -84,7 +89,7 @@ export class MiddlewarePipeline<H extends string = string> {
       const resolved = resolve(entry.target, context, entry.factory)
       const hook = entry.hook ?? (resolved.hint === undefined ? undefined : String(resolved.hint))
 
-      return { path: entry.path, hook, fn: resolved.fn }
+      return { path: entry.path, hook, fn: resolved.fn, handle: resolved.handle }
     })
   }
 }
@@ -92,18 +97,18 @@ export class MiddlewarePipeline<H extends string = string> {
 function resolve(target: unknown, context: HTTPSetupContext, factory: boolean): Resolved {
   if (factory) {
     const produced = (target as MiddlewareFactory)(context)
-    return { fn: fromFactory(produced), hint: hintOn(target as object) }
+    return { ...fromFactory(produced), hint: hintOn(target as object) }
   }
 
   if (isMiddlewareInstance(target)) {
-    return { fn: adaptCaffeine((ctx, next) => target.handle(ctx, next)), hint: hintOn(target.constructor) }
+    return { ...caffeine((ctx, next) => target.handle(ctx, next)), hint: hintOn(target.constructor) }
   }
 
   if (typeof target === 'function' && !isMiddlewareClass(target)) {
     if (target.length >= 3) {
-      return { fn: target as NodeMiddleware, hint: undefined }
+      return { fn: target as NodeMiddleware, handle: undefined, hint: undefined }
     }
-    return { fn: adaptCaffeine(target as MiddlewareFn), hint: hintOn(target) }
+    return { ...caffeine(target as MiddlewareFn), hint: hintOn(target) }
   }
 
   const container = context.container
@@ -112,22 +117,24 @@ function resolve(target: unknown, context: HTTPSetupContext, factory: boolean): 
   if (container.hasScopeInGraph(key, Scopes.REQUEST)) {
     const provider = container.wrap<Middleware>(key)
     return {
-      fn: adaptCaffeine((ctx, next) => provider.get().handle(ctx, next)),
+      ...caffeine((ctx, next) => provider.get().handle(ctx, next)),
       hint: typeof key === 'function' ? hintOn(key) : undefined,
     }
   }
 
   const instance = container.get<Middleware>(key)
-  return { fn: adaptCaffeine((ctx, next) => instance.handle(ctx, next)), hint: hintOn(instance.constructor) }
+  return { ...caffeine((ctx, next) => instance.handle(ctx, next)), hint: hintOn(instance.constructor) }
 }
 
-function fromFactory(produced: unknown): NodeMiddleware {
+function fromFactory(produced: unknown): Forms {
   if (isMiddlewareInstance(produced)) {
-    return adaptCaffeine((ctx, next) => produced.handle(ctx, next))
+    return caffeine((ctx, next) => produced.handle(ctx, next))
   }
 
   if (typeof produced === 'function' && !isMiddlewareClass(produced)) {
-    return produced.length >= 3 ? (produced as NodeMiddleware) : adaptCaffeine(produced as MiddlewareFn)
+    return produced.length >= 3
+      ? { fn: produced as NodeMiddleware, handle: undefined }
+      : caffeine(produced as MiddlewareFn)
   }
 
   throw new ErrConfiguration(
@@ -135,6 +142,11 @@ function fromFactory(produced: unknown): NodeMiddleware {
       .reference('@caffeinejs/http', ErrConfiguration)
       .build(),
   )
+}
+
+/** A context-form middleware with the Node form the Fastify adapter installs. */
+function caffeine(handle: MiddlewareFn): Forms {
+  return { fn: adaptCaffeine(handle), handle }
 }
 
 function hintOn(holder: object): unknown {

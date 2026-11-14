@@ -233,3 +233,28 @@ describe('ContextRequest behind a proxy and with a request ID', () => {
     expect(await seen(await served.request('/p', { headers: { 'x-request-id': '' } }))).toMatchObject({ id: 'req-1' })
   })
 })
+
+describe('Context while onSend runs', () => {
+  const sending = createWebApplication()
+    .hook('onSend', ctx => {
+      ctx.status(201)
+      ctx.body('replaced')
+    })
+    .mount(new Router('/s').get('/').handler(() => 'answer'))
+
+  beforeAll(async () => {
+    await sending.bootstrap()
+  })
+
+  afterAll(async () => {
+    await sending.close()
+  })
+
+  // The head is still open while onSend runs; the answer is not: a new body goes through the payload onSend returns.
+  it('takes a status and refuses a new body', async () => {
+    const res = await sending.request('/s')
+
+    expect(res.status).toBe(201)
+    expect(await res.text()).toBe('answer')
+  })
+})

@@ -1,6 +1,7 @@
 import type { ConfigSnapshot } from '@caffeinejs/application/config'
 
 import type { AnyAdapterTypes, IAdapterTypes } from './adapter.js'
+import type { RouteDefinition } from './core/lifecycle/route_definition.js'
 import type { AuthenticationState } from './core/security/auth/authentication_state.js'
 import { type Principal } from './core/security/identity.js'
 import type { IRequest } from './request.js'
@@ -101,6 +102,13 @@ export interface IContext<
    * reply is outside that record, and is seen here only once the response has actually ended.
    */
   get sent(): boolean
+
+  /**
+   * The route the request matched, as `onRoute` hooks saw it: how a hook that covers many routes, an application's
+   * or a plugin's, reads what one route declared, `ctx.route?.config.get('key')`. `undefined` when no route matched,
+   * and for a route Caffeine did not compile itself.
+   */
+  get route(): RouteDefinition | undefined
 
   /**
    * What the route declared, as the adapter recorded it. The shape belongs to the adapter — the Fastify one

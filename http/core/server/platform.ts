@@ -1,12 +1,23 @@
 import type { IContextPlatform } from '../../adapter.js'
-
-/** What goes out as a body: text, bytes, a stream, or none. */
-export type SendPayload = string | Uint8Array | ReadableStream<Uint8Array> | null
+import type { SendPayload } from '../lifecycle/lifecycle.js'
+import type { Next, NodeMiddleware } from '../middleware/middleware.js'
 
 /** The status and headers of an answer, lower-case names. */
 export interface ResponseHead {
   readonly status: number
   readonly headers: Readonly<Record<string, string | readonly string[]>>
+}
+
+/**
+ * What a Node middleware finds on the request beside Node's own members, as a Node framework's middleware expects:
+ * read off the context. A body, a logger and the list of forwarded addresses are not set.
+ */
+export interface NodeMiddlewareStamp {
+  readonly id: string
+  readonly hostname: string
+  readonly protocol: string
+  readonly ip: string | undefined
+  readonly query: Readonly<Record<string, string | string[]>>
 }
 
 /** What the engine hands `respond`: how to say the answer has left, and how to cut it while it streams. */
@@ -43,4 +54,17 @@ export interface ServerPlatform<N, P extends IContextPlatform, R> {
    * and, for a stream, registers with `hooks.cancelWith` how to cut it: a reader of its body then fails with the reason.
    */
   respond(native: N, head: ResponseHead, payload: SendPayload, hooks: SendHooks): R
+  /**
+   * Runs a Node `(req, res, next)` middleware on the native request, with `req.url` set to `url` until it calls `next`.
+   * `answered` is called when the response closed, by the middleware or the client, without `next`; a `next` after
+   * that is ignored. Absent on a runtime with no Node request: a Node middleware is then refused at start-up.
+   */
+  runNodeMiddleware?(
+    native: N,
+    fn: NodeMiddleware,
+    url: string,
+    stamp: NodeMiddlewareStamp,
+    next: Next,
+    answered: () => void,
+  ): void
 }

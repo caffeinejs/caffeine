@@ -1,28 +1,39 @@
 import { ConfigStore } from '@caffeinejs/application/config'
-import { runGuards } from '@caffeinejs/application/framework'
 import type { Logger } from '@caffeinejs/application/logger'
-import { ExecutionContext, type Container, type ContextKey, type Ctor } from '@caffeinejs/di'
+import { ContextStorage, ExecutionContext, type Container, type ContextKey, type Ctor } from '@caffeinejs/di'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
 import type { IContextPlatform } from '../../adapter.js'
 import { stripBasePath } from '../../base_path.js'
 import { kRouteConstraints } from '../constraints/keys.js'
-import { kCSRFRoute } from '../csrf/route.js'
 import { problemEncoder } from '../error/encode.js'
 import { ErrorHandlerProvider } from '../error/handler.js'
 import { ErrHTTPNotFound, ErrHTTPServiceUnavailable } from '../error/http.js'
 import { kErrorHandlingOptions } from '../error/keys.js'
-import { httpGuardDenial, type GuardContext, type GuardTarget } from '../guards/guard.js'
-import { andThen, callbackEntry, isThenable, runHooks, type HookEntry } from '../lifecycle/lifecycle.js'
+import { newProblem } from '../error/problem.js'
+import type { GuardTarget } from '../guards/guard.js'
+import type { HookBatch } from '../lifecycle/batch.js'
+import {
+  asError,
+  isThenable,
+  runAll,
+  runErrorHooks,
+  runHooks,
+  runSendHooks,
+  type HookEntry,
+  type SendPayload,
+} from '../lifecycle/lifecycle.js'
+import { callOnRoute, openDefinition, type RouteDefinition } from '../lifecycle/route_definition.js'
 import { ErrRouteConflict, type RouteMatch, type RouteMatcher } from '../matcher/matcher.js'
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
 import { joinPaths, pathsOf } from '../routing/paths.js'
-import type { IRoute, IRouteGroup } from '../routing/route.js'
+import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import { answer, byteLength, connectionFields } from './answer.js'
 import { Context, type ServerShared } from './context.js'
-import { answerError, asError, configurationError, defaultProblem, USE_FASTIFY } from './error.js'
+import { answerError, configurationError, defaultProblem, sendProblem, USE_FASTIFY } from './error.js'
+import { compileLevel, composeRouteHooks, type LevelInput, type StoreHooks } from './hooks.js'
 import { engineCompilers } from './parameters.js'
-import type { SendHooks, SendPayload, ServerPlatform } from './platform.js'
+import type { SendHooks, ServerPlatform } from './platform.js'
 import { isTimeout, MAX_TIMEOUT, type ResolvedServerSettings } from './settings.js'
 
 /** What one route resolves to in the matcher. A miss resolves to the server's not-found store. */
@@ -30,8 +41,10 @@ export interface RouteStore {
   readonly route: IRoute<Context> | undefined
   readonly group: IRouteGroup<Context> | undefined
   readonly handle: (req: Context, res: Context) => unknown
-  /** The group's `onRequest`, then its guards. */
-  readonly onRequest: readonly HookEntry<Context>[]
+  /** Every hook of the route, in the fixed order, one array per point. */
+  readonly hooks: StoreHooks
+  /** What `onRoute` was handed; `undefined` for a miss. */
+  readonly definition: RouteDefinition | undefined
   readonly headers: readonly (readonly [string, string | string[]])[]
   readonly contentType: string | undefined
   readonly status: number | undefined
@@ -49,6 +62,10 @@ export interface HTTPServerInput {
   /** The slot of each request's frame that holds its context: what the container resolves `Context` from. */
   readonly contextKey: ContextKey<Context>
   readonly logger: Logger
+  /** What sits in front of the routes: the server's root level, and each scope's at one path. */
+  readonly levels: { readonly root: LevelInput; of(scope: RouteGroupScope): LevelInput }
+  /** Whether the platform runs Node middleware: a Node middleware is refused at start-up otherwise. */
+  readonly nodeMiddleware: boolean
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, string | undefined>> = Object.freeze({})
@@ -68,6 +85,14 @@ export class HTTPServer {
   readonly #basePath: string | undefined
   readonly #container: Container
   readonly #contextKey: ContextKey<Context>
+  readonly #storage: ContextStorage | undefined
+  readonly #settings: ResolvedServerSettings
+  readonly #input: HTTPServerInput
+  readonly #root: StoreHooks
+  /** Each scope's level, by key then path: one router nested under two parents is one key at two paths. */
+  readonly #scoped = new Map<object, Map<string, ScopeLevel>>()
+  /** Every batch whose server hooks run on this server: the root's, then each served scope's, once each. */
+  readonly #batches = new Set<HookBatch>()
 
   /** Each request still in flight, to cut: abort its handler, or its answer once it has one. */
   readonly #inFlight = new Set<InFlight>()
@@ -83,6 +108,7 @@ export class HTTPServer {
   #closed = false
   #cutting = false
   #drained: Promise<void> | undefined
+  #closedOnce: Promise<void> | undefined
   #resolveDrained: (() => void) | undefined
 
   /**
@@ -102,10 +128,19 @@ export class HTTPServer {
       application: settings.application,
       trustProxy: settings.trustProxy,
       requestIDHeader: settings.requestIDHeader,
+      router: settings.router,
     }
     this.#basePath = input.basePath
     this.#container = container
     this.#contextKey = input.contextKey
+    // Absent, the request scope fails each request at `enter`, as it did before hooks existed.
+    this.#storage = container.getOptional(ContextStorage)
+    this.#settings = settings
+    this.#input = input
+    this.#root = compileLevel(input.levels.root, settings, input.nodeMiddleware)
+    for (const batch of input.levels.root.batches) {
+      this.#batches.add(batch)
+    }
     this.#matcher = settings.matcher<RouteStore>(settings.router)
     this.#notFound = {
       route: undefined,
@@ -113,7 +148,8 @@ export class HTTPServer {
       handle: ctx => {
         throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
       },
-      onRequest: [],
+      hooks: this.#root,
+      definition: undefined,
       headers: [],
       contentType: undefined,
       status: undefined,
@@ -151,7 +187,7 @@ export class HTTPServer {
     this.#count++
     const id = ++this.#ids
 
-    const flight = new InFlight(this.#inFlight, this.#uncountOne, this.#settle, drainAtRespond)
+    const flight = new InFlight(this.#inFlight, this.#uncountOne, this.#settle, drainAtRespond, this.#storage)
     this.#inFlight.add(flight)
 
     try {
@@ -186,8 +222,10 @@ export class HTTPServer {
         seenBase,
         match?.params ?? EMPTY_PARAMS,
         match?.query ?? queryAfter(url),
+        store.definition,
       )
       flight.ctx = current
+      flight.onResponse = store.hooks.onResponse
 
       const pipeline = new Pipeline<N, R>(this.#shared, platform, native, current, store, flight, method === 'HEAD')
 
@@ -197,6 +235,10 @@ export class HTTPServer {
       const result = this.#container.requestScopeManager.enter(
         end => {
           flight.scope = end
+          // Kept only for what runs after the answer left, outside this continuation.
+          if (flight.onResponse.length > 0) {
+            flight.frame = this.#storage?.getStore()
+          }
           return pipeline.run(failure)
         },
         ExecutionContext.ROOT.with(this.#contextKey, current),
@@ -230,13 +272,23 @@ export class HTTPServer {
     flight.sent()
   }
 
+  /** Runs every `onReady`, the root's plugins' first, then each served scope's, in order. */
+  async ready(): Promise<void> {
+    for (const batch of this.#batches) {
+      for (const onReady of batch.onReady) {
+        await onReady(batch.kit)
+      }
+    }
+  }
+
   /**
    * Answers 503 from now on; resolves once every request in flight has been answered and, on `fetch`, its body has
-   * been sent.
+   * been sent, and every `onClose` has run. Every `onClose` runs; the first that failed rejects.
    */
   close(): Promise<void> {
+    // A second call waits for what the first started, `onClose` included.
     if (this.#closed) {
-      return Promise.resolve()
+      return this.#closedOnce ?? Promise.resolve()
     }
 
     this.#closing = true
@@ -245,9 +297,31 @@ export class HTTPServer {
     })
     this.#settleDrain()
 
-    return this.#drained.then(() => {
+    this.#closedOnce ??= this.#drained.then(async () => {
       this.#closed = true
+      await this.#runOnClose()
     })
+
+    return this.#closedOnce
+  }
+
+  async #runOnClose(): Promise<void> {
+    const failures: unknown[] = []
+
+    for (const batch of this.#batches) {
+      for (const onClose of batch.onClose) {
+        try {
+          await onClose(batch.kit)
+        } catch (err) {
+          this.#shared.logger.error({ err }, 'onClose hook failed')
+          failures.push(err)
+        }
+      }
+    }
+
+    if (failures.length > 0) {
+      throw failures[0]
+    }
   }
 
   /**
@@ -304,7 +378,7 @@ export class HTTPServer {
 
         assertServable(route, methods, paths[0], settings.application)
 
-        const store = storeOf(group, route, settings.handlerTimeout)
+        const store = this.#storeOf(group, route, methods, paths[0], settings.handlerTimeout)
 
         for (const method of methods) {
           for (const path of paths) {
@@ -342,6 +416,89 @@ export class HTTPServer {
 
     return registered.map(({ route, group, methods, url }) => routeRecord(route, group, methods, url))
   }
+
+  /**
+   * One route's store. Everything the route declares is read first; then `onRoute` runs, root plugins' first, then
+   * each scope's, outermost first; then the hooks are composed, with what `onRoute` added last.
+   */
+  #storeOf(
+    group: IRouteGroup<Context>,
+    route: IRoute<Context>,
+    methods: readonly string[],
+    url: string,
+    handlerTimeout: Duration | undefined,
+  ): RouteStore {
+    const guards = route.guards
+    const compiled = route.hooks
+    // The same object for every request on this route.
+    const target: GuardTarget = { clazz: group.target as Ctor<unknown> | undefined, handler: route.name }
+    const statics = {
+      handle: route.dispatch(engineCompilers) as (req: Context, res: Context) => unknown,
+      headers: [...route.header],
+      contentType: route.contentType || undefined,
+      status: typeof route.statusCode === 'number' && route.statusCode > 0 ? route.statusCode : undefined,
+      timeout: route.timeout ?? handlerTimeout,
+    }
+
+    const scopes = group.scopes ?? []
+    const levels = scopes.map(scope => this.#level(scope))
+
+    // A copy: the automatic HEAD route is added to `methods` later, and is not one the route declared.
+    const open = openDefinition(route, group, Object.freeze([...methods]), url)
+    try {
+      callOnRoute(this.#input.levels.root.batches, open.definition)
+      for (const level of levels) {
+        callOnRoute(level.batches, open.definition)
+      }
+    } finally {
+      open.close()
+    }
+
+    return {
+      route,
+      group,
+      ...statics,
+      hooks: composeRouteHooks({
+        root: this.#root,
+        scopes: levels.map(level => level.hooks),
+        group,
+        guards,
+        target,
+        compiled,
+        added: open.added,
+      }),
+      definition: open.definition as RouteDefinition,
+      twin: false,
+    }
+  }
+
+  // A scope's level at one path, compiled on first use; its batches join the server's once.
+  #level(scope: RouteGroupScope): ScopeLevel {
+    let byPath = this.#scoped.get(scope.key)
+    if (byPath === undefined) {
+      byPath = new Map()
+      this.#scoped.set(scope.key, byPath)
+    }
+
+    let level = byPath.get(scope.path)
+    if (level === undefined) {
+      const input = this.#input.levels.of(scope)
+      level = { hooks: compileLevel(input, this.#settings, this.#input.nodeMiddleware), batches: input.batches }
+      byPath.set(scope.path, level)
+
+      for (const batch of input.batches) {
+        this.#batches.add(batch)
+      }
+    }
+
+    return level
+  }
+}
+
+/** One scope's level at one path: its compiled hooks, and the batches its `onRoute` and server hooks come from. */
+interface ScopeLevel {
+  readonly hooks: StoreHooks
+  readonly batches: readonly HookBatch[]
 }
 
 /** One request in flight: what a forced close cuts, and what releases it once its answer has left. */
@@ -349,6 +506,9 @@ class InFlight implements SendHooks {
   ctx: Context | undefined
   /** Ends the request scope: set as the request enters it. */
   scope: (() => void | Promise<void>) | undefined
+  /** The request's frame, which `onResponse` runs in: set as the request enters its scope. */
+  frame: ExecutionContext | undefined
+  onResponse: readonly HookEntry<Context>[] = []
   fail: ((reason: Error) => void) | undefined
 
   readonly #flights: Set<InFlight>
@@ -359,20 +519,57 @@ class InFlight implements SendHooks {
   #finished = false
   #uncounted = false
 
-  constructor(flights: Set<InFlight>, uncountOne: () => void, settle: () => void, drainAtRespond: boolean) {
+  readonly #storage: ContextStorage | undefined
+
+  constructor(
+    flights: Set<InFlight>,
+    uncountOne: () => void,
+    settle: () => void,
+    drainAtRespond: boolean,
+    storage: ContextStorage | undefined,
+  ) {
+    this.#storage = storage
     this.#flights = flights
     this.#uncountOne = uncountOne
     this.#settle = settle
     this.#drainAtRespond = drainAtRespond
   }
 
-  /** Releases the request scope and the drain count, once. An arrow: a platform may call it detached. */
+  /**
+   * Runs `onResponse`, then releases the request scope and the drain count, once. An arrow: a platform may call it
+   * detached.
+   */
   readonly sent = (): void => {
     if (this.#finished) {
       return
     }
 
     this.#finished = true
+
+    const ran = this.#runOnResponse()
+    if (isThenable(ran)) {
+      void Promise.resolve(ran).then(() => this.#release())
+    } else {
+      this.#release()
+    }
+  }
+
+  // In the request's frame, re-entered: a stream's end fires outside it. A request whose scope never opened has none.
+  #runOnResponse(): void | Promise<void> {
+    const ctx = this.ctx
+    const frame = this.frame
+
+    if (ctx === undefined || frame === undefined || this.#storage === undefined) {
+      return
+    }
+
+    const entries = this.onResponse
+    return this.#storage.run(frame, () =>
+      runAll(entries, ctx, err => ctx.logger.error({ reqId: ctx.req.id, err }, 'onResponse hook failed')),
+    )
+  }
+
+  #release(): void {
     this.#endScope()
     this.#flights.delete(this)
 
@@ -439,6 +636,7 @@ class Pipeline<N, R> {
   readonly #store: RouteStore
   readonly #hooks: InFlight
   readonly #head: boolean
+  #answeringError = false
 
   constructor(
     shared: ServerShared,
@@ -475,40 +673,55 @@ class Pipeline<N, R> {
   }
 
   // Hooks, the route's statics, then the handler and its answer.
+  // Each step goes on in the same call when the one before it stayed synchronous: no closure on that path.
   #work(): void | PromiseLike<void> {
+    const ran = runHooks(this.#store.hooks.onRequest, this.#ctx)
+    return isThenable(ran) ? ran.then(() => this.#afterOnRequest()) : this.#afterOnRequest()
+  }
+
+  #afterOnRequest(): void | PromiseLike<void> {
+    if (this.#ctx.sent) {
+      return
+    }
+
+    // Parsing and validation go here.
+    const ran = runHooks(this.#store.hooks.preHandler, this.#ctx)
+    return isThenable(ran) ? ran.then(() => this.#afterPreHandler()) : this.#afterPreHandler()
+  }
+
+  #afterPreHandler(): void | PromiseLike<void> {
+    return this.#ctx.sent ? undefined : this.#handle()
+  }
+
+  // The route's statics, then the handler and its answer.
+  #handle(): void | PromiseLike<void> {
     const ctx = this.#ctx
     const store = this.#store
 
-    return andThen(runHooks(store.onRequest, ctx), () => {
-      if (ctx.sent) {
-        return
-      }
-
-      for (const [name, value] of store.headers) {
-        if (typeof value === 'string') {
-          ctx.header(name, value)
-        } else {
-          for (const item of value) {
-            ctx.appendHeader(name, item)
-          }
+    for (const [name, value] of store.headers) {
+      if (typeof value === 'string') {
+        ctx.header(name, value)
+      } else {
+        for (const item of value) {
+          ctx.appendHeader(name, item)
         }
       }
+    }
 
-      if (store.contentType !== undefined) {
-        ctx.header('content-type', store.contentType)
-      }
+    if (store.contentType !== undefined) {
+      ctx.header('content-type', store.contentType)
+    }
 
-      if (store.status !== undefined) {
-        ctx.status(store.status)
-      }
+    if (store.status !== undefined) {
+      ctx.status(store.status)
+    }
 
-      const result = store.handle(ctx, ctx)
+    const result = store.handle(ctx, ctx)
 
-      // What the handler settles with once its timeout fired is dropped: the 503 stands, whoever is writing it.
-      return isThenable(result)
-        ? Promise.resolve(result).then(settled => (ctx.expired ? undefined : answer(ctx, settled)))
-        : answer(ctx, result)
-    })
+    // What the handler settles with once its timeout fired is dropped: the 503 stands, whoever is writing it.
+    return isThenable(result)
+      ? Promise.resolve(result).then(settled => (ctx.expired ? undefined : answer(ctx, settled)))
+      : answer(ctx, result)
   }
 
   /**
@@ -586,8 +799,25 @@ class Pipeline<N, R> {
     return isThenable(handled) ? Promise.resolve(handled).then(() => this.#respond()) : this.#respond()
   }
 
-  // The error chain, and the default problem for whatever the chain itself throws.
+  // The `onError` hooks, which observe; then the error chain, and the default problem for whatever it throws.
   #answerError(err: Error): void | Promise<void> {
+    this.#answeringError = true
+
+    const observed = this.#runOnError(err)
+    return isThenable(observed)
+      ? Promise.resolve(observed).then(() => this.#resolveError(err))
+      : this.#resolveError(err)
+  }
+
+  // A failing hook is logged, and the error goes on: an observer does not replace the application's answer.
+  #runOnError(err: Error): void | Promise<void> {
+    const ctx = this.#ctx
+    return runErrorHooks(this.#store.hooks.onError, ctx, err, failure =>
+      this.#shared.logger.error({ reqId: ctx.req.id, err: failure }, 'onError hook failed'),
+    )
+  }
+
+  #resolveError(err: Error): void | Promise<void> {
     try {
       const handled = answerError(this.#shared, this.#ctx, this.#store, err)
       return isThenable(handled)
@@ -616,8 +846,88 @@ class Pipeline<N, R> {
     }
   }
 
+  // `onSend`, then the answer the context holds goes out.
+  #respond(): R | Promise<R> {
+    const ctx = this.#ctx
+
+    // A Node middleware ended the response itself: nothing more goes out, and the request is done.
+    if (ctx.outside) {
+      this.#hooks.sent()
+      return undefined as R
+    }
+
+    if (ctx.responded) {
+      return undefined as R
+    }
+
+    const onSend = this.#store.hooks.onSend
+    if (onSend.length === 0) {
+      return this.#send()
+    }
+
+    ctx.openSending()
+
+    let sent: SendPayload | Promise<SendPayload>
+    try {
+      sent = runSendHooks(onSend, ctx, ctx.payload ?? null)
+    } catch (err) {
+      return this.#sendFailed(err)
+    }
+
+    if (isThenable(sent)) {
+      return Promise.resolve(sent).then(
+        payload => this.#sendWith(payload),
+        (err: unknown) => this.#sendFailed(err),
+      )
+    }
+
+    return this.#sendWith(sent)
+  }
+
+  #sendWith(payload: SendPayload): R {
+    const ctx = this.#ctx
+    ctx.closeSending()
+
+    // A forced close cut the request while `onSend` ran.
+    if (ctx.responded) {
+      dropped(payload)
+      return undefined as R
+    }
+
+    ctx.replacePayload(payload)
+    return this.#send()
+  }
+
+  // A throw from `onSend`: logged, observed by `onError` unless an error is already being answered, and answered with
+  // a 500 that no `onSend` runs over.
+  #sendFailed(failure: unknown): R | Promise<R> {
+    const ctx = this.#ctx
+    const err = asError(failure)
+    ctx.closeSending()
+    this.#shared.logger.error({ reqId: ctx.req.id, err }, 'onSend hook failed')
+
+    const answer500 = (): R => {
+      if (ctx.responded) {
+        return undefined as R
+      }
+
+      dropped(ctx.payload ?? null)
+      ctx.reopen()
+      sendProblem(this.#shared, ctx, newProblem({ status: 500, code: 'ERR_INTERNAL' }))
+      return this.#send()
+    }
+
+    if (this.#answeringError) {
+      return answer500()
+    }
+
+    this.#answeringError = true
+    const observed = this.#runOnError(err)
+    return isThenable(observed) ? Promise.resolve(observed).then(answer500) : answer500()
+  }
+
   // Sends what the context holds, under the length rules of Fastify's `reply.send` and HEAD route.
-  #respond(): R {
+  #send(): R {
     const ctx = this.#ctx
     const hooks = this.#hooks
 
@@ -697,7 +1007,6 @@ class Pipeline<N, R> {
 function assertServable(route: IRoute<Context>, methods: readonly string[], url: string, application: string): void {
   const types = new Set(route.parameters.map(parameter => parameter.type))
   const timeout = route.timeout
-  const unreadConfig = [...route.config.keys()].filter(key => key !== kCSRFRoute).map(String)
 
   if (timeout !== undefined && !isTimeout(timeout)) {
     throw configurationError(
@@ -717,12 +1026,12 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
     [route.options.size > 0, `route options ("${[...route.options.keys()].map(String).join('", "')}")`],
     [route.config.has(kRouteConstraints), 'a route constraint'],
     [route.config.has('cache') || route.config.has('cacheInvalidate'), '@CacheControl or @CacheInvalidate'],
+    // Read by the Fastify CORS plugin, which the engine does not run yet. A plugin's own key is served: it reads it.
+    [route.config.has('cors'), '@CORS()'],
     [route.authorization.authorizer != null, 'a protected route, which needs an authentication gate'],
     [types.has('body'), 'reading the body'],
     [types.has('cookie') || types.has('cookie:signed'), 'reading cookies'],
     [types.has('fastify:request') || types.has('fastify:reply'), 'the Fastify request or reply'],
-    // A key nothing here reads would be ignored: a plugin's own, such as CORS, that the engine does not run.
-    [unreadConfig.length > 0, `route config ("${unreadConfig.join('", "')}")`],
   ]
   const unsupported = refusals.find(([applies]) => applies)?.[1]
 
@@ -731,43 +1040,6 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
       `Cannot serve "${methods.join('|')} ${url}" on the ${application}: ${unsupported} is not supported yet`,
       USE_FASTIFY,
     )
-  }
-}
-
-function storeOf(
-  group: IRouteGroup<Context>,
-  route: IRoute<Context>,
-  handlerTimeout: Duration | undefined,
-): RouteStore {
-  const onRequest: HookEntry<Context>[] = []
-
-  const groupHook = group.onRequest
-  if (groupHook !== undefined) {
-    onRequest.push(callbackEntry<Context>((ctx, done) => groupHook(ctx, ctx, done)))
-  }
-
-  const guards = route.guards
-  if (guards !== undefined && guards.length > 0) {
-    // The same object for every request on this route.
-    const target: GuardTarget = { clazz: group.target as Ctor<unknown> | undefined, handler: route.name }
-
-    onRequest.push(
-      callbackEntry<Context>((ctx, done) =>
-        runGuards(guards, { kind: 'http', context: ctx as unknown as GuardContext, target }, httpGuardDenial, done),
-      ),
-    )
-  }
-
-  return {
-    route,
-    group,
-    handle: route.dispatch(engineCompilers) as (req: Context, res: Context) => unknown,
-    onRequest,
-    headers: [...route.header],
-    contentType: route.contentType || undefined,
-    status: typeof route.statusCode === 'number' && route.statusCode > 0 ? route.statusCode : undefined,
-    timeout: route.timeout ?? handlerTimeout,
-    twin: false,
   }
 }
 
