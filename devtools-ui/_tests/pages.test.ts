@@ -18,8 +18,9 @@ import {
   Principal,
   type IContext,
   type WebApplication,
+  healthProbes,
 } from '@caffeinejs/http'
-import { authentication, createWebApplication, csrf, healthProbes, newRouter } from '@caffeinejs/http/fastify'
+import { authentication, createWebApplication, csrf, newRouter } from '@caffeinejs/http/fastify'
 import { testClient, type TestClient } from '@caffeinejs/testing/http'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -528,7 +529,7 @@ describe('devtools UI over devtools that require credentials', () => {
       .install(DevTools(d => d.port(0).authorize({ roles: ['ops'] })))
       .with(authentication())
       .with(csrf())
-      // Raw routes, exempt from authentication.
+      // Exempt from authentication.
       .with(healthProbes(h => h.enabled(true)))
       .mount(
         newRouter('/pets')
@@ -574,7 +575,8 @@ describe('devtools UI over devtools that require credentials', () => {
 
     expect(res.status).toBe(200)
     expect(page).toContain('role keeper')
-    expect(page).toMatch(/<code>\/livez<\/code> <span class="badge badge-muted">raw<\/span>/)
+    expect(page).toContain('<code>/livez</code>')
+    expect(page).not.toMatch(/<code>\/livez<\/code> <span class="badge badge-muted">raw/)
     expect(page).toContain('exempt')
     expect(page).toContain('default: Bearer')
     expect(page).toMatch(/protected/)

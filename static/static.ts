@@ -1,13 +1,8 @@
 import { validateHeaderName, validateHeaderValue } from 'node:http'
 import { join, posix, relative } from 'node:path'
 
-import { ErrConfiguration, ErrHTTPNotFound, type RouterFlags } from '@caffeinejs/http'
-import {
-  authenticationExempt,
-  routerFlagsOf,
-  type HTTPPluginConfigurer,
-  type HTTPPluginFactory,
-} from '@caffeinejs/http/fastify'
+import { ErrConfiguration, ErrHTTPNotFound, type HTTPPluginConfigurer, type RouterFlags } from '@caffeinejs/http'
+import { authenticationExempt, routerFlagsOf, type HTTPPluginFactory, type RouterTypes } from '@caffeinejs/http/fastify'
 import { Day, Second, formatDuration, truncate } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
@@ -30,7 +25,7 @@ import {
 } from './serve.js'
 
 /** Authors static file serving through {@link StaticBuilder}. */
-export type StaticConfigurer<C = unknown> = HTTPPluginConfigurer<StaticBuilder, C>
+export type StaticConfigurer<C = unknown> = HTTPPluginConfigurer<StaticBuilder, C, RouterTypes>
 
 /** The decoration `sendFile` reads the mounts from, off the server that serves the request. */
 export const kStaticMounts = Symbol('caffeine.static.mounts')

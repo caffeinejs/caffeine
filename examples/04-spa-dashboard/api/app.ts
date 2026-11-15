@@ -1,7 +1,7 @@
 import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
-import { Authentication, Authorization } from '@caffeinejs/http'
-import { createWebApplication, authentication, csrf, healthProbes } from '@caffeinejs/http/fastify'
+import { Authentication, Authorization, healthProbes } from '@caffeinejs/http'
+import { createWebApplication, authentication, csrf } from '@caffeinejs/http/fastify'
 import { OpenAPI, openapi } from '@caffeinejs/openapi'
 import { Second } from '@caffeinejs/std/duration'
 

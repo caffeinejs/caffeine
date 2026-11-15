@@ -48,3 +48,24 @@ export abstract class HTTPPlugin<T extends IAdapterTypes = never> {
 
   abstract register(context: HTTPSetupContext<unknown, T>): void | Promise<void>
 }
+
+/**
+ * Authors a plugin's options through its builder, handed the same {@link HTTPSetupContext} the factory that
+ * runs it was given — so a plugin's settings can come from the application's configuration or from something
+ * it resolves out of the container.
+ *
+ * Runs while the factory builds the plugin, after `container.init()`, so `container.get(...)` is legal and
+ * `container.bind(...)` is not. A feature's callback is `FeatureConfigurer` from `@caffeinejs/application` instead,
+ * which runs earlier and binds rather than resolves.
+ *
+ * `T` is the adapter the plugin is written for: a Fastify plugin factory's callback names `RouterTypes`, so its
+ * context mounts `newRouter()` routers.
+ *
+ * ```ts
+ * .with(HTTPCaching((b, { container }) => b.store(container.get(RedisCache))))
+ * ```
+ */
+export type HTTPPluginConfigurer<B, C = unknown, T extends IAdapterTypes = never> = (
+  builder: B,
+  context: HTTPSetupContext<C, T>,
+) => void

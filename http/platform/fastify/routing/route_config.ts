@@ -52,7 +52,8 @@ export interface CaffeineRouteConfig<R = FastifyRequest> {
   /**
    * The gate returns before authenticating, so no principal is established.
    *
-   * See {@link authenticationExempt}.
+   * See {@link authenticationExempt}. Also set for a route carrying the framework's access-control mark, such as a
+   * health probe.
    */
   skipAuthentication: boolean
 
@@ -78,7 +79,7 @@ export interface CaffeineRouteConfig<R = FastifyRequest> {
  * Route config for a route the authentication gate must leave alone.
  *
  * For a route registered straight on the server that has to answer before anyone is signed in, whatever the
- * application's fallback policy says — a health probe, the callback an identity provider redirects to. A
+ * application's fallback policy says — the callback an identity provider redirects to. A
  * compiled route never needs it: `@AllowAnonymous` says the same thing.
  *
  * No principal is established for such a route either, so its handler must not read `ctx.user`.

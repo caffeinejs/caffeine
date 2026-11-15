@@ -1,7 +1,8 @@
 import type { ConfigDefinition } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
-import { createWebApplication, healthProbes } from '@caffeinejs/http/fastify'
+import { healthProbes } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { Resilience } from '@caffeinejs/resilience/aop'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 

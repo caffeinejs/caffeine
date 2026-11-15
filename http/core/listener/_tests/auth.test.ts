@@ -14,7 +14,8 @@ import {
   bindTo,
   type WebApplication,
 } from '../../../index.js'
-import { authentication, createWebApplication, healthProbes, newRouter } from '../../../platform/fastify/index.js'
+import { authentication, createWebApplication, newRouter } from '../../../platform/fastify/index.js'
+import { healthProbes } from '../../health/index.js'
 
 /**
  * Scenario: a listener with authentication and authorization.

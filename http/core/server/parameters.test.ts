@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { Args, Controller, Get, Post } from '../../decorators/index.js'
+import { HMACCookieSigner } from '../cookie/signer.js'
 import { $p } from '../routing/picker.js'
 import { portOf } from './parameters.js'
 
@@ -37,6 +38,24 @@ class Picks {
   @Args([$p.body()])
   body(body: unknown): object {
     return { body }
+  }
+
+  @Get('/cookie/one')
+  @Args([$p.cookie('a')])
+  cookie(a: string | undefined): object {
+    return { a: a ?? null }
+  }
+
+  @Get('/cookie/all')
+  @Args([$p.cookie()])
+  cookies(all: Record<string, string>): object {
+    return { all }
+  }
+
+  @Get('/cookie/signed')
+  @Args([$p.signedCookie('s')])
+  signed(s: string | false | undefined): object {
+    return { s: s ?? null }
   }
 
   @Get('/custom/url')
@@ -122,5 +141,39 @@ describe('the body pick', () => {
     })
 
     expect(await res.json()).toEqual({ body: { a: 1 } })
+  })
+})
+
+describe('the cookie picks', () => {
+  const S = 's'.repeat(32)
+  const signing = createWebApplication({ container: new CaffeineIoC() }).cookie(k => k.secret(S))
+
+  beforeAll(async () => {
+    await signing.bootstrap()
+  })
+
+  afterAll(async () => {
+    await signing.close()
+  })
+
+  it('picks one cookie, and every cookie', async () => {
+    const headers = { cookie: 'a=1' }
+
+    expect(await (await app.fetch(new Request('http://localhost/picks/cookie/one', { headers }))).json()).toEqual({
+      a: '1',
+    })
+    expect(await (await app.fetch(new Request('http://localhost/picks/cookie/all', { headers }))).json()).toEqual({
+      all: { a: '1' },
+    })
+  })
+
+  it('picks a signed cookie, verified', async () => {
+    const value = await new HMACCookieSigner({ secret: S }).sign('v')
+
+    const res = await signing.fetch(
+      new Request('http://localhost/picks/cookie/signed', { headers: { cookie: `s=${value}` } }),
+    )
+
+    expect(await res.json()).toEqual({ s: 'v' })
   })
 })

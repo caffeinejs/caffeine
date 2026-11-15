@@ -21,8 +21,8 @@ import {
   authenticationExempt,
   newRouter,
   authentication,
-  healthProbes,
 } from '../../../platform/fastify/index.js'
+import { healthProbes } from '../../health/index.js'
 
 /**
  * The authentication gate in front of routes the application's router did not compile, and the ways a route stays

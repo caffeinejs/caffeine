@@ -15,9 +15,9 @@ import { type Engine, createEngine } from './_engine.js'
 /**
  * Where a middleware runs under the Fastify adapter: one of Fastify's request-lifecycle hooks.
  *
- * Defaults to `onRequest`. Hooks cover every route, including ones the framework registers for itself, except
- * probe routes which have no context and are skipped. Use a later hook when the middleware must see a parsed
- * or validated body.
+ * Defaults to `onRequest`. Hooks cover every route, including ones the framework registers for itself, except a
+ * route registered straight on Fastify, which has no context and is skipped. Use a later hook when the middleware
+ * must see a parsed or validated body.
  */
 export type MiddlewareHook =
   | 'onRequest'

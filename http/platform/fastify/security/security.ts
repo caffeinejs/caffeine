@@ -20,8 +20,10 @@ import { newPolicyEvaluator } from '../../../core/security/authz/policy.js'
 import { AuthzRouteService } from '../../../core/security/authz/route_service.js'
 import { anonymousUser, mergePrincipals, type Principal } from '../../../core/security/identity.js'
 import { AuthenticationGateBuilder, kGateOptions } from '../../../core/security/security.js'
+import type { HTTPPluginConfigurer } from '../../../plugin.js'
+import type { RouterTypes } from '../adapter.js'
 import { hasServerCookies } from '../cookie/cookie.js'
-import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
+import type { HTTPPluginFactory } from '../plugin.js'
 import { type GatedRoute } from '../routing/route_config.js'
 import { oidcRoutesPlugin } from './auth/oidc/oidc.js'
 
@@ -132,7 +134,7 @@ export function gateCovering<G extends AuthenticationGates['installed'][number]>
  * @throws ErrAuthSchemeNotFound at start-up when the gate's `defaultScheme(...)` names an unregistered scheme.
  */
 export function authentication<C = unknown>(
-  configure?: HTTPPluginConfigurer<AuthenticationGateBuilder, C>,
+  configure?: HTTPPluginConfigurer<AuthenticationGateBuilder, C, RouterTypes>,
 ): HTTPPluginFactory<C> {
   return context => {
     const builder = new AuthenticationGateBuilder()

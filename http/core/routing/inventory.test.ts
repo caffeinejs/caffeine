@@ -2,8 +2,18 @@ import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication as createFetchApplication } from '../../application.js'
-import { HTTPPlugin, Router, RouteInventory, type Guard, type WebApplication } from '../../index.js'
+import {
+  AuthenticateResult,
+  Authentication,
+  BaseAuthenticationHandler,
+  HTTPPlugin,
+  Router,
+  RouteInventory,
+  type Guard,
+  type WebApplication,
+} from '../../index.js'
 import { createWebApplication } from '../../platform/fastify/index.js'
+import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../security/exempt.js'
 import type { FetchAdapterTypes } from '../server/adapter.js'
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
@@ -94,5 +104,33 @@ describe('routeRecord on the fetch application', () => {
     expect(record.security.authentication.gate).toBe(undefined)
     expect(record.security.authorization.protected).toBe(false)
     expect(record.security.csrf).toBe('uncovered')
+  })
+
+  it('reports a route the framework serves outside access control as skipped, with no scheme', async () => {
+    class NobodyScheme extends BaseAuthenticationHandler<object> {
+      constructor() {
+        super({})
+      }
+
+      async authenticate(): Promise<AuthenticateResult> {
+        return AuthenticateResult.none()
+      }
+    }
+
+    app = createFetchApplication()
+      .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
+      .mount(
+        new Router('/marked')
+          .config(kAccessControlExempt, ACCESS_CONTROL_EXEMPT)
+          .get('/')
+          .handler(() => 'x'),
+        new Router('/plain').get('/').handler(() => 'x'),
+      )
+    await app.bootstrap()
+    const routes = app.container.get(RouteInventory).servers[0].routes
+    const security = (url: string) => routes.find(record => record.url === url)?.security.authentication
+
+    expect(security('/marked')).toEqual({ skipped: true, schemes: [], allowAnonymous: false, gate: undefined })
+    expect(security('/plain')).toEqual({ skipped: false, schemes: ['Nobody'], allowAnonymous: false, gate: undefined })
   })
 })

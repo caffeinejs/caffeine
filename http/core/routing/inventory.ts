@@ -4,6 +4,7 @@ import type { Duration } from '@caffeinejs/std/duration'
 
 import { SAFE_METHODS } from '../csrf/origin.js'
 import { csrfMarkOf } from '../csrf/route.js'
+import { isAccessControlExempt } from '../security/exempt.js'
 import type { IRoute, IRouteGroup } from './route.js'
 
 /** Adds one server's routes. The adapter's, through `AdapterIn.recordRoutes`; nothing else writes the inventory. */
@@ -13,7 +14,7 @@ export const kCompleteInventory: unique symbol = Symbol('@caffeinejs/http:invent
 
 /**
  * Every route of every server the application runs: the application's own and each listener's, the routes plugins
- * mounted and the ones registered straight on the server (health probes, static files) included.
+ * mounted and the ones registered straight on the server (static files) included.
  *
  * Plain data, built once every route has registered, and readable once the application has bootstrapped. What a
  * route requires is described as the server decided it, so a route a gate covers names that gate, and a route
@@ -88,7 +89,10 @@ export interface RouteSchemaRecord {
 
 export interface RouteSecurityRecord {
   readonly authentication: {
-    /** Exempt from authentication: no principal is established (`authenticationExempt()`, a health probe). */
+    /**
+     * Exempt from authentication: no principal is established (`authenticationExempt()`, or a route the framework
+     * serves outside access control, such as a health probe).
+     */
     readonly skipped: boolean
     /** The schemes that authenticate the route, the application's default when it named none. */
     readonly schemes: readonly string[]
@@ -157,7 +161,7 @@ export function routeRecord(
     },
     security: {
       authentication: {
-        skipped: false,
+        skipped: isAccessControlExempt(route.config),
         schemes: [...authorization.schemes],
         allowAnonymous: authorization.options?.allowAnonymous === true,
         gate: undefined,

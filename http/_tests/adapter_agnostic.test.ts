@@ -33,10 +33,10 @@ import { Router } from '../core/routing/programmatic/programmatic.js'
 import type { AdapterOf, RoutesOf } from '../core/routing/programmatic/types.js'
 import type { RouterTypes, AdapterTypes } from '../platform/fastify/adapter.js'
 import { createWebApplication } from '../platform/fastify/application.js'
-import { healthProbes } from '../platform/fastify/index.js'
-import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../platform/fastify/plugin.js'
+import { constraints } from '../platform/fastify/index.js'
+import type { HTTPPluginFactory } from '../platform/fastify/plugin.js'
 import { newRouter } from '../platform/fastify/routing/new_router.js'
-import { HTTPPlugin } from '../plugin.js'
+import { HTTPPlugin, type HTTPPluginConfigurer } from '../plugin.js'
 
 /**
  * The adapter contract, held to its word: an application whose adapter is not Fastify's.
@@ -254,7 +254,7 @@ describe('adapter types', () => {
     expect(() => createWebApplication().with(fakeFeature('elsewhere'))).toThrow()
 
     // @ts-expect-error a factory producing a Fastify plugin on an application that does not run Fastify
-    onFake().with(healthProbes())
+    onFake().with(constraints())
 
     // @ts-expect-error a Fastify plugin on an application that does not run Fastify
     onFake().with(() => noop)
@@ -409,7 +409,9 @@ describe('configure callback typing', () => {
 
   class PluginSideBuilder {}
 
-  function pluginSide<C = unknown>(configure: HTTPPluginConfigurer<PluginSideBuilder, C>): HTTPPluginFactory<C> {
+  function pluginSide<C = unknown>(
+    configure: HTTPPluginConfigurer<PluginSideBuilder, C, RouterTypes>,
+  ): HTTPPluginFactory<C> {
     return context => {
       configure(new PluginSideBuilder(), context)
       return noop

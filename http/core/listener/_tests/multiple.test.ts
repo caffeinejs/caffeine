@@ -20,9 +20,9 @@ import {
   type HTTPPluginFactory,
   authentication,
   createWebApplication,
-  healthProbes,
   newRouter,
 } from '../../../platform/fastify/index.js'
+import { healthProbes } from '../../health/index.js'
 
 /**
  * Scenario: several listeners with different settings.

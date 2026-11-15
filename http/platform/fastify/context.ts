@@ -18,7 +18,7 @@ import { payloadOf } from '../../core/server/answer.js'
 import type { InferBody, InferHeaders, InferParams, InferQuery, IRequest, UnsignedCookie } from '../../request.js'
 import { appendVary } from '../../vary.js'
 import type { ContextPlatform, AdapterTypes } from './adapter.js'
-import { reopenCookieFlush, serverCookies } from './cookie/cookie.js'
+import { reopenCookieFlush, serverCookies, setCookie } from './cookie/cookie.js'
 import { encodeProblem } from './error/error.js'
 import { protocolOf } from './protocol.js'
 import { isHandlerTimeout } from './timeout.js'
@@ -243,12 +243,12 @@ export class Context<
   }
 
   cookie(name: string, value: string, opts?: CookieSerializeOptions): this {
-    serverCookies(this.#fastifyRequest, 'set cookies').set(this.#fastifyRequest, this.#reply, name, value, opts)
+    setCookie(this.#fastifyRequest, this.#reply, 'set', name, value, opts)
     return this
   }
 
   deleteCookie(name: string, opts?: CookieSerializeOptions): this {
-    serverCookies(this.#fastifyRequest, 'delete cookies').delete(this.#fastifyRequest, this.#reply, name, opts)
+    setCookie(this.#fastifyRequest, this.#reply, 'delete', name, '', opts)
     return this
   }
 
@@ -399,19 +399,7 @@ export class ContextRequest<SCHEMA extends RouteValidationSchema = RouteValidati
   signedCookie(): Promise<Record<string, UnsignedCookie>>
   signedCookie(name: string, secret?: CookieSecret): Promise<UnsignedCookie>
   async signedCookie(name?: string, secret?: CookieSecret): Promise<Record<string, UnsignedCookie> | UnsignedCookie> {
-    const server = serverCookies(this.request, 'read cookies')
-    const cookies = this.#parsedCookies()
-
-    if (name !== undefined) {
-      const raw = cookies[name]
-
-      return raw === undefined ? undefined : server.verify(raw, secret)
-    }
-
-    const names = Object.keys(cookies)
-    const values = await Promise.all(names.map(cookie => server.verify(cookies[cookie]!, undefined)))
-
-    return Object.fromEntries(names.map((cookie, i) => [cookie, values[i]]))
+    return serverCookies(this.request, 'read cookies').signed(this.#parsedCookies(), name, secret)
   }
 
   async unsignCookie(value: string, secret?: CookieSecret): Promise<CookieUnsignResult> {
@@ -420,6 +408,6 @@ export class ContextRequest<SCHEMA extends RouteValidationSchema = RouteValidati
 
   /** Parsed once per request, on first read. */
   #parsedCookies(): Record<string, string> {
-    return (this.#cookies ??= serverCookies(this.request, 'read cookies').parse(this.request))
+    return (this.#cookies ??= serverCookies(this.request, 'read cookies').parse(this.request.headers.cookie))
   }
 }

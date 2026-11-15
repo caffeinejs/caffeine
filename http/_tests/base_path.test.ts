@@ -7,8 +7,9 @@ import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { healthProbes } from '../core/health/index.js'
 import { Controller, ErrConfiguration, Get, RouteBuilder, type NodeMiddleware, type WebApplication } from '../index.js'
-import { createWebApplication, newRouter, type HTTPPluginFactory, healthProbes } from '../platform/fastify/index.js'
+import { createWebApplication, newRouter, type HTTPPluginFactory } from '../platform/fastify/index.js'
 
 /**
  * An application served under a base path, the way `UsePathBase` serves one in ASP.NET Core: the server takes the

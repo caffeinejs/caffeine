@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
 
-import { type WebApplication } from '@caffeinejs/http'
-import { authenticationExempt, compress, newRouter, healthProbes } from '@caffeinejs/http/fastify'
+import { type WebApplication, healthProbes } from '@caffeinejs/http'
+import { authenticationExempt, compress, newRouter } from '@caffeinejs/http/fastify'
 import fastifyCompress from '@fastify/compress'
 import fastifyCors from '@fastify/cors'
 import type { FastifyInstance } from 'fastify'

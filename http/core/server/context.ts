@@ -2,14 +2,22 @@ import type { RunInfo } from '@caffeinejs/application'
 import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
 import type { ByteSize } from '@caffeinejs/std/bytes'
-import { errMessage } from '@caffeinejs/std/err'
 
 import type { IAdapterTypes, IContextPlatform } from '../../adapter.js'
 import { resolveAppURL } from '../../base_path.js'
 import { ContextState, type IContext } from '../../context.js'
 import type { InferBody, IRequest, UnsignedCookie } from '../../request.js'
-import { ErrCookiesDisabled } from '../cookie/errors.js'
 import type { CookieSerializeOptions } from '../cookie/options.js'
+import type { CookieOperation } from '../cookie/serialize.js'
+import {
+  kCookieFlush,
+  kPendingCookies,
+  requireCookies,
+  type CookieFlushState,
+  type CookieJar,
+  type PendingCookie,
+  type ServerCookies,
+} from '../cookie/server_cookies.js'
 import type { CookieSecret, CookieUnsignResult } from '../cookie/signer.js'
 import type { ProblemEncoder } from '../error/encode.js'
 import type { GlobalErrorHandlerOptions } from '../error/error.js'
@@ -25,11 +33,14 @@ import type { Principal } from '../security/identity.js'
 import type { CompiledSerializer } from '../validation/validation.js'
 import { isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
 import { contentTooLarge, declaredOver, ErrRequestBodyConsumed, limitStream } from './body.js'
-import { configurationError, sendProblem, USE_FASTIFY } from './error.js'
+import { configurationError, sendProblem } from './error.js'
 import type { ServerPlatform } from './platform.js'
 import { parseQuery } from './query.js'
 import type { RouteStore } from './server.js'
 import type { ResolvedServerSettings } from './settings.js'
+
+/** The engine's `Set-Cookie` writer on a context: see {@link Context}. */
+export const kAppendCookies = Symbol('caffeine.http.cookies.append')
 
 /** What every context of one server shares. Built once per server by `HTTPServer`. */
 export interface ServerShared extends Pick<
@@ -41,6 +52,8 @@ export interface ServerShared extends Pick<
   readonly errors: ErrorHandlerProvider
   readonly options: Required<GlobalErrorHandlerOptions>
   readonly encodeProblem: ProblemEncoder
+  /** `undefined` when the cookie feature is off. */
+  readonly cookies: ServerCookies<Context> | undefined
 }
 
 /** What a context of the engine is typed with on every platform: `ctx.req.raw` is a `Request`. */
@@ -64,7 +77,10 @@ type Params = Readonly<Record<string, string | undefined>>
  * The {@link IContext} the engine builds for every request. Also what routes compile against, and what a group's
  * `onRequest` hook is handed as both its request and its reply.
  */
-export class Context implements IContext<Record<never, never>, Record<never, never>, EngineContextTypes> {
+export class Context implements IContext<Record<never, never>, Record<never, never>, EngineContextTypes>, CookieJar {
+  [kPendingCookies]: Map<string, PendingCookie> | null = null;
+  [kCookieFlush]: CookieFlushState = 'open'
+
   /** @see {@link IContext.auth} */
   auth?: AuthenticationState
 
@@ -296,12 +312,29 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     return Array.isArray(value) ? value.join(', ') : value
   }
 
-  cookie(_name: string, _value: string, _opts?: CookieSerializeOptions): this {
-    throw cookiesDisabled('set cookies', this.#shared.application)
+  /**
+   * Sets a cookie, written as the answer goes out, ahead of every `onSend` hook.
+   *
+   * @throws ErrCookiesDisabled when the server's cookies are off.
+   * @throws ErrCookieTooLate once the answer was handed over, or the error answer's own cookies failed to sign.
+   */
+  cookie(name: string, value: string, opts?: CookieSerializeOptions): this {
+    return this.#queueCookie('set', name, value, opts)
   }
 
-  deleteCookie(_name: string, _opts?: CookieSerializeOptions): this {
-    throw cookiesDisabled('delete cookies', this.#shared.application)
+  /** Deletes a cookie. Throws as {@link cookie} does. */
+  deleteCookie(name: string, opts?: CookieSerializeOptions): this {
+    return this.#queueCookie('delete', name, '', opts)
+  }
+
+  /**
+   * The engine's cookie writer: appends each line to `Set-Cookie`, whatever the answer's state. Symbol-keyed, so no
+   * handler reaches a way to write a cookie that skips its checks.
+   */
+  [kAppendCookies](lines: readonly string[]): void {
+    for (const line of lines) {
+      this.#append('set-cookie', line)
+    }
   }
 
   body(body?: unknown): this {
@@ -481,6 +514,16 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     return this
   }
 
+  #queueCookie(op: CookieOperation, name: string, value: string, opts: CookieSerializeOptions | undefined): this {
+    // Too late once handed to the platform, or once the error answer's own cookies failed to sign: the 500 that
+    // answers then gets no cookie pass. A first failure reopens the jar for the error chain's answer.
+    const late = this.#responded || this[kCookieFlush] === 'failed'
+    const secure = this.req.protocol === 'https'
+
+    requireCookies(this.#shared.cookies, `${op} cookies`).queue(this, op, name, value, opts, { secure, late })
+    return this
+  }
+
   #markAnswered(): void {
     this.#answered = true
     // An answer ends a mounted middleware's view: what runs after it sees the request's own URL.
@@ -580,6 +623,7 @@ export class ContextRequest implements IRequest<
 
   #parsedQuery?: Record<string, string | string[]>
   #headers?: Record<string, string>
+  #cookies?: Record<string, string>
   #requestID?: string
   #trusted?: boolean
   #raw?: Request
@@ -783,18 +827,25 @@ export class ContextRequest implements IRequest<
 
   cookie(): Record<string, string>
   cookie(name: string): string | undefined
-  cookie(_name?: string): never {
-    throw cookiesDisabled('read cookies', this.#shared.application)
+  cookie(name?: string): Record<string, string> | string | undefined {
+    const cookies = this.#parsedCookies()
+
+    return name === undefined ? cookies : cookies[name]
   }
 
   signedCookie(): Promise<Record<string, UnsignedCookie>>
   signedCookie(name: string, secret?: CookieSecret): Promise<UnsignedCookie>
-  signedCookie(_name?: string, _secret?: CookieSecret): never {
-    throw cookiesDisabled('read cookies', this.#shared.application)
+  async signedCookie(name?: string, secret?: CookieSecret): Promise<Record<string, UnsignedCookie> | UnsignedCookie> {
+    return requireCookies(this.#shared.cookies, 'read cookies').signed(this.#parsedCookies(), name, secret)
   }
 
-  unsignCookie(_value: string, _secret?: CookieSecret): Promise<CookieUnsignResult> {
-    throw cookiesDisabled('unsign a cookie', this.#shared.application)
+  async unsignCookie(value: string, secret?: CookieSecret): Promise<CookieUnsignResult> {
+    return requireCookies(this.#shared.cookies, 'unsign a cookie').unsign(value, secret)
+  }
+
+  /** Parsed once per request, on first read. */
+  #parsedCookies(): Record<string, string> {
+    return (this.#cookies ??= requireCookies(this.#shared.cookies, 'read cookies').parse(this.header('cookie')))
   }
 
   // Refused before a byte is read: a body something else started reading, or one declaring more than the limit.
@@ -828,13 +879,4 @@ export class ContextRequest implements IRequest<
     const last = value.slice(value.lastIndexOf(',') + 1).trim()
     return last === '' ? undefined : last
   }
-}
-
-function cookiesDisabled(action: string, application: string): ErrCookiesDisabled {
-  return new ErrCookiesDisabled(
-    errMessage(`Cannot ${action}: the ${application} handles no cookies yet`)
-      .solutions(`${USE_FASTIFY} to use cookies`)
-      .reference('@caffeinejs/http', ErrCookiesDisabled)
-      .build(),
-  )
 }

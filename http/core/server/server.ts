@@ -6,6 +6,8 @@ import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 import type { IContextPlatform } from '../../adapter.js'
 import { stripBasePath } from '../../base_path.js'
 import { kRouteConstraints } from '../constraints/keys.js'
+import { kCookieSettings } from '../cookie/keys.js'
+import { kCookieFlush, kPendingCookies, ServerCookies, type CookieWriter } from '../cookie/server_cookies.js'
 import { problemEncoder } from '../error/encode.js'
 import { ErrorHandlerProvider } from '../error/handler.js'
 import { ErrHTTPNotFound, ErrHTTPServiceUnavailable } from '../error/http.js'
@@ -30,7 +32,7 @@ import { joinPaths, pathsOf } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import type { CompiledSerializer } from '../validation/validation.js'
 import { answer, byteLength, compileSerializers, connectionFields, NO_SERIALIZER } from './answer.js'
-import { Context, type ServerShared } from './context.js'
+import { Context, kAppendCookies, type ServerShared } from './context.js'
 import { answerError, configurationError, defaultProblem, sendProblem, USE_FASTIFY } from './error.js'
 import { compileLevel, composeRouteHooks, type LevelInput, type StoreHooks } from './hooks.js'
 import { compileRouteInput, readInput, type RouteInput } from './input.js'
@@ -75,6 +77,9 @@ export interface HTTPServerInput {
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, string | undefined>> = Object.freeze({})
+
+// The engine's cookie writer, one for every server: a context appends its own lines.
+const writeCookies: CookieWriter<Context> = (ctx, lines) => ctx[kAppendCookies](lines)
 
 const CLOSED_BODY = 'Service Unavailable'
 // The 503 of a closed server is tracked by no request.
@@ -124,6 +129,7 @@ export class HTTPServer {
   constructor(input: HTTPServerInput) {
     const { container, settings } = input
     const options = container.get(kErrorHandlingOptions)
+    const cookieSettings = container.get(kCookieSettings)
 
     this.#shared = {
       store: container.get(ConfigStore),
@@ -136,6 +142,7 @@ export class HTTPServer {
       requestIDHeader: settings.requestIDHeader,
       router: settings.router,
       bodyLimit: settings.bodyLimit,
+      cookies: cookieSettings.enabled ? ServerCookies.resolve(cookieSettings, container, writeCookies) : undefined,
     }
     this.#basePath = input.basePath
     this.#container = container
@@ -864,7 +871,7 @@ class Pipeline<N, R> {
     }
   }
 
-  // `onSend`, then the answer the context holds goes out.
+  // The cookies, then `onSend`, then the answer the context holds goes out.
   #respond(): R | Promise<R> {
     const ctx = this.#ctx
 
@@ -874,6 +881,62 @@ class Pipeline<N, R> {
       return undefined as R
     }
 
+    if (ctx.responded) {
+      return undefined as R
+    }
+
+    // The `Set-Cookie` head slot, ahead of every `onSend` hook: inline, so an answer that set no cookie pays one field
+    // read and one write.
+    if (ctx[kPendingCookies] === null) {
+      ctx[kCookieFlush] = 'done'
+      return this.#runSend()
+    }
+
+    let flushed: void | Promise<void>
+    try {
+      // A queued cookie means the server's cookies are on.
+      flushed = this.#shared.cookies!.flush(ctx)
+    } catch (err) {
+      return this.#flushFailed(err)
+    }
+
+    if (isThenable(flushed)) {
+      return Promise.resolve(flushed).then(
+        () => this.#runSend(),
+        (err: unknown) => this.#flushFailed(err),
+      )
+    }
+
+    return this.#runSend()
+  }
+
+  // The answer's cookies could not be written. The answer they were for is taken back, and the failure is answered as
+  // a handler's throw is: `onError`, then the error chain, whose answer gets a cookie pass of its own. Unless that
+  // answer's cookies failed too, or a forced close cut the request meanwhile.
+  #flushFailed(failure: unknown): R | Promise<R> {
+    const ctx = this.#ctx
+
+    if (ctx.responded) {
+      return undefined as R
+    }
+
+    if (this.#answeringError) {
+      return this.#sendFailed(failure, 'Cannot write the response cookies')
+    }
+
+    dropped(ctx.payload ?? null)
+    ctx.reopen()
+    // The failed batch went with the answer it was for: what the error chain sets goes out with its own.
+    ctx[kCookieFlush] = 'open'
+
+    return this.#errorThenRespond(failure)
+  }
+
+  // The `onSend` hooks, then the answer the context holds goes out.
+  #runSend(): R | Promise<R> {
+    const ctx = this.#ctx
+
+    // A forced close may cut the request while its cookies were signing.
     if (ctx.responded) {
       return undefined as R
     }
@@ -918,11 +981,11 @@ class Pipeline<N, R> {
 
   // A throw from `onSend`: logged, observed by `onError` unless an error is already being answered, and answered with
   // a 500 that no `onSend` runs over.
-  #sendFailed(failure: unknown): R | Promise<R> {
+  #sendFailed(failure: unknown, message = 'onSend hook failed'): R | Promise<R> {
     const ctx = this.#ctx
     const err = asError(failure)
     ctx.closeSending()
-    this.#shared.logger.error({ reqId: ctx.req.id, err }, 'onSend hook failed')
+    this.#shared.logger.error({ reqId: ctx.req.id, err }, message)
 
     const answer500 = (): R => {
       if (ctx.responded) {
@@ -1041,7 +1104,6 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
     // Read by the Fastify CORS plugin, which the engine does not run yet. A plugin's own key is served: it reads it.
     [route.config.has('cors'), '@CORS()'],
     [route.authorization.authorizer != null, 'a protected route, which needs an authentication gate'],
-    [types.has('cookie') || types.has('cookie:signed'), 'reading cookies'],
     [types.has('fastify:request') || types.has('fastify:reply'), 'the Fastify request or reply'],
   ]
   const unsupported = refusals.find(([applies]) => applies)?.[1]

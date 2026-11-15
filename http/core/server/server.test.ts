@@ -18,7 +18,6 @@ import { ErrHTTPServiceUnavailable } from '../error/http.js'
 import type { Guard } from '../guards/guard.js'
 import { ErrRouteConflict } from '../matcher/matcher.js'
 import { RouteBuilder } from '../routing/builder.js'
-import { $p } from '../routing/picker.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import type { FetchAdapterTypes } from './adapter.js'
 import { Context } from './context.js'
@@ -525,10 +524,7 @@ describe('HTTPServer', () => {
   })
 
   // A programmatic route always picks the context: picks are a controller's, bound here to this application alone.
-  it.each([
-    ['$p.cookie()', $p.cookie('a')],
-    ['$fst.request()', $fst.request()],
-  ])('refuses %s at start-up', async (_pick, pick) => {
+  it.each([['$fst.request()', $fst.request()]])('refuses %s at start-up', async (_pick, pick) => {
     const endpoints = class Picking {
       x(): string {
         return 'x'

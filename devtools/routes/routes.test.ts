@@ -10,8 +10,9 @@ import {
   Principal,
   type IContext,
   type WebApplication,
+  healthProbes,
 } from '@caffeinejs/http'
-import { authentication, createWebApplication, healthProbes, newRouter } from '@caffeinejs/http/fastify'
+import { authentication, createWebApplication, newRouter } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { DevTools, type DevToolsRoutes } from '../devtools.js'

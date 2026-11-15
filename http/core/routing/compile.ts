@@ -19,6 +19,7 @@ import {
   kAuthzOpts,
   PolicyEvaluator,
 } from '../security/authz/index.js'
+import { isAccessControlExempt } from '../security/exempt.js'
 import { mergeAuthz } from './inherit.js'
 import {
   IRoute,
@@ -119,6 +120,8 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
       const hasHeader = !!spec.header || !!route.header
 
       const owner = `${meta.name}.${String(route.name)}`
+      // A route the framework serves on the application's behalf: no global guard and no authorization reach it.
+      const exempt = isAccessControlExempt(config)
 
       return {
         path: route.path,
@@ -143,9 +146,20 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         // write back into the spec the route was authored from.
         detail: route.detail === undefined ? undefined : { ...route.detail },
         catchBy: buildCatchByMap(container, route.catchBy, { owner, declaredBy: '"@CatchWith"' }),
-        guards: compileRouteGuardChain(container, compiledGuards, globalGuards, spec.guards, route.guards, owner),
+        guards: compileRouteGuardChain(
+          container,
+          compiledGuards,
+          exempt ? [] : globalGuards,
+          spec.guards,
+          route.guards,
+          owner,
+        ),
         hooks: compileHooks(spec.hooks, meta.hooks, route.hooks),
         authorization: (() => {
+          if (exempt) {
+            return { hasProtection: false, options: undefined, authorizer: undefined, schemes: [] }
+          }
+
           // Always compiled, never gated on a decorator being present: an undecorated route is exactly
           // the one a configured fallback policy has to reach, and compileRoutePolicy is what knows
           // whether there is one. It returns undefined when the route really is ungated.

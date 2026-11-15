@@ -1,8 +1,8 @@
 # HTTP
 
 Package: `@caffeinejs/http`. Adapter is Fastify: what is Fastify-specific — `createWebApplication()`, `newRouter()`,
-`HTTPPluginFactory`, and plugin factories such as `authentication()` and `healthProbes()` — is imported from
-`@caffeinejs/http/fastify`.
+`HTTPPluginFactory`, and plugin factories such as `authentication()` — is imported from `@caffeinejs/http/fastify`.
+`healthProbes()` runs on any adapter and is imported from `@caffeinejs/http/health`.
 
 ```ts
 import { Controller, Get, Post, Args, $p } from '@caffeinejs/http'
@@ -591,9 +591,12 @@ const readiness = await app.health.readiness() // { ok, checks, outcomes }
   mounted or not. Without `Health()`, `ApplicationHealth` runs on 2 s, 3 s and 1 s.
 - Readiness and startup fail until `run()` marks the application started. Under Watt, answer its checks from
   `app.health` as [docs/watt.md](../../docs/watt.md) shows.
+- The probes skip the authentication gate, the application's global guards and its authorization, so the kubelet never
+  sees a 401 or 403 from them. Root hooks and middleware still run for them: a middleware that refuses requests
+  without a credential must let the probe paths through.
 - To serve the probes on a [listener](#listeners), register the plugin there:
-  `.listener('admin', l => l.with(healthProbes()))`. They stay exempt from authentication there, and the
-  application's own server serves them only if its `.with(...)` registers them too.
+  `.listener('admin', l => l.with(healthProbes()))`. They skip access control there too, and the application's own
+  server serves them only if its `.with(...)` registers them too.
 
 ## Listeners
 

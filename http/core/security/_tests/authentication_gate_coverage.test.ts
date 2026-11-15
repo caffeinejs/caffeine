@@ -17,9 +17,9 @@ import {
   authentication,
   authenticationExempt,
   createWebApplication,
-  healthProbes,
   newRouter,
 } from '../../../platform/fastify/index.js'
+import { healthProbes } from '../../health/index.js'
 
 /**
  * Which routes start-up refuses for want of an authentication gate. Installing `Authentication(...)` binds what

@@ -35,8 +35,8 @@ export function portOf(host: string): number | null {
   return Number.isInteger(port) && host.length > colon + 1 ? port : null
 }
 
-// What each built-in pick reads off the engine's context. The cookie picks and the Fastify request and reply are
-// refused when the route registers, so they never get here.
+// What each built-in pick reads off the engine's context. The Fastify request and reply are refused when the route
+// registers, so they never get here.
 function basePicker(p: ParameterPickOptions<Context>): Picker {
   const field = p.name
 
@@ -69,6 +69,10 @@ function basePicker(p: ParameterPickOptions<Context>): Picker {
       return ctx => portOf(ctx.req.host)
     case 'address':
       return ctx => ctx.remoteAddress
+    case 'cookie':
+      return field ? ctx => ctx.req.cookie(field) : ctx => ctx.req.cookie()
+    case 'cookie:signed':
+      return field ? ctx => ctx.req.signedCookie(field) : ctx => ctx.req.signedCookie()
     default:
       throw configurationError(
         `Cannot compile a parameter of type "${String(p.type)}": the web-standards engine does not read it`,

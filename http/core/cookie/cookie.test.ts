@@ -40,7 +40,7 @@ const schema = $t.Object({
 
 interface LogEntry {
   msg?: string
-  err?: { message?: string; type?: string }
+  err?: { message?: string; type?: string; code?: string }
 }
 
 /** Fastify's own logger, writing every line into `logged`. Named in the factory settings, so it is the server's. */
@@ -898,6 +898,33 @@ describe('cookies turned off', () => {
     expect(text).not.toContain('disabled')
 
     expect(loggedError(logged, 'Cannot read cookies: cookies are disabled on this server')).toBe(true)
+  })
+
+  it('fails the write, naming the setting that turned them off', async () => {
+    const logged: LogEntry[] = []
+    const app = await ready(
+      createWebApplication()
+        .cookie(k => k.enabled(false))
+        .server(() => ({ factory: { logger: pinoTo(logged, 'error') } }))
+        .mount(
+          newRouter('/set').get('/', ctx => {
+            ctx.cookie('a', 'b')
+            return 'ok'
+          }),
+        ),
+    )
+
+    const response = await app.request('/set')
+
+    expect(response.status).toBe(500)
+    expect(
+      logged.some(
+        entry =>
+          entry.err?.code === 'ERR_COOKIES_DISABLED' &&
+          entry.err.message?.startsWith('Cannot set cookies: cookies are disabled on this server') === true &&
+          entry.err.message.includes('.cookie(k => k.enabled(true))'),
+      ),
+    ).toBe(true)
   })
 })
 

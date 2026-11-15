@@ -9,7 +9,8 @@ import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { bindTo, type WebApplication } from '../../../index.js'
-import { createWebApplication, healthProbes, newRouter } from '../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../platform/fastify/index.js'
+import { healthProbes } from '../../health/index.js'
 
 /**
  * A listener's lifecycle follows the application's own server: it starts after it — the first listen to

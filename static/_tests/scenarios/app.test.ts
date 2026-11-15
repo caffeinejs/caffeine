@@ -12,8 +12,9 @@ import {
   Authentication,
   Authorization,
   type ActionResult,
+  healthProbes,
 } from '@caffeinejs/http'
-import { createWebApplication, newRouter, authentication, healthProbes } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { isDocumentRequest, sendFile, staticFiles } from '../../index.js'

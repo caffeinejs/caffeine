@@ -1,5 +1,8 @@
+import type { FastifyInstance } from 'fastify'
+import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { healthProbes } from '../../../core/health/index.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -15,11 +18,11 @@ import {
   type ServerRoutes,
   type WebApplication,
 } from '../../../index.js'
-import { authentication, createWebApplication, csrf, healthProbes, newRouter } from '../index.js'
+import { authentication, authenticationExempt, createWebApplication, csrf, newRouter } from '../index.js'
 
 /**
  * The route inventory: every route of every server, described as the server decided it. A tool reading it (the
- * devtools routes page) must see a listener's routes, a probe a plugin registered raw, and what protects each one,
+ * devtools routes page) must see a listener's routes, a raw route a plugin registered, and what protects each one,
  * or it reports an application as safer than it is.
  */
 
@@ -100,7 +103,35 @@ describe('route inventory', () => {
     })
   })
 
-  it('lists a raw route a plugin registered, such as a probe, as exempt from authentication', async () => {
+  it('lists a raw route a plugin registered as exempt from authentication', async () => {
+    app = createWebApplication()
+      .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
+      .install(Authorization(z => z.requireAuthenticatedByDefault()))
+      .with(authentication())
+      .with(() =>
+        fp(async (instance: FastifyInstance) => {
+          instance.route({
+            method: ['GET', 'HEAD'],
+            url: '/livez',
+            config: authenticationExempt(),
+            handler: () => 'ok',
+          })
+        }),
+      ) as WebApplication
+
+    await app.bootstrap()
+
+    expect(route(undefined, '/livez')).toMatchObject({
+      kind: 'raw',
+      methods: ['GET', 'HEAD'],
+      security: {
+        authentication: { skipped: true, schemes: [] },
+        authorization: { protected: false },
+      },
+    })
+  })
+
+  it('lists a health probe as a compiled route exempt from authentication', async () => {
     app = createWebApplication()
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
@@ -110,8 +141,7 @@ describe('route inventory', () => {
     await app.bootstrap()
 
     expect(route(undefined, '/livez')).toMatchObject({
-      kind: 'raw',
-      methods: ['GET', 'HEAD'],
+      kind: 'compiled',
       security: {
         authentication: { skipped: true, schemes: [] },
         authorization: { protected: false },

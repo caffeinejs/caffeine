@@ -7,7 +7,9 @@ import { ErrCSRFCrossOrigin } from '../../../core/csrf/errors.js'
 import { isExcluded, type CSRFOptions, type ExcludedPath } from '../../../core/csrf/options.js'
 import { checkOrigin, SAFE_METHODS, type OriginCheckAskable, type OriginCheckInput } from '../../../core/csrf/origin.js'
 import { csrfMarkOf } from '../../../core/csrf/route.js'
-import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
+import type { HTTPPluginConfigurer } from '../../../plugin.js'
+import type { RouterTypes } from '../adapter.js'
+import type { HTTPPluginFactory } from '../plugin.js'
 import { protocolOf } from '../protocol.js'
 
 /**
@@ -36,7 +38,7 @@ import { protocolOf } from '../protocol.js'
  * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path not starting
  * with `/` or that is `/` itself.
  */
-export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, C>): HTTPPluginFactory<C> {
+export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, C, RouterTypes>): HTTPPluginFactory<C> {
   return context => {
     const builder = new CSRFBuilder()
     configure?.(builder, context)

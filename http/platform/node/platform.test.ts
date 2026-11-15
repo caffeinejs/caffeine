@@ -129,6 +129,21 @@ describe('the Node platform', () => {
     expect((await fetch(`${origin}/a/cookies`)).headers.getSetCookie()).toEqual(['a=1', 'b=2'])
   })
 
+  it('sends each cookie set on a Set-Cookie line of its own', async () => {
+    const routes = newRouter('/a')
+    routes.get('/set').handler(ctx => {
+      ctx.cookie('a', 'b')
+      ctx.cookie('c', 'd')
+      return 'ok'
+    })
+    const { origin } = await serve(routes)
+
+    expect((await fetch(`${origin}/a/set`)).headers.getSetCookie()).toEqual([
+      'a=b; Path=/; SameSite=Lax',
+      'c=d; Path=/; SameSite=Lax',
+    ])
+  })
+
   it('answers HEAD on a GET route with its length and no body', async () => {
     const routes = newRouter('/a')
     routes.get('/text').handler(() => 'hi')

@@ -100,7 +100,7 @@ describe('the API', () => {
       expect(await res.text()).toBe('ok')
     })
 
-    // The probes are raw routes marked exempt, so the gate returns before authenticating at all — which is the
+    // The probes are exempt from access control, so the gate returns before authenticating at all — which is the
     // point for something polled every second. They are never challenged, whatever they answer.
     it('never challenges a probe', async () => {
       for (const path of ['/livez', '/readyz', '/startupz']) {

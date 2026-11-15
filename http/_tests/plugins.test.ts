@@ -10,10 +10,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from '../adapter.js'
 import { ErrHTTPBadRequest } from '../core/error/http.js'
+import { healthProbes } from '../core/health/index.js'
 import { Router } from '../core/routing/programmatic/programmatic.js'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { type WebApplication } from '../index.js'
-import { createWebApplication, healthProbes } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 import type { HTTPPluginFactory } from '../platform/fastify/plugin.js'
 import { newRouter } from '../platform/fastify/routing/new_router.js'
 

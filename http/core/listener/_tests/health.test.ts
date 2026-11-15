@@ -8,7 +8,8 @@ import {
   bindTo,
   type WebApplication,
 } from '../../../index.js'
-import { authentication, createWebApplication, healthProbes, newRouter } from '../../../platform/fastify/index.js'
+import { authentication, createWebApplication, newRouter } from '../../../platform/fastify/index.js'
+import { healthProbes } from '../../health/index.js'
 
 /**
  * Health probes on a listener. The probes know nothing about servers: registered on one with `l.with(...)`, they

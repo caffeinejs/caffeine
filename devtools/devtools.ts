@@ -17,11 +17,12 @@ import {
   RouteInventory,
   Router,
   type AdapterExtensionFactory,
+  type HTTPPluginConfigurer,
   type HTTPSetupContext,
   type IContext,
   type RouteAuthzOptions,
 } from '@caffeinejs/http'
-import { authentication, type HTTPPluginConfigurer, type RouterTypes } from '@caffeinejs/http/fastify'
+import { authentication } from '@caffeinejs/http/fastify'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { configRouter } from './config/config.route.js'
@@ -306,7 +307,7 @@ export function devTools<C = unknown>(
 ): AdapterExtensionFactory<HTTPPlugin, C> {
   return context => {
     const builder = new DevToolsPluginBuilder()
-    configure?.(builder, context as HTTPSetupContext<C, RouterTypes>)
+    configure?.(builder, context)
 
     const options = builder[kResolve](undefined)
     assertNotProduction(options, 'Serve devtools on a server of their own instead: ".install(DevTools())"')

@@ -1,7 +1,7 @@
 import type { Logger } from '@caffeinejs/application/logger'
 import { isValidKey, type Container, type InjectionToken } from '@caffeinejs/di'
-import { ErrConfiguration, type HTTPSetupContext } from '@caffeinejs/http'
-import { type AdapterRouteOptions, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
+import { ErrConfiguration, type HTTPPluginConfigurer, type HTTPSetupContext } from '@caffeinejs/http'
+import { type AdapterRouteOptions, type HTTPPluginFactory, type RouterTypes } from '@caffeinejs/http/fastify'
 import { type ByteSize, formatBytes } from '@caffeinejs/std/bytes'
 import { type Duration, formatDuration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
@@ -20,7 +20,7 @@ import { kBuild, HTTPCachingOptionsBuilder } from './options_builder.js'
 import type { HTTPCacheStore } from './store.js'
 
 /** Authors {@link HTTPCachingOptions} through {@link HTTPCachingOptionsBuilder} instead of the plain object. */
-export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachingOptionsBuilder, C>
+export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachingOptionsBuilder, C, RouterTypes>
 
 /**
  * HTTP response caching, as an ordinary Fastify plugin factory: `.with(HTTPCaching())`.

@@ -23,12 +23,15 @@ import { defineConfig } from 'vitest/config'
 // - platform/fastify/routing/schema/_tests/route_validation.test.ts -> core/validation/typebox.test.ts,
 //   core/server/input.test.ts
 // - platform/fastify/error/validation.test.ts -> core/error/validation.test.ts
+// - core/cookie/cookie.test.ts -> core/cookie/server_cookies.test.ts, core/server/context.test.ts
 //
 // Not yet on the engine, each with what keeps it off:
 // - _tests/context_platform.test.ts: reads Fastify's ctx.platform.request and ctx.platform.reply
+// - _tests/health.test.ts: needs authentication(), which the fetch entry does not export
 // - _tests/http_plugin.test.ts: imports newRouter, which the fetch entry does not export
 // - _tests/http_plugin_controller.test.ts: installs a Fastify plugin with @Use(...)
 // - core/listener/_tests/decorated.test.ts: passes Fastify's { listener } settings
+// - core/listener/_tests/health.test.ts: needs authentication() and newRouter, which the fetch entry does not export
 // - core/listener/_tests/plugins.test.ts: imports newRouter, which the fetch entry does not export
 // - core/listener/_tests/routers.test.ts: imports newRouter, which the fetch entry does not export
 // - core/middleware/middleware.test.ts: installs Node middleware, which the fetch application has no request for, a
@@ -77,6 +80,8 @@ export default defineConfig({
       'plugin.test.ts',
       '_tests/query_method.test.ts',
       '_tests/router_query_method.test.ts',
+      '_tests/health_collision.test.ts',
+      'core/health/health.test.ts',
     ],
     environment: 'node',
     testTimeout: 30000,

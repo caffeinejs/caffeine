@@ -32,14 +32,13 @@ import { defineConfig } from 'vitest/config'
 // - platform/fastify/routing/schema/_tests/route_validation.test.ts -> core/validation/typebox.test.ts,
 //   core/server/input.test.ts
 // - platform/fastify/error/validation.test.ts -> core/error/validation.test.ts
+// - core/cookie/cookie.test.ts -> core/cookie/server_cookies.test.ts, core/server/context.test.ts
 //
 // Not yet on Node, each with what keeps it off:
 // - _tests/context_platform.test.ts: reads Fastify's ctx.platform.request and ctx.platform.reply
 // - _tests/create_web_application.test.ts: reads a Fastify-only member of app.instance
 // - _tests/fetch.test.ts: reads a Fastify-only member of app.instance
-// - _tests/graceful_shutdown.test.ts: needs healthProbes(), not on the Node entry yet
-// - _tests/health_collision.test.ts: needs healthProbes(), not on the Node entry yet
-// - _tests/health.test.ts: needs healthProbes(), not on the Node entry yet
+// - _tests/health.test.ts: needs authentication(), not on the Node entry yet
 // - _tests/http_plugin.test.ts: installs a Fastify plugin with .with(...)
 // - _tests/http_plugin_controller.test.ts: installs a Fastify plugin with @Use(...)
 // - _tests/lifecycle.test.ts: expects request() to reject after close(); the engine answers a plain 503
@@ -47,9 +46,8 @@ import { defineConfig } from 'vitest/config'
 // - _tests/register_router.test.ts: needs authentication(), not on the Node entry yet
 // - _tests/versioning_decorated.test.ts: needs constraints(), not on the Node entry yet
 // - _tests/versioning.test.ts: needs constraints(), not on the Node entry yet
-// - core/health/health.test.ts: needs healthProbes(), not on the Node entry yet
 // - core/listener/_tests/decorated.test.ts: passes Fastify's { listener } settings
-// - core/listener/_tests/health.test.ts: needs healthProbes(), not on the Node entry yet
+// - core/listener/_tests/health.test.ts: needs authentication() and newRouter, not on the Node entry yet
 // - core/listener/_tests/plugins.test.ts: passes Fastify's { listener } settings
 // - core/listener/_tests/routers.test.ts: passes Fastify's { listener } settings
 // - core/middleware/middleware.test.ts: installs a Fastify plugin, and passes Fastify's { factory } settings
@@ -129,6 +127,8 @@ export default defineConfig({
       'response.test.ts',
       '_tests/query_method.test.ts',
       '_tests/router_query_method.test.ts',
+      '_tests/health_collision.test.ts',
+      'core/health/health.test.ts',
     ],
     environment: 'node',
     testTimeout: 30000,

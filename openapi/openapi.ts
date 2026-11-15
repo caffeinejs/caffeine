@@ -10,9 +10,10 @@ import {
   kErrorHandlingOptions,
   type AuthSchemeDescriptor,
   type RouteAuthzOptions,
+  type HTTPPluginConfigurer,
   type IRouteGroup,
 } from '@caffeinejs/http'
-import { collectRouteGroups, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
+import { collectRouteGroups, type HTTPPluginFactory, type RouterTypes } from '@caffeinejs/http/fastify'
 import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -29,7 +30,7 @@ import type { OpenAPIDocument } from './spec/spec.js'
 import { readScalarBundle, scalarPage } from './ui/scalar.js'
 
 /** Authors {@link OpenAPIOptions} through {@link OpenAPIOptionsBuilder} instead of the plain object. */
-export type OpenAPIConfigurer<C = unknown> = HTTPPluginConfigurer<OpenAPIOptionsBuilder, C>
+export type OpenAPIConfigurer<C = unknown> = HTTPPluginConfigurer<OpenAPIOptionsBuilder, C, RouterTypes>
 
 /** The path the Scalar bundle is served from, relative to the documentation page. */
 const ASSET_SEGMENT = '/_scalar.js'
