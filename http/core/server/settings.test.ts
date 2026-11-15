@@ -1,13 +1,16 @@
+import { KiB, MiB } from '@caffeinejs/std/bytes'
 import { Day } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
 import { ErrConfiguration } from '../error/common.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS } from '../matcher/matcher.js'
+import { typeBoxSchemaCompiler } from '../validation/typebox.js'
+import type { SchemaCompiler } from '../validation/validation.js'
 import { resolveServerSettings } from './settings.js'
 
 describe('resolveServerSettings', () => {
-  it("defaults to find-my-way's flags, the default matcher and no timeout", () => {
+  it("defaults to find-my-way's flags, the default matcher, no timeout, a 1 MiB body and TypeBox", () => {
     expect(resolveServerSettings({})).toEqual({
       handlerTimeout: undefined,
       router: DEFAULT_ROUTER_FLAGS,
@@ -15,7 +18,32 @@ describe('resolveServerSettings', () => {
       trustProxy: undefined,
       requestIDHeader: undefined,
       application: 'fetch application',
+      bodyLimit: 1 * MiB,
+      schemaCompiler: typeBoxSchemaCompiler,
     })
+  })
+
+  it('takes a body limit in bytes', () => {
+    expect(resolveServerSettings({ bodyLimit: 10 * KiB }).bodyLimit).toBe(10 * KiB)
+  })
+
+  // No magic value: 0 does not mean "no limit", and text is read by configuration, never here.
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '1mb'])('refuses a body limit of %o', bodyLimit => {
+    expect(() => resolveServerSettings({ bodyLimit })).toThrow(
+      `Cannot set bodyLimit to "${String(bodyLimit)}": it must be a whole number of bytes above 0`,
+    )
+  })
+
+  it('takes a schema compiler of its own', () => {
+    const compiler: SchemaCompiler = { validator: typeBoxSchemaCompiler.validator, serializer: () => () => '' }
+
+    expect(resolveServerSettings({ schemaCompiler: compiler }).schemaCompiler).toBe(compiler)
+  })
+
+  it.each([{}, { validator() {} }, 'typebox'])('refuses a schema compiler without both functions: %o', compiler => {
+    expect(() => resolveServerSettings({ schemaCompiler: compiler })).toThrow(
+      'Cannot use the schemaCompiler setting: it must have validator and serializer functions',
+    )
   })
 
   it('merges given router flags over the defaults', () => {
@@ -125,7 +153,7 @@ describe('resolveServerSettings', () => {
 
   it('lists every setting the application takes when refusing an unknown one', () => {
     expect(() => resolveServerSettings({ port: 3000 })).toThrow(
-      'Return only handlerTimeout, router, matcher, trustProxy, requestIDHeader from ".server(...)"',
+      'Return only handlerTimeout, router, matcher, trustProxy, requestIDHeader, bodyLimit, schemaCompiler from ".server(...)"',
     )
   })
 })

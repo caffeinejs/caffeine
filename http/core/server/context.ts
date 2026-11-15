@@ -1,6 +1,7 @@
 import type { RunInfo } from '@caffeinejs/application'
 import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { IAdapterTypes, IContextPlatform } from '../../adapter.js'
@@ -14,22 +15,26 @@ import type { ProblemEncoder } from '../error/encode.js'
 import type { GlobalErrorHandlerOptions } from '../error/error.js'
 import type { ErrorHandlerProvider } from '../error/handler.js'
 import { newProblem } from '../error/problem.js'
+import type { ValidationSlot } from '../error/validation.js'
 import { isThenable, type RequestHookName, type SendPayload } from '../lifecycle/lifecycle.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import type { Next, NodeMiddleware } from '../middleware/middleware.js'
 import { normalizePath, sanitizeURL } from '../middleware/path.js'
 import type { AuthenticationState } from '../security/auth/authentication_state.js'
 import type { Principal } from '../security/identity.js'
+import type { CompiledSerializer } from '../validation/validation.js'
 import { isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
+import { contentTooLarge, declaredOver, ErrRequestBodyConsumed, limitStream } from './body.js'
 import { configurationError, sendProblem, USE_FASTIFY } from './error.js'
 import type { ServerPlatform } from './platform.js'
 import { parseQuery } from './query.js'
+import type { RouteStore } from './server.js'
 import type { ResolvedServerSettings } from './settings.js'
 
 /** What every context of one server shares. Built once per server by `HTTPServer`. */
 export interface ServerShared extends Pick<
   ResolvedServerSettings,
-  'application' | 'trustProxy' | 'requestIDHeader' | 'router'
+  'application' | 'trustProxy' | 'requestIDHeader' | 'router' | 'bodyLimit'
 > {
   readonly store: ConfigStore<unknown>
   readonly logger: Logger
@@ -79,7 +84,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   readonly #basePath: string
   readonly #params: Params
   readonly #query: string
-  readonly #route: RouteDefinition | undefined
+  readonly #store: RouteStore
 
   #req?: ContextRequest
   #normalized?: { path: string; error: Error | undefined }
@@ -113,7 +118,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     basePath: string,
     params: Params,
     query: string,
-    route: RouteDefinition | undefined,
+    store: RouteStore,
   ) {
     this.#shared = shared
     this.#platform = platform
@@ -125,7 +130,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     this.#basePath = basePath
     this.#params = params
     this.#query = query
-    this.#route = route
+    this.#store = store
   }
 
   get req(): ContextRequest {
@@ -139,6 +144,9 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
       this.#basePath,
       this.#params,
       this.#query,
+      this.#store.input?.limit ?? this.#shared.bodyLimit,
+      // Only a matched route reads its body, so only a matched route's name is ever read here.
+      this.#store.input?.route ?? '',
     ))
   }
 
@@ -182,7 +190,12 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   /** @see {@link IContext.route} */
   get route(): RouteDefinition | undefined {
-    return this.#route
+    return this.#store.definition
+  }
+
+  /** The route's serializer for an answer of `status`, when its schema declares one. */
+  serializerFor(status: number): CompiledSerializer | undefined {
+    return this.#store.serializerFor(status)
   }
 
   /** The request path as the router matches it, computed once: what a path-scoped middleware is matched against. */
@@ -531,7 +544,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
     // Shaped first: an answer that cannot be sent at all throws with nothing written, and the context stays
     // unanswered for a catch handler to answer instead.
-    const payload = shapeAnswer(this, body, statusCode !== undefined)
+    const payload = shapeAnswer(this, body, statusCode !== undefined, statusCode ?? this.#status)
 
     if (statusCode !== undefined) {
       this.status(statusCode)
@@ -561,6 +574,9 @@ export class ContextRequest implements IRequest<
   readonly #basePath: string
   readonly #params: Params
   readonly #query: string
+  readonly #limit: ByteSize
+  /** The route in failures, e.g. `POST /pets`. */
+  readonly #route: string
 
   #parsedQuery?: Record<string, string | string[]>
   #headers?: Record<string, string>
@@ -568,6 +584,10 @@ export class ContextRequest implements IRequest<
   #trusted?: boolean
   #raw?: Request
   #mounted?: string
+  #body?: unknown
+  #validatedParams?: Record<string, string>
+  /** The headers validation produced, by lower-case name: read in place of the platform's once set. */
+  #validatedHeaders?: Record<string, string>
 
   constructor(
     shared: ServerShared,
@@ -579,6 +599,8 @@ export class ContextRequest implements IRequest<
     basePath: string,
     params: Params,
     query: string,
+    limit: ByteSize,
+    route: string,
   ) {
     this.#shared = shared
     this.#platform = platform
@@ -589,10 +611,70 @@ export class ContextRequest implements IRequest<
     this.#basePath = basePath
     this.#params = params
     this.#query = query
+    this.#limit = limit
+    this.#route = route
   }
 
+  /**
+   * The request as a web `Request`, one per request. Once the route has read the body, the Node application's serves
+   * the bytes read, and the fetch application's is the runtime's own `Request`, its body used.
+   */
   get raw(): Request {
-    return (this.#raw ??= this.#platform.request(this.#native))
+    return (this.#raw ??= this.#platform.request(this.#native, this.#limit))
+  }
+
+  /** Whether the request declares a body. */
+  hasBody(): boolean {
+    return this.#platform.hasBody(this.#native)
+  }
+
+  /**
+   * Reads the body whole, held to the route's limit. Rejects with `ErrRequestBodyConsumed` when something started
+   * reading it first, `ErrHTTPContentTooLarge` when it declares or brings more than the limit, and as
+   * {@link ServerPlatform.readBody} does.
+   */
+  readBodyBytes(): Promise<Uint8Array> {
+    try {
+      this.#assertReadable()
+    } catch (err) {
+      return Promise.reject(err)
+    }
+
+    return this.#platform.readBody(this.#native, this.#limit)
+  }
+
+  /**
+   * The body as a stream held to the route's limit, for `@BodyAsStream`.
+   *
+   * @throws ErrRequestBodyConsumed when something started reading the body first.
+   * @throws ErrHTTPContentTooLarge when the body declares more than the limit.
+   */
+  bodyStream(): ReadableStream<Uint8Array> {
+    this.#assertReadable()
+    return limitStream(this.raw.body, this.#limit)
+  }
+
+  /** What the body was read as, or what validation produced for `slot`: read in place of what the request carried. */
+  setSlot(slot: ValidationSlot, value: unknown): void {
+    switch (slot) {
+      case 'params':
+        this.#validatedParams = value as Record<string, string>
+        return
+      case 'querystring':
+        this.#parsedQuery = value as Record<string, string | string[]>
+        return
+      case 'headers':
+        // Merged over the request's own, so a schema that drops what it does not declare cannot drop `host`; with no
+        // prototype, so a name only `Object.prototype` holds is no header.
+        this.#validatedHeaders = Object.assign(
+          Object.create(null) as Record<string, string>,
+          this.header(),
+          value as Record<string, string>,
+        )
+        return
+      case 'body':
+        this.#body = value
+    }
   }
 
   /** The value of the server's `requestIDHeader` when the request carries one, else a number in Fastify's form. */
@@ -638,9 +720,9 @@ export class ContextRequest implements IRequest<
     return this.#forwarded('x-forwarded-proto')?.toLowerCase() ?? this.#platform.protocol(this.#native)
   }
 
-  /** @throws ErrConfiguration: the engine reads no request body yet. */
+  /** The parsed body, as validation left it; `undefined` before the body is read, and for a request with none. */
   body(): InferBody<Record<never, never>> {
-    throw configurationError(`Cannot read the request body on the ${this.#shared.application} yet`, USE_FASTIFY)
+    return this.#body
   }
 
   query(): Record<string, string>
@@ -648,12 +730,18 @@ export class ContextRequest implements IRequest<
   query(key?: string): Record<string, string> | string | undefined {
     const query = (this.#parsedQuery ??= parseQuery(this.#query))
 
-    // A repeated key reads back as its list, as on Fastify: the declared type is the single-value one.
-    return key === undefined ? (query as Record<string, string>) : (query[key] as string | undefined)
+    // A repeated key reads back as its list, as on Fastify: the declared type is the single-value one. Own names only:
+    // what validation produced has a prototype, whose members are no parameter.
+    if (key === undefined) {
+      return query as Record<string, string>
+    }
+
+    return Object.hasOwn(query, key) ? (query[key] as string | undefined) : undefined
   }
 
   queries(key: string): string[] | undefined {
-    const value = (this.#parsedQuery ??= parseQuery(this.#query))[key]
+    const query = (this.#parsedQuery ??= parseQuery(this.#query))
+    const value = Object.hasOwn(query, key) ? query[key] : undefined
 
     if (Array.isArray(value)) {
       return value
@@ -665,6 +753,11 @@ export class ContextRequest implements IRequest<
   header(): Record<string, string>
   header(key: string): string | undefined
   header(key?: string): Record<string, string> | string | undefined {
+    const validated = this.#validatedHeaders
+    if (validated !== undefined) {
+      return key === undefined ? validated : validated[key.toLowerCase()]
+    }
+
     if (key === undefined) {
       return (this.#headers ??= this.#platform.headers(this.#native))
     }
@@ -673,13 +766,19 @@ export class ContextRequest implements IRequest<
   }
 
   hasHeader(key: string): boolean {
-    return this.#platform.header(this.#native, key) !== undefined
+    return this.header(key) !== undefined
   }
 
   param(): Record<string, string>
   param(key: string): string | undefined
   param(key?: string): Record<string, string> | string | undefined {
-    return key === undefined ? (this.#params as Record<string, string>) : this.#params[key]
+    const params = this.#validatedParams ?? this.#params
+    if (key === undefined) {
+      return params as Record<string, string>
+    }
+
+    // Own names only: what validation produced has a prototype, whose members are no parameter.
+    return Object.hasOwn(params, key) ? params[key] : undefined
   }
 
   cookie(): Record<string, string>
@@ -696,6 +795,17 @@ export class ContextRequest implements IRequest<
 
   unsignCookie(_value: string, _secret?: CookieSecret): Promise<CookieUnsignResult> {
     throw cookiesDisabled('unsign a cookie', this.#shared.application)
+  }
+
+  // Refused before a byte is read: a body something else started reading, or one declaring more than the limit.
+  #assertReadable(): void {
+    if (this.#platform.bodyConsumed(this.#native)) {
+      throw new ErrRequestBodyConsumed(this.#route)
+    }
+
+    if (declaredOver(this.#platform.header(this.#native, 'content-length'), this.#limit)) {
+      throw contentTooLarge(this.#limit)
+    }
   }
 
   // The last entry of a forwarding header, read only when the peer is a proxy the server trusts.

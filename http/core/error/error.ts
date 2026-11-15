@@ -204,9 +204,10 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
    * Merges over earlier calls key by key. Unset, `type` is `about:blank`, `title` the status phrase, `code`
    * `ERR_VALIDATION`, and a problem lists at most 25 entries, its `detail` saying how many there were.
    *
-   * Fastify's validator reports the first error it meets. An application that wants every one turns on Ajv's
-   * `allErrors` through `.server()`, and pays for it: Ajv then records every error a request holds, as many as its
-   * items times the fields each one fails, before any cap applies.
+   * On the Fastify application, Fastify's validator reports the first error it meets. An application that wants
+   * every one turns on Ajv's `allErrors` through `.server()`, and pays for it: Ajv then records every error a request
+   * holds, as many as its items times the fields each one fails, before any cap applies. The Node and fetch
+   * applications report the first issue of a TypeBox slot only.
    *
    * @throws ErrConfiguration when `maxErrors` is not an integer of at least 1.
    */

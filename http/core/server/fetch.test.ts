@@ -1,8 +1,10 @@
+import { Byte } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import type { FetchAdapterTypes } from './adapter.js'
+import { fetchPlatform } from './fetch.js'
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
 type AnyRouter = Router<any, any, any, any, any, any>
@@ -120,5 +122,42 @@ describe('fetchPlatform', () => {
     body.release()
     await closing
     app = undefined
+  })
+})
+
+describe('the body on fetchPlatform', () => {
+  const post = (body: RequestInit['body'], headers: Record<string, string> = {}) =>
+    new Request('http://x/', { method: 'POST', body, headers })
+
+  it('says a request declares a body only when it carries one of some length', () => {
+    expect(fetchPlatform.hasBody(new Request('http://x/'))).toBe(false)
+    expect(fetchPlatform.hasBody(post(null))).toBe(false)
+    expect(fetchPlatform.hasBody(post('x', { 'content-length': '0' }))).toBe(false)
+    expect(fetchPlatform.hasBody(post('x'))).toBe(true)
+  })
+
+  it('says a body is consumed once read, or once a reader holds it', async () => {
+    const read = post('x')
+    await read.text()
+    const held = post('x')
+    held.body?.getReader()
+
+    expect(fetchPlatform.bodyConsumed(post('x'))).toBe(false)
+    expect(fetchPlatform.bodyConsumed(read)).toBe(true)
+    expect(fetchPlatform.bodyConsumed(held)).toBe(true)
+  })
+
+  it('reads a body whole', async () => {
+    expect(new TextDecoder().decode(await fetchPlatform.readBody(post('ping'), 10 * Byte))).toBe('ping')
+  })
+
+  it('refuses a body bringing more than the limit', async () => {
+    await expect(fetchPlatform.readBody(post('x'.repeat(11)), 10 * Byte)).rejects.toMatchObject({ statusCode: 413 })
+  })
+
+  it("hands the runtime's own Request as ctx.req.raw, whatever the limit", () => {
+    const request = post('x')
+
+    expect(fetchPlatform.request(request, 10 * Byte)).toBe(request)
   })
 })

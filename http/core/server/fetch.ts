@@ -1,5 +1,6 @@
 import type { IContextPlatform } from '../../adapter.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
+import { readLimited } from './body.js'
 import type { ResponseHead, SendHooks, ServerPlatform } from './platform.js'
 
 /** What `ctx.platform` is on the fetch application. */
@@ -28,6 +29,9 @@ export const fetchPlatform: ServerPlatform<Request, FetchContextPlatform, Respon
   header: (request, name) => request.headers.get(name) ?? undefined,
   headers: request => Object.fromEntries(request.headers),
   request: request => request,
+  hasBody: request => request.body !== null && request.headers.get('content-length') !== '0',
+  bodyConsumed,
+  readBody: (request, limit) => readLimited(request.body, limit),
   signal: request => request.signal,
   remoteAddress: () => undefined,
   context: (_request, extra) => ({ name: 'fetch', runtime: (extra as readonly unknown[] | undefined) ?? [] }),
@@ -58,6 +62,11 @@ export const inProcessPlatform: ServerPlatform<Request, FetchContextPlatform, Re
   // `request()` is the one caller whose abort must fail a body already handed over: its signal cuts the stream.
   respond: (request, head, payload, hooks) =>
     fetchPlatform.respond(request, head, payload, linkedTo(request.signal, hooks)),
+}
+
+// Read, or held by a reader that may be reading.
+function bodyConsumed(request: Request): boolean {
+  return request.bodyUsed || request.body?.locked === true
 }
 
 /** `hooks`, with a streamed answer cut when `signal` aborts, until it has been sent. */

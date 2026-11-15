@@ -19,10 +19,18 @@ import {
   type EncodedProblem,
   type ProblemEncoder,
 } from '../../../core/error/encode.js'
-import type { GlobalErrorHandlerOptions, ProblemIssueMapper } from '../../../core/error/error.js'
+import type { GlobalErrorHandlerOptions } from '../../../core/error/error.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from '../../../core/error/handler.js'
 import { ErrHTTP } from '../../../core/error/http.js'
-import { newProblem, type Problem, type ProblemIssue } from '../../../core/error/problem.js'
+import { newProblem, type Problem } from '../../../core/error/problem.js'
+import {
+  buildValidationProblem,
+  CANNOT_MAP_ISSUE,
+  isValidationSlot,
+  validationMessage,
+  type ValidationProblem,
+  type ValidationSlot,
+} from '../../../core/error/validation.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
 import { payloadOf } from '../../../core/server/answer.js'
 import { appendVary } from '../../../vary.js'
@@ -30,21 +38,12 @@ import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
 import { runOnErrorOnce, type FastifyErrorEntry } from '../lifecycle/lifecycle.js'
 import { answer } from '../response.js'
-import {
-  isValidationSlot,
-  validationDetail,
-  validationIssues,
-  validationMessage,
-  type ValidationSlot,
-} from './validation.js'
+import { validationIssues } from './validation.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
 /** The context of a request, made when no hook has made it yet: one an earlier `onRequest` hook failed. */
 export type ContextOf = (request: FastifyRequest, reply: FastifyReply) => Context
-
-/** The validation problem's settings, as the error handling feature bound them. */
-type ValidationProblem = Required<GlobalErrorHandlerOptions>['validation']
 
 const kProblemEncoder = Symbol('caffeine.http.problem-encoder')
 const kContextOf = Symbol('caffeine.http.context-of')
@@ -305,22 +304,26 @@ function validationProblem(
   validation: ValidationProblem,
 ): Problem {
   const reported = reportedErrors(err)
-  const status = slot === 'body' ? 422 : 400
-  const base = { status, type: validation.type, title: validation.title, code: validation.code }
 
   // A validator compiled by the application returned an `Error` of its own, so there is nothing to list.
   if (reported === undefined) {
     request.log.info({ err }, err.message)
-    return newProblem({ ...base, detail: validationDetail(slot, 0, validation.maxErrors) })
+    return buildValidationProblem(ctx, slot, [], 0, validation, () => undefined)
   }
 
-  const built = validationIssues(reported, slot, validation.maxErrors)
-  const errors = validation.issue === undefined ? built : mapIssues(request, ctx, built, validation.issue)
   const total = reported.length
+  const problem = buildValidationProblem(
+    ctx,
+    slot,
+    validationIssues(reported, slot, validation.maxErrors),
+    total,
+    validation,
+    failure => request.log.error({ err: failure }, CANNOT_MAP_ISSUE),
+  )
 
-  request.log.info({ validation: { slot, total, errors } }, validationMessage(slot, total))
+  request.log.info({ validation: { slot, total, errors: problem.errors } }, validationMessage(slot, total))
 
-  return newProblem({ ...base, detail: validationDetail(slot, total, validation.maxErrors), errors })
+  return problem
 }
 
 // Fastify's list, or the one Ajv rejects an `$async` schema with: an error of Ajv's own, the list under `errors`.
@@ -332,27 +335,6 @@ function reportedErrors(err: Error): FastifySchemaValidationError[] | undefined 
   }
 
   return ajv === true && Array.isArray(errors) ? (errors as FastifySchemaValidationError[]) : undefined
-}
-
-// A mapper that throws is the application's bug, logged once per response rather than once per entry.
-function mapIssues(
-  request: FastifyRequest,
-  ctx: IContext,
-  issues: ProblemIssue[],
-  mapper: ProblemIssueMapper,
-): ProblemIssue[] {
-  const mapped: ProblemIssue[] = []
-
-  for (const issue of issues) {
-    try {
-      mapped.push(mapper(ctx, issue))
-    } catch (err) {
-      request.log.error({ err }, 'Cannot map a validation issue: sending the issues as the framework built them')
-      return [...mapped, ...issues.slice(mapped.length)]
-    }
-  }
-
-  return mapped
 }
 
 // The handler answered from the context. Handed the reply back, the runner waits for that send out rather than

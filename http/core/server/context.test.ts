@@ -2,6 +2,7 @@ import { newNoopLogger } from '@caffeinejs/application/logger'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
+import { bodyAsStream } from '../../decorators/body_as_stream.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 
 const routes = new Router('/c')
@@ -31,9 +32,34 @@ routes.get('/promise').handler(ctx => {
   return 'ok'
 })
 routes.get('/cookie').handler(ctx => ctx.cookie('a', 'b'))
-routes.get('/body').handler(ctx => ctx.req.body())
 routes.get('/status').handler(ctx => ctx.status(101))
 routes.get('/config').handler(ctx => ({ same: ctx.config === ctx.config }))
+
+// The body shared between `ctx.req.raw` and the route, read in either order. A plain router types `raw` for every
+// application; the fetch application's is the web `Request`.
+const rawOf = (ctx: { req: { raw: unknown } }): Request => ctx.req.raw as Request
+let seenRaw: Request | undefined
+routes
+  .post('/raw-headers')
+  .hook('onRequest', ctx => void rawOf(ctx).headers)
+  .handler(ctx => {
+    seenRaw = rawOf(ctx)
+    return { body: ctx.req.body() }
+  })
+routes
+  .post('/raw-read')
+  .hook('onRequest', async ctx => void (await rawOf(ctx).text()))
+  .handler(() => 'never')
+routes
+  .post('/raw-read-stream')
+  .extend(bodyAsStream())
+  .hook('onRequest', async ctx => void (await rawOf(ctx).text()))
+  .handler(() => 'never')
+routes
+  .post('/raw-locked-stream')
+  .extend(bodyAsStream())
+  .hook('onRequest', ctx => void rawOf(ctx).body?.getReader())
+  .handler(() => 'never')
 
 const logged = vi.fn()
 const app = createWebApplication()
@@ -107,7 +133,6 @@ describe('Context', () => {
 
   it.each([
     ['/cookie', 'ERR_COOKIES_DISABLED', 'Cannot set cookies'],
-    ['/body', 'ERR_CONFIGURATION', 'Cannot read the request body'],
     ['/status', 'ERR_CONFIGURATION', 'Cannot set status "101"'],
   ])('answers %s, which the fetch application refuses, with a 500 and logs %s', async (path, code, message) => {
     logged.mockClear()
@@ -257,4 +282,38 @@ describe('Context while onSend runs', () => {
     expect(res.status).toBe(201)
     expect(await res.text()).toBe('answer')
   })
+})
+
+describe('the body shared with ctx.req.raw', () => {
+  function post(path: string): { request: Request; answer: Response | Promise<Response> } {
+    const request = new Request(`http://localhost/api/c${path}`, {
+      method: 'POST',
+      body: 'ping',
+      headers: { 'content-type': 'text/plain' },
+    })
+    return { request, answer: app.fetch(request) }
+  }
+
+  it('leaves the body to the route when a hook reads only the headers of ctx.req.raw', async () => {
+    const { request, answer } = post('/raw-headers')
+
+    expect(await (await answer).json()).toEqual({ body: 'ping' })
+    // The runtime's own Request, read by the route: what a runtime API keyed on it still finds.
+    expect(seenRaw).toBe(request)
+  })
+
+  it.each(['/raw-read', '/raw-read-stream', '/raw-locked-stream'])(
+    'answers %s, whose body a hook read first, with a 500 and logs ERR_REQUEST_BODY_CONSUMED',
+    async path => {
+      logged.mockClear()
+
+      const res = await post(path).answer
+
+      expect(res.status).toBe(500)
+      expect(logged).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.objectContaining({ code: 'ERR_REQUEST_BODY_CONSUMED' }) }),
+        expect.any(String),
+      )
+    },
+  )
 })

@@ -114,7 +114,10 @@
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.52",
+    "@standard-schema/spec": "^1.1.0",
+    "ajv-formats": "^3.0.1",
     "cookie": "^2.0.1",
+    "fast-json-stringify": "^7.3.6",
     "fastify": "^5.12.8",
     "fastify-plugin": "^6.0.0",
     "find-my-way": "^9.10.0",
@@ -122,7 +125,8 @@
     "jose": "^6.2.10",
     "light-my-request": "^6.6.0",
     "negotiator": "^1.1.0",
-    "path-to-regexp": "^8.4.2"
+    "path-to-regexp": "^8.4.2",
+    "secure-json-parse": "^4.1.1"
   },
   "peerDependencies": {
     "@caffeinejs/application": "0.0.0",

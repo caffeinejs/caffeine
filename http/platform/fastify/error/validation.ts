@@ -1,52 +1,14 @@
-import type { FastifyError, FastifySchemaValidationError } from 'fastify'
+import type { FastifySchemaValidationError } from 'fastify'
 
-import type { ProblemIssue, ProblemIssueSource } from '../../../core/error/problem.js'
-
-// Fastify exports no name for the slot a validation error names.
-export type ValidationSlot = NonNullable<FastifyError['validationContext']>
-
-// Where an entry says each slot Fastify validates is: the parameter locations an OpenAPI document names.
-const LOCATIONS = { body: 'body', querystring: 'query', params: 'path', headers: 'header' } as const
-
-const NOUNS = {
-  body: 'request body',
-  querystring: 'query string',
-  params: 'path parameters',
-  headers: 'request headers',
-} as const satisfies Record<ValidationSlot, string>
-
-/** Whether `value` names a slot Fastify validates, which only a request validation failure carries. */
-export function isValidationSlot(value: unknown): value is ValidationSlot {
-  return typeof value === 'string' && Object.hasOwn(LOCATIONS, value)
-}
-
-/**
- * The code of an entry for a JSON Schema keyword: `ERR_VALIDATION_MIN_LENGTH` for `minLength`. A keyword with no
- * letter or digit gives `ERR_VALIDATION`.
- */
-export function validationCode(keyword: string): string {
-  // Each run of separators is one `_` by the time the ends are trimmed, so none of these backtracks.
-  const words = keyword
-    .replaceAll(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replaceAll(/([A-Z])([A-Z][a-z])/g, '$1_$2')
-    .replaceAll(/[^A-Za-z0-9]+/g, '_')
-    .replaceAll(/^_|_$/g, '')
-    .toUpperCase()
-
-  return words === '' ? 'ERR_VALIDATION' : `ERR_VALIDATION_${words}`
-}
-
-/** The problem's `detail`: the slot that failed, and how many errors the list leaves out. */
-export function validationDetail(slot: ValidationSlot, total: number, maxErrors: number): string {
-  const sentence = `Invalid ${NOUNS[slot]}`
-
-  return total > maxErrors ? `${sentence}: showing the first ${maxErrors} of ${total} errors` : sentence
-}
-
-/** The slot that failed and how many errors it had, for the error's message and the log line. */
-export function validationMessage(slot: ValidationSlot, total: number): string {
-  return `Invalid ${NOUNS[slot]}: ${total} ${total === 1 ? 'error' : 'errors'}`
-}
+import type { ProblemIssue } from '../../../core/error/problem.js'
+import {
+  escapeSegment,
+  sourceOf,
+  unescapeSegment,
+  validationCode,
+  validationMessage,
+  type ValidationSlot,
+} from '../../../core/error/validation.js'
 
 /** The `schemaErrorFormatter` the adapter installs unless the application set one: the slot and the count. */
 export function validationFormatter(errors: FastifySchemaValidationError[], slot: ValidationSlot): Error {
@@ -80,37 +42,7 @@ function issueOf(error: FastifySchemaValidationError, slot: ValidationSlot): Pro
   }
 }
 
-function sourceOf(slot: ValidationSlot, segments: readonly string[]): ProblemIssueSource {
-  const location = LOCATIONS[slot]
-
-  if (location === 'body') {
-    return { in: location, pointer: pointerOf(segments) }
-  }
-
-  if (segments.length === 0) {
-    return { in: location }
-  }
-
-  const [name, ...rest] = segments
-  return rest.length === 0
-    ? { in: location, name: unescapeSegment(name) }
-    : { in: location, name: unescapeSegment(name), pointer: pointerOf(rest) }
-}
-
 // Ajv's pointer, its segments still escaped: `''` for the slot itself, `/a~1b/0` below it.
 function segmentsOf(instancePath: unknown): string[] {
   return typeof instancePath === 'string' && instancePath.startsWith('/') ? instancePath.split('/').slice(1) : []
-}
-
-function pointerOf(segments: readonly string[]): string {
-  return segments.map(segment => `/${segment}`).join('')
-}
-
-// RFC 6901 §4: `~1` before `~0`, so `~01` reads as `~1` and not as `/`.
-function unescapeSegment(segment: string): string {
-  return segment.replaceAll('~1', '/').replaceAll('~0', '~')
-}
-
-function escapeSegment(name: string): string {
-  return name.replaceAll('~', '~0').replaceAll('/', '~1')
 }

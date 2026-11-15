@@ -1,0 +1,94 @@
+import { $t } from '@caffeinejs/application/schema'
+import { Injectable } from '@caffeinejs/di'
+import {
+  Controller,
+  Get,
+  Args,
+  Post,
+  Schema,
+  $p,
+  GuardResult,
+  UseGuards,
+  type Guard,
+  type GuardInput,
+  type IContext,
+} from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/node'
+
+const PORT = parseInt(process.env.PORT ?? '3000', 10)
+
+interface DataSchema {
+  text: string
+  num: number
+  bool: boolean
+}
+
+const schema = $t.Object({
+  text: $t.String(),
+  num: $t.Number(),
+  bool: $t.Boolean(),
+})
+
+// The single difference from the "caffeine (web)" fixture: the query's `text` is a codec, which the validator decodes
+// after its check. The codec does nothing, so what the two rows differ by is decoding alone.
+const query = $t.Object({
+  text: $t
+    .Transform($t.String())
+    .Decode(text => text)
+    .Encode(text => text),
+  num: $t.Number(),
+  bool: $t.Boolean(),
+})
+
+const responseSchema = {
+  200: $t.Object({
+    params: schema,
+    query: schema,
+    body: schema,
+  }),
+}
+
+@Injectable()
+class APIKeyGuard implements Guard {
+  guard(input: GuardInput): boolean | GuardResult {
+    if (input.context.req.header('x-api-key') !== 'benchmark') {
+      return GuardResult.unauthenticated('Invalid API key')
+    }
+    return true
+  }
+}
+
+@Controller('')
+class AppController {
+  @Get('/health')
+  health() {
+    return { ok: true }
+  }
+
+  @Post('/api/test/:text/:num/:bool')
+  @UseGuards(APIKeyGuard)
+  @Args([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
+  @Schema({ params: schema, querystring: query, body: schema, response: responseSchema })
+  helloWorld(ctx: IContext, params: DataSchema, query: DataSchema, body: DataSchema, header: Record<string, string>) {
+    ctx.header('text', header.text)
+    ctx.header('num', header.num)
+    ctx.header('bool', header.bool)
+
+    return {
+      params: { text: params.text, num: params.num, bool: params.bool },
+      query: { text: query.text, num: query.num, bool: query.bool },
+      body: { text: body.text, num: body.num, bool: body.bool },
+    }
+  }
+}
+
+void [AppController]
+
+const app = createWebApplication()
+
+app.use((ctx, next) => {
+  ctx.header('x-request-id', Math.random().toString(36).slice(2))
+  return next()
+})
+
+await app.run({ port: PORT, host: '0.0.0.0' })

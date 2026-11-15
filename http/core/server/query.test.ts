@@ -36,10 +36,11 @@ describe('parseQuery', () => {
   })
 
   // A key named `__proto__` must not reach the prototype chain of what a handler reads.
-  it('keeps __proto__ as a key of an object with no prototype', () => {
+  it('keeps __proto__ as a key of an object that inherits nothing', () => {
     const query = parseQuery('__proto__=x')
 
-    expect(Object.getPrototypeOf(query)).toBe(null)
     expect(Object.getOwnPropertyDescriptor(query, '__proto__')?.value).toBe('x')
+    expect('toString' in query).toBe(false)
+    expect('constructor' in query).toBe(false)
   })
 })

@@ -1,7 +1,11 @@
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS, type RouteMatcherFactory, type RouterFlags } from '../matcher/matcher.js'
+import { typeBoxSchemaCompiler } from '../validation/typebox.js'
+import type { SchemaCompiler } from '../validation/validation.js'
+import { DEFAULT_BODY_LIMIT, isBodyLimit } from './body.js'
 import { configurationError, USE_FASTIFY, USE_NODE } from './error.js'
 import { compileTrustProxy, type TrustProxy } from './trust.js'
 
@@ -24,6 +28,16 @@ export interface ServerSettings {
   trustProxy?: boolean
   /** The request header `ctx.req.id` is taken from when a request carries it. Unset: requests are numbered. */
   requestIDHeader?: string
+  /**
+   * The largest request body a route reads, in bytes, such as `10 * MiB`; a route's own `bodyLimit` wins. A larger
+   * body answers 413. Unset: `1 * MiB`.
+   */
+  bodyLimit?: ByteSize
+  /**
+   * Turns a route's TypeBox schemas into validators and serializers. Unset: {@link typeBoxSchemaCompiler}. A Standard
+   * Schema slot validates itself whatever this is.
+   */
+  schemaCompiler?: SchemaCompiler
 }
 
 /** {@link ServerSettings} with every default filled in. */
@@ -36,6 +50,8 @@ export interface ResolvedServerSettings {
   readonly requestIDHeader: string | undefined
   /** The application's name in messages: `fetch application`, `Node application`. */
   readonly application: string
+  readonly bodyLimit: ByteSize
+  readonly schemaCompiler: SchemaCompiler
 }
 
 /** One kind of application: its name, the settings sections only it takes, and whether its runtime knows the peer. */
@@ -55,7 +71,7 @@ export function isTimeout(value: unknown): value is Duration {
   return typeof value === 'number' && value > 0 && value <= MAX_TIMEOUT
 }
 
-const SETTINGS = ['handlerTimeout', 'router', 'matcher', 'trustProxy', 'requestIDHeader']
+const SETTINGS = ['handlerTimeout', 'router', 'matcher', 'trustProxy', 'requestIDHeader', 'bodyLimit', 'schemaCompiler']
 const FASTIFY_SECTIONS = new Set(['factory', 'listener'])
 /** The settings sections only the Node application takes: what Node itself configures. */
 export const NODE_SECTIONS: ReadonlySet<string> = new Set(['listen', 'http', 'https', 'http2'])
@@ -87,10 +103,10 @@ export function resolveServerSettings(
   }
 
   // `trustProxy` and `requestIDHeader` are read as given: a Node application's `trustProxy` is wider.
-  const { handlerTimeout, router, matcher, trustProxy, requestIDHeader } = settings as Omit<
+  const { handlerTimeout, router, matcher, trustProxy, requestIDHeader, bodyLimit, schemaCompiler } = settings as Omit<
     ServerSettings,
-    'trustProxy' | 'requestIDHeader'
-  > & { trustProxy?: unknown; requestIDHeader?: unknown }
+    'trustProxy' | 'requestIDHeader' | 'bodyLimit' | 'schemaCompiler'
+  > & { trustProxy?: unknown; requestIDHeader?: unknown; bodyLimit?: unknown; schemaCompiler?: unknown }
 
   if (handlerTimeout !== undefined && !isTimeout(handlerTimeout)) {
     throw configurationError(
@@ -115,6 +131,21 @@ export function resolveServerSettings(
     )
   }
 
+  if (bodyLimit !== undefined && !isBodyLimit(bodyLimit)) {
+    throw configurationError(
+      `Cannot set bodyLimit to "${String(bodyLimit)}": it must be a whole number of bytes above 0`,
+      'Write a size in bytes, such as 1 * MiB',
+      'Leave bodyLimit out for the default, 1 * MiB',
+    )
+  }
+
+  if (schemaCompiler !== undefined && !isSchemaCompiler(schemaCompiler)) {
+    throw configurationError(
+      'Cannot use the schemaCompiler setting: it must have validator and serializer functions',
+      'Pass a SchemaCompiler, such as typeBoxSchemaCompiler, or leave schemaCompiler out',
+    )
+  }
+
   return {
     handlerTimeout,
     router: routerFlags(router),
@@ -122,7 +153,18 @@ export function resolveServerSettings(
     trustProxy: compileTrustProxy(trustProxy, application),
     requestIDHeader: typeof requestIDHeader === 'string' ? requestIDHeader.toLowerCase() : undefined,
     application: application.name,
+    bodyLimit: bodyLimit ?? DEFAULT_BODY_LIMIT,
+    schemaCompiler: schemaCompiler ?? typeBoxSchemaCompiler,
   }
+}
+
+function isSchemaCompiler(value: unknown): value is SchemaCompiler {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const { validator, serializer } = value as Partial<Record<keyof SchemaCompiler, unknown>>
+  return typeof validator === 'function' && typeof serializer === 'function'
 }
 
 function routerFlags(router: unknown): RouterFlags {

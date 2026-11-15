@@ -2,9 +2,9 @@ import { $t } from '@caffeinejs/application/schema'
 import { fc, it } from '@fast-check/vitest'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
 
+import { validationCode } from '../../../core/error/validation.js'
 import type { Problem, WebApplication } from '../../../index.js'
 import { createWebApplication, newRouter } from '../index.js'
-import { validationCode } from './validation.js'
 
 /**
  * Where an entry says a failure is, over keys no one wrote down, checked against RFC 6901 rather than against how the

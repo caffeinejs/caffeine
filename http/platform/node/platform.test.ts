@@ -6,11 +6,12 @@ import { Readable } from 'node:stream'
 
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
-import { MiB } from '@caffeinejs/std/bytes'
+import { Byte, MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Next } from '../../core/middleware/middleware.js'
 import { $p } from '../../core/routing/picker.js'
+import { bodyAsStream } from '../../decorators/body_as_stream.js'
 import { Args, Controller, Get } from '../../decorators/index.js'
 import { createWebApplication, newRouter } from './node.js'
 
@@ -155,15 +156,13 @@ describe('the Node platform', () => {
     })
   })
 
-  // A middleware that reads only the headers of `raw` leaves the body to whoever reads it next.
+  // A hook that reads only the headers of `raw` leaves the body to the route, which reads it next.
   it('takes no body byte when ctx.req.raw is built', async () => {
     const routes = newRouter('/a')
-    routes.post('/headers-first').handler(async ctx => {
-      void ctx.req.raw.headers
-      // Both request classes are a Node `Readable`.
-      const incoming = ctx.platform.incoming as Readable
-      return { body: await new Response(Readable.toWeb(incoming) as ReadableStream<Uint8Array>).text() }
-    })
+    routes
+      .post('/headers-first')
+      .hook('onRequest', ctx => void ctx.req.raw.headers)
+      .handler(ctx => ({ body: ctx.req.body() }))
     const { origin } = await serve(routes)
 
     const res = await fetch(`${origin}/a/headers-first`, { method: 'POST', body: 'ping' })
@@ -349,7 +348,9 @@ describe('the Node platform', () => {
       }
     })
 
-    socket.write('POST /a/echo HTTP/1.1\r\nHost: x\r\nExpect: 100-continue\r\nContent-Length: 4\r\n\r\n')
+    socket.write(
+      'POST /a/echo HTTP/1.1\r\nHost: x\r\nExpect: 100-continue\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\n',
+    )
     await continued.promise
     socket.write('ping')
     await answered.promise
@@ -358,20 +359,24 @@ describe('the Node platform', () => {
     expect(received.split('\r\n\r\n')[1]!.startsWith('HTTP/1.1 200 OK')).toBe(true)
   })
 
+  // Read by the handler: a route reading its body with @BodyAsStream.
   it('fails the body read of a client that aborts its upload', async () => {
     const reading = Promise.withResolvers<void>()
     const failed = Promise.withResolvers<boolean>()
     const routes = newRouter('/a')
-    routes.post('/upload').handler(async ctx => {
-      reading.resolve()
-      try {
-        await ctx.req.raw.text()
-        failed.resolve(false)
-      } catch {
-        failed.resolve(true)
-      }
-      return 'late'
-    })
+    routes
+      .post('/upload')
+      .extend(bodyAsStream())
+      .handler(async ctx => {
+        reading.resolve()
+        try {
+          await new Response(ctx.req.body() as ReadableStream<Uint8Array>).text()
+          failed.resolve(false)
+        } catch {
+          failed.resolve(true)
+        }
+        return 'late'
+      })
     const { port } = await serve(routes)
 
     const socket = await connected(port)
@@ -532,8 +537,8 @@ describe('the Node platform', () => {
   it('refuses at start-up a route the Node application cannot serve yet', async () => {
     const routes = newRouter('/a')
     routes
-      .post('/schema')
-      .schema({ body: { type: 'object' } } as never)
+      .get('/cached')
+      .config('cache', { maxAge: 1 })
       .handler(() => 'never')
     const app = createWebApplication().mount(routes)
     apps.push(app)
@@ -725,5 +730,277 @@ describe('Node middleware', () => {
 
     expect(ids).toHaveLength(2)
     expect(ids[1]).toBe(ids[0])
+  })
+})
+
+describe('the request body on Node', () => {
+  async function listen(app: App): Promise<number> {
+    apps.push(app)
+    const { address } = await app.run({ host: '127.0.0.1', port: 0 })
+    return address.port
+  }
+
+  function echo(): ReturnType<typeof newRouter> {
+    const routes = newRouter('/b')
+    routes.post('/echo').handler(ctx => ctx.req.body())
+    return routes
+  }
+
+  const text = (body: string, extra = '') =>
+    `POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\n${extra}Content-Length: ${body.length}\r\n\r\n${body}`
+
+  it('reads a body whole and keeps the connection', async () => {
+    const { port } = await serve(echo())
+
+    const answer = await raw(port, text('ping'), /ping$/)
+
+    expect(answer.startsWith('HTTP/1.1 200 OK')).toBe(true)
+    expect(answer).toMatch(/\r\nConnection: keep-alive\r\n/i)
+  })
+
+  it('answers 413 to a declared length over the limit and closes the connection', async () => {
+    const { port } = await serve(echo(), { settings: { bodyLimit: 10 * Byte } })
+
+    const answer = await raw(port, text('x'.repeat(11)))
+
+    expect(answer.startsWith('HTTP/1.1 413')).toBe(true)
+    expect(answer).toMatch(/\r\nConnection: close\r\n/i)
+  })
+
+  it('answers 413 to a chunked body over the limit and closes the connection', async () => {
+    const { port } = await serve(echo(), { settings: { bodyLimit: 10 * Byte } })
+
+    const answer = await raw(
+      port,
+      'POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\nb\r\nxxxxxxxxxxx\r\n0\r\n\r\n',
+    )
+
+    expect(answer.startsWith('HTTP/1.1 413')).toBe(true)
+    expect(answer).toMatch(/\r\nConnection: close\r\n/i)
+  })
+
+  it('closes the connection after a 415 that left the body unread', async () => {
+    const { port } = await serve(echo())
+
+    const answer = await raw(
+      port,
+      'POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: application/xml\r\nContent-Length: 4\r\n\r\n<a/>',
+    )
+
+    expect(answer.startsWith('HTTP/1.1 415')).toBe(true)
+    expect(answer).toMatch(/\r\nConnection: close\r\n/i)
+  })
+
+  it('closes the connection after an early answer that left the body unread', async () => {
+    const routes = newRouter('/b')
+    routes
+      .post('/echo')
+      .hook('onRequest', ctx => void ctx.status(401).body('no'))
+      .handler(() => 'never')
+    const { port } = await serve(routes)
+
+    const answer = await raw(port, text('ping'))
+
+    expect(answer.startsWith('HTTP/1.1 401')).toBe(true)
+    expect(answer).toMatch(/\r\nConnection: close\r\n/i)
+  })
+
+  it('closes the connection after a Node middleware answered without reading the body', async () => {
+    const port = await listen(
+      createWebApplication()
+        .logger(b => b.use(newNoopLogger()))
+        .use((_req: IncomingMessage, res: ServerResponse, _next: Next) => {
+          res.statusCode = 401
+          res.end('no')
+        })
+        .mount(echo()),
+    )
+
+    const answer = await raw(port, text('ping'))
+
+    expect(answer.startsWith('HTTP/1.1 401')).toBe(true)
+    expect(answer).toMatch(/\r\nConnection: close\r\n/i)
+  })
+
+  it('reads a body over HTTP/2', async () => {
+    const { origin } = await serve(echo(), { settings: { http2: true } })
+
+    const session = http2Connect(origin)
+    try {
+      const stream = session.request({ ':method': 'POST', ':path': '/b/echo', 'content-type': 'text/plain' })
+      stream.setEncoding('utf8')
+      let body = ''
+      stream.on('data', (chunk: string) => (body += chunk))
+      stream.end('ping')
+      await once(stream, 'end')
+
+      expect(body).toBe('ping')
+    } finally {
+      session.close()
+    }
+  })
+
+  // The client left: its request is cut short, not read by something before the route.
+  it('answers a client that left before its body arrived as cut short', async () => {
+    const entered = Promise.withResolvers<void>()
+    const failed = Promise.withResolvers<unknown>()
+    const routes = newRouter('/b')
+    routes
+      .post('/slow')
+      .hook('onRequest', async ctx => {
+        entered.resolve()
+        await once(ctx.signal, 'abort')
+      })
+      .hook('onError', (_ctx, err) => failed.resolve(err))
+      .handler(() => 'never')
+    const { port } = await serve(routes)
+
+    const socket = await connected(port)
+    socket.write('POST /b/slow HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\n')
+    await entered.promise
+    socket.destroy()
+
+    expect(await failed.promise).toMatchObject({ statusCode: 400 })
+  })
+
+  // HTTP/2 sends a body without Content-Length: the bytes read are kept for ctx.req.raw all the same.
+  it('serves the bytes read through ctx.req.raw for an HTTP/2 body without Content-Length', async () => {
+    const routes = newRouter('/b')
+    routes.post('/raw').handler(async ctx => ({ body: ctx.req.body(), raw: await ctx.req.raw.text() }))
+    const { origin } = await serve(routes, { settings: { http2: true } })
+
+    const session = http2Connect(origin)
+    try {
+      const stream = session.request({ ':method': 'POST', ':path': '/b/raw', 'content-type': 'text/plain' })
+      stream.setEncoding('utf8')
+      let answer = ''
+      stream.on('data', (chunk: string) => (answer += chunk))
+      stream.end('ping')
+      await once(stream, 'end')
+
+      expect(JSON.parse(answer)).toEqual({ body: 'ping', raw: 'ping' })
+    } finally {
+      session.close()
+    }
+  })
+
+  // What the route failed to read whole is not served as if whole: ctx.req.raw refuses it.
+  it('refuses ctx.req.raw a body the route failed to read past its limit', async () => {
+    const outcome = Promise.withResolvers<string>()
+    const routes = newRouter('/b')
+    routes
+      .post('/echo')
+      .hook('onError', async ctx => {
+        try {
+          outcome.resolve(`read "${await ctx.req.raw.text()}"`)
+        } catch (err) {
+          outcome.resolve(`refused ${String((err as { statusCode?: number }).statusCode)}`)
+        }
+      })
+      .handler(() => 'never')
+    const { port } = await serve(routes, { settings: { bodyLimit: 10 * Byte } })
+
+    await raw(
+      port,
+      'POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\nb\r\nxxxxxxxxxxx\r\n4\r\ntail\r\n0\r\n\r\n',
+    )
+
+    expect(await outcome.promise).toBe('refused 413')
+  })
+
+  it('refuses ctx.req.raw a body a Node middleware started reading', async () => {
+    const outcome = Promise.withResolvers<string>()
+    const routes = newRouter('/b')
+    routes
+      .post('/echo')
+      .hook('onError', async ctx => {
+        try {
+          outcome.resolve(`read "${await ctx.req.raw.text()}"`)
+        } catch (err) {
+          outcome.resolve(`refused ${String((err as { code?: string }).code)}`)
+        }
+      })
+      .handler(() => 'never')
+    const port = await listen(
+      createWebApplication()
+        .logger(b => b.use(newNoopLogger()))
+        .use((req: IncomingMessage, _res: ServerResponse, next: Next) => {
+          req.once('data', () => {
+            req.pause()
+            next()
+          })
+        })
+        .mount(routes),
+    )
+
+    await raw(port, text('ping'), /\r\n\r\n/)
+
+    expect(await outcome.promise).toBe('refused ERR_REQUEST_BODY_CONSUMED')
+  })
+
+  it('holds a body read through ctx.req.raw to the limit', async () => {
+    const routes = newRouter('/b')
+    routes
+      .post('/echo')
+      .hook('onRequest', async ctx => void (await ctx.req.raw.text()))
+      .handler(() => 'never')
+    const { port } = await serve(routes, { settings: { bodyLimit: 10 * Byte } })
+
+    const answer = await raw(port, text('x'.repeat(11)))
+
+    expect(answer.startsWith('HTTP/1.1 413')).toBe(true)
+  })
+
+  it('serves the bytes read through the ctx.req.raw a hook saw before the body was read', async () => {
+    let seen: Request | undefined
+    const routes = newRouter('/b')
+    routes
+      .post('/echo')
+      .hook('onRequest', ctx => void (seen = ctx.req.raw))
+      .handler(async ctx => ({ same: ctx.req.raw === seen, text: await ctx.req.raw.text(), body: ctx.req.body() }))
+    const { origin } = await serve(routes)
+
+    const res = await fetch(`${origin}/b/echo`, { method: 'POST', body: 'ping' })
+
+    expect(await res.json()).toEqual({ same: true, text: 'ping', body: 'ping' })
+  })
+
+  it.each([
+    ['a parsed body', (routes: ReturnType<typeof newRouter>) => void routes.post('/read').handler(() => 'never')],
+    [
+      'a @BodyAsStream body',
+      (routes: ReturnType<typeof newRouter>) =>
+        void routes
+          .post('/read')
+          .extend(bodyAsStream())
+          .handler(() => 'never'),
+    ],
+  ])('answers 500 to %s a Node middleware started reading', async (_case, declare) => {
+    const error = vi.fn()
+    const routes = newRouter('/b')
+    declare(routes)
+    const port = await listen(
+      createWebApplication()
+        .logger(b => b.use({ ...newNoopLogger(), error }))
+        .use((req: IncomingMessage, _res: ServerResponse, next: Next) => {
+          req.once('data', () => {
+            req.pause()
+            next()
+          })
+        })
+        .mount(routes),
+    )
+
+    const answer = await raw(
+      port,
+      'POST /b/read HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nping',
+      /\r\n\r\n/,
+    )
+
+    expect(answer.startsWith('HTTP/1.1 500')).toBe(true)
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.objectContaining({ code: 'ERR_REQUEST_BODY_CONSUMED' }) }),
+      expect.any(String),
+    )
   })
 })

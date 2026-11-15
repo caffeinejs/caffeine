@@ -25,9 +25,15 @@ import { defineConfig } from 'vitest/config'
 // - _tests/context_platform.test.ts -> platform/node/platform.test.ts (ctx.platform on Node)
 // - core/listener/_tests/{decorated,plugins,routers}.test.ts -> core/listener/listener.test.ts,
 //   core/server/adapter.test.ts (a listener's own routes and plugins)
+// - _tests/body_limit.test.ts -> core/server/input.test.ts (its bad-limit cases pin Fastify's own message)
+// - _tests/body_as_buffer.test.ts -> core/server/input.test.ts
+// - _tests/body_as_stream.test.ts -> core/server/input.test.ts
+// - platform/fastify/form/form.test.ts -> core/server/body.test.ts, core/server/input.test.ts
+// - platform/fastify/routing/schema/_tests/route_validation.test.ts -> core/validation/typebox.test.ts,
+//   core/server/input.test.ts
+// - platform/fastify/error/validation.test.ts -> core/error/validation.test.ts
 //
 // Not yet on Node, each with what keeps it off:
-// - _tests/body_limit.test.ts: reads a body, declares a schema or a @BodyLimit, which the engine refuses
 // - _tests/context_platform.test.ts: reads Fastify's ctx.platform.request and ctx.platform.reply
 // - _tests/create_web_application.test.ts: reads a Fastify-only member of app.instance
 // - _tests/fetch.test.ts: reads a Fastify-only member of app.instance
@@ -38,9 +44,7 @@ import { defineConfig } from 'vitest/config'
 // - _tests/http_plugin_controller.test.ts: installs a Fastify plugin with @Use(...)
 // - _tests/lifecycle.test.ts: expects request() to reject after close(); the engine answers a plain 503
 // - _tests/programmatic_router_parity.test.ts: needs authentication(), not on the Node entry yet
-// - _tests/query_method.test.ts: reads a body, declares a schema or a @BodyLimit, which the engine refuses
 // - _tests/register_router.test.ts: needs authentication(), not on the Node entry yet
-// - _tests/router_query_method.test.ts: reads a body, declares a schema or a @BodyLimit, which the engine refuses
 // - _tests/versioning_decorated.test.ts: needs constraints(), not on the Node entry yet
 // - _tests/versioning.test.ts: needs constraints(), not on the Node entry yet
 // - core/health/health.test.ts: needs healthProbes(), not on the Node entry yet
@@ -123,6 +127,8 @@ export default defineConfig({
       'core/security/_tests/route_scheme_assert.test.ts',
       'plugin.test.ts',
       'response.test.ts',
+      '_tests/query_method.test.ts',
+      '_tests/router_query_method.test.ts',
     ],
     environment: 'node',
     testTimeout: 30000,

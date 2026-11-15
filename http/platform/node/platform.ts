@@ -6,12 +6,14 @@ import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import type { TLSSocket } from 'node:tls'
 
 import type { Logger } from '@caffeinejs/application/logger'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 
 import type { IContextPlatform } from '../../adapter.js'
-import { ErrHTTPServiceUnavailable } from '../../core/error/http.js'
+import { ErrHTTPBadRequest, ErrHTTPServiceUnavailable } from '../../core/error/http.js'
 import { isThenable } from '../../core/lifecycle/lifecycle.js'
 import { ErrNextCalledTwice } from '../../core/middleware/errors.js'
 import type { Next, NodeMiddleware } from '../../core/middleware/middleware.js'
+import { contentTooLarge, declaredOver, ErrRequestBodyConsumed } from '../../core/server/body.js'
 import type { NodeMiddlewareStamp, ServerPlatform } from '../../core/server/platform.js'
 import type { HTTPServer } from '../../core/server/server.js'
 
@@ -27,6 +29,17 @@ export interface NodeContextPlatform extends IContextPlatform {
 
 type NodePlatform = ServerPlatform<NodeResponse, NodeContextPlatform, void>
 
+/** What the platform keeps for a request that declares a body: the keep-alive it closed, and the bytes it read. */
+interface BodyState {
+  /** Set where the platform closed the connection until the body is read: what to restore. */
+  readonly keepAlive?: boolean
+  bytes?: Uint8Array
+  /** Why the route's read failed part-way: what `ctx.req.raw` refuses its body with, rather than serve what is left. */
+  failure?: Error
+}
+
+const bodies = new WeakMap<NodeResponse, BodyState>()
+
 /** The Node platform of one server: `logger` hears of a streamed answer whose source failed. */
 export function createNodePlatform(logger: Logger): NodePlatform {
   const platform: NodePlatform = {
@@ -36,7 +49,10 @@ export function createNodePlatform(logger: Logger): NodePlatform {
     protocol: res => (socketField(res, 'encrypted') === true ? 'https' : 'http'),
     header: headerOf,
     headers: res => res.req.headers as Record<string, string>,
-    request: res => requestOf(res, platform.protocol(res), signalOf(res)),
+    request: (res, limit) => requestOf(res, platform.protocol(res), signalOf(res), limit),
+    hasBody: res => declaresBody(res.req),
+    bodyConsumed: res => consumed(res.req),
+    readBody,
     signal: signalOf,
     remoteAddress: res => socketField(res, 'remoteAddress'),
     context: res => ({ name: 'node', incoming: res.req, outgoing: res }),
@@ -171,6 +187,17 @@ export function serveNode(
 ): void {
   let answer: void | Promise<void>
 
+  // A body nobody reads to its end would stay on a kept-alive connection: closed until the body has been read whole,
+  // whatever answers first (a 413, a 415, a guard's 401, a Node middleware, a failure).
+  if (declaresBody(res.req)) {
+    if (res instanceof Http2ServerResponse) {
+      bodies.set(res, {})
+    } else {
+      bodies.set(res, { keepAlive: res.shouldKeepAlive })
+      res.shouldKeepAlive = false
+    }
+  }
+
   try {
     answer = engine.serve(platform, res, undefined, drainAtRespond)
   } catch {
@@ -226,7 +253,7 @@ function headerOf(res: NodeResponse, name: string): string | undefined {
  * The request as a web `Request`. Its URL names the host the request did, on the connection's scheme, and keeps the
  * target as a path whatever it holds. Its body reads nothing until it is read.
  */
-function requestOf(res: NodeResponse, protocol: string, signal: AbortSignal): Request {
+function requestOf(res: NodeResponse, protocol: string, signal: AbortSignal, limit: ByteSize): Request {
   const incoming = res.req
   const target = incoming.url ?? '/'
 
@@ -259,7 +286,7 @@ function requestOf(res: NodeResponse, protocol: string, signal: AbortSignal): Re
   const init: RequestInit & { duplex?: 'half' } = { method, headers, signal }
 
   if (method !== 'GET' && method !== 'HEAD') {
-    init.body = lazyBody(incoming)
+    init.body = lazyBody(res, limit)
     init.duplex = 'half'
   }
 
@@ -268,27 +295,172 @@ function requestOf(res: NodeResponse, protocol: string, signal: AbortSignal): Re
 
 /**
  * The request body as a web stream that reads from `incoming` only once it is read, so building the `Request` takes no
- * byte from it.
+ * byte from it. Once {@link readBody} has read the body, it serves those bytes instead. It fails with a 413 when the
+ * body declares or brings more than `limit` bytes; `incoming` is left as it is, its connection closed after the answer.
  */
-function lazyBody(incoming: Readable): ReadableStream<Uint8Array> {
+function lazyBody(res: NodeResponse, limit: ByteSize): ReadableStream<Uint8Array> {
+  const incoming = res.req
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let received = 0
 
   return new ReadableStream<Uint8Array>(
     {
       async pull(controller) {
-        reader ??= (Readable.toWeb(incoming) as ReadableStream<Uint8Array>).getReader()
+        if (reader === undefined) {
+          const state = bodies.get(res)
+          if (state?.bytes !== undefined) {
+            if (state.bytes.byteLength > 0) {
+              controller.enqueue(state.bytes)
+            }
+            controller.close()
+            return
+          }
+
+          // A body the route failed to read, or something else started reading: what is left is not the body.
+          if (state?.failure !== undefined) {
+            controller.error(state.failure)
+            return
+          }
+          if (consumed(incoming)) {
+            controller.error(new ErrRequestBodyConsumed(`${incoming.method ?? 'GET'} ${pathOf(incoming.url)}`))
+            return
+          }
+
+          if (declaredOver(headerOf(res, 'content-length'), limit)) {
+            controller.error(contentTooLarge(limit))
+            return
+          }
+          reader = (Readable.toWeb(incoming as Readable) as ReadableStream<Uint8Array>).getReader()
+        }
+
         const { done, value } = await reader.read()
 
         if (done) {
+          restoreKeepAlive(res)
           controller.close()
-        } else {
-          controller.enqueue(value)
+          return
         }
+
+        received += value.byteLength
+        if (received > limit) {
+          controller.error(contentTooLarge(limit))
+          return
+        }
+
+        controller.enqueue(value)
       },
       cancel: reason => reader?.cancel(reason),
     },
     { highWaterMark: 0 },
   )
+}
+
+/**
+ * Reads the body whole, as Fastify's `rawBody` does: counted as it arrives, and held to its `Content-Length`. The bytes
+ * are kept for `ctx.req.raw`.
+ */
+function readBody(res: NodeResponse, limit: ByteSize): Promise<Uint8Array> {
+  const incoming = res.req
+  const declared = headerOf(res, 'content-length')
+
+  // The client left before its body arrived: no event will come.
+  if (incoming.destroyed) {
+    return Promise.reject(new ErrHTTPBadRequest('The request body was cut short'))
+  }
+
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let received = 0
+
+    // Kept for `ctx.req.raw`, which must not serve the rest of a body as if it were whole.
+    const fail = (err: Error): void => {
+      const state = bodies.get(res)
+      if (state === undefined) {
+        bodies.set(res, { failure: err })
+      } else {
+        state.failure = err
+      }
+      reject(err)
+    }
+
+    const settle = (): void => {
+      incoming.off('data', onData)
+      incoming.off('end', onEnd)
+      incoming.off('error', onCut)
+      incoming.off('close', onCut)
+    }
+
+    const onData = (chunk: Buffer | string): void => {
+      const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+      received += bytes.byteLength
+
+      if (received > limit) {
+        settle()
+        incoming.pause()
+        fail(contentTooLarge(limit))
+        return
+      }
+
+      chunks.push(bytes)
+    }
+
+    const onEnd = (): void => {
+      settle()
+
+      const length = Number(declared)
+      if (declared !== undefined && !Number.isNaN(length) && length !== received) {
+        fail(new ErrHTTPBadRequest('The request body does not match its Content-Length'))
+        return
+      }
+
+      const bytes = Buffer.concat(chunks, received)
+      const state = bodies.get(res)
+      // Kept for `ctx.req.raw` whether or not the request declared its body: HTTP/2 sends one without a length.
+      if (state === undefined) {
+        bodies.set(res, { bytes })
+      } else {
+        state.bytes = bytes
+        restoreKeepAlive(res)
+      }
+      resolve(bytes)
+    }
+
+    const onCut = (): void => {
+      settle()
+      fail(new ErrHTTPBadRequest('The request body was cut short'))
+    }
+
+    incoming.on('data', onData)
+    incoming.on('end', onEnd)
+    incoming.on('error', onCut)
+    incoming.on('close', onCut)
+  })
+}
+
+// The path of a request target, its query left out: what an error names the request by.
+function pathOf(target: string | undefined): string {
+  const path = target ?? '/'
+  const query = path.indexOf('?')
+  return query === -1 ? path : path.slice(0, query)
+}
+
+/** Whether a request declares a body: a `Transfer-Encoding`, or a `Content-Length` other than `0`. */
+function declaresBody(incoming: IncomingMessage | Http2ServerRequest): boolean {
+  const { 'transfer-encoding': encoding, 'content-length': length } = incoming.headers
+  return encoding !== undefined || (length !== undefined && length !== '0')
+}
+
+/** Whether something read, or started reading, the body: even one chunk, then `pause()`. A client gone is not one. */
+function consumed(incoming: IncomingMessage | Http2ServerRequest): boolean {
+  return incoming.readableDidRead || incoming.readableFlowing !== null || incoming.readableEnded
+}
+
+// The body has been read whole: the connection may be kept as Node would have kept it.
+function restoreKeepAlive(res: NodeResponse): void {
+  const state = bodies.get(res)
+  if (state?.keepAlive !== undefined && !(res instanceof Http2ServerResponse)) {
+    res.shouldKeepAlive = state.keepAlive
+  }
 }
 
 /**

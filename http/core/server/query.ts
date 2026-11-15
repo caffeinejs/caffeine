@@ -1,9 +1,16 @@
+// What a parsed query is built on: an object that inherits nothing, made fast. `Object.create(null)` makes one V8 keeps
+// in its slow dictionary mode, which every read and every copy of the query then pays for.
+const Bare = function Bare() {
+  // Nothing to set: what matters is the prototype below.
+} as unknown as new () => Record<string, string | string[]>
+Bare.prototype = Object.create(null) as object
+
 /**
  * Parses a query string as handlers read it: a repeated key is a list, `+` is a space, an escape that does not decode
- * is kept as written. The result has no prototype, so `__proto__` is a key like any other.
+ * is kept as written. The result inherits nothing, so `__proto__` is a key like any other.
  */
 export function parseQuery(query: string): Record<string, string | string[]> {
-  const result: Record<string, string | string[]> = Object.create(null)
+  const result = new Bare()
   let start = 0
 
   while (start <= query.length) {

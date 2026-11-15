@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { newNoopLogger } from '@caffeinejs/application/logger'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
@@ -6,6 +7,7 @@ import { Catch } from '../../decorators/index.js'
 import type { ActionResult } from '../../response.js'
 import type { ErrorHandler } from '../error/handler.js'
 import { ErrHTTPConflict, ErrHTTPForbidden } from '../error/http.js'
+import { ErrRequestValidation } from '../error/validation.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 
 class ErrRouteLevel extends Error {}
@@ -134,5 +136,69 @@ describe('answerError', () => {
     expect(status).toBe(502)
     expect(body).toMatchObject({ code: 'ERR_IDP', detail: 'Sign-in is unavailable' })
     expect(JSON.stringify(body)).not.toContain('idp.internal')
+  })
+})
+
+describe('a request that failed its schema', () => {
+  @Catch(ErrRequestValidation)
+  class ValidationHandler implements ErrorHandler<ErrRequestValidation> {
+    handle(_ctx: IContext, err: ErrRequestValidation): ActionResult {
+      return { caught: err.slot }
+    }
+  }
+
+  const failing = new Router('/v').get('/').handler(() => {
+    throw new ErrRequestValidation(
+      'querystring',
+      [
+        { message: 'a', path: ['a'], code: 'minLength' },
+        { message: 'b', path: ['b'], code: 'maxLength' },
+        { message: 'c', path: ['c'], code: 'pattern' },
+      ],
+      'GET /v',
+    )
+  })
+
+  it('answers with the validation problem the error handling settings describe, and logs it', async () => {
+    const info = vi.fn()
+    const validating = createWebApplication()
+      .logger(b => b.use({ ...newNoopLogger(), info }))
+      .errorHandling(e => e.validation({ type: 'https://example.test/invalid', code: 'BAD', maxErrors: 2 }))
+      .mount(failing)
+    await validating.bootstrap()
+
+    try {
+      const res = await validating.request('/v')
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        type: 'https://example.test/invalid',
+        code: 'BAD',
+        detail: 'Invalid query string: showing the first 2 of 3 errors',
+        errors: [
+          { code: 'ERR_VALIDATION_MIN_LENGTH', detail: 'a a', source: { in: 'query', name: 'a' } },
+          { code: 'ERR_VALIDATION_MAX_LENGTH', detail: 'b b', source: { in: 'query', name: 'b' } },
+        ],
+      })
+      expect(info).toHaveBeenCalledWith(
+        expect.objectContaining({ validation: expect.objectContaining({ slot: 'querystring', total: 3 }) }),
+        'Invalid query string: 3 errors',
+      )
+    } finally {
+      await validating.close()
+    }
+  })
+
+  it('is answered by a global handler that catches ErrRequestValidation', async () => {
+    const catching = createWebApplication()
+      .errorHandling(e => e.globalHandlers(ValidationHandler))
+      .mount(failing)
+    await catching.bootstrap()
+
+    try {
+      expect(await (await catching.request('/v')).json()).toEqual({ caught: 'querystring' })
+    } finally {
+      await catching.close()
+    }
   })
 })

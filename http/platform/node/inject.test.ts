@@ -133,7 +133,7 @@ describe('request() on the Node application', () => {
     const res = await app.request('/echo', {
       method: 'POST',
       body,
-      headers: { 'content-length': '4' },
+      headers: { 'content-length': '4', 'content-type': 'text/plain' },
       duplex: 'half',
     } as RequestInit)
 

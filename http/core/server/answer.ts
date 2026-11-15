@@ -9,6 +9,8 @@ import type { VaryReply } from '../../vary.js'
 import { ErrCaffeineWebApplication } from '../error/common.js'
 import { withCharset } from '../error/encode.js'
 import { isThenable, type SendPayload } from '../lifecycle/lifecycle.js'
+import type { IRoute } from '../routing/route.js'
+import type { CompiledSerializer, SchemaCompiler } from '../validation/validation.js'
 import type { Context } from './context.js'
 
 // RFC 9110 §7.6.1: fields that describe one connection, never forwarded. A Node server writes its own, and HTTP/2
@@ -207,15 +209,45 @@ export class ErrInvalidPayloadType extends ErrCaffeineWebApplication {
 
 const ENCODER = new TextEncoder()
 
+/** The serializer lookup of a route that declares no response schema, and of a request no route matched. */
+export const NO_SERIALIZER = (_status: number): CompiledSerializer | undefined => undefined
+
+/**
+ * The serializer each answer of `route` is written with, by status, as Fastify picks one: the exact status, then its
+ * class (`2xx`, in any case), then `default`; `undefined` when none applies.
+ *
+ * @param context - The route in failures, e.g. `POST /pets`.
+ * @throws ErrConfiguration for a response schema `compiler` cannot compile.
+ */
+export function compileSerializers(
+  route: IRoute<Context>,
+  context: string,
+  compiler: SchemaCompiler,
+): (status: number) => CompiledSerializer | undefined {
+  const response = route.schema?.response
+  if (response === undefined || Object.keys(response).length === 0) {
+    return NO_SERIALIZER
+  }
+
+  const serializers = new Map<string, CompiledSerializer>()
+  for (const [key, schema] of Object.entries(response)) {
+    const status = key.toLowerCase()
+    serializers.set(status, compiler.serializer({ schema, context: `${context} response ${status}` }))
+  }
+
+  return status =>
+    serializers.get(String(status)) ?? serializers.get(`${Math.floor(status / 100)}xx`) ?? serializers.get('default')
+}
+
 /**
  * What `value` goes out as on the engine, with the headers it carries written to `ctx`: {@link payloadOf}, then the
- * rules of Fastify's `reply.send`. `null` for no body.
+ * rules of Fastify's `reply.send`, JSON written by the route's serializer for `status`. `null` for no body.
  *
  * @throws ErrInvalidPayloadType for a value that is not text, bytes or a stream under a type that is not JSON.
  * @throws ErrResponseBodyConsumed for a `Response` whose body was read.
  */
-export function shapeAnswer(ctx: Context, value: unknown, keepStatus = false): SendPayload {
-  return serialize(ctx, payloadOf(ctx, value, keepStatus))
+export function shapeAnswer(ctx: Context, value: unknown, keepStatus: boolean, status: number): SendPayload {
+  return serialize(ctx, payloadOf(ctx, value, keepStatus), status)
 }
 
 /**
@@ -269,7 +301,7 @@ export function byteLength(text: string): number {
 }
 
 // What `reply.send` does with what `payloadOf` hands it (`fastify/lib/reply.js`, `send`).
-function serialize(ctx: Context, payload: unknown): SendPayload {
+function serialize(ctx: Context, payload: unknown, status: number): SendPayload {
   if (payload === undefined) {
     return null
   }
@@ -314,7 +346,8 @@ function serialize(ctx: Context, payload: unknown): SendPayload {
 
   ctx.header('content-type', type === undefined ? 'application/json; charset=utf-8' : withCharset(type))
 
-  return JSON.stringify(payload)
+  const write = ctx.serializerFor(status)
+  return write === undefined ? JSON.stringify(payload) : write(payload)
 }
 
 /**

@@ -19,6 +19,8 @@
     "request/caffeine/**",
     "request/caffeine-request-scope/**",
     "request/caffeine-router/**",
+    "request/caffeine-web/**",
+    "request/caffeine-web-codec/**",
     "mixedscopes/caffeine/**",
     "authn/caffeine/**",
     "caching/caffeine/**",

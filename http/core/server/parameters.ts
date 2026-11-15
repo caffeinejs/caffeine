@@ -35,8 +35,8 @@ export function portOf(host: string): number | null {
   return Number.isInteger(port) && host.length > colon + 1 ? port : null
 }
 
-// What each built-in pick reads off the engine's context. `body`, the cookie picks and the Fastify request and reply
-// are refused when the route registers, so they never get here.
+// What each built-in pick reads off the engine's context. The cookie picks and the Fastify request and reply are
+// refused when the route registers, so they never get here.
 function basePicker(p: ParameterPickOptions<Context>): Picker {
   const field = p.name
 
@@ -47,6 +47,8 @@ function basePicker(p: ParameterPickOptions<Context>): Picker {
       return field ? ctx => ctx.req.param(field) : ctx => ctx.req.param()
     case 'header':
       return field ? ctx => ctx.req.header(field) : ctx => ctx.req.header()
+    case 'body':
+      return ctx => ctx.req.body()
     case 'context':
       return ctx => ctx
     case 'user':

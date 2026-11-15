@@ -3,9 +3,9 @@ import type { FastifySchemaValidationError } from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import { validationCode, validationDetail } from '../../../core/error/validation.js'
 import type { Problem, ProblemIssue, WebApplication } from '../../../index.js'
 import { createWebApplication, newRouter } from '../index.js'
-import { validationCode, validationDetail } from './validation.js'
 
 type App = WebApplication<any, any, any, any>
 

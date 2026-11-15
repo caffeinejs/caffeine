@@ -7,6 +7,13 @@ import { codeForStatus, errorStatus, hasPublicMessage } from '../error/encode.js
 import { resolveByErrorChain } from '../error/handler.js'
 import { ErrHTTP } from '../error/http.js'
 import { newProblem, type Problem } from '../error/problem.js'
+import {
+  buildValidationProblem,
+  CANNOT_MAP_ISSUE,
+  ErrRequestValidation,
+  standardIssue,
+  validationMessage,
+} from '../error/validation.js'
 import { andThen, asError, isThenable } from '../lifecycle/lifecycle.js'
 import { kErrorUnhandled, type CatchByMap } from '../routing/route.js'
 import { answer } from './answer.js'
@@ -62,7 +69,7 @@ function scoped(ctx: Context, store: RouteStore, err: Error): boolean | PromiseL
   )
 }
 
-/** The application-wide handlers, then the default problem: Fastify's global error handler without validation. */
+/** The application-wide handlers, then the default problem: Fastify's global error handler. */
 function global(shared: ServerShared, ctx: Context, err: Error): void | Promise<void> {
   const handler = shared.errors.provide(err)
 
@@ -79,6 +86,29 @@ function global(shared: ServerShared, ctx: Context, err: Error): void | Promise<
  */
 export function defaultProblem(shared: ServerShared, ctx: Context, err: Error): void {
   const log = shared.logger
+
+  // A request that failed its schema: the body's failures answer 422, the request's parameters' 400. The log line is
+  // bounded like the response: the slot, the count and the entries sent.
+  if (err instanceof ErrRequestValidation) {
+    const validation = shared.options.validation
+    const { slot, issues } = err
+    const reqId = ctx.req.id
+    const problem = buildValidationProblem(
+      asIContext(ctx),
+      slot,
+      issues.slice(0, validation.maxErrors).map(issue => standardIssue(slot, issue)),
+      issues.length,
+      validation,
+      failure => log.error({ reqId, err: failure }, CANNOT_MAP_ISSUE),
+    )
+
+    log.info(
+      { reqId, validation: { slot, total: issues.length, errors: problem.errors } },
+      validationMessage(slot, issues.length),
+    )
+    sendProblem(shared, ctx, problem, err)
+    return
+  }
 
   if (err instanceof ErrHTTP) {
     if (err.headers) {

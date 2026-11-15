@@ -17,6 +17,12 @@ import { defineConfig } from 'vitest/config'
 // - _tests/context_platform.test.ts -> platform/node/platform.test.ts (ctx.platform on Node)
 // - core/listener/_tests/{decorated,plugins,routers}.test.ts -> core/listener/listener.test.ts,
 //   core/server/adapter.test.ts (a listener's own routes and plugins)
+// - _tests/body_as_buffer.test.ts -> core/server/input.test.ts
+// - _tests/body_as_stream.test.ts -> core/server/input.test.ts
+// - platform/fastify/form/form.test.ts -> core/server/body.test.ts, core/server/input.test.ts
+// - platform/fastify/routing/schema/_tests/route_validation.test.ts -> core/validation/typebox.test.ts,
+//   core/server/input.test.ts
+// - platform/fastify/error/validation.test.ts -> core/error/validation.test.ts
 //
 // Not yet on the engine, each with what keeps it off:
 // - _tests/context_platform.test.ts: reads Fastify's ctx.platform.request and ctx.platform.reply
@@ -69,6 +75,8 @@ export default defineConfig({
       '_tests/versioning_decorated_prefix.test.ts',
       '_tests/response_bodies.test.ts',
       'plugin.test.ts',
+      '_tests/query_method.test.ts',
+      '_tests/router_query_method.test.ts',
     ],
     environment: 'node',
     testTimeout: 30000,

@@ -28,10 +28,12 @@ import { ErrRouteConflict, type RouteMatch, type RouteMatcher } from '../matcher
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
 import { joinPaths, pathsOf } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
-import { answer, byteLength, connectionFields } from './answer.js'
+import type { CompiledSerializer } from '../validation/validation.js'
+import { answer, byteLength, compileSerializers, connectionFields, NO_SERIALIZER } from './answer.js'
 import { Context, type ServerShared } from './context.js'
 import { answerError, configurationError, defaultProblem, sendProblem, USE_FASTIFY } from './error.js'
 import { compileLevel, composeRouteHooks, type LevelInput, type StoreHooks } from './hooks.js'
+import { compileRouteInput, readInput, type RouteInput } from './input.js'
 import { engineCompilers } from './parameters.js'
 import type { SendHooks, ServerPlatform } from './platform.js'
 import { isTimeout, MAX_TIMEOUT, type ResolvedServerSettings } from './settings.js'
@@ -52,6 +54,10 @@ export interface RouteStore {
   readonly timeout: Duration | undefined
   /** The automatic HEAD route of a GET, which replaces `content-length` as Fastify's does. */
   readonly twin: boolean
+  /** How the route reads its body and validates its request; `undefined` for a miss, which reads neither. */
+  readonly input: RouteInput | undefined
+  /** The serializer an answer of a status is written with, when the route's response schema declares one. */
+  readonly serializerFor: (status: number) => CompiledSerializer | undefined
 }
 
 export interface HTTPServerInput {
@@ -129,6 +135,7 @@ export class HTTPServer {
       trustProxy: settings.trustProxy,
       requestIDHeader: settings.requestIDHeader,
       router: settings.router,
+      bodyLimit: settings.bodyLimit,
     }
     this.#basePath = input.basePath
     this.#container = container
@@ -155,6 +162,8 @@ export class HTTPServer {
       status: undefined,
       timeout: undefined,
       twin: false,
+      input: undefined,
+      serializerFor: NO_SERIALIZER,
     }
     this.routes = this.#register(input.routeGroups, settings)
   }
@@ -222,7 +231,7 @@ export class HTTPServer {
         seenBase,
         match?.params ?? EMPTY_PARAMS,
         match?.query ?? queryAfter(url),
-        store.definition,
+        store,
       )
       flight.ctx = current
       flight.onResponse = store.hooks.onResponse
@@ -378,7 +387,7 @@ export class HTTPServer {
 
         assertServable(route, methods, paths[0], settings.application)
 
-        const store = this.#storeOf(group, route, methods, paths[0], settings.handlerTimeout)
+        const store = this.#storeOf(group, route, methods, paths[0], settings)
 
         for (const method of methods) {
           for (const path of paths) {
@@ -426,18 +435,21 @@ export class HTTPServer {
     route: IRoute<Context>,
     methods: readonly string[],
     url: string,
-    handlerTimeout: Duration | undefined,
+    settings: ResolvedServerSettings,
   ): RouteStore {
     const guards = route.guards
     const compiled = route.hooks
     // The same object for every request on this route.
     const target: GuardTarget = { clazz: group.target as Ctor<unknown> | undefined, handler: route.name }
+    const name = `${methods.join('|')} ${url}`
     const statics = {
       handle: route.dispatch(engineCompilers) as (req: Context, res: Context) => unknown,
       headers: [...route.header],
       contentType: route.contentType || undefined,
       status: typeof route.statusCode === 'number' && route.statusCode > 0 ? route.statusCode : undefined,
-      timeout: route.timeout ?? handlerTimeout,
+      timeout: route.timeout ?? settings.handlerTimeout,
+      input: compileRouteInput(route, name, settings),
+      serializerFor: compileSerializers(route, name, settings.schemaCompiler),
     }
 
     const scopes = group.scopes ?? []
@@ -684,7 +696,13 @@ class Pipeline<N, R> {
       return
     }
 
-    // Parsing and validation go here.
+    // The body is read and the request validated before `preHandler`, which sees what validation produced.
+    const input = this.#store.input
+    const read = input === undefined ? undefined : readInput(this.#ctx, input)
+    return isThenable(read) ? read.then(() => this.#beforeHandler()) : this.#beforeHandler()
+  }
+
+  #beforeHandler(): void | PromiseLike<void> {
     const ran = runHooks(this.#store.hooks.preHandler, this.#ctx)
     return isThenable(ran) ? ran.then(() => this.#afterPreHandler()) : this.#afterPreHandler()
   }
@@ -1017,19 +1035,12 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
 
   // The first that applies names the refusal.
   const refusals: ReadonlyArray<readonly [boolean, string]> = [
-    [
-      route.schema !== undefined && Object.values(route.schema).some(slot => slot !== undefined),
-      'a request or response schema',
-    ],
-    [route.bodyAs !== undefined, '@BodyAsBuffer or @BodyAsStream'],
-    [route.bodyLimit !== undefined, '@BodyLimit'],
     [route.options.size > 0, `route options ("${[...route.options.keys()].map(String).join('", "')}")`],
     [route.config.has(kRouteConstraints), 'a route constraint'],
     [route.config.has('cache') || route.config.has('cacheInvalidate'), '@CacheControl or @CacheInvalidate'],
     // Read by the Fastify CORS plugin, which the engine does not run yet. A plugin's own key is served: it reads it.
     [route.config.has('cors'), '@CORS()'],
     [route.authorization.authorizer != null, 'a protected route, which needs an authentication gate'],
-    [types.has('body'), 'reading the body'],
     [types.has('cookie') || types.has('cookie:signed'), 'reading cookies'],
     [types.has('fastify:request') || types.has('fastify:reply'), 'the Fastify request or reply'],
   ]

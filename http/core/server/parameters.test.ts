@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
-import { Args, Controller, Get } from '../../decorators/index.js'
+import { Args, Controller, Get, Post } from '../../decorators/index.js'
 import { $p } from '../routing/picker.js'
 import { portOf } from './parameters.js'
 
@@ -31,6 +31,12 @@ class Picks {
   @Args([$p.user()])
   user(user: unknown): object {
     return { user }
+  }
+
+  @Post('/body/json')
+  @Args([$p.body()])
+  body(body: unknown): object {
+    return { body }
   }
 
   @Get('/custom/url')
@@ -104,5 +110,17 @@ describe('portOf', () => {
     ['example.com:', null],
   ])('reads %s as %s', (host, port) => {
     expect(portOf(host)).toBe(port)
+  })
+})
+
+describe('the body pick', () => {
+  it('hands the handler the parsed body, as ctx.req.body() reads it', async () => {
+    const res = await app.request('/picks/body/json', {
+      method: 'POST',
+      body: JSON.stringify({ a: 1 }),
+      headers: { 'content-type': 'application/json' },
+    })
+
+    expect(await res.json()).toEqual({ body: { a: 1 } })
   })
 })

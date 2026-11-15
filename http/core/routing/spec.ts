@@ -76,11 +76,13 @@ export type RouteInvoker = (...args: unknown[]) => unknown
 
 /**
  * The validation contract of a route, as authored. Every slot takes the `$t` dialect (recommended) or any Standard
- * Schema that converts to JSON Schema.
+ * Schema; a Standard Schema response must convert to JSON Schema.
  *
- * This is the authoring shape, not the runtime one: each slot is compiled to JSON Schema once, while routes are
- * being registered, and Fastify's Ajv does all request-time validation. See
- * `platform/fastify/routing/schema/schema.ts` for the compilation and the per-slot strictness policy.
+ * This is the authoring shape, not the runtime one: each slot is compiled once, while routes are being registered.
+ * On the Node and fetch applications a `$t` slot is compiled by the server's `schemaCompiler` (TypeBox by default),
+ * and its codecs, such as `$t.Duration()`, are decoded; a Standard Schema slot is validated by its own library. On the
+ * Fastify application Fastify's Ajv validates, codecs are not decoded, and a Standard Schema must convert to JSON
+ * Schema.
  */
 export interface RouteValidationSchema {
   params?: AnySchema
@@ -92,7 +94,9 @@ export interface RouteValidationSchema {
    *
    * Beware that a response schema *serializes*, it does not validate. Fastify hands it to fast-json-stringify,
    * which emits only the declared properties — a handler returning a non-conforming object is not rejected, its
-   * extra fields are simply omitted.
+   * extra fields are simply omitted. On the Node and fetch applications a codec in it is encoded first, so
+   * `$t.Duration()` sends `"5s"`; on the Fastify application codecs are not encoded. A string the handler returns is
+   * sent as it is.
    */
   response?: Record<number | string, AnySchema>
 }

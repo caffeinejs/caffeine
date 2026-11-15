@@ -1,14 +1,12 @@
 import { newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import { CaffeineIoC, Injectable, Scopes } from '@caffeinejs/di'
-import { KiB } from '@caffeinejs/std/bytes'
 import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { bindTo } from '../../decorators/bind_to.js'
-import { bodyAsStream } from '../../decorators/body_as_stream.js'
 import { Catch, Controller, Get, Prefix } from '../../decorators/index.js'
 import { registerRouteGroup } from '../../decorators/registrar/index.js'
 import { $fst } from '../../platform/fastify/routing/picker.js'
@@ -459,28 +457,11 @@ describe('HTTPServer', () => {
 
   it.each<[string, (router: AnyRouter) => void]>([
     [
-      'a schema',
+      'a schema that is neither a TypeBox schema nor a Standard Schema',
       r =>
         void r
           .get('/x')
           .schema({ querystring: { type: 'object' } } as never)
-          .handler(() => 'x'),
-    ],
-    [
-      '@BodyAsStream',
-      r =>
-        void r
-          .post('/x')
-          .extend(bodyAsStream())
-          .handler(() => 'x'),
-    ],
-    // A limit the engine does not enforce yet would let any body through.
-    [
-      '@BodyLimit',
-      r =>
-        void r
-          .post('/x')
-          .bodyLimit(1 * KiB)
           .handler(() => 'x'),
     ],
     [
@@ -545,7 +526,6 @@ describe('HTTPServer', () => {
 
   // A programmatic route always picks the context: picks are a controller's, bound here to this application alone.
   it.each([
-    ['$p.body()', $p.body()],
     ['$p.cookie()', $p.cookie('a')],
     ['$fst.request()', $fst.request()],
   ])('refuses %s at start-up', async (_pick, pick) => {

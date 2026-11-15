@@ -1,3 +1,5 @@
+import type { ByteSize } from '@caffeinejs/std/bytes'
+
 import type { IContextPlatform } from '../../adapter.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
 import type { Next, NodeMiddleware } from '../middleware/middleware.js'
@@ -43,7 +45,24 @@ export interface ServerPlatform<N, P extends IContextPlatform, R> {
   header(native: N, name: string): string | undefined
   /** Every request header, by lower-case name. */
   headers(native: N): Record<string, string>
-  request(native: N): Request
+  /**
+   * `ctx.req.raw`, built once per request. Where the platform builds it, its body is held to `limit` and serves the
+   * bytes {@link readBody} read; the fetch platform hands over the runtime's own.
+   */
+  request(native: N, limit: ByteSize): Request
+  /**
+   * Whether the request says it carries a body, as its runtime tells: one a request with no `Content-Type` and no
+   * body to tell of is read as having none.
+   */
+  hasBody(native: N): boolean
+  /** Whether something other than the route started reading the body. */
+  bodyConsumed(native: N): boolean
+  /**
+   * The whole body, counted to at most `limit` bytes. Called once the engine has checked {@link bodyConsumed} and the
+   * declared `Content-Length`. Rejects with `ErrHTTPContentTooLarge` past the limit, `ErrHTTPBadRequest` for a body cut
+   * short or other than its `Content-Length`.
+   */
+  readBody(native: N, limit: ByteSize): Promise<Uint8Array>
   /** Aborts when the client leaves. */
   signal(native: N): AbortSignal
   remoteAddress(native: N): string | undefined
