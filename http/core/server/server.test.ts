@@ -523,6 +523,21 @@ describe('HTTPServer', () => {
     await expect(booting).rejects.toThrow('/refused/x')
   })
 
+  // Fastify's `cors()` writes @fastify/cors's options, which the engine's `corsPolicy()` does not read.
+  it("refuses Fastify's cors() and names the engine's", async () => {
+    app = createWebApplication().mount(
+      new Router('/refused')
+        .get('/x')
+        .config('cors', { origin: '*' })
+        .handler(() => 'x'),
+    )
+
+    const booting = app.bootstrap()
+
+    await expect(booting).rejects.toThrow('its cors(...) or @CORS(...) is the one from "@caffeinejs/http/fastify"')
+    await expect(booting).rejects.toThrow('Import "cors" and "CORS" from "@caffeinejs/http"')
+  })
+
   // A programmatic route always picks the context: picks are a controller's, bound here to this application alone.
   it.each([['$fst.request()', $fst.request()]])('refuses %s at start-up', async (_pick, pick) => {
     const endpoints = class Picking {

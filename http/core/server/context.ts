@@ -39,6 +39,9 @@ import { parseQuery } from './query.js'
 import type { RouteStore } from './server.js'
 import type { ResolvedServerSettings } from './settings.js'
 
+/** The engine's preflight lookup on a context: see {@link ServerShared.routeOf}. */
+export const kRouteOf = Symbol('caffeine.http.route-of')
+
 /** The engine's `Set-Cookie` writer on a context: see {@link Context}. */
 export const kAppendCookies = Symbol('caffeine.http.cookies.append')
 
@@ -54,6 +57,11 @@ export interface ServerShared extends Pick<
   readonly encodeProblem: ProblemEncoder
   /** `undefined` when the cookie feature is off. */
   readonly cookies: ServerCookies<Context> | undefined
+  /**
+   * The routes a preflight asks about: every route `method` and `url` match, whatever constraints each declares.
+   * `undefined` for none, and for a URL that cannot be decoded.
+   */
+  readonly routeOf: (method: string, url: string) => readonly RouteDefinition[] | undefined
 }
 
 /** What a context of the engine is typed with on every platform: `ctx.req.raw` is a `Request`. */
@@ -207,6 +215,11 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   /** @see {@link IContext.route} */
   get route(): RouteDefinition | undefined {
     return this.#store.definition
+  }
+
+  /** The routes this request's path serves under `method`, as a preflight asks: see {@link ServerShared.routeOf}. */
+  [kRouteOf](method: string): readonly RouteDefinition[] | undefined {
+    return this.#shared.routeOf(method, this.#url)
   }
 
   /** The route's serializer for an answer of `status`, when its schema declares one. */

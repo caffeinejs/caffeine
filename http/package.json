@@ -40,6 +40,10 @@
       "types": "./dist/core/cookie/index.d.ts",
       "default": "./dist/core/cookie/index.js"
     },
+    "./cors": {
+      "types": "./dist/core/cors/index.d.ts",
+      "default": "./dist/core/cors/index.js"
+    },
     "./csrf": {
       "types": "./dist/core/csrf/index.d.ts",
       "default": "./dist/core/csrf/index.js"

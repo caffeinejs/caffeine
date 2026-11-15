@@ -3,6 +3,7 @@ import { Readable } from 'node:stream'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from '../../../adapter.js'
+import { corsPolicy } from '../../../core/cors/cors.js'
 import { csrf as engineCSRF } from '../../../core/csrf/csrf.js'
 import { authentication as engineAuthentication } from '../../../core/security/security.js'
 import {
@@ -165,5 +166,18 @@ describe('an engine-only plugin on Fastify', () => {
     await expect(a.bootstrap()).rejects.toThrow(
       'Cannot install "authentication()" from "@caffeinejs/http" on a Fastify application',
     )
+  })
+
+  // Fastify has no corsPolicy() of Caffeine's: the refusal names what to register instead.
+  it("refuses the engine's corsPolicy(), naming @fastify/cors", async () => {
+    const a = createWebApplication().with(corsPolicy(c => c.origins('https://app.example')))
+    app = a
+
+    const booting = a.bootstrap()
+
+    await expect(booting).rejects.toThrow(
+      'Cannot install "corsPolicy()" from "@caffeinejs/http" on a Fastify application',
+    )
+    await expect(booting).rejects.toThrow('Register "@fastify/cors" with ".with(...)"')
   })
 })

@@ -16,6 +16,11 @@ interface Tracked {
   abort(reason: Error): void
 }
 
+// An in-process request names its host in its URL alone.
+function hostOf(request: Request): string {
+  return new URL(request.url).host
+}
+
 /** The fetch runtime's platform: a `Request` in, a `Response` out. */
 export const fetchPlatform: ServerPlatform<Request, FetchContextPlatform, Response> = {
   name: 'fetch',
@@ -26,8 +31,13 @@ export const fetchPlatform: ServerPlatform<Request, FetchContextPlatform, Respon
     return path === -1 ? '/' : url.slice(path)
   },
   protocol: request => (request.url.startsWith('https:') ? 'https' : 'http'),
-  header: (request, name) => request.headers.get(name) ?? undefined,
-  headers: request => Object.fromEntries(request.headers),
+  header: (request, name) =>
+    request.headers.get(name) ?? (name.length === 4 && name.toLowerCase() === 'host' ? hostOf(request) : undefined),
+  headers: request => {
+    const all = Object.fromEntries(request.headers)
+    all.host ??= hostOf(request)
+    return all
+  },
   request: request => request,
   hasBody: request => request.body !== null && request.headers.get('content-length') !== '0',
   bodyConsumed,

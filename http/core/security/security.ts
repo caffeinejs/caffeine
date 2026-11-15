@@ -4,7 +4,7 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
-import { kEngineOnly } from '../../plugin_marks.js'
+import { kEngineOnly, type EngineOnly } from '../../plugin_marks.js'
 import { kCookieSettings } from '../cookie/keys.js'
 import type { IRouteGroup } from '../routing/route.js'
 import {
@@ -161,7 +161,10 @@ export function authentication<C = unknown>(
 
 class AuthenticationGate extends HTTPPlugin {
   override readonly name: string
-  readonly [kEngineOnly] = 'authentication'
+  readonly [kEngineOnly]: EngineOnly = {
+    factory: 'authentication',
+    instead: 'Import "authentication" from "@caffeinejs/http/fastify"',
+  }
   readonly #gate: ResolvedGate
 
   constructor(gate: ResolvedGate) {

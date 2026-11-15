@@ -2,3 +2,4 @@
 export { createWebApplication } from '../application.js'
 export { authentication } from '../core/security/security.js'
 export { csrf } from '../core/csrf/csrf.js'
+export { constraints } from './constraints_entry.js'

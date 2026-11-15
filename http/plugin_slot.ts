@@ -8,7 +8,7 @@ import { parseUse } from './core/middleware/middleware.js'
 import { MiddlewarePipeline } from './core/middleware/pipeline.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
 import { HTTPPlugin } from './plugin.js'
-import { kEngineOnly } from './plugin_marks.js'
+import { kEngineOnly, type EngineOnly } from './plugin_marks.js'
 
 type Operation = 'mount' | 'use' | 'useFn' | 'hook' | 'hasPlugin'
 
@@ -75,7 +75,7 @@ export class PluginSlot implements WebApplicationOps<any, any> {
       const extension = await factory(context)
 
       if (extension instanceof HTTPPlugin) {
-        batch.engineOnly = (extension as { [kEngineOnly]?: string })[kEngineOnly]
+        batch.engineOnly = (extension as { [kEngineOnly]?: EngineOnly })[kEngineOnly]
         this.claim(extension, where)
         await extension.register(context)
       }

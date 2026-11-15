@@ -46,9 +46,9 @@ export function installHookBatch(server: FastifyInstance, batch: HookBatch, onSe
   // The engine's own plugins see no route registered straight on Fastify, and would leave it unguarded.
   if (batch.engineOnly !== undefined) {
     throw configurationError(
-      `Cannot install "${batch.engineOnly}()" from "@caffeinejs/http" on a Fastify application: it runs on the ` +
-        'web-standards engine only',
-      `Import "${batch.engineOnly}" from "@caffeinejs/http/fastify"`,
+      `Cannot install "${batch.engineOnly.factory}()" from "@caffeinejs/http" on a Fastify application: it runs on ` +
+        'the web-standards engine only',
+      batch.engineOnly.instead,
     )
   }
 

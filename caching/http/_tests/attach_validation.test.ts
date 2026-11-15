@@ -172,7 +172,7 @@ describe('constrained routes that share a URL', () => {
         const map = new Map<string, unknown>()
         return { get: value => map.get(value) ?? null, set: (value, handler) => void map.set(value, handler) }
       },
-      deriveConstraint: req => req.headers['x-tenant'] as string | undefined,
+      deriveConstraint: req => req.header('x-tenant'),
     }
 
     const build = (options: CacheControlOptions) => {

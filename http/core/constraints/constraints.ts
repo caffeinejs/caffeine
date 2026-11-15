@@ -1,7 +1,14 @@
-import type { IncomingMessage } from 'node:http'
+/** What a {@link ConstraintStrategy} reads a request through. The engine derives before the request is routed. */
+export interface ConstraintRequest {
+  /** A request header by name, in any case; several lines of one name are joined with `, `. */
+  header(name: string): string | undefined
+}
 
 export interface ConstraintStrategy<T = string> {
-  /** The name a route declares the constraint under: `@Constraint(name, value)` / `constraint(name, value)`. */
+  /**
+   * The name a route declares the constraint under: `@Constraint(name, value)` / `constraint(name, value)`. A
+   * JavaScript identifier, such as `tenant`: the default matcher refuses any other with `ErrConfiguration`.
+   */
   readonly name: string
 
   /**
@@ -16,8 +23,11 @@ export interface ConstraintStrategy<T = string> {
   /** Rejects an unusable value while the route is registered. */
   validate?(value: unknown): void
 
-  /** Reads the constraint value off the request. Returns `undefined` when the request carries none. */
-  deriveConstraint(req: IncomingMessage): T | undefined
+  /**
+   * Reads the constraint value off the request, through its headers. Returns `undefined` when the request carries
+   * none. On the web-standards engine a throw fails the request: it is answered as an error.
+   */
+  deriveConstraint(req: ConstraintRequest): T | undefined
 }
 
 /** The handler store a {@link ConstraintStrategy} keeps, one entry per distinct constraint value. */

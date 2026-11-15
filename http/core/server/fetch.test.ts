@@ -60,6 +60,19 @@ describe('fetchPlatform', () => {
     expect(await (await served.fetch(new Request('http://x/p'))).text()).toBe('http')
   })
 
+  // A request built in-process names its host in its URL alone, as `ctx.req.host` already reads it.
+  it('reads the host off the URL when the request sends no Host header', () => {
+    expect(fetchPlatform.header(new Request('http://api.example:8080/x'), 'host')).toBe('api.example:8080')
+    expect(fetchPlatform.headers(new Request('http://api.example/x')).host).toBe('api.example')
+  })
+
+  it('reads a Host header the request sends over its URL', () => {
+    const request = new Request('http://a.example/x', { headers: { host: 'b.example' } })
+
+    expect(fetchPlatform.header(request, 'Host')).toBe('b.example')
+    expect(fetchPlatform.headers(request).host).toBe('b.example')
+  })
+
   it('gives ctx.req.raw the very Request handed to fetch', async () => {
     let raw: unknown
     const served = await serve(

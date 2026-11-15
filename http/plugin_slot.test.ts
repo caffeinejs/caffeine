@@ -68,18 +68,18 @@ describe('PluginSlot', () => {
     )
   })
 
-  it("marks the batch of an engine-only plugin with the name Fastify's entry exports instead", async () => {
-    class EngineOnly extends HTTPPlugin {
-      readonly [kEngineOnly] = 'x'
+  it('marks the batch of an engine-only plugin with what a Fastify application says instead', async () => {
+    class Marked extends HTTPPlugin {
+      readonly [kEngineOnly] = { factory: 'x', instead: 'y' }
 
       register(): void {}
     }
 
     const slot = new PluginSlot()
-    const marked = await slot.during(() => slot.run(() => new EngineOnly(), kit, 'here'))
+    const marked = await slot.during(() => slot.run(() => new Marked(), kit, 'here'))
     const plain = await slot.during(() => slot.run(() => new Named('plain'), kit, 'here'))
 
-    expect(marked.batch.engineOnly).toBe('x')
+    expect(marked.batch.engineOnly).toEqual({ factory: 'x', instead: 'y' })
     expect(plain.batch.engineOnly).toBe(undefined)
   })
 })

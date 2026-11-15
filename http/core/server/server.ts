@@ -5,13 +5,13 @@ import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
 import type { IContextPlatform } from '../../adapter.js'
 import { stripBasePath } from '../../base_path.js'
-import { kRouteConstraints } from '../constraints/keys.js'
+import { compileConstraints, type CompiledConstraints } from '../constraints/derive.js'
 import { kCookieSettings } from '../cookie/keys.js'
 import { kCookieFlush, kPendingCookies, ServerCookies, type CookieWriter } from '../cookie/server_cookies.js'
 import { csrfCoversOf } from '../csrf/csrf.js'
 import { problemEncoder } from '../error/encode.js'
 import { ErrorHandlerProvider } from '../error/handler.js'
-import { ErrHTTPNotFound, ErrHTTPServiceUnavailable } from '../error/http.js'
+import { ErrHTTPBadRequest, ErrHTTPNotFound, ErrHTTPServiceUnavailable } from '../error/http.js'
 import { kErrorHandlingOptions } from '../error/keys.js'
 import { newProblem } from '../error/problem.js'
 import type { GuardTarget } from '../guards/guard.js'
@@ -27,7 +27,8 @@ import {
   type SendPayload,
 } from '../lifecycle/lifecycle.js'
 import { callOnRoute, openDefinition, type RouteDefinition } from '../lifecycle/route_definition.js'
-import { ErrRouteConflict, type RouteMatch, type RouteMatcher } from '../matcher/matcher.js'
+import { findMyWayMatcher, preflightTable, type PreflightTable } from '../matcher/find_my_way.js'
+import { ErrRouteConflict, type DerivedConstraints, type RouteMatch, type RouteMatcher } from '../matcher/matcher.js'
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
 import { joinPaths, pathsOf } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
@@ -94,6 +95,9 @@ export class HTTPServer {
 
   readonly #shared: ServerShared
   readonly #matcher: RouteMatcher<RouteStore>
+  readonly #constraints: CompiledConstraints
+  /** Where a preflight looks its route up once some route is constrained: a table that ignores constraints. */
+  readonly #preflight: PreflightTable<RouteDefinition> | undefined
   readonly #notFound: RouteStore
   readonly #basePath: string | undefined
   readonly #container: Container
@@ -145,6 +149,22 @@ export class HTTPServer {
       router: settings.router,
       bodyLimit: settings.bodyLimit,
       cookies: cookieSettings.enabled ? ServerCookies.resolve(cookieSettings, container, writeCookies) : undefined,
+      routeOf: (method, url) => {
+        if (this.#preflight !== undefined) {
+          return this.#preflight.match(method, url)
+        }
+
+        try {
+          const definition = this.#matcher.match(method, url, undefined)?.store.definition
+          return definition === undefined ? undefined : [definition]
+        } catch (err) {
+          // A URL that cannot be decoded names no route.
+          if (err instanceof ErrHTTPBadRequest) {
+            return undefined
+          }
+          throw err
+        }
+      },
     }
     this.#basePath = input.basePath
     this.#container = container
@@ -153,11 +173,19 @@ export class HTTPServer {
     this.#storage = container.getOptional(ContextStorage)
     this.#settings = settings
     this.#input = input
-    this.#root = compileLevel(input.levels.root, settings, input.nodeMiddleware)
+    this.#constraints = compileConstraints(input.routeGroups, settings.constraints)
+    // Without a constrained route a preflight finds its route in the matcher itself. The table is find-my-way's: under
+    // a matcher of the application's own, a preflight finds only unconstrained routes, and a constrained one goes
+    // unanswered.
+    this.#preflight =
+      this.#constraints.derives && settings.matcher === findMyWayMatcher ? preflightTable(settings.router) : undefined
+    this.#matcher = settings.matcher<RouteStore>(settings.router, settings.constraints)
+    const root = compileLevel(input.levels.root, settings, input.nodeMiddleware)
+    const vary = this.#constraints.vary
+    this.#root = vary === undefined ? root : { ...root, onSend: [vary, ...root.onSend] }
     for (const batch of input.levels.root.batches) {
       this.#batches.add(batch)
     }
-    this.#matcher = settings.matcher<RouteStore>(settings.router)
     this.#notFound = {
       route: undefined,
       group: undefined,
@@ -222,7 +250,13 @@ export class HTTPServer {
         failure = new ErrHTTPServiceUnavailable('The server is closing')
       } else {
         try {
-          match = this.#matcher.match(method, url, undefined)
+          match = this.#matcher.match(
+            method,
+            url,
+            this.#constraints.derives
+              ? this.#constraints.derive({ header: name => platform.header(native, name) })
+              : undefined,
+          )
         } catch (err) {
           failure = asError(err)
         }
@@ -387,8 +421,12 @@ export class HTTPServer {
       readonly methods: string[]
       readonly url: string
     }> = []
-    const twins: Array<{ readonly store: RouteStore; readonly paths: readonly string[]; readonly methods: string[] }> =
-      []
+    const twins: Array<{
+      readonly store: RouteStore
+      readonly paths: readonly string[]
+      readonly methods: string[]
+      readonly declared: DerivedConstraints | undefined
+    }> = []
 
     for (const group of groups) {
       for (const route of group.routes) {
@@ -396,19 +434,21 @@ export class HTTPServer {
         const paths = pathsOf(group.prefix, joinPaths(group.path, route.path), settings.router.ignoreTrailingSlash)
 
         assertServable(route, methods, paths[0], settings.application)
+        const declared = this.#constraints.of(route, methods, paths[0])
 
         const store = this.#storeOf(group, route, methods, paths[0], settings)
 
         for (const method of methods) {
           for (const path of paths) {
-            this.#matcher.add(method, path, undefined, store)
+            this.#matcher.add(method, path, declared, store)
+            this.#preflight?.add(method, path, store.definition!)
           }
         }
 
         registered.push({ route, group, definition: store.definition!, methods, url: paths[0] })
 
         if (methods.includes('GET')) {
-          twins.push({ store: { ...store, twin: true }, paths, methods })
+          twins.push({ store: { ...store, twin: true }, paths, methods, declared })
         }
       }
     }
@@ -419,7 +459,8 @@ export class HTTPServer {
 
       for (const path of twin.paths) {
         try {
-          this.#matcher.add('HEAD', path, undefined, twin.store)
+          this.#matcher.add('HEAD', path, twin.declared, twin.store)
+          this.#preflight?.add('HEAD', path, twin.store.definition!)
           served = true
         } catch (err) {
           if (!(err instanceof ErrRouteConflict)) {
@@ -1104,13 +1145,19 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
     )
   }
 
+  // Fastify's `cors()` writes @fastify/cors's options under `cors`; the engine's writes `kCORSRoute`.
+  if (route.config.has('cors')) {
+    throw configurationError(
+      `Cannot serve "${methods.join('|')} ${url}" on the ${application}: its cors(...) or @CORS(...) is the one from ` +
+        '"@caffeinejs/http/fastify", which @fastify/cors reads',
+      'Import "cors" and "CORS" from "@caffeinejs/http"',
+    )
+  }
+
   // The first that applies names the refusal.
   const refusals: ReadonlyArray<readonly [boolean, string]> = [
     [route.options.size > 0, `route options ("${[...route.options.keys()].map(String).join('", "')}")`],
-    [route.config.has(kRouteConstraints), 'a route constraint'],
     [route.config.has('cache') || route.config.has('cacheInvalidate'), '@CacheControl or @CacheInvalidate'],
-    // Read by the Fastify CORS plugin, which the engine does not run yet. A plugin's own key is served: it reads it.
-    [route.config.has('cors'), '@CORS()'],
     [types.has('fastify:request') || types.has('fastify:reply'), 'the Fastify request or reply'],
   ]
   const unsupported = refusals.find(([applies]) => applies)?.[1]

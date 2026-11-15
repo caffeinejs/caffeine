@@ -36,6 +36,7 @@ import { kRawBasePath, stripBasePath, type BasePathCarrier } from '../../base_pa
 import { kRouteConstraints } from '../../core/constraints/keys.js'
 import { kCookieSettings } from '../../core/cookie/keys.js'
 import type { CookieSerializeOptions } from '../../core/cookie/options.js'
+import { kCORSRoute } from '../../core/cors/cors.js'
 import { ErrCaffeineWebApplication, ErrConfiguration } from '../../core/error/common.js'
 import { kErrorHandlingOptions } from '../../core/error/keys.js'
 import { HookBatch } from '../../core/lifecycle/batch.js'
@@ -43,6 +44,7 @@ import { callOnRoute, type AuthoredHooks, type RouteDefinition } from '../../cor
 import { starParameterRefusal } from '../../core/matcher/find_my_way.js'
 import { rebaseMiddlewares } from '../../core/middleware/path.js'
 import { RouteGroupBuilder } from '../../core/routing/builder.js'
+import { joinPaths, pathsOf } from '../../core/routing/paths.js'
 import type { IRoute, IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../core/routing/route.js'
 import { assertAuthorizationConfigured } from '../../core/security/authz/index.js'
 import type { Principal } from '../../core/security/identity.js'
@@ -746,7 +748,7 @@ function batchesOf(entries: readonly unknown[]): HookBatch[] {
  * plugin one group installed does not serve its sibling.
  *
  * @throws ErrConfiguration when a route carries `@CacheControl` / `@CacheInvalidate` or a constraint and the
- *   plugin that serves it is not registered.
+ *   plugin that serves it is not registered, or the engine's `cors(...)`, which `@fastify/cors` does not read.
  */
 function assertRouteFeaturesInstalled(
   server: FastifyInstance,
@@ -793,5 +795,25 @@ function assertRouteFeaturesInstalled(
         .reference('@caffeinejs/http', ErrConfiguration)
         .build(),
     )
+  }
+
+  // @fastify/cors reads `cors`, never the engine's key: the route would answer without what it declares.
+  for (const group of routeGroups) {
+    for (const route of group.routes) {
+      if (route.config.has(kCORSRoute)) {
+        const methods = [...new Set(route.method.map(method => method.toUpperCase()))].join('|')
+        const url = pathsOf(group.prefix, joinPaths(group.path, route.path), false)[0]
+
+        throw new ErrConfiguration(
+          errMessage(
+            `Cannot register "${methods} ${url}": its cors(...) or @CORS(...) is the one from "@caffeinejs/http", ` +
+              'which only corsPolicy() on the web-standards engine reads',
+          )
+            .solutions('Import "cors" and "CORS" from "@caffeinejs/http/fastify"')
+            .reference('@caffeinejs/http', ErrConfiguration)
+            .build(),
+        )
+      }
+    }
   }
 }

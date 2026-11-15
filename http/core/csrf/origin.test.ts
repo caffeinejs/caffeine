@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ErrCSRFConfiguration } from './errors.js'
-import { checkOrigin, normalizeTrustedOrigin, SAFE_METHODS, type OriginCheckInput } from './origin.js'
+import { checkOrigin, normalizeTrustedOrigin, originProblem, SAFE_METHODS, type OriginCheckInput } from './origin.js'
 
 const NONE = { trustedOrigins: new Set<string>() }
 const ADMIN = { trustedOrigins: new Set(['https://admin.example']) }
@@ -344,5 +344,45 @@ describe('normalizeTrustedOrigin', () => {
   it('refuses a scheme other than http and https', () => {
     expect(() => normalizeTrustedOrigin('ftp://admin.example')).toThrow(ErrCSRFConfiguration)
     expect(() => normalizeTrustedOrigin('chrome-extension://abc')).toThrow(ErrCSRFConfiguration)
+  })
+})
+
+describe('originProblem', () => {
+  it('spells an origin as an Origin header writes it', () => {
+    expect(originProblem('HTTPS://Admin.Example:443/')).toEqual({ origin: 'https://admin.example' })
+  })
+
+  it.each<[string, string, { problem: string; solutions: readonly string[] }]>([
+    [
+      'not an absolute URL',
+      'admin.example',
+      {
+        problem: 'it is not an absolute URL',
+        solutions: ['Write it as scheme://host[:port], e.g. "https://admin.example.com"'],
+      },
+    ],
+    [
+      'not http or https',
+      'ftp://admin.example',
+      {
+        problem: 'only an http or https origin can be named',
+        solutions: ['Write an http or https origin, such as "https://app.example"'],
+      },
+    ],
+    [
+      'a wildcard host',
+      'https://*.example',
+      { problem: 'an origin is exact, with no wildcard', solutions: ['List every origin'] },
+    ],
+    [
+      'a path',
+      'https://admin.example/x',
+      {
+        problem: 'an origin is a scheme, a host and a port, with no path, query, fragment or credentials',
+        solutions: ['Write it as "https://admin.example"'],
+      },
+    ],
+  ])('refuses %s', (_what, text, refusal) => {
+    expect(originProblem(text)).toEqual(refusal)
   })
 })

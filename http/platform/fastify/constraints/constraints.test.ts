@@ -18,7 +18,7 @@ function tenantStrategy(): ConstraintStrategy {
         set: (value, handler) => void map.set(value, handler),
       }
     },
-    deriveConstraint: req => (req.headers['x-tenant'] as string | undefined) || undefined,
+    deriveConstraint: req => req.header('x-tenant') || undefined,
   }
 }
 

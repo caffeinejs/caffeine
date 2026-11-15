@@ -1,6 +1,6 @@
 import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
 import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
-import { kEngineOnly } from '../../plugin_marks.js'
+import { kEngineOnly, type EngineOnly } from '../../plugin_marks.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import { ErrCSRFCrossOrigin } from './errors.js'
 import {
@@ -186,7 +186,7 @@ export function csrfCoversOf(route: RouteDefinition): ReadonlyArray<readonly Exc
 
 class CSRFProtection extends HTTPPlugin {
   override readonly name: string
-  readonly [kEngineOnly] = 'csrf'
+  readonly [kEngineOnly]: EngineOnly = { factory: 'csrf', instead: 'Import "csrf" from "@caffeinejs/http/fastify"' }
   readonly #options: CSRFOptions
 
   constructor(name: string, options: CSRFOptions) {

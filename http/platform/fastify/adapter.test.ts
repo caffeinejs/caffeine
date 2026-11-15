@@ -1,8 +1,10 @@
 import { $t } from '@caffeinejs/application/schema'
 import { Scopes, Injectable, Lifetime } from '@caffeinejs/di'
 import type { FastifyError, FastifyInstance } from 'fastify'
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 
+import { cors } from '../../core/cors/cors.js'
+import { ErrConfiguration } from '../../core/error/common.js'
 import { $p } from '../../core/routing/picker.js'
 import {
   Catch,
@@ -353,5 +355,33 @@ describe('the Ajv options an application sets', () => {
     await app.close()
 
     expect(((await res.json()) as { errors: unknown[] }).errors).toHaveLength(2)
+  })
+})
+
+// @fastify/cors reads `cors` and would never see the engine's `kCORSRoute`: the route would answer without what it
+// declares.
+describe("routes that declare the engine's cors()", () => {
+  let app: WebApplication<any, any, any, any> | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+  })
+
+  it('are refused, naming the Fastify import', async () => {
+    app = createWebApplication().mount(
+      newRouter('/c')
+        .get('/')
+        .extend(cors({ origins: ['https://app.example'] }))
+        .handler(() => 'c'),
+    )
+
+    const booting = app.bootstrap()
+
+    await expect(booting).rejects.toThrow(ErrConfiguration)
+    await expect(booting).rejects.toThrow(
+      'Cannot register "GET /c": its cors(...) or @CORS(...) is the one from "@caffeinejs/http"',
+    )
+    await expect(booting).rejects.toThrow('Import "cors" and "CORS" from "@caffeinejs/http/fastify"')
   })
 })

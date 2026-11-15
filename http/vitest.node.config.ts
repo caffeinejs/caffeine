@@ -37,6 +37,9 @@ import { defineConfig } from 'vitest/config'
 //   downgrade cases, checks, logging and the router scope)
 // - core/security/_tests/authentication_gate_registration.test.ts -> core/security/security.test.ts (duplicate gates;
 //   the code is ERR_CONFIGURATION there)
+// - _tests/constraints.test.ts -> core/constraints/derive.test.ts, core/matcher/find_my_way.test.ts
+// - platform/fastify/constraints/constraints.test.ts -> core/constraints/derive.test.ts
+// - _tests/cors.test.ts -> core/cors/cors.test.ts, decorators/cors.test.ts
 //
 // Not yet on Node, each with what keeps it off:
 // - _tests/context_platform.test.ts: reads Fastify's ctx.platform.request and ctx.platform.reply
@@ -45,9 +48,8 @@ import { defineConfig } from 'vitest/config'
 // - _tests/http_plugin.test.ts: installs a Fastify plugin with .with(...)
 // - _tests/http_plugin_controller.test.ts: installs a Fastify plugin with @Use(...)
 // - _tests/lifecycle.test.ts: expects request() to reject after close(); the engine answers a plain 503
-// - _tests/programmatic_router_parity.test.ts: needs constraints() (5c)
-// - _tests/versioning_decorated.test.ts: needs constraints(), not on the Node entry yet
-// - _tests/versioning.test.ts: needs constraints(), not on the Node entry yet
+// - _tests/programmatic_router_parity.test.ts: expects a body on an explicit HEAD route, which the engine strips, and
+//   reads ctx.routeConfig, which the engine does not set
 // - core/csrf/_tests/csrf_edges.test.ts: installs a Fastify plugin
 // - core/csrf/_tests/csrf_plugin.test.ts: installs a Fastify plugin
 // - core/csrf/_tests/csrf_webhook.test.ts: installs a Fastify plugin
@@ -107,6 +109,8 @@ export default defineConfig({
       '_tests/status.test.ts',
       '_tests/timeout.test.ts',
       '_tests/versioning_decorated_prefix.test.ts',
+      '_tests/versioning.test.ts',
+      '_tests/versioning_decorated.test.ts',
       'application.test.ts',
       'core/error/_tests/catch_by_ambiguous.test.ts',
       'core/error/_tests/catch_by_not_a_handler.test.ts',

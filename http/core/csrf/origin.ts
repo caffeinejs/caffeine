@@ -100,52 +100,57 @@ const ORIGIN_TEXT = /^[a-z][a-z\d+.-]*:\/\/[^/\\?#]*\/?$/i
  * fragment or credentials.
  */
 export function normalizeTrustedOrigin(text: string): string {
+  const read = originProblem(text)
+
+  if ('problem' in read) {
+    throw new ErrCSRFConfiguration(
+      errMessage(`Cannot trust origin "${text}": ${read.problem}`)
+        .solutions(...read.solutions)
+        .reference('@caffeinejs/http', ErrCSRFConfiguration)
+        .build(),
+    )
+  }
+
+  return read.origin
+}
+
+/** Why `text` is not an origin a setting may name, or its spelling as an `Origin` header writes it. */
+export function originProblem(
+  text: string,
+): { readonly origin: string } | { readonly problem: string; readonly solutions: readonly string[] } {
   let url: URL
 
   try {
     url = new URL(text)
   } catch {
-    throw new ErrCSRFConfiguration(
-      errMessage(`Cannot trust origin "${text}": it is not an absolute URL`)
-        .solutions('Write it as scheme://host[:port], e.g. "https://admin.example.com"')
-        .reference('@caffeinejs/http', ErrCSRFConfiguration)
-        .build(),
-    )
+    return {
+      problem: 'it is not an absolute URL',
+      solutions: ['Write it as scheme://host[:port], e.g. "https://admin.example.com"'],
+    }
   }
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new ErrCSRFConfiguration(
-      errMessage(`Cannot trust origin "${text}": only an http or https origin can be trusted`)
-        .reference('@caffeinejs/http', ErrCSRFConfiguration)
-        .build(),
-    )
+    return {
+      problem: 'only an http or https origin can be named',
+      solutions: ['Write an http or https origin, such as "https://app.example"'],
+    }
   }
 
-  // The URL parser takes `*` for a host character, so a pattern would be trusted as a host nobody has.
+  // The URL parser takes `*` for a host character, so a pattern would be taken as a host nobody has.
   if (url.hostname.includes('*')) {
-    throw new ErrCSRFConfiguration(
-      errMessage(`Cannot trust origin "${text}": a trusted origin is exact, with no wildcard`)
-        .solutions('List every origin to trust')
-        .reference('@caffeinejs/http', ErrCSRFConfiguration)
-        .build(),
-    )
+    return { problem: 'an origin is exact, with no wildcard', solutions: ['List every origin'] }
   }
 
   // An origin and a slash: the one spelling a URL of nothing but scheme, host and port has. The text is checked too,
   // since the parser folds a dot segment, a backslash or missing slashes into that spelling.
   if (url.href !== `${url.origin}/` || !ORIGIN_TEXT.test(text.trim())) {
-    throw new ErrCSRFConfiguration(
-      errMessage(
-        `Cannot trust origin "${text}": an origin is a scheme, a host and a port, with no path, query, fragment or ` +
-          'credentials',
-      )
-        .solutions(`Write it as "${url.origin}"`)
-        .reference('@caffeinejs/http', ErrCSRFConfiguration)
-        .build(),
-    )
+    return {
+      problem: 'an origin is a scheme, a host and a port, with no path, query, fragment or credentials',
+      solutions: [`Write it as "${url.origin}"`],
+    }
   }
 
-  return url.origin
+  return { origin: url.origin }
 }
 
 // The browser's own word on where the request came from, which no script can forge.

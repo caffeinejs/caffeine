@@ -1,3 +1,4 @@
+import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { ErrCaffeineWebApplication } from '../error/common.js'
 
 /** How a server's router matches a request's path. */
@@ -45,8 +46,14 @@ export interface RouteMatcher<S> {
   match(method: string, path: string, constraints: DerivedConstraints | undefined): RouteMatch<S> | null
 }
 
-/** Builds the matcher of one server from its router flags. */
-export type RouteMatcherFactory = <S>(flags: RouterFlags) => RouteMatcher<S>
+/**
+ * Builds the matcher of one server from its router flags and its custom constraint strategies. `version` and `host`
+ * are the matcher's own; a strategy of either name replaces it.
+ */
+export type RouteMatcherFactory = <S>(
+  flags: RouterFlags,
+  strategies: readonly ConstraintStrategy<unknown>[],
+) => RouteMatcher<S>
 
 /**
  * A route of that method already matches that path. What a second registration of a route meets, and what a GET's

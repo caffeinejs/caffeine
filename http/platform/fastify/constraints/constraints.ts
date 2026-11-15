@@ -1,3 +1,5 @@
+import type { IncomingMessage } from 'node:http'
+
 import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -6,6 +8,7 @@ import type { HTTPSetupContext } from '../../../adapter.js'
 import type { ConstraintStrategy } from '../../../core/constraints/constraints.js'
 import { kRouteConstraints, type ResolvedRouteConstraint } from '../../../core/constraints/keys.js'
 import { ErrConfiguration } from '../../../core/error/index.js'
+import { findMyWayStrategy } from '../../../core/matcher/find_my_way.js'
 import { appendVary } from '../../../vary.js'
 import type { RouterTypes } from '../adapter.js'
 import type { HTTPPluginFactory } from '../plugin.js'
@@ -43,7 +46,11 @@ export function constraints<C = unknown>(
     const plugin: FastifyPluginAsync = async instance => {
       for (const strategy of resolvedStrategies) {
         if (!instance.hasConstraintStrategy(strategy.name)) {
-          instance.addConstraintStrategy(strategy as never)
+          instance.addConstraintStrategy(
+            findMyWayStrategy(strategy, (req: IncomingMessage) =>
+              strategy.deriveConstraint({ header: name => joined(req, name) }),
+            ) as never,
+          )
         }
       }
 
@@ -96,4 +103,10 @@ export function constraints<C = unknown>(
 
     return fp(plugin, { name: CONSTRAINTS_PLUGIN })
   }
+}
+
+// A request header as Node holds it: a repeated one is joined, as a fetch runtime joins it.
+function joined(req: IncomingMessage, name: string): string | undefined {
+  const value = req.headers[name.toLowerCase()]
+  return Array.isArray(value) ? value.join(', ') : value
 }

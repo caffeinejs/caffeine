@@ -2,6 +2,7 @@ import { KiB, MiB } from '@caffeinejs/std/bytes'
 import { Day } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
+import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { ErrConfiguration } from '../error/common.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS } from '../matcher/matcher.js'
@@ -15,12 +16,36 @@ describe('resolveServerSettings', () => {
       handlerTimeout: undefined,
       router: DEFAULT_ROUTER_FLAGS,
       matcher: findMyWayMatcher,
+      constraints: [],
       trustProxy: undefined,
       requestIDHeader: undefined,
       application: 'fetch application',
       bodyLimit: 1 * MiB,
       schemaCompiler: typeBoxSchemaCompiler,
     })
+  })
+
+  it('takes the constraint strategies as given', () => {
+    const list: readonly ConstraintStrategy<unknown>[] = [flavor()]
+
+    expect(resolveServerSettings({ constraints: list }).constraints).toBe(list)
+  })
+
+  it.each<[string, unknown]>([
+    ['a string', 'x'],
+    ['an object with a name alone', [{ name: 'x' }]],
+  ])('refuses %s as the constraint strategies', (_what, constraints) => {
+    const resolve = () => resolveServerSettings({ constraints })
+
+    expect(resolve).toThrow(ErrConfiguration)
+    expect(resolve).toThrow('Cannot use the constraints setting: it must be an array of constraint strategies')
+  })
+
+  it('refuses two constraint strategies of one name', () => {
+    const resolve = () => resolveServerSettings({ constraints: [flavor(), flavor()] })
+
+    expect(resolve).toThrow(ErrConfiguration)
+    expect(resolve).toThrow('Cannot use the constraints setting: two strategies are named "flavor"')
   })
 
   it('takes a body limit in bytes', () => {
@@ -153,7 +178,15 @@ describe('resolveServerSettings', () => {
 
   it('lists every setting the application takes when refusing an unknown one', () => {
     expect(() => resolveServerSettings({ port: 3000 })).toThrow(
-      'Return only handlerTimeout, router, matcher, trustProxy, requestIDHeader, bodyLimit, schemaCompiler from ".server(...)"',
+      'Return only handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler from ".server(...)"',
     )
   })
 })
+
+function flavor(): ConstraintStrategy<unknown> {
+  return {
+    name: 'flavor',
+    storage: () => ({ get: () => null, set: () => undefined }),
+    deriveConstraint: req => req.header('x-flavor'),
+  }
+}

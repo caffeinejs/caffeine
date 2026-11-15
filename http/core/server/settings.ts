@@ -1,6 +1,7 @@
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
+import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS, type RouteMatcherFactory, type RouterFlags } from '../matcher/matcher.js'
 import { typeBoxSchemaCompiler } from '../validation/typebox.js'
@@ -20,6 +21,11 @@ export interface ServerSettings {
   router?: Partial<RouterFlags>
   /** The matcher routes are registered in. Defaults to {@link findMyWayMatcher}. */
   matcher?: RouteMatcherFactory
+  /**
+   * Constraint strategies routes may name besides `version` and `host`, such as one resolved out of the container.
+   * One named `version` or `host` replaces the built-in.
+   */
+  constraints?: readonly ConstraintStrategy<unknown>[]
   /**
    * Whether `X-Forwarded-Host` and `X-Forwarded-Proto` decide `ctx.req.host` and `ctx.req.protocol`: `true` trusts
    * any peer, and the last entry of each header wins. Unset: no peer. The fetch runtime gives no peer address, so
@@ -45,6 +51,7 @@ export interface ResolvedServerSettings {
   readonly handlerTimeout: Duration | undefined
   readonly router: RouterFlags
   readonly matcher: RouteMatcherFactory
+  readonly constraints: readonly ConstraintStrategy<unknown>[]
   readonly trustProxy: TrustProxy | undefined
   /** Lower-cased. */
   readonly requestIDHeader: string | undefined
@@ -71,21 +78,31 @@ export function isTimeout(value: unknown): value is Duration {
   return typeof value === 'number' && value > 0 && value <= MAX_TIMEOUT
 }
 
-const SETTINGS = ['handlerTimeout', 'router', 'matcher', 'trustProxy', 'requestIDHeader', 'bodyLimit', 'schemaCompiler']
+const SETTINGS = [
+  'handlerTimeout',
+  'router',
+  'matcher',
+  'constraints',
+  'trustProxy',
+  'requestIDHeader',
+  'bodyLimit',
+  'schemaCompiler',
+]
 const FASTIFY_SECTIONS = new Set(['factory', 'listener'])
 /** The settings sections only the Node application takes: what Node itself configures. */
 export const NODE_SECTIONS: ReadonlySet<string> = new Set(['listen', 'http', 'https', 'http2'])
 
-// A header name, as RFC 9110 writes a token.
-const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
+/** A header name, as RFC 9110 writes a token. */
+export const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
 
 /**
  * What `.server(...)` resolved to, checked and with its defaults. The sections only `application` takes are left to
  * its caller.
  *
  * @throws ErrConfiguration for a section that is not a setting, a `handlerTimeout` not above 0, a `router` that is
- *   not an object of boolean router flags, a `matcher` that is not a function, a `trustProxy` the application cannot
- *   apply, or a `requestIDHeader` that is not a header name.
+ *   not an object of boolean router flags, a `matcher` that is not a function, a `constraints` setting that is not an
+ *   array of strategies or names one twice, a `trustProxy` the application cannot apply, or a `requestIDHeader` that
+ *   is not a header name.
  */
 export function resolveServerSettings(
   settings: object,
@@ -103,10 +120,17 @@ export function resolveServerSettings(
   }
 
   // `trustProxy` and `requestIDHeader` are read as given: a Node application's `trustProxy` is wider.
-  const { handlerTimeout, router, matcher, trustProxy, requestIDHeader, bodyLimit, schemaCompiler } = settings as Omit<
-    ServerSettings,
-    'trustProxy' | 'requestIDHeader' | 'bodyLimit' | 'schemaCompiler'
-  > & { trustProxy?: unknown; requestIDHeader?: unknown; bodyLimit?: unknown; schemaCompiler?: unknown }
+  const { handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler } =
+    settings as Omit<
+      ServerSettings,
+      'constraints' | 'trustProxy' | 'requestIDHeader' | 'bodyLimit' | 'schemaCompiler'
+    > & {
+      constraints?: unknown
+      trustProxy?: unknown
+      requestIDHeader?: unknown
+      bodyLimit?: unknown
+      schemaCompiler?: unknown
+    }
 
   if (handlerTimeout !== undefined && !isTimeout(handlerTimeout)) {
     throw configurationError(
@@ -121,6 +145,26 @@ export function resolveServerSettings(
       `Cannot use the matcher setting: it must be a function, got ${typeof matcher}`,
       'Pass a RouteMatcherFactory, such as findMyWayMatcher, or leave matcher out',
     )
+  }
+
+  if (constraints !== undefined && !(Array.isArray(constraints) && constraints.every(isConstraintStrategy))) {
+    throw configurationError(
+      'Cannot use the constraints setting: it must be an array of constraint strategies',
+      'Pass ConstraintStrategy objects, such as one resolved with container.get(...)',
+      'Leave constraints out',
+    )
+  }
+
+  const strategies = (constraints ?? []) as readonly ConstraintStrategy<unknown>[]
+  const named = new Set<string>()
+  for (const strategy of strategies) {
+    if (named.has(strategy.name)) {
+      throw configurationError(
+        `Cannot use the constraints setting: two strategies are named "${strategy.name}"`,
+        'Keep one strategy per name',
+      )
+    }
+    named.add(strategy.name)
   }
 
   if (requestIDHeader !== undefined && (typeof requestIDHeader !== 'string' || !HEADER_NAME.test(requestIDHeader))) {
@@ -150,12 +194,24 @@ export function resolveServerSettings(
     handlerTimeout,
     router: routerFlags(router),
     matcher: matcher ?? findMyWayMatcher,
+    constraints: strategies,
     trustProxy: compileTrustProxy(trustProxy, application),
     requestIDHeader: typeof requestIDHeader === 'string' ? requestIDHeader.toLowerCase() : undefined,
     application: application.name,
     bodyLimit: bodyLimit ?? DEFAULT_BODY_LIMIT,
     schemaCompiler: schemaCompiler ?? typeBoxSchemaCompiler,
   }
+}
+
+function isConstraintStrategy(value: unknown): value is ConstraintStrategy<unknown> {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const { name, storage, deriveConstraint } = value as Partial<Record<keyof ConstraintStrategy, unknown>>
+  return (
+    typeof name === 'string' && name !== '' && typeof storage === 'function' && typeof deriveConstraint === 'function'
+  )
 }
 
 function isSchemaCompiler(value: unknown): value is SchemaCompiler {
