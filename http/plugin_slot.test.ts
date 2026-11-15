@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { HTTPSetupContext } from './adapter.js'
 import { ErrConfiguration } from './core/error/common.js'
 import { HTTPPlugin } from './plugin.js'
+import { kEngineOnly } from './plugin_marks.js'
 import { PluginSlot } from './plugin_slot.js'
 
 class Named extends HTTPPlugin {
@@ -65,5 +66,20 @@ describe('PluginSlot', () => {
     expect(() => new PluginSlot().claim(new Named(''), 'on the test server')).toThrow(
       'Cannot register a plugin with an empty name on the test server',
     )
+  })
+
+  it("marks the batch of an engine-only plugin with the name Fastify's entry exports instead", async () => {
+    class EngineOnly extends HTTPPlugin {
+      readonly [kEngineOnly] = 'x'
+
+      register(): void {}
+    }
+
+    const slot = new PluginSlot()
+    const marked = await slot.during(() => slot.run(() => new EngineOnly(), kit, 'here'))
+    const plain = await slot.during(() => slot.run(() => new Named('plain'), kit, 'here'))
+
+    expect(marked.batch.engineOnly).toBe('x')
+    expect(plain.batch.engineOnly).toBe(undefined)
   })
 })

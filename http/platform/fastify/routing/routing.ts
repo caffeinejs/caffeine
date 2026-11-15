@@ -15,7 +15,7 @@ import { openDefinition, type AuthoredHooks, type RouteDefinition } from '../../
 import type { RouterFlags } from '../../../core/matcher/matcher.js'
 import { joinPaths, pathsOf } from '../../../core/routing/paths.js'
 import type { IRoute, IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../../core/routing/route.js'
-import { isAccessControlExempt } from '../../../core/security/exempt.js'
+import { gatedRouteOf } from '../../../core/security/gate.js'
 import type { Context } from '../context.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../error/error.js'
 import { attachGuardHook } from '../guards/guards.js'
@@ -133,16 +133,13 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
           catchBy: route.catchBy,
         }
 
+        const { skip, gated } = gatedRouteOf(route)
         config.$caffeine = {
           compiled,
-          skipAuthentication: isAccessControlExempt(route.config),
+          skipAuthentication: skip,
           // The authentication middleware is registered once, for the whole server, so what a route
           // declared has to travel with the route rather than be closed over per registration.
-          auth: {
-            schemes: route.authorization.options?.schemes,
-            allowAnonymous: route.authorization.options?.allowAnonymous === true,
-            authorizer: route.authorization.authorizer,
-          },
+          auth: gated,
         } satisfies CaffeineRouteConfig<REQ>
 
         const url = joinPaths(basePath, route.path)

@@ -278,6 +278,13 @@ export interface WebApplicationOps<T extends IAdapterTypes = never, C = unknown>
    * router's plugins register once, before any server's, so they never see a server's plugins.
    */
   hasPlugin(name: string): boolean
+
+  /**
+   * The server this slot registers on: its base path as `.basePath(...)` resolved it, `''` when it set none.
+   * `undefined` in a router's or a controller's slot, which every server serving it shares, and in the server's own
+   * `.server(...)` and `.basePath(...)` callbacks, which run before it is known.
+   */
+  readonly server: { readonly basePath: string } | undefined
 }
 
 /**

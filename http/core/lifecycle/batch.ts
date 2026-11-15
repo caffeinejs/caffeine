@@ -7,6 +7,9 @@ import { type HookFn, type HookName, type RequestHookName, type RequestHooks, ty
  * `app.hook(...)` call. Kept where that entry stands among the slot's plugins, which is the order its hooks run in.
  */
 export class HookBatch {
+  /** The `kEngineOnly` of the plugin that added these hooks: the Fastify adapter refuses the batch, naming it. */
+  engineOnly: string | undefined = undefined
+
   /** The context the entry registered with: what its server hooks are handed. */
   readonly kit: HTTPSetupContext
 

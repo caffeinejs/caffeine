@@ -1,13 +1,20 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
-import type { IContext } from '../../../context.js'
 import { CSRFBuilder, kBuild } from '../../../core/csrf/csrf.js'
 import { ErrCSRFCrossOrigin } from '../../../core/csrf/errors.js'
-import { isExcluded, type CSRFOptions, type ExcludedPath } from '../../../core/csrf/options.js'
-import { checkOrigin, SAFE_METHODS, type OriginCheckAskable, type OriginCheckInput } from '../../../core/csrf/origin.js'
+import { isExcluded, type ExcludedPath } from '../../../core/csrf/options.js'
+import {
+  checkOrigin,
+  pathOf,
+  questionsOf,
+  SAFE_METHODS,
+  type OriginCheckInput,
+  type Question,
+} from '../../../core/csrf/origin.js'
 import { csrfMarkOf } from '../../../core/csrf/route.js'
 import type { HTTPPluginConfigurer } from '../../../plugin.js'
+import { kFastifyOnly } from '../../../plugin_marks.js'
 import type { RouterTypes } from '../adapter.js'
 import type { HTTPPluginFactory } from '../plugin.js'
 import { protocolOf } from '../protocol.js'
@@ -103,7 +110,10 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
       })
     }
 
-    return fp(plugin, { name })
+    const registered = fp(plugin, { name })
+    // The engine refuses a Fastify plugin; this mark lets it name the import it takes instead.
+    ;(registered as { [kFastifyOnly]?: string })[kFastifyOnly] = 'csrf'
+    return registered
   }
 }
 
@@ -128,22 +138,6 @@ export function csrfCovering(context: object): Array<readonly ExcludedPath[]> {
   }
 
   return found
-}
-
-type Question = () => boolean | PromiseLike<boolean>
-
-// Origin checks first, then site checks, each in the order written; every one is handed its own URL.
-function questionsOf(ctx: IContext, askable: OriginCheckAskable, options: CSRFOptions): Question[] {
-  const questions: Question[] = options.originChecks.map(check => () => check(ctx, new URL(askable.origin)))
-
-  const site = askable.site
-  if (site !== undefined) {
-    for (const check of options.siteChecks) {
-      questions.push(() => check(ctx, site))
-    }
-  }
-
-  return questions
 }
 
 // Asks each check in turn, with no microtask for an answer that is not a promise. Only `true` lets the request
@@ -202,11 +196,4 @@ function inputOf(request: FastifyRequest): OriginCheckInput {
 // A header sent twice reads as one value no browser writes, which the check refuses.
 function headerOf(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value.join(', ') : value
-}
-
-// The query can carry a token a webhook sender was handed, and the check never reads it.
-function pathOf(url: string): string {
-  const query = url.indexOf('?')
-
-  return query === -1 ? url : url.slice(0, query)
 }

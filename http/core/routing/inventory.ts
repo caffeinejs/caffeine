@@ -2,9 +2,10 @@ import { ErrApplicationNotReady } from '@caffeinejs/application'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
+import { isExcluded, type ExcludedPath } from '../csrf/options.js'
 import { SAFE_METHODS } from '../csrf/origin.js'
 import { csrfMarkOf } from '../csrf/route.js'
-import { isAccessControlExempt } from '../security/exempt.js'
+import { gatedRouteOf } from '../security/gate.js'
 import type { IRoute, IRouteGroup } from './route.js'
 
 /** Adds one server's routes. The adapter's, through `AdapterIn.recordRoutes`; nothing else writes the inventory. */
@@ -125,10 +126,17 @@ export interface RouteSecurityRecord {
   readonly csrf: 'protected' | 'exempt' | 'excluded' | 'safe' | 'uncovered'
 }
 
+/** What a server knows of one route's protection, beyond what the route declared. */
+export interface RecordSecurity {
+  /** The label of the gate that owns the route; `undefined` when no gate covers it. */
+  readonly gate: string | undefined
+  /** The `exclude(...)` list of every enabled `csrf()` covering the route. */
+  readonly csrf: ReadonlyArray<readonly ExcludedPath[]>
+}
+
 /**
- * The record of a compiled route a server registered with no authentication gate and no cross-origin protection: the
- * web-standards engine's, whose routes needing either are refused at start-up. A GET's automatic HEAD route is folded
- * into `methods`.
+ * The record of a compiled route the engine registered. Its gate and its cross-origin cover are what each plugin's
+ * `onRoute` recorded. A GET's automatic HEAD route is folded into `methods`.
  */
 // `any`, as every core helper taking groups of any adapter does: a route is invariant in the request it compiles for.
 export function routeRecord(
@@ -136,10 +144,13 @@ export function routeRecord(
   group: IRouteGroup<any>,
   methods: readonly string[],
   url: string,
+  security: RecordSecurity,
 ): RouteRecord {
   const authorization = route.authorization
+  const options = authorization.options
   const schema = route.schema
-  const mark = csrfMarkOf(Object.fromEntries(route.config))
+  const { skip: skipped, gated } = gatedRouteOf(route)
+  const allowAnonymous = gated.allowAnonymous
 
   return {
     methods: [...methods],
@@ -161,14 +172,51 @@ export function routeRecord(
     },
     security: {
       authentication: {
-        skipped: isAccessControlExempt(route.config),
+        skipped,
         schemes: [...authorization.schemes],
-        allowAnonymous: authorization.options?.allowAnonymous === true,
-        gate: undefined,
+        allowAnonymous,
+        gate: security.gate,
       },
-      authorization: { protected: false, fallback: false, policies: [], roleGroups: [], defaultPolicy: false },
+      authorization: {
+        protected: !skipped && !allowAnonymous && authorization.authorizer != null,
+        // A route that declared nothing had the fallback policy compiled in.
+        fallback: options === undefined && authorization.authorizer != null,
+        policies: [...(options?.policies ?? [])],
+        roleGroups: (options?.roleGroups ?? []).map(roles => [...roles]),
+        defaultPolicy: options?.defaultPolicy === true,
+      },
       guards: (route.guards ?? []).map(guard => guard.name),
-      csrf: mark === true ? 'exempt' : methods.every(method => SAFE_METHODS.has(method)) ? 'safe' : 'uncovered',
+      csrf: csrfOf(methods, url, csrfMarkOf(Object.fromEntries(route.config)), security.csrf),
     },
   }
+}
+
+/**
+ * What cross-origin protection does on a route, from its own mark and the `exclude(...)` list of every `csrf()`
+ * covering it.
+ */
+export function csrfOf(
+  methods: readonly string[],
+  url: string,
+  mark: boolean | undefined,
+  covers: ReadonlyArray<readonly ExcludedPath[]>,
+): RouteSecurityRecord['csrf'] {
+  if (mark === true) {
+    return 'exempt'
+  }
+
+  if (methods.every(method => SAFE_METHODS.has(method))) {
+    return 'safe'
+  }
+
+  if (covers.length === 0) {
+    return 'uncovered'
+  }
+
+  // A route's own `false` mark keeps it protected under an excluded prefix.
+  if (mark === undefined && covers.every(exclude => isExcluded(url, exclude))) {
+    return 'excluded'
+  }
+
+  return 'protected'
 }

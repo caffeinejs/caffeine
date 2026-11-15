@@ -3,7 +3,16 @@ import { Readable } from 'node:stream'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from '../../../adapter.js'
-import { HTTPPlugin, type RouteDefinition, Router } from '../../../index.js'
+import { csrf as engineCSRF } from '../../../core/csrf/csrf.js'
+import { authentication as engineAuthentication } from '../../../core/security/security.js'
+import {
+  AuthenticateResult,
+  Authentication,
+  BaseAuthenticationHandler,
+  HTTPPlugin,
+  type RouteDefinition,
+  Router,
+} from '../../../index.js'
 import { createWebApplication } from '../index.js'
 
 let app: { close(): Promise<void> } | undefined
@@ -110,5 +119,51 @@ describe('the lifecycle on Fastify', () => {
 
     expect(await (await a.request('/r/g/b')).text()).toBe('b')
     expect(ready).toBe(1)
+  })
+})
+
+describe('an engine-only plugin on Fastify', () => {
+  // The engine's `csrf()` would see no raw Fastify route: refused rather than leaving those unchecked.
+  const refusal = 'Cannot install "csrf()" from "@caffeinejs/http" on a Fastify application'
+
+  it('is refused at start-up on the application, though it adds no hook', async () => {
+    const a = createWebApplication().with(engineCSRF(c => c.enabled(false)))
+    app = a
+
+    await expect(a.bootstrap()).rejects.toThrow(refusal)
+  })
+
+  it('is refused at start-up on a router', async () => {
+    const a = createWebApplication().mount(
+      new Router('/r')
+        .with(engineCSRF())
+        .get('/')
+        .handler(() => 'ok'),
+    )
+    app = a
+
+    await expect(a.bootstrap()).rejects.toThrow(refusal)
+  })
+
+  // The engine's own built-ins carry the mark: each is refused, naming the Fastify entry's.
+  it("refuses the engine's authentication()", async () => {
+    class NobodyScheme extends BaseAuthenticationHandler<object> {
+      constructor() {
+        super({})
+      }
+
+      async authenticate(): Promise<AuthenticateResult> {
+        return AuthenticateResult.none()
+      }
+    }
+
+    const a = createWebApplication()
+      .install(Authentication(auth => auth.addStrategy('Nobody', new NobodyScheme())))
+      .with(engineAuthentication())
+    app = a
+
+    await expect(a.bootstrap()).rejects.toThrow(
+      'Cannot install "authentication()" from "@caffeinejs/http" on a Fastify application',
+    )
   })
 })

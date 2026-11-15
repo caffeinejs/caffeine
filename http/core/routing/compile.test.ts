@@ -6,6 +6,7 @@ import {
   Authentication,
   Authorization,
   BaseAuthenticationHandler,
+  ErrAuthenticationGateRequired,
   Guards,
   Router,
   type Guard,
@@ -82,6 +83,6 @@ describe('the access-control mark', () => {
       .mount(plain())
     opened.push(app)
 
-    await expect(app.bootstrap()).rejects.toThrow('a protected route, which needs an authentication gate')
+    await expect(app.bootstrap()).rejects.toThrow(ErrAuthenticationGateRequired)
   })
 })

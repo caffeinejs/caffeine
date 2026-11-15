@@ -121,6 +121,7 @@ export class ServerSet<T extends IAdapterTypes> {
     // fails should do so before a factory with side effects has run.
     const server = await resolveServerOptions(definition.server, context)
     const basePath = normalizeBasePath(await definition.basePath?.(context))
+    slot.forServer(basePath ?? '')
 
     // Its own `.with(...)` factories, in the order they were written. The adapter installs the framework's head
     // slots ahead of them.
@@ -250,7 +251,8 @@ async function registerPlugins<T extends IAdapterTypes>(
       where,
     )
 
-    if (!batch.empty) {
+    // A batch of an engine-only plugin is kept even when empty: the adapter that refuses it must see it.
+    if (!batch.empty || batch.engineOnly !== undefined) {
       root.push(batch)
     }
 

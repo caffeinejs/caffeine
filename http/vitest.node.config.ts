@@ -33,40 +33,36 @@ import { defineConfig } from 'vitest/config'
 //   core/server/input.test.ts
 // - platform/fastify/error/validation.test.ts -> core/error/validation.test.ts
 // - core/cookie/cookie.test.ts -> core/cookie/server_cookies.test.ts, core/server/context.test.ts
+// - core/csrf/_tests/csrf_plugin.test.ts -> core/csrf/csrf.test.ts (in part: the verdicts, exemptions, proxy and
+//   downgrade cases, checks, logging and the router scope)
+// - core/security/_tests/authentication_gate_registration.test.ts -> core/security/security.test.ts (duplicate gates;
+//   the code is ERR_CONFIGURATION there)
 //
 // Not yet on Node, each with what keeps it off:
 // - _tests/context_platform.test.ts: reads Fastify's ctx.platform.request and ctx.platform.reply
 // - _tests/create_web_application.test.ts: reads a Fastify-only member of app.instance
 // - _tests/fetch.test.ts: reads a Fastify-only member of app.instance
-// - _tests/health.test.ts: needs authentication(), not on the Node entry yet
 // - _tests/http_plugin.test.ts: installs a Fastify plugin with .with(...)
 // - _tests/http_plugin_controller.test.ts: installs a Fastify plugin with @Use(...)
 // - _tests/lifecycle.test.ts: expects request() to reject after close(); the engine answers a plain 503
-// - _tests/programmatic_router_parity.test.ts: needs authentication(), not on the Node entry yet
-// - _tests/register_router.test.ts: needs authentication(), not on the Node entry yet
+// - _tests/programmatic_router_parity.test.ts: needs constraints() (5c)
 // - _tests/versioning_decorated.test.ts: needs constraints(), not on the Node entry yet
 // - _tests/versioning.test.ts: needs constraints(), not on the Node entry yet
+// - core/csrf/_tests/csrf_edges.test.ts: installs a Fastify plugin
+// - core/csrf/_tests/csrf_plugin.test.ts: installs a Fastify plugin
+// - core/csrf/_tests/csrf_webhook.test.ts: installs a Fastify plugin
+// - core/listener/_tests/auth.test.ts: passes Fastify's { listener } settings
 // - core/listener/_tests/decorated.test.ts: passes Fastify's { listener } settings
-// - core/listener/_tests/health.test.ts: needs authentication() and newRouter, not on the Node entry yet
+// - core/listener/_tests/health.test.ts: passes Fastify's { listener } settings
 // - core/listener/_tests/plugins.test.ts: passes Fastify's { listener } settings
 // - core/listener/_tests/routers.test.ts: passes Fastify's { listener } settings
 // - core/middleware/middleware.test.ts: installs a Fastify plugin, and passes Fastify's { factory } settings
-// - core/security/_tests/authentication_gate_registration.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/_tests/authentication_gate.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/_tests/authorization_installation.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/_tests/authorize_decorators.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/_tests/multi_scheme.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/auth/_tests/auth_config.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/auth/_tests/credentials_hasher.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/auth/basic/basic.integration.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/auth/cookie/cookie.integration.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/auth/forward/forward.integration.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/auth/jwt/jwt.integration.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/auth/oidc/oidc.integration.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/auth/opaque/opaque.integration.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/auth/refresh/refresh.integration.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/authz/authz.test.ts: needs authentication(), not on the Node entry yet
-// - core/security/authz/fallback_policy.test.ts: needs authentication(), not on the Node entry yet
+// - core/security/_tests/authentication_gate_coverage.test.ts: installs a Fastify plugin
+// - core/security/_tests/authentication_gate_fallback.test.ts: installs a Fastify plugin
+// - core/security/_tests/authentication_gate_order.test.ts: installs a Fastify plugin
+// - core/security/_tests/authentication_gate_registration.test.ts: imports newRouter from a Fastify path
+// - core/security/auth/oidc/failure_responses.test.ts: installs a Fastify plugin
+// - core/security/auth/oidc/oidc.fastify.test.ts: pins a router gate claiming the OIDC routes, which only Fastify does
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   plugins: [
@@ -129,6 +125,24 @@ export default defineConfig({
       '_tests/router_query_method.test.ts',
       '_tests/health_collision.test.ts',
       'core/health/health.test.ts',
+      '_tests/health.test.ts',
+      '_tests/register_router.test.ts',
+      'core/security/_tests/authentication_gate.test.ts',
+      'core/security/_tests/authorization_installation.test.ts',
+      'core/security/_tests/authorize_decorators.test.ts',
+      'core/security/_tests/multi_scheme.test.ts',
+      'core/security/auth/_tests/auth_config.test.ts',
+      'core/security/auth/_tests/credentials_hasher.test.ts',
+      'core/security/auth/basic/basic.integration.test.ts',
+      'core/security/auth/forward/forward.integration.test.ts',
+      'core/security/auth/jwt/jwt.integration.test.ts',
+      'core/security/auth/opaque/opaque.integration.test.ts',
+      'core/security/auth/refresh/refresh.integration.test.ts',
+      'core/security/authz/fallback_policy.test.ts',
+      'core/security/auth/_tests/auth_config_options.test.ts',
+      'core/security/auth/cookie/cookie.integration.test.ts',
+      'core/security/auth/oidc/oidc.integration.test.ts',
+      'core/security/authz/authz.test.ts',
     ],
     environment: 'node',
     testTimeout: 30000,

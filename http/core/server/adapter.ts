@@ -10,6 +10,7 @@ import type {
   IAdapterTypes,
   ServerAddress,
 } from '../../adapter.js'
+import { kFastifyOnly } from '../../plugin_marks.js'
 import { HookBatch } from '../lifecycle/batch.js'
 import { rebaseMiddlewares } from '../middleware/path.js'
 import type { IRouteGroup, RouteGroupScope } from '../routing/route.js'
@@ -106,10 +107,15 @@ export function buildEngine<T extends IAdapterTypes>(
 ): HTTPServer {
   const scopes = routeGroups.flatMap(group => group.scopes ?? [])
   const batchesOf = (entries: readonly unknown[]): HookBatch[] => {
-    if (entries.some(entry => !(entry instanceof HookBatch))) {
+    // By index: a factory that returned nothing leaves `undefined`, which is foreign too.
+    const at = entries.findIndex(entry => !(entry instanceof HookBatch))
+    if (at !== -1) {
+      // A Fastify plugin the engine has its own of, under the same name: the import is the fix.
+      const own = (entries[at] as { [kFastifyOnly]?: string } | null | undefined)?.[kFastifyOnly]
+
       throw configurationError(
         `Cannot install a server plugin on the ${settings.application}: only an HTTPPlugin is supported yet`,
-        USE_FASTIFY,
+        own === undefined ? USE_FASTIFY : `Import "${own}" from "@caffeinejs/http"`,
       )
     }
 

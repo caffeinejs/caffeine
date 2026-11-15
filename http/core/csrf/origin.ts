@@ -1,6 +1,8 @@
 import { errMessage } from '@caffeinejs/std/err'
 
+import type { IContext } from '../../context.js'
 import { ErrCSRFConfiguration } from './errors.js'
+import type { CSRFOptions } from './options.js'
 
 /**
  * The methods a request may use without changing state, which the cross-origin check therefore never refuses: the
@@ -234,4 +236,28 @@ function normalizeHost(host: string, protocol: string): string {
   const defaultPort = DEFAULT_PORTS.get(protocol)
 
   return defaultPort !== undefined && lower.endsWith(defaultPort) ? lower.slice(0, -defaultPort.length) : lower
+}
+
+/** One check `trustOrigin(...)` or `allowSecFetchSite(...)` added, bound to the request it asks about. */
+export type Question = () => boolean | PromiseLike<boolean>
+
+// Origin checks first, then site checks, each in the order written; every one is handed its own URL.
+export function questionsOf(ctx: IContext, askable: OriginCheckAskable, options: CSRFOptions): Question[] {
+  const questions: Question[] = options.originChecks.map(check => () => check(ctx, new URL(askable.origin)))
+
+  const site = askable.site
+  if (site !== undefined) {
+    for (const check of options.siteChecks) {
+      questions.push(() => check(ctx, site))
+    }
+  }
+
+  return questions
+}
+
+// The query can carry a token a webhook sender was handed, and the check never reads it.
+export function pathOf(url: string): string {
+  const query = url.indexOf('?')
+
+  return query === -1 ? url : url.slice(0, query)
 }

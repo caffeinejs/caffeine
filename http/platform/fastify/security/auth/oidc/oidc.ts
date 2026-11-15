@@ -1,9 +1,14 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
-import { stripBasePath } from '../../../../../base_path.js'
-import { isRemoteAuthenticationError } from '../../../../../core/security/auth/internal/remote/errors.js'
 import type { OIDCMeta } from '../../../../../core/security/auth/oidc/index.js'
+import {
+  callbackFailure,
+  oidcConflict,
+  routedPath,
+  unreachableStrategies,
+  unreachableText,
+} from '../../../../../core/security/auth/oidc/routes.js'
 import { authenticationExempt } from '../../../routing/route_config.js'
 
 /**
@@ -28,10 +33,8 @@ export function oidcRoutesPlugin(meta: OIDCMeta): FastifyPluginAsync {
  * it — so they are marked {@link authenticationExempt}: no fallback policy may stand in front of them.
  */
 export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void {
-  // Both paths are the browser's — the callback's comes from `callbackURL` — so they carry the application's base
-  // path, which the server takes off a request before routing it. The routes go where the stripped request lands.
   const basePath = server.$basePath
-  const routed = (path: string): string => (basePath === '' ? path : (stripBasePath(path, basePath) ?? path))
+  const routed = (path: string): string => routedPath(path, basePath)
 
   const ownPaths = new Set(
     oidc.handlers.flatMap(({ callbackPath, handler }) => [routed(callbackPath), routed(handler.loginPath)]),
@@ -46,9 +49,7 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
     }
 
     if (ownPaths.has(route.url)) {
-      throw new Error(
-        `Cannot start application: the OIDC callback or login path "${route.url}" conflicts with a registered controller route`,
-      )
+      throw new Error(oidcConflict(route.url))
     }
 
     for (const scheme of meta.route.authorization.options?.schemes ?? []) {
@@ -59,23 +60,10 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
   server.addHook('onReady', async () => {
     // A strategy that is neither the default, nor selectable through a Forward default, nor named by any
     // route authenticates nobody: it registers a callback route and silently never signs anyone in.
-    //
-    // A warning, not a failure. This used to be a hard error demanding a Forward default whenever two
-    // OAuth strategies were registered, which rejected the configuration that makes them reachable —
-    // `/login/google` and `/login/github`, each naming its own scheme. Only the registered routes carry
-    // those names, which is why the decision lands here rather than in the builder.
-    const unreachable = oidc.unreachableCandidates.filter(name => !namedByRoutes.has(name))
+    const unreachable = unreachableStrategies(oidc, namedByRoutes)
     if (unreachable.length > 0) {
-      process.emitWarning(
-        `OAuth strategies ${unreachable.map(n => `"${n}"`).join(', ')} can never authenticate a request: ` +
-          'they are not the default authenticate scheme and no route names them',
-        {
-          type: 'CaffeineAuthenticationWarning',
-          detail:
-            'Name the scheme on a route with @Authorize({ schemes: [...] }), make it the default, ' +
-            'or use a Forward default to select per request.',
-        },
-      )
+      const { message, detail } = unreachableText(unreachable)
+      process.emitWarning(message, { type: 'CaffeineAuthenticationWarning', detail })
     }
   })
 
@@ -107,9 +95,8 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
           return reply.send()
         }
 
-        const status = isRemoteAuthenticationError(e) ? e.statusCode : 400
-        const error = isRemoteAuthenticationError(e) ? e.publicMessage : 'Authentication failed'
-        return reply.status(status).send({ error, statusCode: status })
+        const { status, body } = callbackFailure(e)
+        return reply.status(status).send(body)
       }
     })
   }

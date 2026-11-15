@@ -1,10 +1,19 @@
+import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
+import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
+import { kEngineOnly } from '../../plugin_marks.js'
+import type { RouteDefinition } from '../lifecycle/route_definition.js'
+import { ErrCSRFCrossOrigin } from './errors.js'
 import {
+  isExcluded,
   resolveCSRFOptions,
   type CSRFConfig,
   type CSRFOptions,
+  type ExcludedPath,
   type OriginPredicate,
   type SecFetchSitePredicate,
 } from './options.js'
+import { checkOrigin, pathOf, questionsOf, SAFE_METHODS, type OriginCheckInput } from './origin.js'
+import { kCSRFRoute, type CSRFRouteConfig } from './route.js'
 
 export const kBuild = Symbol('caffeine.http.csrf.build')
 
@@ -103,9 +112,9 @@ export class CSRFBuilder {
   }
 
   /**
-   * Names this plugin. The label distinguishes its `fastify-plugin` registration, `caffeine-csrf` for the default
-   * and `caffeine-csrf:<label>` otherwise, so a second plugin on one registration chain, a scoped one under a root
-   * one, must carry its own label, and an accidental duplicate is refused at start-up.
+   * Names this plugin: `caffeine-csrf` for the default, `caffeine-csrf:<label>` otherwise. A second one under one
+   * label is refused at start-up: on Fastify on one registration chain, a scoped one under a root one included; on the
+   * web-standards engine in one slot.
    */
   name(label: string): this {
     this.#label = label
@@ -124,5 +133,140 @@ export class CSRFBuilder {
         { originChecks: [...this.#originChecks], siteChecks: [...this.#siteChecks] },
       ),
     }
+  }
+}
+
+/**
+ * Cross-origin protection by Fetch Metadata on the web-standards engine: `.with(csrf())`. A Fastify application takes
+ * `csrf` from `@caffeinejs/http/fastify`, and refuses this one at start-up.
+ *
+ * Every request with an unsafe method is judged by `Sec-Fetch-Site`, then by `Origin` against the request's host
+ * ({@link checkOrigin}), and refused with {@link ErrCSRFCrossOrigin}, a 403, when it comes from another origin. A
+ * browser sends both headers of its own accord and no script can forge them, so a page this application serves needs
+ * no token: its requests are `same-origin`. A request carrying neither header is let through, as a non-browser
+ * client's, which carries no cookies of a victim.
+ *
+ * The check is an `onRequest` hook, ahead of body parsing, so a refused request costs nothing past its headers. It runs
+ * where `.with(csrf())` was written among the plugins: ahead of `.with(authentication())`, a cross-origin request is
+ * refused before anyone is authenticated.
+ *
+ * An origin no exact list can spell, every subdomain of a domain or a tenant's own, is let through by
+ * `c.trustOrigin(...)`, and a `Sec-Fetch-Site` of `same-site` by `c.allowSecFetchSite(...)`. Each is asked only about
+ * a request the rules refused, and neither lets through `Origin: null`, a malformed origin, or an `http:` origin on a
+ * request known to be HTTPS. A check that throws or rejects fails the request.
+ *
+ * A route is left alone when it is marked with `@CSRFExempt()` or `csrfExempt()`, or, unmarked, when its registered
+ * path is under `.exclude(...)`. A URL no route matched is the not-found answer's. A listener is covered by its own
+ * `.listener(name, l => l.with(csrf()))`, a route group by `router.with(csrf())`.
+ *
+ * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path not starting
+ * with `/` or that is `/` itself.
+ */
+export function csrf<C = unknown>(
+  configure?: HTTPPluginConfigurer<CSRFBuilder, C>,
+): AdapterExtensionFactory<HTTPPlugin, C> {
+  return context => {
+    const builder = new CSRFBuilder()
+    configure?.(builder, context)
+
+    // Resolved as the factory runs: a bad setting fails start-up where it was written.
+    const { label, options } = builder[kBuild]()
+
+    return new CSRFProtection(label === 'default' ? 'caffeine-csrf' : `caffeine-csrf:${label}`, options)
+  }
+}
+
+// The `exclude(...)` list of every enabled `csrf()` covering a route, outermost first, for the route inventory.
+const COVERS = new WeakMap<RouteDefinition, Array<readonly ExcludedPath[]>>()
+
+/** The `exclude(...)` list of every enabled `csrf()` covering `route`, outermost first; empty when none does. */
+export function csrfCoversOf(route: RouteDefinition): ReadonlyArray<readonly ExcludedPath[]> {
+  return COVERS.get(route) ?? []
+}
+
+class CSRFProtection extends HTTPPlugin {
+  override readonly name: string
+  readonly [kEngineOnly] = 'csrf'
+  readonly #options: CSRFOptions
+
+  constructor(name: string, options: CSRFOptions) {
+    super()
+    this.name = name
+    this.#options = options
+  }
+
+  register(context: HTTPSetupContext): void {
+    const options = this.#options
+    if (!options.enabled) {
+      context.logger.warn({ plugin: this.name }, 'Cross-origin protection is turned off')
+      return
+    }
+
+    const asks = options.originChecks.length > 0 || options.siteChecks.length > 0
+    const exempt = new WeakSet<RouteDefinition>()
+
+    context.app.hook('onRoute', route => {
+      const covers = COVERS.get(route) ?? []
+      covers.push(options.exclude)
+      COVERS.set(route, covers)
+
+      // A route's own mark is the more specific word: `csrfExempt(false)` keeps it under an excluded prefix.
+      const mark = (route.config.get(kCSRFRoute) as CSRFRouteConfig | undefined)?.exempt
+      if (mark === true || (mark === undefined && isExcluded(route.url, options.exclude))) {
+        exempt.add(route)
+      }
+    })
+
+    context.app.hook('onRequest', ctx => {
+      const route = ctx.route
+      if (SAFE_METHODS.has(ctx.req.method) || route === undefined || exempt.has(route)) {
+        return
+      }
+
+      const input: OriginCheckInput = {
+        method: ctx.req.method,
+        secFetchSite: ctx.req.header('sec-fetch-site'),
+        origin: ctx.req.header('origin'),
+        host: ctx.req.host,
+        protocol: ctx.req.protocol,
+      }
+      const { verdict, reason, askable } = checkOrigin(input, options)
+      if (verdict !== 'deny') {
+        return
+      }
+
+      const refuse = (): ErrCSRFCrossOrigin => {
+        context.logger.warn(
+          {
+            reqId: ctx.req.id,
+            reason,
+            method: input.method,
+            path: pathOf(ctx.req.url),
+            host: input.host,
+            origin: input.origin,
+            secFetchSite: input.secFetchSite,
+          },
+          'Cross-origin request refused',
+        )
+        return new ErrCSRFCrossOrigin(reason)
+      }
+
+      if (!asks || askable === undefined) {
+        throw refuse()
+      }
+
+      const questions = questionsOf(ctx, askable, options)
+
+      // Only `true` lets the request through; a throw or a rejection fails it.
+      return (async () => {
+        for (const question of questions) {
+          if ((await question()) === true) {
+            return
+          }
+        }
+
+        throw refuse()
+      })()
+    })
   }
 }

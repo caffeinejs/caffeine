@@ -66,3 +66,62 @@ describe('ServerSet', () => {
     expect(order).toEqual(['first', 'plugin', 'last'])
   })
 })
+
+describe('context.app.server', () => {
+  /** A plugin that records what its slot says of the server it registers on. */
+  function recorder(seen: unknown[]): () => HTTPPlugin {
+    return () =>
+      new (class extends HTTPPlugin {
+        register(context: HTTPSetupContext): void {
+          seen.push(context.app.server)
+        }
+      })()
+  }
+
+  async function serverSeen(build: (seen: unknown[]) => { bootstrap(): Promise<unknown>; close(): Promise<void> }) {
+    const seen: unknown[] = []
+    const app = build(seen)
+
+    try {
+      await app.bootstrap()
+    } finally {
+      await app.close()
+    }
+
+    return seen
+  }
+
+  it("reports the base path on the application's own slot", async () => {
+    expect(await serverSeen(seen => createFetchApplication().basePath('/api').with(recorder(seen)))).toEqual([
+      { basePath: '/api' },
+    ])
+  })
+
+  it('reports an empty base path when the application set none', async () => {
+    expect(await serverSeen(seen => createFetchApplication().with(recorder(seen)))).toEqual([{ basePath: '' }])
+  })
+
+  // A router's slot is shared by every server that serves it: it belongs to none.
+  it("reports no server on a router's slot", async () => {
+    expect(
+      await serverSeen(seen =>
+        createFetchApplication().mount(
+          new Router('/r')
+            .with(recorder(seen))
+            .get('/')
+            .handler(() => 'ok'),
+        ),
+      ),
+    ).toEqual([undefined])
+  })
+
+  it("reports the listener's server on a listener's slot", async () => {
+    expect(
+      await serverSeen(seen =>
+        createWebApplication()
+          .basePath('/api')
+          .listener('admin', l => l.with(recorder(seen))),
+      ),
+    ).toEqual([{ basePath: '' }])
+  })
+})

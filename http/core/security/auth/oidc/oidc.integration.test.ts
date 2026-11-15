@@ -127,20 +127,6 @@ describe('OIDC integration', () => {
       expect((await app.request(`${CALLBACK_PATH}/login?returnTo=/x`)).status).toBe(404)
       expect((await app.request(`${CALLBACK_PATH}?code=code&state=oidc-st`)).status).toBe(404)
     })
-
-    it('leaves them to a later gate when the root gate opts out', async () => {
-      const scoped = newRouter('/oidc-claim-scoped')
-        .with(authentication(g => g.name('scoped')))
-        .get('/', () => ({ ok: true }))
-
-      const app = makeOIDCApp(undefined, { gate: g => g.oidcRoutes(false) }).mount(scoped)
-      await app.bootstrap()
-
-      const res = await app.request(`${CALLBACK_PATH}/login?returnTo=/x`)
-
-      expect(res.status).toBe(302)
-      expect(res.headers.get('location')).toContain(`${ISSUER}/auth`)
-    })
   })
 
   describe('callback flow', () => {

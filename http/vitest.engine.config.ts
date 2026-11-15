@@ -24,18 +24,36 @@ import { defineConfig } from 'vitest/config'
 //   core/server/input.test.ts
 // - platform/fastify/error/validation.test.ts -> core/error/validation.test.ts
 // - core/cookie/cookie.test.ts -> core/cookie/server_cookies.test.ts, core/server/context.test.ts
+// - core/csrf/_tests/csrf_plugin.test.ts -> core/csrf/csrf.test.ts (in part: the verdicts, exemptions, proxy and
+//   downgrade cases, checks, logging and the router scope)
+// - core/security/_tests/authentication_gate_registration.test.ts -> core/security/security.test.ts (duplicate gates;
+//   the code is ERR_CONFIGURATION there)
 //
 // Not yet on the engine, each with what keeps it off:
 // - _tests/context_platform.test.ts: reads Fastify's ctx.platform.request and ctx.platform.reply
-// - _tests/health.test.ts: needs authentication(), which the fetch entry does not export
 // - _tests/http_plugin.test.ts: imports newRouter, which the fetch entry does not export
 // - _tests/http_plugin_controller.test.ts: installs a Fastify plugin with @Use(...)
+// - _tests/programmatic_router_parity.test.ts: needs constraints() (5c)
+// - core/csrf/_tests/csrf_edges.test.ts: installs a Fastify plugin
+// - core/csrf/_tests/csrf_plugin.test.ts: installs a Fastify plugin
+// - core/csrf/_tests/csrf_webhook.test.ts: installs a Fastify plugin
+// - core/listener/_tests/auth.test.ts: passes Fastify's { listener } settings
 // - core/listener/_tests/decorated.test.ts: passes Fastify's { listener } settings
-// - core/listener/_tests/health.test.ts: needs authentication() and newRouter, which the fetch entry does not export
+// - core/listener/_tests/health.test.ts: passes Fastify's { listener } settings
 // - core/listener/_tests/plugins.test.ts: imports newRouter, which the fetch entry does not export
 // - core/listener/_tests/routers.test.ts: imports newRouter, which the fetch entry does not export
 // - core/middleware/middleware.test.ts: installs Node middleware, which the fetch application has no request for, a
 //   Fastify plugin, and Fastify's { factory } settings
+// - core/security/_tests/authentication_gate_coverage.test.ts: installs a Fastify plugin
+// - core/security/_tests/authentication_gate_fallback.test.ts: installs a Fastify plugin
+// - core/security/_tests/authentication_gate_order.test.ts: installs a Fastify plugin
+// - core/security/_tests/authentication_gate_registration.test.ts: imports newRouter from a Fastify path
+// - core/security/auth/_tests/auth_config_options.test.ts: imports newRouter, which the fetch entry does not export
+// - core/security/auth/cookie/cookie.integration.test.ts: imports newRouter, which the fetch entry does not export
+// - core/security/auth/oidc/failure_responses.test.ts: installs a Fastify plugin
+// - core/security/auth/oidc/oidc.fastify.test.ts: pins a router gate claiming the OIDC routes, which only Fastify does
+// - core/security/auth/oidc/oidc.integration.test.ts: imports newRouter, which the fetch entry does not export
+// - core/security/authz/authz.test.ts: imports newRouter, which the fetch entry does not export
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   plugins: [
@@ -82,6 +100,20 @@ export default defineConfig({
       '_tests/router_query_method.test.ts',
       '_tests/health_collision.test.ts',
       'core/health/health.test.ts',
+      '_tests/health.test.ts',
+      '_tests/register_router.test.ts',
+      'core/security/_tests/authentication_gate.test.ts',
+      'core/security/_tests/authorization_installation.test.ts',
+      'core/security/_tests/authorize_decorators.test.ts',
+      'core/security/_tests/multi_scheme.test.ts',
+      'core/security/auth/_tests/auth_config.test.ts',
+      'core/security/auth/_tests/credentials_hasher.test.ts',
+      'core/security/auth/basic/basic.integration.test.ts',
+      'core/security/auth/forward/forward.integration.test.ts',
+      'core/security/auth/jwt/jwt.integration.test.ts',
+      'core/security/auth/opaque/opaque.integration.test.ts',
+      'core/security/auth/refresh/refresh.integration.test.ts',
+      'core/security/authz/fallback_policy.test.ts',
     ],
     environment: 'node',
     testTimeout: 30000,

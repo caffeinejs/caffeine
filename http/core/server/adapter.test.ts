@@ -2,10 +2,26 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
 import { bindTo } from '../../decorators/bind_to.js'
+import { csrf as fastifyCSRF } from '../../platform/fastify/csrf/csrf.js'
+import { authentication as fastifyAuthentication } from '../../platform/fastify/security/security.js'
 import { HTTPPlugin } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { Router } from '../routing/programmatic/programmatic.js'
+import { Authentication } from '../security/auth/auth.js'
+import { BaseAuthenticationHandler } from '../security/auth/handler.js'
+import { AuthenticateResult } from '../security/auth/ticket.js'
 import type { FetchAdapterTypes } from './adapter.js'
+
+/** A scheme that authenticates nobody: enough for a gate to be built. */
+class NobodyScheme extends BaseAuthenticationHandler<object> {
+  constructor() {
+    super({})
+  }
+
+  async authenticate(): Promise<AuthenticateResult> {
+    return AuthenticateResult.none()
+  }
+}
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
 type AnyRouter = Router<any, any, any, any, any, any>
@@ -26,6 +42,7 @@ describe('the fetch adapter', () => {
       a => a.with((() => async () => undefined) as never),
       'Cannot install a server plugin',
     ],
+    ['a factory that returns nothing', a => a.with((() => undefined) as never), 'Cannot install a server plugin'],
     [
       'a Fastify plugin factory on a router',
       a =>
@@ -53,6 +70,21 @@ describe('the fetch adapter', () => {
 
     await expect(booting).rejects.toThrow(ErrConfiguration)
     await expect(booting).rejects.toThrow(message)
+  })
+
+  // The engine exports a gate of its own under the same name: the refusal names the import to take.
+  it("names the engine's import for the Fastify authentication()", async () => {
+    app = createWebApplication()
+      .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
+      .with(fastifyAuthentication() as never)
+
+    await expect(app.bootstrap()).rejects.toThrow('Import "authentication" from "@caffeinejs/http"')
+  })
+
+  it("names the engine's import for the Fastify csrf()", async () => {
+    app = createWebApplication().with(fastifyCSRF() as never)
+
+    await expect(app.bootstrap()).rejects.toThrow('Import "csrf" from "@caffeinejs/http"')
   })
 
   // The fetch application has no Node request, but a context middleware needs none.

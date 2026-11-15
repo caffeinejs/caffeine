@@ -8,6 +8,7 @@ import { parseUse } from './core/middleware/middleware.js'
 import { MiddlewarePipeline } from './core/middleware/pipeline.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
 import { HTTPPlugin } from './plugin.js'
+import { kEngineOnly } from './plugin_marks.js'
 
 type Operation = 'mount' | 'use' | 'useFn' | 'hook' | 'hasPlugin'
 
@@ -27,11 +28,22 @@ export class PluginSlot implements WebApplicationOps<any, any> {
   #open = false
   /** Where `hook(...)` adds: the batch of the slot entry running now. */
   #batch: HookBatch | undefined
+  #server: { readonly basePath: string } | undefined
 
   /** @param mountable - `false` for a controller's slot: a class has no children to nest routers under. */
   constructor(middlewares: MiddlewarePipeline<string> = new MiddlewarePipeline(), mountable = true) {
     this.#middlewares = middlewares
     this.#mountable = mountable
+  }
+
+  /** @see {@link WebApplicationOps.server} */
+  get server(): { readonly basePath: string } | undefined {
+    return this.#server
+  }
+
+  /** Marks this slot as a server's. Called once, before the slot opens. */
+  forServer(basePath: string): void {
+    this.#server = { basePath }
   }
 
   /** Runs `work` with the slot open, and closes it on every way out. */
@@ -63,6 +75,7 @@ export class PluginSlot implements WebApplicationOps<any, any> {
       const extension = await factory(context)
 
       if (extension instanceof HTTPPlugin) {
+        batch.engineOnly = (extension as { [kEngineOnly]?: string })[kEngineOnly]
         this.claim(extension, where)
         await extension.register(context)
       }

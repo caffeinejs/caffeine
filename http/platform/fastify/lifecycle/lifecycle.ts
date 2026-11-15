@@ -19,6 +19,7 @@ import {
 import type { AuthoredHooks } from '../../../core/lifecycle/route_definition.js'
 import type { CompiledHooks } from '../../../core/routing/route.js'
 import { REPRESENTATION_HEADERS } from '../../../core/server/answer.js'
+import { configurationError } from '../../../core/server/error.js'
 import { appendVary } from '../../../vary.js'
 import type { Context } from '../context.js'
 import { encodeProblem } from '../error/error.js'
@@ -42,6 +43,15 @@ const failedSend = new WeakSet<FastifyRequest>()
 
 /** Adds `batch`'s request hooks to `server`, the root or a group's context. `onError` is left to the error handlers. */
 export function installHookBatch(server: FastifyInstance, batch: HookBatch, onSendFailed: SendFailure): void {
+  // The engine's own plugins see no route registered straight on Fastify, and would leave it unguarded.
+  if (batch.engineOnly !== undefined) {
+    throw configurationError(
+      `Cannot install "${batch.engineOnly}()" from "@caffeinejs/http" on a Fastify application: it runs on the ` +
+        'web-standards engine only',
+      `Import "${batch.engineOnly}" from "@caffeinejs/http/fastify"`,
+    )
+  }
+
   const { request } = batch
 
   if (request.onRequest.length > 0) {

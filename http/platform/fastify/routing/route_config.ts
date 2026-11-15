@@ -2,15 +2,8 @@ import { type FastifyInstance, type FastifyRequest, type RouteOptions } from 'fa
 
 import type { RouteDefinition } from '../../../core/lifecycle/route_definition.js'
 import { type CatchByMap, type IRoute, type IRouteGroup } from '../../../core/routing/route.js'
-import { type AuthzRouteService } from '../../../core/security/authz/route_service.js'
+import type { GatedRoute } from '../../../core/security/gate.js'
 import type { FastifyErrorEntry } from '../lifecycle/lifecycle.js'
-
-/** What the authentication gate has to know about the route a request matched. */
-export interface GatedRoute {
-  schemes?: readonly string[]
-  allowAnonymous: boolean
-  authorizer?: AuthzRouteService
-}
 
 /** What Caffeine compiled for a route, as the handler and every `onRoute` reader see it. */
 export interface CompiledRouteMetadata<R = FastifyRequest> {

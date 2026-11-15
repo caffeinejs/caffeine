@@ -1,9 +1,7 @@
 import type { Container } from '@caffeinejs/di'
 
-import { isExcluded } from '../../../core/csrf/options.js'
-import { SAFE_METHODS } from '../../../core/csrf/origin.js'
 import { csrfMarkOf } from '../../../core/csrf/route.js'
-import type { RouteRecord, RouteSecurityRecord } from '../../../core/routing/inventory.js'
+import { csrfOf, type RouteRecord, type RouteSecurityRecord } from '../../../core/routing/inventory.js'
 import { AuthenticationGates } from '../../../core/security/auth/gates.js'
 import { AuthenticationSchemeProvider } from '../../../core/security/auth/scheme_provider.js'
 import { csrfCovering } from '../csrf/csrf.js'
@@ -93,7 +91,7 @@ function securityOf(scope: SecurityScope, { route, url, method, context }: Regis
       defaultPolicy: authz?.options?.defaultPolicy === true,
     },
     guards: (compiled?.route.guards ?? []).map(guard => guard.name),
-    csrf: csrfOf([method].flat(), url, route.config, context),
+    csrf: csrfOf([method].flat(), url, csrfMarkOf(route.config), csrfCovering(context)),
   }
 }
 
@@ -114,34 +112,4 @@ function schemaOf(schema: Partial<Record<keyof RouteRecord['schema'], unknown>>)
     body: schema.body !== undefined,
     response: schema.response !== undefined,
   }
-}
-
-function csrfOf(
-  methods: readonly string[],
-  url: string,
-  config: unknown,
-  context: object,
-): RouteSecurityRecord['csrf'] {
-  const mark = csrfMarkOf(config)
-
-  if (mark === true) {
-    return 'exempt'
-  }
-
-  if (methods.every(method => SAFE_METHODS.has(method))) {
-    return 'safe'
-  }
-
-  const covers = csrfCovering(context)
-
-  if (covers.length === 0) {
-    return 'uncovered'
-  }
-
-  // A route's own `false` mark keeps it protected under an excluded prefix.
-  if (mark === undefined && covers.every(exclude => isExcluded(url, exclude))) {
-    return 'excluded'
-  }
-
-  return 'protected'
 }

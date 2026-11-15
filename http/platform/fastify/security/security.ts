@@ -1,30 +1,25 @@
-import { ErrFeatureNotInstalled } from '@caffeinejs/application'
 import type { Container } from '@caffeinejs/di'
 import type { FastifyPluginAsync, FastifyRequest, RouteOptions } from 'fastify'
 import fp from 'fastify-plugin'
 
-import type { IContext } from '../../../context.js'
 import {
   ErrAuthenticationCookies,
   ErrAuthenticationGateRequired,
   ErrAuthenticationRequired,
-  ErrAuthSchemeNotFound,
 } from '../../../core/security/auth/errors.js'
 import { AuthenticationGates } from '../../../core/security/auth/gates.js'
-import { kAuthSchemeDescriptors } from '../../../core/security/auth/keys.js'
 import { OIDCRoutesRef } from '../../../core/security/auth/oidc/oidc_routes_ref.js'
-import { AuthenticationSchemeProvider } from '../../../core/security/auth/scheme_provider.js'
 import { AuthenticationService } from '../../../core/security/auth/service.js'
 import { kAuthzHandlers, kAuthzOpts } from '../../../core/security/authz/keys.js'
 import { newPolicyEvaluator } from '../../../core/security/authz/policy.js'
 import { AuthzRouteService } from '../../../core/security/authz/route_service.js'
-import { anonymousUser, mergePrincipals, type Principal } from '../../../core/security/identity.js'
+import { authenticateAndAuthorize, resolveGate, type GatedRoute } from '../../../core/security/gate.js'
 import { AuthenticationGateBuilder, kGateOptions } from '../../../core/security/security.js'
 import type { HTTPPluginConfigurer } from '../../../plugin.js'
+import { kFastifyOnly } from '../../../plugin_marks.js'
 import type { RouterTypes } from '../adapter.js'
 import { hasServerCookies } from '../cookie/cookie.js'
 import type { HTTPPluginFactory } from '../plugin.js'
-import { type GatedRoute } from '../routing/route_config.js'
 import { oidcRoutesPlugin } from './auth/oidc/oidc.js'
 
 /** A route as it registered: its options, and the server context it registered on. */
@@ -80,7 +75,11 @@ export function assertRoutesGated(container: Container, registered: readonly Reg
     throw new ErrAuthenticationRequired()
   }
 
-  throw new ErrAuthenticationGateRequired(Array.from(ungated, ([url, methods]) => `${[...methods].join('|')} ${url}`))
+  throw new ErrAuthenticationGateRequired(
+    Array.from(ungated, ([url, methods]) => `${[...methods].join('|')} ${url}`),
+    'Or exempt a raw route: "authenticationExempt()" as its config, or "exemptFromAuthentication(route)" from an ' +
+      '"onRoute" hook for a route another plugin registers',
+  )
 }
 
 /**
@@ -140,28 +139,12 @@ export function authentication<C = unknown>(
     const builder = new AuthenticationGateBuilder()
     configure?.(builder, context)
 
-    const { label, defaultScheme: override, oidcRoutes } = builder[kGateOptions]()
-
-    // Factories run at start-up: a gate registered without the feature is a boot failure naming the fix,
-    // never a server that quietly authenticates nobody.
-    if (!context.hasFeature('auth')) {
-      throw new ErrFeatureNotInstalled(
-        'auth',
-        'Install authentication on the application: ".install(Authentication(a => a.addJWTBearer(...)))"',
-      )
-    }
-
+    const { label, override, defaultScheme, oidcRoutes, service, cookieScheme } = resolveGate(
+      context,
+      builder[kGateOptions](),
+    )
     const container = context.container
-    const service = container.get(AuthenticationService)
-    const schemeProvider = container.get(AuthenticationSchemeProvider)
-
-    if (override !== undefined && schemeProvider.schemeFor(override) === undefined) {
-      throw new ErrAuthSchemeNotFound(override, schemeProvider.schemeNames)
-    }
-
-    const defaultScheme = override ?? schemeProvider.defaultAuthenticateScheme
     const fallback = fallbackFor(container)
-    const cookieScheme = cookieSchemeOf(container)
     const gates = container.get(AuthenticationGates)
     const gateID = Symbol(label)
 
@@ -229,9 +212,12 @@ export function authentication<C = unknown>(
       })
     }
 
-    return fp(plugin, {
+    const registered = fp(plugin, {
       name: label === 'default' ? 'caffeine-authentication' : `caffeine-authentication:${label}`,
     })
+    // The engine refuses a Fastify plugin; this mark lets it name the import it takes instead.
+    ;(registered as { [kFastifyOnly]?: string })[kFastifyOnly] = 'authentication'
+    return registered
   }
 }
 
@@ -241,18 +227,6 @@ export interface Fallback {
   for(request: FastifyRequest): GatedRoute | undefined
   /** For the route registered under `path`, which is how start-up asks. */
   forPath(path: string): GatedRoute | undefined
-}
-
-/** A scheme that keeps its session in a cookie, or `undefined` when none does. */
-function cookieSchemeOf(container: Container): string | undefined {
-  // Bound by the `auth` feature, which the factory has already found installed.
-  for (const [name, descriptor] of container.get(kAuthSchemeDescriptors)) {
-    if (descriptor.in === 'cookie') {
-      return name
-    }
-  }
-
-  return undefined
 }
 
 /** The application's {@link Fallback}, or `undefined` when it set no fallback policy. */
@@ -291,102 +265,4 @@ export function fallbackFor(container: Container): Fallback | undefined {
     },
     forPath,
   }
-}
-
-/**
- * Establishes `ctx.user`, then runs the route's authorization. Resolves to whether the request may go on.
- *
- * `challengeScheme` is a gate's `defaultScheme(...)` override, when it set one: a route that names no scheme
- * is then challenged by the gate's own default rather than by the application's challenge chain, so the gate
- * that authenticates a route is also the one whose scheme answers it.
- */
-async function authenticateAndAuthorize(
-  ctx: IContext,
-  service: AuthenticationService,
-  defaultScheme: string,
-  route: GatedRoute | undefined,
-  challengeScheme?: string,
-): Promise<boolean> {
-  const schemes = route?.schemes
-  const named = schemes !== undefined && schemes.length > 0 && route?.allowAnonymous !== true
-
-  ctx.user = named
-    ? await authenticateNamed(ctx, service, schemes)
-    : await authenticateDefault(ctx, service, defaultScheme)
-
-  const authorizer = route?.authorizer
-  if (authorizer == null) {
-    return true
-  }
-
-  const result = await authorizer.authorize(ctx, ctx.user)
-  if (result.ok) {
-    return true
-  }
-
-  // A route that names schemes must be challenged by those, not by the application default. Otherwise a
-  // Basic-protected route in a browser-first application answers with the default scheme's redirect, which
-  // an API client can neither follow nor satisfy. An unnamed route passes the gate's override, or `undefined`
-  // for the application's own challenge chain.
-  const challenged: Array<string | undefined> = schemes?.length ? [...schemes] : [challengeScheme]
-
-  if (!ctx.user.authenticated) {
-    // Every named scheme gets to contribute, each appending its own `WWW-Authenticate`, so a route accepting
-    // Basic or Bearer advertises both. A scheme that answers the request itself — a redirect to a login page, a
-    // body — has taken the response: one after it would turn the redirect back into a 401, or write to a reply
-    // that already left.
-    for (const scheme of challenged) {
-      await service.challenge(ctx, scheme)
-
-      if (ctx.sent || (ctx.statusCode >= 300 && ctx.statusCode < 400)) {
-        break
-      }
-    }
-  } else {
-    // Forbid is a single decision, not an advertisement: the caller is authenticated and simply not
-    // permitted, so repeating it per scheme would just overwrite one 403 with another.
-    await service.forbid(ctx, challenged[0])
-  }
-
-  return false
-}
-
-async function authenticateDefault(
-  ctx: IContext,
-  service: AuthenticationService,
-  defaultScheme: string,
-): Promise<Principal> {
-  const result = await service.authenticate(ctx, defaultScheme)
-  return result.succeeded ? result.ticket!.principal : anonymousUser()
-}
-
-/**
- * Re-authenticates a route that names its own schemes, accepting those and nothing else.
- *
- * **The reset is the security-relevant part.** A route naming schemes never inherits the principal the
- * default scheme would have produced, so a caller holding a valid default-scheme credential cannot sail
- * through a route that demands something else: authorization would otherwise see an authenticated user and
- * allow it, and naming a scheme would *widen* access rather than narrow it. Anything the named schemes do
- * not accept is anonymous by the time authorization looks.
- *
- * Every named scheme runs, and every one that succeeds contributes its identities — not the first that
- * succeeds. A route naming two schemes is describing what it accepts, so which of them the caller satisfied
- * should not decide which claims the policy gets to see, and a caller presenting both credentials should
- * not have one silently discarded because of decorator ordering.
- */
-async function authenticateNamed(
-  ctx: IContext,
-  service: AuthenticationService,
-  schemes: readonly string[],
-): Promise<Principal> {
-  let user: Principal | undefined
-
-  for (const scheme of schemes) {
-    const result = await service.authenticate(ctx, scheme)
-    if (result.succeeded) {
-      user = mergePrincipals(user, result.ticket!.principal)
-    }
-  }
-
-  return user ?? anonymousUser()
 }

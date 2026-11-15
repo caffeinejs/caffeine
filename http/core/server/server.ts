@@ -8,6 +8,7 @@ import { stripBasePath } from '../../base_path.js'
 import { kRouteConstraints } from '../constraints/keys.js'
 import { kCookieSettings } from '../cookie/keys.js'
 import { kCookieFlush, kPendingCookies, ServerCookies, type CookieWriter } from '../cookie/server_cookies.js'
+import { csrfCoversOf } from '../csrf/csrf.js'
 import { problemEncoder } from '../error/encode.js'
 import { ErrorHandlerProvider } from '../error/handler.js'
 import { ErrHTTPNotFound, ErrHTTPServiceUnavailable } from '../error/http.js'
@@ -30,6 +31,7 @@ import { ErrRouteConflict, type RouteMatch, type RouteMatcher } from '../matcher
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
 import { joinPaths, pathsOf } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
+import { assertGated, gateOf } from '../security/gate.js'
 import type { CompiledSerializer } from '../validation/validation.js'
 import { answer, byteLength, compileSerializers, connectionFields, NO_SERIALIZER } from './answer.js'
 import { Context, kAppendCookies, type ServerShared } from './context.js'
@@ -381,6 +383,7 @@ export class HTTPServer {
     const registered: Array<{
       readonly route: IRoute<Context>
       readonly group: IRouteGroup<Context>
+      readonly definition: RouteDefinition
       readonly methods: string[]
       readonly url: string
     }> = []
@@ -402,7 +405,7 @@ export class HTTPServer {
           }
         }
 
-        registered.push({ route, group, methods, url: paths[0] })
+        registered.push({ route, group, definition: store.definition!, methods, url: paths[0] })
 
         if (methods.includes('GET')) {
           twins.push({ store: { ...store, twin: true }, paths, methods })
@@ -430,7 +433,12 @@ export class HTTPServer {
       }
     }
 
-    return registered.map(({ route, group, methods, url }) => routeRecord(route, group, methods, url))
+    // Once every gate's `onRoute` has run, and the HEAD twins are in `methods`.
+    assertGated(registered)
+
+    return registered.map(({ route, group, definition, methods, url }) =>
+      routeRecord(route, group, methods, url, { gate: gateOf(definition)?.label, csrf: csrfCoversOf(definition) }),
+    )
   }
 
   /**
@@ -1103,7 +1111,6 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
     [route.config.has('cache') || route.config.has('cacheInvalidate'), '@CacheControl or @CacheInvalidate'],
     // Read by the Fastify CORS plugin, which the engine does not run yet. A plugin's own key is served: it reads it.
     [route.config.has('cors'), '@CORS()'],
-    [route.authorization.authorizer != null, 'a protected route, which needs an authentication gate'],
     [types.has('fastify:request') || types.has('fastify:reply'), 'the Fastify request or reply'],
   ]
   const unsupported = refusals.find(([applies]) => applies)?.[1]

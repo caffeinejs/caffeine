@@ -1,9 +1,23 @@
 import type { Container } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/err'
 
+import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
+import type { IContext } from '../../context.js'
+import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
+import { kEngineOnly } from '../../plugin_marks.js'
+import { kCookieSettings } from '../cookie/keys.js'
 import type { IRouteGroup } from '../routing/route.js'
-import { ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
+import {
+  ErrAuthConfiguration,
+  ErrAuthenticationCookies,
+  ErrAuthenticationRequired,
+  ErrAuthSchemeNotFound,
+} from './auth/errors.js'
+import { OIDCRoutesRef } from './auth/oidc/oidc_routes_ref.js'
+import { mountOIDCRoutes } from './auth/oidc/routes.js'
 import { AuthenticationSchemeProvider } from './auth/scheme_provider.js'
 import { AuthenticationService } from './auth/service.js'
+import { authenticateAndAuthorize, gateOf, ownRoute, resolveGate, type GatedRoute, type ResolvedGate } from './gate.js'
 
 /**
  * Refuses an application that protects a route and never configured authentication.
@@ -63,10 +77,10 @@ export class AuthenticationGateBuilder {
   #oidcRoutes = true
 
   /**
-   * Names this gate. The label distinguishes the gate's `fastify-plugin` registration —
-   * `caffeine-authentication` for the default, `caffeine-authentication:<label>` otherwise — so a second gate
-   * on one registration chain (a scoped gate under a root one) must carry its own label, and an accidental
-   * duplicate is refused at start-up instead of authenticating every request twice.
+   * Names this gate: `caffeine-authentication` for the default, `caffeine-authentication:<label>` otherwise. Two
+   * gates under one label are refused at start-up, on one registration chain on Fastify, and on the web-standards
+   * engine in one slot or when both cover a route, so a gate inside a route group under a root gate carries its own
+   * label.
    */
   name(label: string): this {
     this.#label = label
@@ -92,7 +106,8 @@ export class AuthenticationGateBuilder {
    * Whether this gate may claim the OIDC login and callback routes, which the first installing gate registers
    * once for the whole application. On by default. Turn it off on a gate registered inside a prefixed route
    * group: the routes would land under the group's prefix, where the identity provider's `callbackURL` never
-   * arrives.
+   * arrives. On the web-standards engine only a gate on a server registers them; a router's gate that keeps them on
+   * fails start-up unless a gate on its server, or on one built before it, claimed them.
    */
   oidcRoutes(enabled: boolean): this {
     this.#oidcRoutes = enabled
@@ -102,4 +117,136 @@ export class AuthenticationGateBuilder {
   [kGateOptions](): { label: string; defaultScheme: string | undefined; oidcRoutes: boolean } {
     return { label: this.#label, defaultScheme: this.#defaultScheme, oidcRoutes: this.#oidcRoutes }
   }
+}
+
+/**
+ * The authentication gate on the web-standards engine: authenticates the request and, when the route is protected,
+ * authorizes it, in that order, in one `onRequest` hook. Requires `Authentication(...)` to be installed; the feature
+ * binds what the gate runs on. A Fastify application takes `authentication` from `@caffeinejs/http/fastify`, and
+ * refuses this one at start-up.
+ *
+ * The hook runs at `onRequest`, before the body is parsed or validated: an unauthenticated caller is answered 401,
+ * not a 400 describing the route's schema. It runs where the gate was registered among the plugins, and before the
+ * guards: a plugin registered before it, such as cross-origin protection, runs first.
+ *
+ * Registered with `.with(authentication())`, the gate covers every route of the application's own server; with a
+ * listener's `l.with(authentication())`, every route of that server; with
+ * `router.with(authentication(g => g.name('admin')))`, the router's routes alone. Where several gates cover a route,
+ * the innermost authenticates and challenges it, and the others stand down. Two gates under one label never cover
+ * one route.
+ *
+ * Start-up refuses a protected route, one declaring protection or one the fallback policy reaches, when no gate
+ * covers it: installing `Authentication(...)` is not what gates a request.
+ *
+ * The OIDC sign-in and callback routes are registered once, by the first gate on a server that keeps them on; servers
+ * are built the application's own first. A gate on a router does not register them.
+ *
+ * @throws ErrFeatureNotInstalled at start-up when `Authentication(...)` is not installed.
+ * @throws ErrAuthSchemeNotFound at start-up when the gate's `defaultScheme(...)` names an unregistered scheme.
+ * @throws ErrAuthenticationCookies at start-up when a scheme keeps its session in a cookie and cookies are off.
+ * @throws ErrConfiguration at start-up when two gates under one label would cover one route.
+ * @throws ErrAuthConfiguration at start-up when a gate on a router keeps the OIDC routes on and no gate on its server,
+ * or on a server built before it, registered them.
+ */
+export function authentication<C = unknown>(
+  configure?: HTTPPluginConfigurer<AuthenticationGateBuilder, C>,
+): AdapterExtensionFactory<HTTPPlugin, C> {
+  return context => {
+    const builder = new AuthenticationGateBuilder()
+    configure?.(builder, context)
+
+    return new AuthenticationGate(resolveGate(context, builder[kGateOptions]()))
+  }
+}
+
+class AuthenticationGate extends HTTPPlugin {
+  override readonly name: string
+  readonly [kEngineOnly] = 'authentication'
+  readonly #gate: ResolvedGate
+
+  constructor(gate: ResolvedGate) {
+    super()
+    this.#gate = gate
+    this.name = gate.label === 'default' ? 'caffeine-authentication' : `caffeine-authentication:${gate.label}`
+  }
+
+  register(context: HTTPSetupContext): void {
+    const { label, override, defaultScheme, oidcRoutes, service, cookieScheme } = this.#gate
+
+    // Refused as the server starts, rather than as every request carrying the cookie failing to read it.
+    if (cookieScheme !== undefined && !context.container.get(kCookieSettings).enabled) {
+      throw new ErrAuthenticationCookies(cookieScheme)
+    }
+
+    if (oidcRoutes) {
+      claimOIDCRoutes(context, this.name)
+    }
+
+    const id = Symbol(label)
+    context.app.hook('onRoute', route => ownRoute(route, id, label))
+    context.app.hook('onRequest', ctx => {
+      const route = ctx.route
+      // This gate's `onRoute` saw every route its `onRequest` covers: the entry names the innermost gate. A miss has
+      // none, and is authenticated by the default scheme and authorized by nothing.
+      const entry = route === undefined ? undefined : gateOf(route)
+      if (entry !== undefined && (entry.id !== id || entry.skip)) {
+        return
+      }
+
+      return gate(ctx, service, defaultScheme, entry?.gated, override)
+    })
+  }
+}
+
+/** Authenticates and authorizes, and sends what challenge() or forbid() set when the request may not go on. */
+async function gate(
+  ctx: IContext,
+  service: AuthenticationService,
+  defaultScheme: string,
+  route: GatedRoute | undefined,
+  override: string | undefined,
+): Promise<void> {
+  // challenge() and forbid() set the status and headers, or a redirect: an empty body sends them.
+  if (!(await authenticateAndAuthorize(ctx, service, defaultScheme, route, override)) && !ctx.sent) {
+    ctx.body()
+  }
+}
+
+/**
+ * Serves the OIDC routes from the first gate on a server that keeps them on. A router's or a controller's slot belongs
+ * to no server: whether a gate on a server claimed them, on any server built so far, is known once the server this
+ * router is served on is ready.
+ */
+function claimOIDCRoutes(context: HTTPSetupContext, gate: string): void {
+  const oidc = context.container.getOptional(OIDCRoutesRef)
+  if (oidc === undefined) {
+    return
+  }
+
+  const server = context.app.server
+  if (server !== undefined) {
+    if (!oidc.claimed) {
+      oidc.claimed = true
+      mountOIDCRoutes(context, oidc.meta, server.basePath)
+    }
+    return
+  }
+
+  context.app.hook('onReady', () => {
+    if (!oidc.claimed) {
+      throw new ErrAuthConfiguration(
+        errMessage(
+          `Cannot serve the OIDC sign-in and callback routes from gate "${gate}" on a router: on the ` +
+            'web-standards engine only a gate on a server registers them, and none on this server or one built ' +
+            'before it did',
+        )
+          .solutions(
+            'Register a gate on the application, whose server is built first: ".with(authentication())"',
+            'Or turn them off on the router\'s gate: "authentication(g => g.oidcRoutes(false))"',
+          )
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
+      )
+    }
+  })
 }
