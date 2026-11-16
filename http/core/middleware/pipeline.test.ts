@@ -4,12 +4,13 @@ import { type AddressInfo, connect } from 'node:net'
 import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/application/config'
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC, token, type Container } from '@caffeinejs/di'
-import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
+import fastify, { type FastifyInstance, type FastifyReply, type FastifyServerOptions } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
 import { installMiddlewares, type MiddlewareHook } from '../../platform/fastify/middleware/middleware.js'
+import { recordRouterFlags } from '../../platform/fastify/router.js'
 import { closedApplicationOps } from '../../plugin_slot.js'
 import { Keys } from '../../symbols.js'
 import { ErrNextCalledTwice } from './errors.js'
@@ -62,6 +63,13 @@ function attachContext(server: FastifyInstance): void {
   })
 }
 
+// A bare server with its router flags recorded, as the adapter records them on every server it builds.
+function built(options: FastifyServerOptions = {}): FastifyInstance {
+  const server = fastify(options)
+  recordRouterFlags(server, options)
+  return server
+}
+
 async function serve(
   pipeline: MiddlewarePipeline,
   options: {
@@ -71,7 +79,7 @@ async function serve(
     routes?: (server: FastifyInstance) => void
   } = {},
 ): Promise<FastifyInstance> {
-  const server = options.server ?? fastify()
+  const server = options.server ?? built()
   if (options.context !== false) {
     attachContext(server)
   }
@@ -85,7 +93,14 @@ async function serve(
 }
 
 function stubServer(added: string[]): FastifyInstance {
-  return { addHook: (hook: string) => void added.push(hook), initialConfig: {} } as never
+  const server = {
+    addHook: (hook: string) => void added.push(hook),
+    decorate(name: symbol, value: unknown) {
+      Object.defineProperty(server, name, { value })
+    },
+  }
+  recordRouterFlags(server as never, {})
+  return server as never
 }
 
 // Blocks every request that does not carry the key, the way a path-scoped auth middleware would.
@@ -581,7 +596,7 @@ describe('MiddlewarePipeline path matching', () => {
     const routerOptions = { ignoreDuplicateSlashes: true, ignoreTrailingSlash: true, useSemicolonDelimiter: true }
     const pipeline = new MiddlewarePipeline().add('/secret', guard)
     const server = await serve(pipeline, {
-      server: fastify({ routerOptions }),
+      server: built({ routerOptions }),
       routes: s => s.get('/secret', () => ({ secret: true })),
     })
 
