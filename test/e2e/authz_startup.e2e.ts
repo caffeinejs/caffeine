@@ -1,5 +1,11 @@
-import { type AuthenticationBuilder, type AuthorizationBuilder, Authentication, Authorization } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import {
+  authentication,
+  type AuthenticationBuilder,
+  type AuthorizationBuilder,
+  Authentication,
+  Authorization,
+} from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/node'
 import { describe, expect, it } from 'vitest'
 
 import { startApp, type E2EApplication } from './internal/app.js'

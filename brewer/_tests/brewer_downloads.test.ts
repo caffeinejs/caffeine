@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { Attachment, Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
@@ -150,10 +151,10 @@ const downloads = new Router('/downloads')
   .get('/archive')
   .handler(() => Attachment(archive(), { name: 'archive.bin' }))
 
-// A client that stops a download part-way can leave the server a connection with no request on it, which its
-// graceful close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
+// A client that stops part-way can leave a connection holding a partial request, which a graceful close would wait
+// out (caffeinejs/caffeine#131): the close cuts it after a second.
 const app = createWebApplication()
-  .server(() => ({ factory: { forceCloseConnections: true } }))
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(downloads)
 
 let origin: string

@@ -1,5 +1,5 @@
-import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { authentication, Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'

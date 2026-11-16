@@ -1,5 +1,6 @@
 import { once } from 'node:events'
 
+import { ErrApplicationClosed } from '@caffeinejs/application'
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -28,6 +29,18 @@ async function ready(routes: ReturnType<typeof newRouter>): Promise<App> {
 }
 
 describe('request() on the Node application', () => {
+  // A dead application stops answering as if it still served: a test that reaches one after close() learns it at once.
+  it('rejects with ErrApplicationClosed once close() has torn the server down', async () => {
+    const routes = newRouter('/a')
+    routes.get('/hi').handler(() => 'hi')
+    const app = await ready(routes)
+    expect((await app.request('/a/hi')).status).toBe(200)
+
+    await app.close()
+
+    await expect(app.request('/a/hi')).rejects.toBeInstanceOf(ErrApplicationClosed)
+  })
+
   // A forced close cuts what is still in flight, as it destroys a socket's: the caller is never handed an answer the
   // handler did not give, and learns why as on the fetch application.
   it('fails a pending call that a forced close cuts with the 503 error, rather than answering it 500', async () => {

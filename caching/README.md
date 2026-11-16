@@ -25,7 +25,7 @@ plugin fails at `app.bootstrap()`. There is no default store: you pass one.
 import { CacheControl, CacheInvalidate, HTTPCaching } from '@caffeinejs/caching/http'
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
 import { Controller, Get, Put } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Minute } from '@caffeinejs/std/duration'
 
 @Controller('/pets')
@@ -325,12 +325,10 @@ It installs on the whole application, or on one route group with `router.with(HT
 `@Use(HTTPCaching(...))`, each install with its own store and settings. A group that declares caching and
 installs nothing, under an application that installs nothing, fails at `app.bootstrap()`.
 
-Order matters in two places:
+Order matters in one place:
 
 - Install it after the authentication gate, `.with(authentication())`. Guards run before the cache, on a hit as
   well as on a miss, so a cached response never skips authorization.
-- Install it before a plugin that compresses responses. Installed after one, the cache is handed a stream, which
-  is neither hashed nor stored, and `onSkip` is told (`stream`).
 
 The default `ETag` is a strong tag hashed from the payload before any content-coding. Behind a compressor, the
 one tag goes out with every coding; if that matters, pass an `etagGenerator` that returns weak tags (`W/"..."`).

@@ -25,7 +25,7 @@ export default defineConfig({
       '@caffeinejs/http/decorators/registrar': fileURLToPath(
         new URL('../../http/decorators/registrar/index.ts', import.meta.url),
       ),
-      '@caffeinejs/http/fastify': fileURLToPath(new URL('../../http/platform/fastify/index.ts', import.meta.url)),
+      '@caffeinejs/http/node': fileURLToPath(new URL('../../http/platform/node/index.ts', import.meta.url)),
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
     },
   },

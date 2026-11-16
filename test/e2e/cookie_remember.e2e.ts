@@ -3,6 +3,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import {
+  authentication,
   AuthenticationService,
   AuthenticationTicket,
   type CredentialUser,
@@ -14,7 +15,7 @@ import {
   UserProvider,
   Authentication,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { newRouter } from '@caffeinejs/http/node'
 import { Hour, Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 

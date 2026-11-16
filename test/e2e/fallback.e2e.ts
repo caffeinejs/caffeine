@@ -1,7 +1,14 @@
-import { Authentication, Authorization, healthProbes } from '@caffeinejs/http'
-import { authenticationExempt, newRouter, authentication } from '@caffeinejs/http/fastify'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
+import {
+  accessControlExempt,
+  authentication,
+  Authentication,
+  Authorization,
+  healthProbes,
+  HTTPPlugin,
+  Router,
+  type HTTPSetupContext,
+} from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -9,12 +16,24 @@ import { Browser, type BrowserResponse } from './internal/browser/index.js'
 import { bearer, localJWT } from './internal/tokens.js'
 
 /**
- * "Every route requires a signed-in user unless it says otherwise", asked of the routes the application's router
- * never compiled: the ones a plugin registers straight on the server. They carry no `@Authorize` to forget, so the
- * fallback policy is the only thing standing in front of them.
+ * "Every route requires a signed-in user unless it says otherwise", asked of the routes the application never mounted
+ * itself: the ones a plugin mounts from its `register`. They carry no `@Authorize` to forget, so the fallback policy is
+ * the only thing standing in front of them.
  */
 
 const ok = () => ({ ok: true })
+
+class PlainRoutes extends HTTPPlugin {
+  override readonly name = 'e2e-plain-routes'
+
+  register({ app }: HTTPSetupContext): void {
+    app.mount(
+      new Router().get('/admin-ui/users', ok).get('/assets-but-not-really', ok),
+      new Router('/assets').authorize({ allowAnonymous: true }).get('/app.js', ok),
+      new Router('/metrics').extend(accessControlExempt()).get('/', ok),
+    )
+  }
+}
 
 describe('a fallback policy in front of routes a plugin registered on the server', () => {
   let running: RunningApp
@@ -30,19 +49,9 @@ describe('a fallback policy in front of routes a plugin registered on the server
       app
         .install(Authentication(auth => auth.addJWTBearer(localJWT)))
         .with(authentication())
-        .install(Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets/'] })))
+        .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
         .with(healthProbes())
-        .with(() =>
-          fp(
-            async (instance: FastifyInstance) => {
-              instance.get('/admin-ui/users', ok)
-              instance.get('/assets/app.js', ok)
-              instance.get('/assets-but-not-really', ok)
-              instance.get('/metrics', { config: authenticationExempt() }, ok)
-            },
-            { name: 'e2e-plain-routes' },
-          ),
-        )
+        .with(() => new PlainRoutes())
         .mount(newRouter('/compiled').get('/', ok)),
     )
   })
@@ -59,7 +68,7 @@ describe('a fallback policy in front of routes a plugin registered on the server
     expect((await get('/admin-ui/users', token)).status).toBe(200)
   })
 
-  it('leaves open what the application listed as public, by the route’s own path and not by a look-alike', async () => {
+  it('opens the routes a router declared public, and keeps gated a neighbour that declares nothing', async () => {
     expect((await get('/assets/app.js')).status).toBe(200)
     expect((await get('/assets-but-not-really')).status).toBe(401)
   })

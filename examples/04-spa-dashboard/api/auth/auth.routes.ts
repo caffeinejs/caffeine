@@ -5,7 +5,7 @@ import {
   ErrHTTPBadRequest,
   type Principal,
 } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/fastify'
+import { newRouter } from '@caffeinejs/http/node'
 
 /** The scheme's registered name. `addCookie(...)` with no name uses this one. */
 const SCHEME = 'Cookie'

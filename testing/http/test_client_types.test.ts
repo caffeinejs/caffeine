@@ -1,7 +1,7 @@
 import { $t } from '@caffeinejs/application/schema'
 import type { Authenticator, Interceptor } from '@caffeinejs/brewer'
 import { Router, blend } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import { testClient } from './index.js'

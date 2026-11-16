@@ -13,7 +13,7 @@ import {
   Schema,
   type ActionResult,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { describe, it, expect } from 'vitest'
 
 import { FallbackErrorHandler, HTTPErrorHandler, type ErrorBody } from './error.handlers.js'

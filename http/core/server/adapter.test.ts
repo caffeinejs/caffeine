@@ -1,3 +1,4 @@
+import { ErrApplicationClosed } from '@caffeinejs/application'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
@@ -10,6 +11,8 @@ import { Router } from '../routing/programmatic/programmatic.js'
 import { Authentication } from '../security/auth/auth.js'
 import { BaseAuthenticationHandler } from '../security/auth/handler.js'
 import { AuthenticateResult } from '../security/auth/ticket.js'
+import { Authorization } from '../security/authz/index.js'
+import { authentication } from '../security/security.js'
 import type { FetchAdapterTypes } from './adapter.js'
 
 /** A scheme that authenticates nobody: enough for a gate to be built. */
@@ -154,5 +157,47 @@ describe('the fetch adapter', () => {
 
     expect(await res.text()).toBe('jobs')
     expect((await app.fetch(new Request('http://localhost/jobs'))).status).toBe(404)
+  })
+
+  // `except` exempts only what a plugin registers straight on a Fastify server; here it would exempt nothing, silently.
+  it("refuses the fallback policy's except, which no compiled route reads", async () => {
+    app = createWebApplication()
+      .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
+      .with(authentication())
+      .install(Authorization(z => z.requireAuthenticatedByDefault({ except: ['/assets'] })))
+      .mount(new Router('/assets').get('/').handler(() => 'a'))
+
+    const booting = app.run()
+
+    await expect(booting).rejects.toThrow(ErrConfiguration)
+    const err = (await booting.catch((e: unknown) => e)) as Error
+    expect(err.message.split('\n')[0]).toBe(
+      'Cannot use the except "/assets" of requireAuthenticatedByDefault() or fallbackPolicy() on the fetch ' +
+        'application: it exempts only routes registered straight on a Fastify server, and this application compiles ' +
+        'every route',
+    )
+  })
+
+  it('accepts an empty except, which leaves every route that declares nothing gated', async () => {
+    app = createWebApplication()
+      .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
+      .with(authentication())
+      .install(Authorization(z => z.requireAuthenticatedByDefault({ except: [] })))
+      .mount(new Router('/assets').get('/').handler(() => 'a'))
+
+    await app.run()
+
+    expect((await app.request('/assets')).status).toBe(401)
+  })
+
+  // request() is the in-process call a test makes; a closed application refuses it rather than answering 503 for good.
+  it('rejects request() with ErrApplicationClosed once close() has torn the server down', async () => {
+    app = createWebApplication().mount(new Router('/x').get('/').handler(() => 'x'))
+    await app.run()
+    expect((await app.request('/x')).status).toBe(200)
+
+    await app.close()
+
+    await expect(app.request('/x')).rejects.toBeInstanceOf(ErrApplicationClosed)
   })
 })

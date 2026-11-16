@@ -1,4 +1,5 @@
 import {
+  authentication,
   AuthenticateResult,
   AuthenticationService,
   AuthenticationTicket,
@@ -9,7 +10,7 @@ import {
   Principal,
   Authentication,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { newRouter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'

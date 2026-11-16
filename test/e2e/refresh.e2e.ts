@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import {
+  authentication,
   Claim,
   type CredentialUser,
   CredentialsService,
@@ -14,7 +15,7 @@ import {
   UserProvider,
   Authentication,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { newRouter } from '@caffeinejs/http/node'
 import { Hour, Minute } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 

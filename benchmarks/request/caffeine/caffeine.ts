@@ -11,8 +11,9 @@ import {
   UseGuards,
   type Guard,
   type GuardInput,
+  type IContext,
 } from '@caffeinejs/http'
-import { createWebApplication, Context } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 
@@ -57,7 +58,7 @@ class AppController {
   @UseGuards(APIKeyGuard)
   @Args([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
   @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
-  helloWorld(ctx: Context, params: DataSchema, query: DataSchema, body: DataSchema, header: Record<string, string>) {
+  helloWorld(ctx: IContext, params: DataSchema, query: DataSchema, body: DataSchema, header: Record<string, string>) {
     ctx.header('text', header.text)
     ctx.header('num', header.num)
     ctx.header('bool', header.bool)

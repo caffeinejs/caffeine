@@ -1,4 +1,5 @@
 import {
+  authentication,
   $p,
   AllowAnonymous,
   Args,
@@ -11,7 +12,7 @@ import {
   Authentication,
   Authorization,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { newRouter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'

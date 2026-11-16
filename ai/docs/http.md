@@ -1,12 +1,14 @@
 # HTTP
 
-Package: `@caffeinejs/http`. Adapter is Fastify: what is Fastify-specific — `createWebApplication()`, `newRouter()`,
-`HTTPPluginFactory`, and plugin factories such as `authentication()` — is imported from `@caffeinejs/http/fastify`.
-`healthProbes()` runs on any adapter and is imported from `@caffeinejs/http/health`.
+Package: `@caffeinejs/http`. Two applications serve on the web-standards engine. The Node application,
+`createWebApplication()` and `newRouter()` from `@caffeinejs/http/node`, listens on a node:http, node:https or
+node:http2 server. The fetch application, `createWebApplication()` from `@caffeinejs/http`, has no socket of its own:
+the runtime calls `app.fetch`, as Bun, Deno and workers do. `authentication()`, `csrf()`, `cors()`, `corsPolicy()`,
+`healthProbes()`, cookies and error handling are imported from `@caffeinejs/http` and run on both.
 
 ```ts
 import { Controller, Get, Post, Args, $p } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 
 @Controller('/examples')
 export class ExampleController {
@@ -22,43 +24,57 @@ export class ExampleController {
   }
 }
 
-const app = createWebApplication().server(({ config }) => ({ listener: config.server }))
+const app = createWebApplication().server(({ config }) => ({ listen: config.server }))
 
-await app.run() // or app.run({ port: 3000 })
+const { address } = await app.run() // or app.run({ port: 3000 }); address.origin is the URL it serves
 ```
 
-The adapter builds the Fastify instance itself; `.server(configure)` is how it is configured — `factory` for
-Fastify's constructor options, `listener` for `listen()`. `.serverCallback(callback)` gets the setup context and the
-bare instance before anything registers.
+`.server(configure)` configures the server it builds. `listen` takes node:net's listen options, `http`, `https` and
+`http2` the node server's own, and `bodyLimit`, `handlerTimeout`, `trustProxy`, `router`, `requestIDHeader` and
+`schemaCompiler` the engine's. `run(options)` takes node:net's `ListenOptions`, merged over `listen` key by key.
+`app.instance` is the node:http, node:https or node:http2 server. `.serverCallback(callback)` gets the setup context
+and that server before it serves. `factory` and `listener` are refused at start-up.
+
+The fetch application takes the same engine settings and none of the Node ones. Start it, then hand `app.fetch` to the
+runtime:
+
+```ts
+import { createWebApplication } from '@caffeinejs/http'
+
+const app = createWebApplication({ config }).mount(pets)
+await app.run()
+
+export default { fetch: app.fetch } // Bun, Deno, workers
+```
 
 Side-effect-import the controller file from `main.ts` so `@Controller` registers.
 
 - Routes: method decorators (`@Get`, `@Post`, …) on a `@Controller(path)` class. Constructor injection via `@Injectable` / the controller decorator’s dependency list.
 - `@Args` / `$p` pick body, params, query — same idea as Kafka `$k`.
-- `@Prefix` is a Fastify plugin prefix; `@Controller('/api/pets')` is the URL path, not a 404-scoped `/api` bubble.
+- `@Prefix` goes before the controller's path; `@Controller('/api/pets')` is the URL path, not a 404-scoped `/api` bubble.
 - Errors: throw `ErrHTTPNotFound` (etc.). Render with `@Catch(ErrType)` on an `ErrorHandler` class, then enrol it with `.errorHandling(e => e.globalHandlers(H))`; or leave it unenrolled and name it with `@CatchWith`, or use a `@Catch` method on the controller. Enrolling two handlers for the same class fails at boot. See [errors.md](errors.md).
 
 ## HTTPS and HTTP/2
 
-TLS and HTTP/2 are `factory` options, so configuration can switch them at `bootstrap()`:
+TLS and HTTP/2 are `.server(...)` sections of the Node application, so configuration can switch them at `bootstrap()`:
 
 ```ts
 createWebApplication({ config }).server(({ config }) => ({
-  factory: { https: { key: config.tls.key, cert: config.tls.cert } },
-  listener: config.server,
+  https: { key: config.tls.key, cert: config.tls.cert },
+  listen: config.server,
 }))
 ```
 
-- `https: { key, cert, ... }` serves TLS over HTTP/1.1.
-- `http2: true` with `https` serves HTTP/2 over TLS. Add `allowHTTP1: true` to the TLS options to also answer
+- `https: { key, cert, ... }` serves TLS over HTTP/1.1. `http` takes node:http's options for an HTTP/1.1 server, and
+  is refused beside `http2`.
+- `http2: true` with `https` serves HTTP/2 over TLS. `http2: { allowHTTP1: true }`, which needs `https`, also answers
   HTTP/1.1 clients. Without `https`, `http2: true` is cleartext HTTP/2 (h2c), which browsers do not speak.
 - `app.address.origin` starts with `https://` when the server serves TLS.
 
-`app.instance` is a `FastifyInstance` whichever server was built. Narrow to reach what only the TLS server has:
-`if (app.instance.server instanceof https.Server) app.instance.server.setSecureContext({ key, cert })` rotates a
-certificate without a restart. Under HTTP/2, `ctx.req.raw` and `ctx.platform.reply.raw` are Node's
-`Http2ServerRequest` and `Http2ServerResponse`, typed as their HTTP/1 counterparts. Narrow them with `instanceof`
-for `stream`.
+`app.instance` is whichever server was built. Narrow to reach what only the TLS server has:
+`if (app.instance instanceof https.Server) app.instance.setSecureContext({ key, cert })` rotates a certificate without
+a restart. Under HTTP/2, `ctx.platform.incoming` and `ctx.platform.outgoing` are Node's `Http2ServerRequest` and
+`Http2ServerResponse`. Narrow them with `instanceof` for `stream`.
 
 Two things differ under HTTP/2:
 
@@ -119,12 +135,11 @@ if (result.valid && result.renew) {
 - A cookie nobody scoped goes out with `Path=/` and `SameSite=Lax`. `.cookie(k => k.parseOptions({ ... }))` sets
   what every cookie starts from, and a call writing an option as `undefined` clears it. Under `.basePath('/api')`,
   `Path=/` reaches every application on the origin: scope a cookie with `path: ctx.req.basePath || '/'`.
-- `.cookie(k => k.secret(secret))` signs with HMAC through Web Crypto, in the format `@fastify/cookie` writes, so
-  cookies it signed keep verifying. A secret has at least 32 characters; `k.algorithm('SHA-512')` picks the hash. A
+- `.cookie(k => k.secret(secret))` signs with HMAC through Web Crypto. A secret has at least 32 characters; `k.algorithm('SHA-512')` picks the hash. A
   signature covers the value alone: under one secret, a value signed for one cookie verifies under any other name, so
   a cookie whose value must not move between names takes a secret of its own.
 - `k.secret([current, previous])` rotates: the first signs and any verifies. `ctx.req.unsignCookie(value)` answers
-  `{ valid, renew, value }`, as `@fastify/cookie`'s `unsignCookie` does, with `renew` when `previous` verified it: set
+  `{ valid, renew, value }`, with `renew` when `previous` verified it: set
   the cookie again, with the options it was set with, and it goes out signed with `current`. Drop `previous` once the
   cookies it signed have been set again or have expired.
 - `k.signer(new MySigner())`, or the container key it is bound under — `k.signer(CookieSigner)` — signs with keys of
@@ -141,12 +156,9 @@ if (result.valid && result.renew) {
   `SameSite=None` as `Lax` over plain HTTP. A prefixed name or `partitioned` has no such fallback: over plain HTTP it
   is refused. A browser takes `Secure` from `http://localhost`, so `secure: true` serves local development.
 - The cookies are written by the server's first `onSend` hook. One a later plugin's `onSend` sets still goes out;
-  a signed one is refused with `ErrCookieTooLate`. A route of a plugin registered in `.serverCallback()` cannot set
-  cookies at all: register that plugin with `.with(...)`.
+  a signed one is refused with `ErrCookieTooLate`.
 - `.cookie(k => k.enabled(false))` turns them off on every server: reading or setting one throws
   `ErrCookiesDisabled`, and a cookie-based authentication scheme refuses to start.
-- A Fastify plugin that needs `@fastify/cookie`, such as `@fastify/session`, has the application register it beside
-  the framework's: `.with(() => [fastifyCookie, { secret }])`. The context's cookies stay the framework's.
 
 Authentication cookies:
 
@@ -159,20 +171,6 @@ Authentication cookies:
   `priority(...)`; OIDC and OAuth take `cookieDomain(...)`, `cookiePartitioned()` and `cookiePriority(...)`, and a
   name they derive switches from `__Host-` to `__Secure-` when given a domain.
 - Start-up refuses a cookie a browser would drop and two schemes writing cookies of one name.
-
-Moving from the `@fastify/cookie` wrapper:
-
-- `ctx.req.signedCookie(...)` answers with a promise: `await` it. `request.unsignCookie(value)` and
-  `reply.unsignCookie(value)` are `await ctx.req.unsignCookie(value)`.
-- Under `secure: 'auto'` over plain HTTP, `SameSite=None` goes out as `Lax`; `@fastify/cookie` wrote it as given, and
-  a browser dropped it.
-- A secret under 32 characters is refused, a `Buffer` secret is not taken, and an algorithm is named `SHA-256`,
-  `SHA-384` or `SHA-512`.
-- Cookies default to `Path=/`, `expires: 0` is the epoch, and `$p.signedCookie` gives `false` for an empty value.
-- `request.cookies` and `reply.setCookie` exist only when the application registers `@fastify/cookie`, which no
-  longer configures `ctx.req.signedCookie`.
-- Authentication cookies take no attribute from `parseOptions`, only its `encode` and `decode`;
-  `addStrategy(name, fn)` with a function that is not a class takes it as a container key.
 
 ## CSRF
 
@@ -215,12 +213,13 @@ newRouter('/hooks').extend(csrfExempt()) // the programmatic form; csrfExempt(fa
   `ErrCSRFConfiguration`.
 - The host and scheme an `Origin` is compared with are `ctx.req.host` and `ctx.req.protocol`, the scheme
   lower-cased: they follow `X-Forwarded-Host` and `X-Forwarded-Proto` only under `trustProxy`,
-  `.server(() => ({ factory: { trustProxy: true } }))`. `trustProxy` names the proxy, as `true`, its addresses or a
-  function: a hop count (`trustProxy: 1`) trusts no peer in Fastify 5.12, and the forwarding headers are ignored.
+  `.server(() => ({ trustProxy: true }))`. On the Node application `trustProxy` names the proxy, as `true`, a list of
+  addresses, CIDR ranges or `loopback`, `linklocal` and `uniquelocal`: a hop count is refused. The fetch application
+  knows no peer address and takes `true` alone.
 - `c.exclude('/webhooks')` leaves the routes registered under that prefix alone, whole segments only: `/webhooks`
   and `/webhooks/stripe`, not `/webhooks-old`, judged by the path a route was registered under, never the URL
-  requested. For a route the application cannot mark; its own take `@CSRFExempt()`, `csrfExempt()`, or
-  `csrfExemptConfig()` as the `config` of a raw Fastify route. A URL no route matched stays a 404.
+  requested. For a route the application cannot mark; its own take `@CSRFExempt()` or `csrfExempt()`. A URL no route
+  matched stays a 404.
 - A route's own mark wins over a path: `csrfExempt(false)` keeps a route under an excluded prefix protected.
   `c.exclude('/')`, which would cover every route, is refused at start-up; `c.enabled(false)` turns the check off.
 - The check is a root `onRequest` hook of the server it is registered on, ahead of body parsing, in the slot
@@ -286,9 +285,7 @@ Limitations:
   Serve over HTTPS, with HSTS, and name the proxy in `trustProxy`.
 - A proxy or an extension that strips both headers makes a browser's request look like a non-browser client's,
   which passes. The cookie scheme's `SameSite=lax` is the second layer.
-- An origin `@fastify/cors` allows is not trusted here: list it in `trustedOrigins(...)` as well. A refusal carries
-  the CORS headers only when `@fastify/cors` is registered ahead of `.with(csrf())`; behind it, the browser reports a
-  network error instead of the 403.
+- An origin `corsPolicy()` allows is not trusted here: list it in `trustedOrigins(...)` as well.
 - A plugin registered ahead of `.with(csrf())` that answers a request from its own hook answers it unchecked, and
   one that rewrites the request's method there decides which method is checked.
 - A URL no route matched is the not-found handler's, which is never checked: it must not change state.
@@ -298,16 +295,6 @@ Limitations:
   `Origin` itself.
 - An origin of another scheme, such as `capacitor://localhost` or `tauri://localhost`, can be neither trusted nor
   checked, only exempted.
-
-Moving from `@fastify/csrf-protection`:
-
-- There is no token, no `_csrf` cookie and no route handing a token out: delete the `/csrf` route, the
-  `x-csrf-token` header the client sent and every `reply.generateCsrf()`. A browser needs nothing, and a non-browser
-  client that used to send a token now sends nothing at all.
-- `FST_CSRF_INVALID_TOKEN` and `FST_CSRF_MISSING_SECRET` become one refusal, `ERR_CSRF_CROSS_ORIGIN`, answered
-  before the body is parsed.
-- Every route of the server is covered, not only those the hook was attached to: exempt a route, or exclude its
-  path.
 
 ## Programmatic routers
 
@@ -363,24 +350,15 @@ app.mount(pets) // before app.bootstrap()
 - Route names default to method + path (`get_pets_id`) and are what the OpenAPI operationId is built from.
   `.name('find')` pins one.
 - `.extend(ext, ...)` applies extensions — how a package configures a route it does not own. http ships
-  `bodyAsBuffer()`, `bodyAsStream()`, `fst(options)`, `compress(opts)` and `encoding(tokens)`; openapi ships
+  `bodyAsBuffer()`, `bodyAsStream()`, `bindTo(name)`, `csrfExempt()` and `cors(options)`; openapi ships
   `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
 - `.with(factory)` registers a plugin in front of that router's routes and the groups nested under it, taking what
-  the application's `.with(...)` takes. A Fastify plugin needs a router bound to Fastify, created with
-  `newRouter(path)` rather than `new Router(path)` —
-  `newRouter('/pets').with(() => [fastifyCors, { origin: 'https://pets.example' }])`.
-  A router from `new Router(path)` is bound to no adapter, mounts on any application, and takes only an
-  `HTTPPlugin` written for no adapter ([Plugins without Fastify](#plugins-without-fastify)).
-  There is no `corsPlugin`/`compressPlugin` wrapper — register the third-party plugin directly, the same as any
-  other Fastify plugin. A factory returns the plugin, or the plugin paired with the options to register it
-  with; an official plugin already wraps itself in `fastify-plugin`, so a wrapper written only to carry its
-  options would be encapsulated and reach no routes. The same on a controller is
-  `@Use(factory)` above `@Controller`. A router takes only plugins, never features, and nothing is
-  deduplicated: two groups wanting different settings pass two factories. The factory's context carries
+  the application's `.with(...)` takes: a factory that returns an `HTTPPlugin` ([Plugins](#plugins)). A router from
+  `new Router(path)` is bound to no adapter and mounts on any application. One from `newRouter(path)`, imported from
+  `@caffeinejs/http/node`, is bound to the Node application: its handlers' `ctx.platform` is Node's request and
+  response. The same on a controller is `@Use(factory)` above `@Controller`. A router takes only plugins, never
+  features, and nothing is deduplicated: two groups wanting different settings pass two factories. The factory's context carries
   `config` as `ConfigSnapshot<unknown>` — a router does not know which application it will be mounted into.
-- `fst({ ... })` is the Fastify escape hatch: lifecycle hooks, `attachValidation`, `logLevel`, custom compilers —
-  everything Fastify takes except what the router already decides (`method`, `url`, `schema`, `config`, `handler`,
-  `bodyLimit`, `handlerTimeout`).
 - A router accumulates its routes in its type: `RoutesOf<typeof app>` is the whole surface, ready for a typed
   client. What carries them is the value `.handler()` returns, so a chain gathers them all.
 - Writing routes as separate statements leaves one such value each. `blend(...routers)` unions them into one
@@ -426,8 +404,6 @@ What a handler returns is what the client gets, and the same holds for a `Respon
   set with `ctx.header('content-type', ...)`; failing that a `Blob`'s own type; failing that
   `application/octet-stream`. A `Response` keeps the headers it was built with, and takes the route's type only when
   it carries none.
-- A `File` from an upload carries the type its client claimed. Return it through `Attachment(...)`, or name its type,
-  rather than as it is: `text/html` from a client is a page on your origin.
 - A `HEAD` is answered as the `GET` would be, without the body.
 - A `Response` loses the headers that describe one connection: `Connection`, the ones it names, `Keep-Alive`,
   `Transfer-Encoding` and the rest of RFC 9110's list. A `Response` from `fetch(...)` holds its body decoded, so it
@@ -489,11 +465,11 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
 - `fs.openAsBlob` reports a file past 4 GiB at its size modulo 2^32 (Node 22 and 24). Serve such a file with
   `@caffeinejs/static`'s `sendFile` when its build lists it, or as a stream otherwise.
 
-## Plugins without Fastify
+## Plugins
 
-A `.with(...)` factory may return an `HTTPPlugin` instead of a Fastify plugin: a class whose `register(context)`
-does the work, handed the same context the factory got. `context.app` is what it may do to the application:
-`mount(...routers)`, `use(...)` and `useFn(...)`, taking what `app.mount`, `app.use` and `app.useFn` take.
+A `.with(...)` factory returns an `HTTPPlugin`: a class whose `register(context)` does the work, handed the same
+context the factory got. `context.app` is what it may do to the application: `mount(...routers)`, `use(...)`,
+`useFn(...)` and `hook(name, fn)`, taking what `app.mount`, `app.use`, `app.useFn` and `app.hook` take.
 
 ```ts
 import { HTTPPlugin, Router, type AdapterExtensionFactory, type HTTPSetupContext } from '@caffeinejs/http'
@@ -533,14 +509,24 @@ Where it is registered decides what `context.app` reaches:
   `detail('http', { internal: true })` so the OpenAPI document leaves it out. The groups stay out of
   `app.routeGroups`, and a router mounted twice in one place, or one the application already serves on that server,
   is served once.
-- A plain `HTTPPlugin` is written for no adapter: it mounts only `new Router(...)` routers, names no hook, and runs
-  on any adapter. `HTTPPlugin<RouterTypes>` may mount `newRouter()` routers and name Fastify hooks
-  (`use(mw, { hook: 'preHandler' })`); only Fastify applications and routers take it.
-- A Fastify plugin's factory gets the same context, so it may mount and add middleware too and still return its
-  plugin: `.with(({ app }) => { app.mount(router); return [fastifyCors, options] })`.
+- A plain `HTTPPlugin` is written for no adapter: it mounts only `new Router(...)` routers and runs on both
+  applications. `HTTPPlugin<NodeAdapterTypes>` may mount `newRouter()` routers from `@caffeinejs/http/node`; only the
+  Node application and its routers take it.
 - A plugin that depends on a feature asks `context.hasFeature(name)` and throws `ErrFeatureNotInstalled`.
-- `context.app` is open only while the plugin registers. A middleware factory, a server callback, a context kept
-  past its slot and a Fastify plugin body are refused; a plugin body adds a group with `instance.$route(...)`.
+- `context.app` is open only while the plugin registers. A middleware factory, a server callback and a context kept
+  past its slot are refused.
+
+Hooks:
+
+- `app.hook(name, fn)` adds one to the application's own server, `l.hook(...)` to a listener's, and `context.app.hook(...)`
+  to a plugin's slot. The names are `onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`, `onRoute`, `onReady`
+  and `onClose`. A request hook has no path and no `next`: it answers with `ctx.body(...)` and fails by throwing.
+- `app.use(fn)` also takes a Node `(req, res, next)` middleware, on the Node application only: the fetch application
+  refuses one at start-up.
+- Plugin hooks run in the order the plugins are installed, and all of them run before the middleware chain. Headers
+  that must reach a 401 the gate answers go in an `onRequest` hook of a plugin installed before `authentication()`:
+  `examples/04-spa-dashboard/api/spa/security.ts` writes `helmet`'s headers that way: it checks that
+  `ctx.platform.name` is `'node'`, then reads `{ incoming, outgoing }` as a `NodeContextPlatform`.
 
 ## Authorization declarations
 
@@ -557,9 +543,9 @@ declarations **add up**: none replaces another, on one route or across the level
   declaration wins: a method with `@Authorize` inside a public controller is protected, and a method with
   `@AllowAnonymous` inside a protected controller is public.
 - `authz.requireAuthenticatedByDefault()` (or `fallbackPolicy(...)`) gates every route that declares nothing —
-  the ones a plugin registered straight on Fastify included. Open under it: a route declared public, the health
-  probes, OAuth callbacks, a URL no route matches (404), the prefixes in `{ except: ['/assets/'] }`, and a plain
-  Fastify route registered with `config: authenticationExempt()`.
+  the routes a plugin mounts included. Open under it: a route declared public (`@AllowAnonymous`,
+  `.authorize({ allowAnonymous: true })`), a static mount marked `anonymous: true`, the health probes, OAuth
+  callbacks and a URL no route matches (404).
 - A route naming several `schemes` advertises every one of them on a 401. A custom handler adds its challenge with
   `ctx.appendHeader('WWW-Authenticate', ...)`, not `ctx.header(...)`, which would replace the others'.
 - A policy must hold at least one requirement. `addPolicy('x', p => {})` fails at start-up
@@ -615,7 +601,7 @@ const app = createWebApplication({ config })
   )
   .listener('admin', (l, { config }) =>
     l
-      .server(() => ({ listener: config.app.admin }))
+      .server(() => ({ listen: config.app.admin }))
       .with(authentication())
       .with(healthProbes())
       .use(AuditLog),
@@ -644,7 +630,7 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
 
   ```ts
   protected configure(kit: FeatureConfigureKit<C>): void {
-    listenersOf(kit).add('metrics', l => l.server(() => ({ listener: { port: this.#port } })).with(metrics()))
+    listenersOf(kit).add('metrics', l => l.server(() => ({ listen: { port: this.#port } })).with(metrics()))
   }
   ```
 
@@ -659,11 +645,10 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   head slots. Nothing registered on the application reaches a listener, an authentication gate included, and
   `.basePath(...)` and `.serverCallback(...)` never do. What a plugin registered with `l.with(...)` mounts or adds
   through `context.app` lands on that server alone.
-- **Settings.** `l.server(...)` takes what `.server(...)` takes, `{ factory, listener }`, so TLS and HTTP/2 are
-  switched by configuration there too.
+- **Settings.** `l.server(...)` takes what `.server(...)` takes, so TLS and HTTP/2 are switched by configuration there
+  too.
 - **Authorization.** There is nothing listener-specific: a route on a listener requires what its router or controller
-  declares, `router.authorize(...)` or `@Authorize(...)`, and an undeclared one, or one a plugin registers straight
-  on the server, answers to the application's fallback policy, exactly as on the application's own server. Health
+  declares, `router.authorize(...)` or `@Authorize(...)`, and an undeclared one answers to the application's fallback policy, exactly as on the application's own server. Health
   probes stay exempt.
 
   Authenticating on a listener takes a gate registered there, `l.with(authentication())`: the application's gate
@@ -675,7 +660,7 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   its own `l.server(...)`; what `run(...)` is given does not reach them. `close()` closes the application's own
   server first, so probes and metrics answer through the drain.
 - **Clients and tests.** A typed client reaches a listener's routes given its origin:
-  `brewer<App>(app.listeners.get('admin')!.address!.origin)`. A test injects with
+  `brewer<App>(app.listeners.get('admin')!.address!.origin)`. A test sends a request with
   `app.listeners.get('admin')!.request('/jobs')`; `app.request(...)` reaches the application's own server only. Each
   listener is an `IServer`, as the application is for its own server.
 - **OpenAPI.** `@caffeinejs/openapi` documents the server it is registered on, so routes bound to a listener are
@@ -725,12 +710,9 @@ await client.pets.post({ body: { name: 'Rex' } })
   ```
 
   The target is structural — anything with a matching `request` works, a stub included — and `options.fetch` still
-  wins over it.
+  wins over it. Once `close()` has finished, `app.request(...)` rejects with `ErrApplicationClosed`.
 
-- Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a
-  `FormData`, which `fetch` encodes as multipart. Build it with `client.$formData({ caption, avatar })` and the call
-  checks its fields against the route. A plain `FormData` is checked on neither side, since the server leaves an upload
-  unvalidated, so the handler checks the parts it reads. A declared object goes as JSON, or as a `URLSearchParams`
+- Bodies follow the platform. A declared object goes as JSON, or as a `URLSearchParams`
   form when every field is text, a number, a boolean or a list of those.
   A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is: a form always under
   the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names

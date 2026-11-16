@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { healthProbes } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 // A minimal application used by health_signals.test.ts. Runs as a real child process, because signal delivery
 // and process exit codes cannot be exercised in-process with any fidelity.
 
@@ -18,10 +18,10 @@ const container = new CaffeineIoC({ decorators: false })
 container.bind(ShutdownMarker, t => t.toSelf())
 
 const app = createWebApplication({ container })
-  .server(() => ({ listener: { port: 0, host: '127.0.0.1' } }))
+  .server(() => ({ listen: { port: 0, host: '127.0.0.1' } }))
   .with(healthProbes())
   .shutdown(s => s.drainDelay(drainDelay).signals(['SIGTERM', 'SIGINT']))
 
 await app.run()
 
-process.stdout.write(`listening ${app.instance.server.address().port}\n`)
+process.stdout.write(`listening ${app.instance.address().port}\n`)

@@ -15,8 +15,9 @@ else, and every client route is a route the application wrote.
 - **Both route sources side by side** — `@Controller` classes for `/api/profile` and `/api/admin`, a
   programmatic `newRouter()` for `/api/projects`. They compile identically.
 - **CSRF protection by Fetch Metadata** — the framework's `csrf()`, which judges every unsafe request by
-  `Sec-Fetch-Site` and `Origin`, so the client sends no token — and **security headers** with `@fastify/helmet`, an
-  official Fastify plugin the application registers itself, because `@caffeinejs/http` ships no wrapper for it.
+  `Sec-Fetch-Site` and `Origin`, so the client sends no token — and **security headers** with `helmet`, written
+  from an `onRequest` hook of a plugin (`SecurityHeaders`) installed ahead of the authentication gate, so they reach
+  a 401 too. `@caffeinejs/http` ships no wrapper for it.
 - **A real front-end build**: esbuild, content-hashed asset names, then `buildStatic()`, which writes `br` and
   `gzip` variants of each file worth compressing to `.static-variants/`, and the manifest the static mount serves
   from.

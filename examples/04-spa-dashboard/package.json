@@ -17,10 +17,8 @@
     "@caffeinejs/openapi": "0.0.0",
     "@caffeinejs/static": "0.0.0",
     "@caffeinejs/std": "0.0.0",
-    "@fastify/helmet": "^13.1.1",
     "dotenv": "^17.0.0",
-    "fastify": "^5.12.8",
-    "fastify-plugin": "^6.0.0",
+    "helmet": "^8.1.0",
     "pino": "^10.3.1"
   },
   "devDependencies": {

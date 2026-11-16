@@ -1,4 +1,4 @@
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter } from '@caffeinejs/http/node'
 import { staticFiles } from '@caffeinejs/static'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)

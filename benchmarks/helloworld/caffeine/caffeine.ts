@@ -1,5 +1,5 @@
 import { Controller, Get } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 

@@ -1,8 +1,8 @@
 import { createHmac, createPublicKey, type JsonWebKeyInput } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { type JWTAuthenticationOptionsBuilder, Authentication } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { authentication, type JWTAuthenticationOptionsBuilder, Authentication } from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/node'
 import { createRemoteJWKSet } from 'jose'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 

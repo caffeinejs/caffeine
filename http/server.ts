@@ -41,6 +41,9 @@ export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
    *
    * A runtime that calls its handler with a second argument of its own hands on the request alone, or that argument is
    * read as `options`: `Bun.serve({ fetch: request => app.request(request) })`.
+   *
+   * @throws ErrApplicationClosed once the application's close has torn the server down; while it drains, the answer
+   * is a 503.
    */
   request(request: Request | string | URL, options?: RequestInit): Promise<Response>
 

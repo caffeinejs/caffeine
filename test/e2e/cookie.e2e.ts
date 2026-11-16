@@ -1,5 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import {
+  authentication,
   AuthenticationService,
   AuthenticationTicket,
   Claim,
@@ -11,7 +12,7 @@ import {
   isSafeReturnPath,
   Authentication,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { newRouter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'

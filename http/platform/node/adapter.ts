@@ -1,5 +1,6 @@
 import type { ListenOptions, Server as NetServer } from 'node:net'
 
+import { ErrApplicationClosed } from '@caffeinejs/application'
 import type { Logger } from '@caffeinejs/application/logger'
 import type { Container, ContextKey } from '@caffeinejs/di'
 import inject from 'light-my-request'
@@ -99,6 +100,8 @@ class NodeServer implements IAdapterServer<NodeAdapterTypes> {
   readonly #listen: ListenOptions | undefined
   readonly #open: OpenConnections
   readonly #logger: Logger
+  // Set once the teardown is over: while it drains, a request is still answered, with the engine's 503.
+  #closed = false
 
   constructor(
     server: NodeHTTPServer,
@@ -125,6 +128,10 @@ class NodeServer implements IAdapterServer<NodeAdapterTypes> {
   }
 
   request(input: Request | string | URL, options?: RequestInit): Promise<Response> {
+    if (this.#closed) {
+      return Promise.reject(new ErrApplicationClosed('reach the server'))
+    }
+
     // Served through the Node platform as a socket's request is, and counted toward `close()` only until answered:
     // a body a test never reads cannot hold it.
     return fetchInProcess(
@@ -174,11 +181,14 @@ class NodeServer implements IAdapterServer<NodeAdapterTypes> {
     // The engine first: it answers 503 from now on, and resolves once what is in flight has been answered.
     return closeServer(this.#server, this.#open, () =>
       Promise.all([this.#engine.close(), stopListening(this.#server)]).then(() => undefined),
-    )
+    ).then(() => {
+      this.#closed = true
+    })
   }
 
   /** Cuts every connection and every request still in flight. Called only once the shutdown budget is spent. */
   forceTeardown(): Promise<void> {
+    this.#closed = true
     destroyConnections(this.#open)
     this.#engine.forceClose()
     return Promise.resolve()

@@ -178,7 +178,10 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * Sends `request` to the application's own server, as {@link IServer.request} describes. Bound to the application,
    * so it can be handed on alone.
    *
+   * While {@link close} drains, it is answered 503; once the server is torn down, it rejects.
+   *
    * @throws ErrApplicationNotReady before {@link ready} has built the server.
+   * @throws ErrApplicationClosed once {@link close} has torn the server down.
    */
   readonly request = async (request: Request | string | URL, options?: RequestInit): Promise<Response> =>
     this.#ownServer().request(request, options)
@@ -187,7 +190,11 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * Answers `request` as the application's own server does, as {@link IServer.fetch} describes: what a fetch runtime
    * is handed, `export default { fetch: app.fetch }`. Bound to the application, so it can be handed on alone.
    *
+   * The Node application listens itself, so its `fetch` is {@link request}, and rejects as it does once the server is
+   * torn down. The fetch application keeps answering 503.
+   *
    * @throws ErrApplicationNotReady before {@link ready} has built the server.
+   * @throws ErrApplicationClosed on the Node application, once {@link close} has torn the server down.
    */
   readonly fetch = (request: Request, ...runtime: unknown[]): Response | Promise<Response> =>
     this.#ownServer().fetch(request, ...runtime)

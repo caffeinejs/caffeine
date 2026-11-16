@@ -52,7 +52,7 @@ describe('routesRouter', () => {
     app = createWebApplication({ logger: false })
       .server(() => ({ listen: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
-      .install(Authorization(z => z.requireAuthenticatedByDefault({ except: ['/livez'] })))
+      .install(Authorization(z => z.requireAuthenticatedByDefault()))
       // A listener's settings are typed by the registered adapter, Fastify's in this program: Node reads `listen`.
       .listener('admin', l => l.server(() => ({ listen: loopback }) as never).with(authentication()))
       .install(DevTools(d => d.port(0)))
@@ -116,7 +116,7 @@ describe('routesRouter', () => {
 
     expect(res.status).toBe(200)
     expect(security.authentication).toEqual({ schemes: ['Header'], defaultScheme: 'Header' })
-    expect(security.authorization).toMatchObject({ fallbackPolicy: expect.any(String), fallbackExcept: ['/livez'] })
+    expect(security.authorization).toMatchObject({ fallbackPolicy: expect.any(String), fallbackExcept: [] })
     expect(security.gates).toEqual([
       { server: '', gates: ['default'] },
       { server: 'admin', gates: ['default'] },

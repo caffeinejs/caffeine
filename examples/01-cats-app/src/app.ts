@@ -1,8 +1,6 @@
 import { Container } from '@caffeinejs/di'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 
 export function createApp(container: Container) {
-  return createWebApplication({ container }).server(() => ({
-    factory: { routerOptions: { ignoreTrailingSlash: true } },
-  }))
+  return createWebApplication({ container }).server(() => ({ router: { ignoreTrailingSlash: true } }))
 }

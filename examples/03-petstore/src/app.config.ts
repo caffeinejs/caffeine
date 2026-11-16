@@ -17,7 +17,7 @@ import { $t } from '@caffeinejs/application/schema'
  * `main.ts` and `prisma.config.ts` load `.env` for it, and for the variables the placeholders read.
  */
 export const ConfigSchema = $t.Object({
-  // Handed to `.server(...)` as the listen options, so the keys are Fastify's.
+  // Handed to `.server(...)` as `listen`, so the keys are node:net's listen options.
   server: $t.Object({
     host: $t.String(),
     port: $t.Number(),

@@ -92,6 +92,7 @@ export default defineConfig({
       '_tests/context_variables.test.ts',
       '_tests/header.test.ts',
       '_tests/hooks.test.ts',
+      '_tests/lifecycle.test.ts',
       '_tests/prefix.test.ts',
       '_tests/timeout.test.ts',
       '_tests/status.test.ts',

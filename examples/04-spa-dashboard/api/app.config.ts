@@ -14,7 +14,7 @@ import { $t } from '@caffeinejs/application/schema'
  * segment: `secureCookie` comes from `SPA_AUTH__SECURE_COOKIE`.
  */
 export const ConfigSchema = $t.Object({
-  // Handed to `.server(...)` as the listen options, so the keys are Fastify's.
+  // Handed to `.server(...)` as `listen`, so the keys are node:net's listen options.
   server: $t.Object({
     host: $t.String({ default: '127.0.0.1' }),
     port: $t.Number({ default: 9010 }),

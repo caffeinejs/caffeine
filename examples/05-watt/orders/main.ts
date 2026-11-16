@@ -1,7 +1,6 @@
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter, type NodeHTTPServer } from '@caffeinejs/http/node'
 import { OpenAPI, OpenAPIProvider, openapi } from '@caffeinejs/openapi'
 import { setOpenapiSchema } from '@platformatic/globals'
-import type { FastifyInstance } from 'fastify'
 
 import { registerWattChecks } from '../watt.js'
 
@@ -14,10 +13,10 @@ const app = createWebApplication()
   // routing table has to catch up, so a drain delay would only hold up the shutdown.
   .shutdown(s => s.drainDelay(0))
 
-// Factory mode: Watt calls this and serves the instance it returns — listening on it if this were the entrypoint,
-// injecting into it otherwise, with no port at all. `run()` never runs, so nothing else marks the application
-// started, and without this line its readiness would never pass.
-export async function create(): Promise<FastifyInstance> {
+// Factory mode: Watt calls this and serves the node:http server it returns through the server's request listener —
+// listening if this were the entrypoint, injecting into it otherwise, with no port at all. `run()` never runs, so
+// nothing else marks the application started, and without this line its readiness would never pass.
+export async function create(): Promise<NodeHTTPServer> {
   await app.bootstrap()
   registerWattChecks(app)
   // The document exists once bootstrap() has readied the server.

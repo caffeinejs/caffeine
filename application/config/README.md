@@ -70,7 +70,7 @@ export const kConfigStore = conf.storeToken // the store, typed after the schema
 export const config = conf.config
 
 // app.ts
-createWebApplication({ config }).server(({ config }) => ({ listener: config.server }))
+createWebApplication({ config }).server(({ config }) => ({ listen: config.server }))
 ```
 
 Precedence is registration order alone: a source added later wins a conflicting value. Here the environment

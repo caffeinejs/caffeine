@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto'
 
 import {
+  authentication,
   AuthenticationService,
   type OAuth2AuthenticationOptionsBuilder,
   type OIDCAuthenticationOptionsBuilder,
   Authentication,
   Authorization,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { newRouter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'

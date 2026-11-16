@@ -1,5 +1,6 @@
 import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
@@ -36,10 +37,10 @@ const routes = new Router('/transport')
   .get('/here')
   .handler(() => ({ here: true }))
 
-// An abort can leave the client a connection it opened and never finished a request on, which the server's graceful
-// close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
+// A client that stops part-way can leave a connection holding a partial request, which a graceful close would wait
+// out (caffeinejs/caffeine#131): the close cuts it after a second.
 const app = createWebApplication()
-  .server(() => ({ factory: { forceCloseConnections: true } }))
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(routes)
 
 let origin: string

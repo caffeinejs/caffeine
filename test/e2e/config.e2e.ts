@@ -11,7 +11,7 @@ import { SpringCloudConfigSource } from '@caffeinejs/application/config/spring'
 import { $t } from '@caffeinejs/application/schema'
 import { $i, CaffeineIoC, type Provider } from '@caffeinejs/di'
 import { Controller, Get, Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 

@@ -1,8 +1,8 @@
 import { newConfiguration } from '@caffeinejs/application'
 import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { $t } from '@caffeinejs/application/schema'
-import { Authentication } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { authentication, Authentication } from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/node'
 import { describe, expect, it } from 'vitest'
 
 import { startApp } from './internal/app.js'

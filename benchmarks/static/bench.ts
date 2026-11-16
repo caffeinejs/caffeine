@@ -14,7 +14,6 @@ const built = (dir: string, file: string): Pick<ServerConfig, 'args' | 'builtPat
 const servers: ServerConfig[] = [
   { name: 'caffeine', port: 3060, ...built('caffeine', 'caffeine.js') },
   { name: '@fastify/static', port: 3061, ...built('fastify-static', 'fastify-static.js') },
-  { name: 'caffeine (web)', port: 3062, ...built('caffeine-web', 'caffeine-web.js') },
 ]
 
 const versions = ['fastify', '@fastify/static', '@caffeinejs/http', '@caffeinejs/static']

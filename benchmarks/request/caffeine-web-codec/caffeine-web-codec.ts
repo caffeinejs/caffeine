@@ -29,7 +29,7 @@ const schema = $t.Object({
   bool: $t.Boolean(),
 })
 
-// The single difference from the "caffeine (web)" fixture: the query's `text` is a codec, which the validator decodes
+// The single difference from the "caffeine" fixture: the query's `text` is a codec, which the validator decodes
 // after its check. The codec does nothing, so what the two rows differ by is decoding alone.
 const query = $t.Object({
   text: $t

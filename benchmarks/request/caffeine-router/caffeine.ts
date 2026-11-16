@@ -1,7 +1,7 @@
 import { $t } from '@caffeinejs/application/schema'
 import { Injectable } from '@caffeinejs/di'
 import { GuardResult, Router, type Guard, type GuardInput } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 

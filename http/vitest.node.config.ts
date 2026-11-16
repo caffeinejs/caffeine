@@ -47,7 +47,6 @@ import { defineConfig } from 'vitest/config'
 // - _tests/fetch.test.ts: reads a Fastify-only member of app.instance
 // - _tests/http_plugin.test.ts: installs a Fastify plugin with .with(...)
 // - _tests/http_plugin_controller.test.ts: installs a Fastify plugin with @Use(...)
-// - _tests/lifecycle.test.ts: expects request() to reject after close(); the engine answers a plain 503
 // - _tests/programmatic_router_parity.test.ts: expects a body on an explicit HEAD route, which the engine strips, and
 //   reads ctx.routeConfig, which the engine does not set
 // - core/csrf/_tests/csrf_edges.test.ts: installs a Fastify plugin
@@ -102,6 +101,7 @@ export default defineConfig({
       '_tests/header.test.ts',
       '_tests/hooks.test.ts',
       '_tests/http_plugin_controller_mount.test.ts',
+      '_tests/lifecycle.test.ts',
       '_tests/not_found_catch.test.ts',
       '_tests/prefix.test.ts',
       '_tests/redirect.test.ts',

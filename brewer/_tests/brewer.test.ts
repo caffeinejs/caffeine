@@ -1,7 +1,7 @@
 import { ErrApplicationNotReady } from '@caffeinejs/application'
 import { $t } from '@caffeinejs/application/schema'
 import { Router, bodyAsBuffer } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {

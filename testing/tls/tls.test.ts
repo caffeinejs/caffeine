@@ -3,7 +3,7 @@ import { createServer, get, type Server } from 'node:https'
 import type { AddressInfo } from 'node:net'
 
 import { type WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { testTLS, testTLSCertificate } from './index.js'
@@ -63,8 +63,8 @@ describe('testTLS', () => {
 
   it('serves a Caffeine web application over HTTPS', async () => {
     app = createWebApplication().server(() => ({
-      factory: { https: testTLS() },
-      listener: { host: '127.0.0.1', port: 0 },
+      https: testTLS(),
+      listen: { host: '127.0.0.1', port: 0 },
     }))
     app.mount(newRouter().get('/ping', () => ({ ok: true })))
 

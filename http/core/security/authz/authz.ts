@@ -31,7 +31,8 @@ export interface FallbackPolicyOptions {
   /**
    * Path prefixes the fallback policy leaves open, for routes a plugin registered straight on a Fastify server.
    * Static files are not among them: a mount opts out with `anonymous: true`. A route the application's own router
-   * compiled opts out with `@AllowAnonymous` instead, and is not affected by this list.
+   * compiled opts out with `@AllowAnonymous` instead, and is not affected by this list. The Node and fetch applications
+   * compile every route, and refuse a non-empty list at start-up.
    *
    * Matched against the path the route was registered under, never against the URL of the request, so no spelling
    * of a URL reaches a route on another route's exemption.
@@ -88,8 +89,8 @@ export class AuthorizationBuilder implements Feature {
    * on the server included, since there is no decorator on those for anyone to forget.
    *
    * What stays open under it: a route declared public, a health probe, the callback an OAuth strategy receives
-   * its redirect on, a route registered with `authenticationExempt()`, the prefixes listed in
-   * {@link FallbackPolicyOptions.except}, and a URL no route matches, which is answered 404 as it always was.
+   * its redirect on, a route registered with `authenticationExempt()`, on the Fastify application the prefixes listed
+   * in {@link FallbackPolicyOptions.except}, and a URL no route matches, which is answered 404 as it always was.
    *
    * Off by default, because turning it on changes what an *undecorated* route means and that has to be a
    * deliberate posture rather than something a dependency bump introduces. Turning it on is the difference

@@ -1,7 +1,7 @@
 import type { Requestable } from '@caffeinejs/brewer'
 import { Injectable } from '@caffeinejs/di'
 import { WebApplication, Controller, Get, Post, Args, $p } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 
 import { ErrFetchFailed, controllerTypedClient } from './index.js'
@@ -65,8 +65,8 @@ describe('controllerTypedClient()', () => {
 
   beforeAll(async () => {
     app = createWebApplication()
-    await app.bootstrap()
-    baseURL = await app.instance.listen({ port: 0, host: '127.0.0.1' })
+    const { address } = await app.run({ port: 0, host: '127.0.0.1' })
+    baseURL = address.origin
   })
 
   afterAll(async () => {

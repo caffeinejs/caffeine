@@ -14,7 +14,6 @@
     "@caffeinejs/openapi": "0.0.0",
     "@platformatic/globals": "^3.70.0",
     "@platformatic/node": "^3.70.0",
-    "fastify": "^5.12.8",
     "wattpm": "^3.70.0"
   },
   "devDependencies": {

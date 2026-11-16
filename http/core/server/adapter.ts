@@ -1,4 +1,4 @@
-import type { RunInfo } from '@caffeinejs/application'
+import { ErrApplicationClosed, type RunInfo } from '@caffeinejs/application'
 import { contextKey, ContextStorage, Scopes, type Container, type ContextKey } from '@caffeinejs/di'
 
 import type {
@@ -16,7 +16,7 @@ import { findMyWayMatcher } from '../matcher/find_my_way.js'
 import type { RouterFlags } from '../matcher/matcher.js'
 import { rebaseMiddlewares } from '../middleware/path.js'
 import type { IRouteGroup, RouteGroupScope } from '../routing/route.js'
-import { assertAuthorizationConfigured } from '../security/authz/index.js'
+import { assertAuthorizationConfigured, kAuthzOpts } from '../security/authz/index.js'
 import { assertAuthenticationConfigured, assertRouteSchemesResolve } from '../security/security.js'
 import { Context, type EngineContextTypes } from './context.js'
 import { configurationError, USE_FASTIFY } from './error.js'
@@ -157,6 +157,19 @@ export function buildEngine<T extends IAdapterTypes>(
   assertRouteSchemesResolve(container, routeGroups)
   assertAuthorizationConfigured(container, routeGroups)
 
+  // `except` names routes a plugin registered straight on a Fastify server; every route here is compiled, so it would
+  // exempt nothing and say nothing.
+  const except = container.getOptional(kAuthzOpts)?.fallbackExcept ?? []
+  if (except.length > 0) {
+    throw configurationError(
+      `Cannot use the except "${except[0]}" of requireAuthenticatedByDefault() or fallbackPolicy() on the ` +
+        `${settings.application}: it exempts only routes registered straight on a Fastify server, and this ` +
+        'application compiles every route',
+      'Open the route with @AllowAnonymous() or .authorize({ allowAnonymous: true }), and remove except',
+      'Open a static mount with serve(root, { anonymous: true }), and remove except',
+    )
+  }
+
   const server = new HTTPServer({
     routeGroups,
     settings,
@@ -176,6 +189,8 @@ export function buildEngine<T extends IAdapterTypes>(
 /** One server the fetch adapter built: no socket of its own, answering what the runtime hands `fetch`. */
 class FetchServer implements IAdapterServer<FetchAdapterTypes> {
   readonly #server: HTTPServer
+  // Set once the teardown is over: a request() then rejects, while the runtime's fetch keeps the engine's 503.
+  #closed = false
 
   constructor(server: HTTPServer) {
     this.#server = server
@@ -197,6 +212,10 @@ class FetchServer implements IAdapterServer<FetchAdapterTypes> {
   }
 
   request(input: Request | string | URL, options?: RequestInit): Promise<Response> {
+    if (this.#closed) {
+      return Promise.reject(new ErrApplicationClosed('reach the server'))
+    }
+
     return requestInProcess(this.#server, input, options)
   }
 
@@ -205,10 +224,13 @@ class FetchServer implements IAdapterServer<FetchAdapterTypes> {
   }
 
   teardown(): Promise<void> {
-    return this.#server.close()
+    return this.#server.close().then(() => {
+      this.#closed = true
+    })
   }
 
   forceTeardown(): Promise<void> {
+    this.#closed = true
     this.#server.forceClose()
     return Promise.resolve()
   }
