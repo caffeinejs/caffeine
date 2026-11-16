@@ -1,5 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
+import { finished } from 'node:stream/promises'
 import { gzipSync } from 'node:zlib'
 
 import { newNoopLogger } from '@caffeinejs/application/logger'
@@ -8,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import { ErrResponseBodyConsumed } from '../../index.js'
+import { createWebApplication as createNodeApplication } from '../../platform/node/index.js'
 import { Responder } from '../../response.js'
 import { ErrHTTPUnprocessableContent } from '../error/http.js'
 import { Router } from '../routing/programmatic/programmatic.js'
@@ -304,5 +306,100 @@ describe("writing an answer with the route's response schema", () => {
       .schema({ response: { 200: $t.Object({ a: $t.Number() }) } })
       .handler(() => 'plain')
     expect(await (await answerOf(router)).text()).toBe('plain')
+  })
+})
+
+/**
+ * A Node stream a handler answers with is read as web bytes once an `onSend` hook reads the payload. Dropping it then,
+ * by a hook that answers in its place or by the server on a HEAD, must still let go of what is behind it: a file, a
+ * socket, an upstream response.
+ */
+describe('a Node stream answer read as web bytes', () => {
+  const sources: Readable[] = []
+  const source = (): Readable => {
+    const stream = new Readable({ read() {} })
+    sources.push(stream)
+    return stream
+  }
+
+  const streams = new Router('/n')
+  streams
+    .get('/replaced')
+    .hook('onSend', async (_ctx, payload) => {
+      await (payload as ReadableStream).cancel()
+      return 'replaced'
+    })
+    .handler(() => source())
+  streams
+    .get('/head')
+    .hook('onSend', () => {})
+    .handler(() => source())
+
+  const served = createWebApplication()
+    .logger(b => b.use(newNoopLogger()))
+    .mount(streams)
+
+  beforeAll(async () => {
+    await served.bootstrap()
+  })
+
+  afterAll(async () => {
+    await served.close()
+  })
+
+  it('destroys the stream when a hook cancels the body it answers in place of', async () => {
+    sources.length = 0
+
+    expect(await (await served.request('/n/replaced')).text()).toBe('replaced')
+    expect(sources[0].destroyed).toBe(true)
+  })
+
+  it('destroys the stream when the server drops the body of a HEAD', async () => {
+    sources.length = 0
+
+    expect((await served.request('/n/head', { method: 'HEAD' })).status).toBe(200)
+    // Settles once the stream is destroyed, at once when it already is.
+    await finished(sources[0]).catch(() => undefined)
+    expect(sources[0].destroyed).toBe(true)
+  })
+})
+
+/**
+ * The Node application pipes a handler's Node stream as it is. An `onSend` hook is handed it as web bytes, which read
+ * nothing until read: what a hook leaves alone still goes out as the stream, and what it read is not sent again.
+ */
+describe('a Node stream answer an onSend hook is handed', () => {
+  const streams = new Router('/k')
+  streams
+    .get('/kept')
+    .hook('onSend', () => {})
+    .handler(() => Readable.from(['a', 'b', 'c']))
+  streams
+    .get('/partly-read')
+    .hook('onSend', async (_ctx, payload) => {
+      const reader = (payload as ReadableStream<Uint8Array>).getReader()
+      await reader.read()
+      reader.releaseLock()
+    })
+    .handler(() => Readable.from(['a', 'b', 'c']))
+
+  const served = createNodeApplication()
+    .logger(b => b.use(newNoopLogger()))
+    .mount(streams)
+
+  beforeAll(async () => {
+    await served.bootstrap()
+  })
+
+  afterAll(async () => {
+    await served.close()
+  })
+
+  it('sends the whole stream when the hook left it alone', async () => {
+    expect(await (await served.request('/k/kept')).text()).toBe('abc')
+  })
+
+  it('sends what the hook did not read when it read part of it', async () => {
+    expect(await (await served.request('/k/partly-read')).text()).toBe('bc')
   })
 })

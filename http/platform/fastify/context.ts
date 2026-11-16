@@ -210,6 +210,16 @@ export class Context<
     return Array.isArray(value) ? value.join(', ') : String(value)
   }
 
+  getHeaders(): Record<string, string | string[]> {
+    const copy: Record<string, string | string[]> = Object.create(null)
+    for (const [name, value] of Object.entries(this.#reply.getHeaders())) {
+      if (value !== undefined) {
+        copy[name] = Array.isArray(value) ? value.map(String) : String(value)
+      }
+    }
+    return copy
+  }
+
   removeHeader(key: string): this {
     this.#reply.removeHeader(key)
     return this

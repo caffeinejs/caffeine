@@ -3,7 +3,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import type { HTTPCacheEntry, HTTPCacheStore } from './store.js'
 
-const entry = (payload: string | Buffer, extra?: Partial<HTTPCacheEntry>): HTTPCacheEntry => ({
+const entry = (payload: string | Uint8Array, extra?: Partial<HTTPCacheEntry>): HTTPCacheEntry => ({
   payload,
   statusCode: 200,
   headers: {},
@@ -68,7 +68,7 @@ export function describeHTTPCacheStoreContract(
 
     // A Buffer is what a handler that answers with bytes hands over: it must come back as bytes, and the same
     // ones, including sequences that are not valid UTF-8.
-    it('keeps a Buffer payload a Buffer, byte for byte, and a string payload a string', async () => {
+    it('keeps a Buffer payload as the same bytes, and a string payload a string', async () => {
       const store = await factory()
       const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80, 0xc3, 0x28, 0x0a])
 
@@ -79,6 +79,19 @@ export function describeHTTPCacheStoreContract(
       expect(Buffer.isBuffer(bin?.payload)).toBe(true)
       expect(Buffer.compare(bin!.payload as Buffer, bytes)).toBe(0)
       expect((await store.get('text'))?.payload).toBe('héllo')
+    })
+
+    // What the server hands the cache for bytes is a plain Uint8Array, not a Buffer: it must come back as the same
+    // bytes too.
+    it('keeps a plain Uint8Array payload as the same bytes', async () => {
+      const store = await factory()
+      const bytes = new Uint8Array([0x00, 0xff, 0xfe, 0x80, 0xc3, 0x28, 0x0a])
+
+      await store.put('plain', entry(bytes), { ttl: 60 * Second })
+
+      const read = await store.get('plain')
+      expect(read?.payload).toBeInstanceOf(Uint8Array)
+      expect([...(read!.payload as Uint8Array)]).toEqual([...bytes])
     })
 
     it('reads an absent key as undefined', async () => {

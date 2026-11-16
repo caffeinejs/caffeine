@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { ErrConfiguration, Router, constraint, version, type ConstraintStrategy } from '@caffeinejs/http'
-import { constraints, createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Second, Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -113,21 +113,18 @@ describe('constrained routes that share a URL', () => {
     return pets
   }
 
-  async function start(router: Router, cachingFirst = true) {
-    const caching = HTTPCaching(b => b.store(new MemoryHTTPCacheStore()))
-    const app = cachingFirst ? newApp().with(caching).with(constraints()) : newApp().with(constraints()).with(caching)
-    const mounted = app.mount(router)
+  async function start(router: Router) {
+    const mounted = newApp()
+      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+      .mount(router)
     close = () => mounted.close()
     await mounted.bootstrap()
 
     return mounted
   }
 
-  it.each([
-    ['caching installed before constraints', true],
-    ['caching installed after constraints', false],
-  ])('are refused when nothing in the key tells them apart (%s)', async (_name, cachingFirst) => {
-    await expect(start(versioned({ ttl: 60 * Second }, { ttl: 60 * Second }), cachingFirst)).rejects.toThrow(
+  it('are refused when nothing in the key tells them apart', async () => {
+    await expect(start(versioned({ ttl: 60 * Second }, { ttl: 60 * Second }))).rejects.toThrow(
       /constrained on "Accept-Version" and its cache key does not tell it from the other routes/,
     )
   })
@@ -183,7 +180,7 @@ describe('constrained routes that share a URL', () => {
         .handler(() => ({ tenant: 'acme' }))
 
       const app = newApp()
-        .with(constraints(() => [tenant]))
+        .server(() => ({ constraints: [tenant] }))
         .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
         .mount(router)
       close = () => app.close()

@@ -1,5 +1,5 @@
 import { $p, Args, Controller, Get, type IContext, type WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -25,7 +25,7 @@ class BasedController {
 void [BasedController]
 
 describe('caching under a base path', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     await app?.close()

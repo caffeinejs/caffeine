@@ -649,7 +649,7 @@ describe('the Node platform', () => {
     expect(await (await other.request('/a/scheme', { headers })).text()).toBe('http')
   })
 
-  it('refuses at start-up a route the Node application cannot serve yet', async () => {
+  it('refuses at start-up a cached route no HTTP caching covers', async () => {
     const routes = newRouter('/a')
     routes
       .get('/cached')

@@ -13,8 +13,8 @@ const built = (dir: string, file: string): Pick<ServerConfig, 'args' | 'builtPat
 // The same built fixture twice per framework: once with its cache, once without (`BENCH_CACHE=off`). The
 // harness repeats one identical request, so after the warmup every measured request on a cached row is a hit.
 const servers: ServerConfig[] = [
-  { name: 'caffeine', port: 3050, ...built('caffeine', 'caffeine.js') },
-  { name: 'caffeine (no cache)', port: 3051, env: { BENCH_CACHE: 'off' }, ...built('caffeine', 'caffeine.js') },
+  { name: 'caffeine (web)', port: 3050, ...built('caffeine', 'caffeine.js') },
+  { name: 'caffeine (web, no cache)', port: 3051, env: { BENCH_CACHE: 'off' }, ...built('caffeine', 'caffeine.js') },
   { name: 'nestjs (node)', port: 3052, ...built('nestjs', 'nestjs.js') },
   { name: 'nestjs (node, no cache)', port: 3053, env: { BENCH_CACHE: 'off' }, ...built('nestjs', 'nestjs.js') },
   { name: 'hono', port: 3054, ...built('hono', 'hono.js') },

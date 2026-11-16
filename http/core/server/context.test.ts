@@ -1,4 +1,5 @@
 import { newNoopLogger } from '@caffeinejs/application/logger'
+import { $t } from '@caffeinejs/application/schema'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
@@ -7,9 +8,11 @@ import { bodyAsStream } from '../../decorators/body_as_stream.js'
 import { Catch } from '../../decorators/index.js'
 import type { ActionResult } from '../../response.js'
 import { CookieSigner, type CookieUnsignResult } from '../cookie/signer.js'
+import { ErrConfiguration } from '../error/common.js'
 import type { ErrorHandler } from '../error/handler.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import { Router } from '../routing/programmatic/programmatic.js'
+import { withholdValidators } from './context.js'
 
 const routes = new Router('/c')
 routes
@@ -685,5 +688,192 @@ describe('cookies', () => {
 
       expect(res.headers.getSetCookie()).toEqual(['a=b; Path=/; SameSite=Lax'])
     })
+  })
+})
+
+describe('response headers', () => {
+  let captured: Record<string, string | string[]> | undefined
+  let afterSent: string | undefined
+  let sent!: () => void
+  const responded = new Promise<void>(resolve => {
+    sent = resolve
+  })
+
+  const headers = new Router('/h')
+  headers
+    .get('/listed')
+    .hook('onSend', ctx => {
+      captured = ctx.getHeaders()
+    })
+    .handler(ctx => {
+      ctx.header('x-a', 'a')
+      ctx.appendHeader('x-b', '1').appendHeader('x-b', '2')
+      return 'ok'
+    })
+  headers
+    .get('/copied')
+    .hook('onSend', ctx => {
+      ctx.getHeaders()['x-a'] = 'changed'
+    })
+    .handler(ctx => {
+      ctx.header('x-a', 'a')
+      return 'ok'
+    })
+  headers
+    .get('/removed')
+    .hook('onSend', ctx => {
+      ctx.removeHeader('X-Gone')
+    })
+    .handler(ctx => {
+      ctx.header('x-gone', '1')
+      return 'ok'
+    })
+  headers
+    .get('/late')
+    .hook('onResponse', ctx => {
+      ctx.removeHeader('x-a')
+      afterSent = ctx.getHeader('x-a')
+      sent()
+    })
+    .handler(ctx => {
+      ctx.header('x-a', 'a')
+      return 'ok'
+    })
+
+  const served = createWebApplication()
+    .logger(b => b.use(newNoopLogger()))
+    .mount(headers)
+
+  beforeAll(async () => {
+    await served.bootstrap()
+  })
+
+  afterAll(async () => {
+    await served.close()
+  })
+
+  it('lists every header a route wrote through getHeaders, a list value as its list', async () => {
+    await (await served.request('/h/listed')).text()
+
+    expect(captured?.['x-a']).toBe('a')
+    expect(captured?.['x-b']).toEqual(['1', '2'])
+  })
+
+  // What getHeaders hands out is a copy: a write to it would otherwise reach the answer past the checks `header` makes.
+  it('does not send a write to what getHeaders returned', async () => {
+    const res = await served.request('/h/copied')
+
+    expect(res.headers.get('x-a')).toBe('a')
+  })
+
+  it('takes a header off the answer with removeHeader, from onSend, in any case', async () => {
+    const res = await served.request('/h/removed')
+
+    expect(res.headers.get('x-gone')).toBe(null)
+  })
+
+  it('changes nothing with removeHeader once the answer has left', async () => {
+    await (await served.request('/h/late')).text()
+    await responded
+
+    expect(afterSent).toBe('a')
+  })
+})
+
+describe('withholdValidators', () => {
+  const restores = new Map<string, () => void>()
+  let restored: string | undefined
+
+  const validators = new Router('/w')
+  for (const [path, validated] of [
+    ['/plain', false],
+    ['/validated', true],
+  ] as const) {
+    const route = validators
+      .get(path)
+      .hook('onRequest', ctx => {
+        restores.set(path, withholdValidators(ctx))
+      })
+      .hook('onSend', ctx => {
+        restores.get(path)?.()
+        restored = ctx.req.header('if-none-match')
+      })
+
+    ;(validated ? route.schema({ headers: $t.Object({ 'x-other': $t.String() }) }) : route).handler(ctx => ({
+      inm: ctx.req.header('if-none-match') ?? null,
+      has: ctx.req.hasHeader('if-modified-since'),
+      all: Object.keys(ctx.req.header()),
+    }))
+  }
+
+  // A schema that requires a validator validates what the client sent: hiding it from the handler is no reason to
+  // refuse the request.
+  validators
+    .get('/required')
+    .hook('onRequest', ctx => void withholdValidators(ctx))
+    .schema({ headers: $t.Object({ 'if-none-match': $t.String() }) })
+    .handler(() => 'ok')
+
+  const served = createWebApplication()
+    .logger(b => b.use(newNoopLogger()))
+    .mount(validators)
+  const sentHeaders = {
+    'if-none-match': '"a"',
+    'if-modified-since': 'Wed, 21 Oct 2015 07:28:00 GMT',
+    'x-other': '1',
+  }
+
+  beforeAll(async () => {
+    await served.bootstrap()
+  })
+
+  afterAll(async () => {
+    await served.close()
+  })
+
+  async function seen(path: string): Promise<{ inm: string | null; has: boolean; all: string[] }> {
+    restored = undefined
+    return (await (await served.request(`/w${path}`, { headers: sentHeaders })).json()) as {
+      inm: string | null
+      has: boolean
+      all: string[]
+    }
+  }
+
+  it('hides both validators from what the handler reads of the request', async () => {
+    const read = await seen('/plain')
+
+    expect(read.inm).toBe(null)
+    expect(read.has).toBe(false)
+    expect(read.all).not.toContain('if-none-match')
+    expect(read.all).not.toContain('if-modified-since')
+  })
+
+  it('leaves every other header alone', async () => {
+    expect((await seen('/plain')).all).toContain('x-other')
+  })
+
+  it('puts them back for what runs after the handler', async () => {
+    await seen('/plain')
+
+    expect(restored).toBe('"a"')
+  })
+
+  // Validation runs after `onRequest` and keeps its own record of the headers, which must not lose them for good.
+  it('puts them back on a route that validates its headers', async () => {
+    const read = await seen('/validated')
+
+    expect(read.inm).toBe(null)
+    expect(restored).toBe('"a"')
+  })
+
+  it('validates the headers the client sent, the withheld ones included', async () => {
+    const res = await served.request('/w/required', { headers: sentHeaders })
+
+    expect(res.status).toBe(200)
+  })
+
+  it('refuses a context the engine did not build', () => {
+    expect(() => withholdValidators({} as IContext)).toThrow(ErrConfiguration)
   })
 })

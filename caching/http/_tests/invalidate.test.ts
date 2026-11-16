@@ -1,6 +1,6 @@
 import { CaffeineIoC, Configuration, Injectable, Profile, Provides } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get, Post, Put, Router, Status } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 

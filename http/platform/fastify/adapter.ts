@@ -50,6 +50,7 @@ import type { IRoute, IRouteCompilers, IRouteGroup, RouteGroupScope } from '../.
 import { assertAuthorizationConfigured } from '../../core/security/authz/index.js'
 import type { Principal } from '../../core/security/identity.js'
 import { assertAuthenticationConfigured, assertRouteSchemesResolve } from '../../core/security/security.js'
+import { CACHING_PLUGIN } from '../../plugin_marks.js'
 import { Keys } from '../../symbols.js'
 import {
   closeServer,
@@ -211,15 +212,6 @@ declare module 'fastify' {
     $caffeine?: CaffeineRouteConfig
   }
 }
-
-/**
- * The name `@caffeinejs/caching` registers its plugin under.
- *
- * The one place this package names another: `@CacheControl` / `@CacheInvalidate` and the plugin that serves them
- * ship together, so a route carrying the config with no plugin to read it is a missing `.with(HTTPCaching())`
- * and nothing else.
- */
-const CACHING_PLUGIN = '@caffeinejs/caching'
 
 export class Adapter implements IAdapter<AdapterTypes> {
   /**

@@ -1,14 +1,15 @@
 import type { Logger } from '@caffeinejs/application/logger'
 import { isValidKey, type Container, type InjectionToken } from '@caffeinejs/di'
-import { ErrConfiguration, type HTTPPluginConfigurer, type HTTPSetupContext } from '@caffeinejs/http'
-import { type AdapterRouteOptions, type HTTPPluginFactory, type RouterTypes } from '@caffeinejs/http/fastify'
+import {
+  ErrConfiguration,
+  HTTPPlugin,
+  type AdapterExtensionFactory,
+  type HTTPPluginConfigurer,
+  type HTTPSetupContext,
+} from '@caffeinejs/http'
 import { type ByteSize, formatBytes } from '@caffeinejs/std/bytes'
 import { type Duration, formatDuration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
-import type { FastifyPluginAsync } from 'fastify'
-
-import './_fastify.js'
-import fp from 'fastify-plugin'
 
 import { guardObserver, storeErrorLogger } from './_observe.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache_control.js'
@@ -20,10 +21,10 @@ import { kBuild, HTTPCachingOptionsBuilder } from './options_builder.js'
 import type { HTTPCacheStore } from './store.js'
 
 /** Authors {@link HTTPCachingOptions} through {@link HTTPCachingOptionsBuilder} instead of the plain object. */
-export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachingOptionsBuilder, C, RouterTypes>
+export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachingOptionsBuilder, C>
 
 /**
- * HTTP response caching, as an ordinary Fastify plugin factory: `.with(HTTPCaching())`.
+ * HTTP response caching, as a plugin factory: `.with(HTTPCaching())`.
  *
  * Takes an options object or a builder callback. Neither binds anything into the container — `store`,
  * `etagGenerator` and `observer` are resolved once as the plugin registers, from the option given. An omitted
@@ -40,14 +41,16 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  *
  * Being a plain plugin factory rather than a feature, it installs once per context — the root, or one route
  * group with `router.with(...)` / `@Use(...)` — each with its own settings.
+ * Installed on a server and again on a router or a controller under it, it is refused at start-up.
  *
  * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
- * `cacheInvalidate()` route extensions. Install it after the authentication gate, `.with(authentication())`, and before a plugin that
- * compresses responses: a payload a compressor already turned into a stream is neither hashed nor stored.
+ * `cacheInvalidate()` route extensions. Wherever it is installed, its hooks run after every hook of the server, its
+ * routers and the route's guards, so a request the authentication gate or a guard refuses is never served from the
+ * store. A payload an earlier `onSend` hook turned into a stream is neither hashed nor stored.
  */
 export function HTTPCaching<C = unknown>(
   options?: HTTPCachingOptions | HTTPCachingConfigurer<C>,
-): HTTPPluginFactory<C> {
+): AdapterExtensionFactory<HTTPPlugin, C> {
   return context => {
     const { container, logger } = context
     const resolved = typeof options === 'function' ? build(options, context) : (options ?? {})
@@ -214,46 +217,46 @@ function resolveETagGenerator(
   return value as ETagGenerator
 }
 
+class CachingPlugin extends HTTPPlugin {
+  // What refuses two installs in one slot, and how the server finds them.
+  override readonly name = '@caffeinejs/caching'
+  readonly #deps: CacheDeps
+
+  constructor(deps: CacheDeps) {
+    super()
+    this.#deps = deps
+  }
+
+  register(context: HTTPSetupContext): void {
+    const deps = this.#deps
+
+    context.app.hook('onRoute', route => {
+      const cacheOpts = route.config.get('cache') as CacheControlOptions | false | undefined
+      if (cacheOpts !== undefined) {
+        attachCacheHooks(route, cacheOpts, deps)
+      }
+
+      const invalidateOpts = route.config.get('cacheInvalidate') as CacheInvalidateOptions | false | undefined
+      if (invalidateOpts !== undefined && invalidateOpts !== false) {
+        attachCacheInvalidateHook(route, invalidateOpts, deps)
+      }
+    })
+  }
+}
+
 /**
  * Attaches the cache read/store and eviction hooks to the routes that declared `@CacheControl` /
  * `@CacheInvalidate`.
  *
- * Per-route work happens in Fastify's own `onRoute` hook, which fires while each route registers and may
- * still rewrite its options. A route that declared neither keeps its hook slots undefined and pays nothing.
+ * Per-route work happens in the server's `onRoute` hook. A route that declared neither gets no hook of the cache and
+ * pays nothing.
  *
- * The hooks land behind the ones the adapter already attached, `@UseGuards` included, so a guard runs on a
- * cache hit as well as on a miss.
+ * The hooks land behind the ones the server already runs, `@UseGuards` included, so a guard runs on a cache hit as
+ * well as on a miss.
  *
- * A `key` function is handed the request of the handler's own context, which exists only on a server the
- * application's adapter drives. Everything else works on any server.
- *
- * Installs once per context — the root, or one route group — and a second registration on the same context is
+ * Installs once per slot, the server's or one router's or controller's; a second install over the same route is
  * refused.
  */
-export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
-  const plugin: FastifyPluginAsync = async instance => {
-    // Fastify refuses a decoration the context already has, which is what refuses a second install on it.
-    instance.decorateRequest('responseCached', false)
-    instance.decorateRequest('cacheKey', null)
-    instance.decorateRequest('cacheFlight', null)
-    instance.decorateRequest('cacheStale', null)
-    instance.decorateRequest('cacheConditionals', null)
-
-    instance.addHook('onRoute', routeOptions => {
-      const routeDef = routeOptions as AdapterRouteOptions
-      const config = routeDef.config as Record<string, unknown> | undefined
-
-      const cacheOpts = config?.cache as CacheControlOptions | false | undefined
-      if (cacheOpts !== undefined) {
-        attachCacheHooks(routeDef, cacheOpts, deps)
-      }
-
-      const invalidateOpts = config?.cacheInvalidate as CacheInvalidateOptions | false | undefined
-      if (invalidateOpts !== undefined && invalidateOpts !== false) {
-        attachCacheInvalidateHook(routeDef, invalidateOpts, deps)
-      }
-    })
-  }
-
-  return fp(plugin, { name: '@caffeinejs/caching' })
+export function cachePlugin(deps: CacheDeps): HTTPPlugin {
+  return new CachingPlugin(deps)
 }

@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer'
+
 import { ConfigStore } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
 import { ContextStorage, ExecutionContext, type Container, type ContextKey, type Ctor } from '@caffeinejs/di'
@@ -5,6 +7,7 @@ import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
 import type { IContextPlatform } from '../../adapter.js'
 import { stripBasePath } from '../../base_path.js'
+import { CACHING_PLUGIN } from '../../plugin_marks.js'
 import { compileConstraints, type CompiledConstraints } from '../constraints/derive.js'
 import { kCookieSettings } from '../cookie/keys.js'
 import { kCookieFlush, kPendingCookies, ServerCookies, type CookieWriter } from '../cookie/server_cookies.js'
@@ -34,7 +37,7 @@ import { joinPaths, pathsOf } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import { assertGated, gateOf } from '../security/gate.js'
 import type { CompiledSerializer } from '../validation/validation.js'
-import { answer, byteLength, compileSerializers, connectionFields, HeldStream, NO_SERIALIZER } from './answer.js'
+import { answer, compileSerializers, connectionFields, HeldStream, NO_SERIALIZER } from './answer.js'
 import { Context, kAppendCookies, type ServerShared } from './context.js'
 import { answerError, configurationError, defaultProblem, sendProblem, USE_FASTIFY } from './error.js'
 import { compileLevel, composeRouteHooks, type LevelInput, type StoreHooks } from './hooks.js'
@@ -511,12 +514,14 @@ export class HTTPServer {
     const scopes = group.scopes ?? []
     const levels = scopes.map(scope => this.#level(scope))
 
+    const batches = [this.#input.levels.root.batches, ...levels.map(level => level.batches)]
+    assertCachingCovered(route, batches, name, settings.application)
+
     // A copy: the automatic HEAD route is added to `methods` later, and is not one the route declared.
     const open = openDefinition(route, group, Object.freeze([...methods]), url)
     try {
-      callOnRoute(this.#input.levels.root.batches, open.definition)
-      for (const level of levels) {
-        callOnRoute(level.batches, open.definition)
+      for (const level of batches) {
+        callOnRoute(level, open.definition)
       }
     } finally {
       open.close()
@@ -1162,7 +1167,6 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
   // The first that applies names the refusal.
   const refusals: ReadonlyArray<readonly [boolean, string]> = [
     [route.options.size > 0, `route options ("${[...route.options.keys()].map(String).join('", "')}")`],
-    [route.config.has('cache') || route.config.has('cacheInvalidate'), '@CacheControl or @CacheInvalidate'],
     [types.has('fastify:request') || types.has('fastify:reply'), 'the Fastify request or reply'],
   ]
   const unsupported = refusals.find(([applies]) => applies)?.[1]
@@ -1175,9 +1179,45 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
   }
 }
 
+/**
+ * Refuses a route that declares caching with no HTTP caching over it, which would answer as if it declared nothing, and
+ * a route with two, which would run two caches. `batches` are the server's and each scope's around the route.
+ */
+function assertCachingCovered(
+  route: IRoute<Context>,
+  batches: readonly (readonly HookBatch[])[],
+  name: string,
+  application: string,
+): void {
+  let installs = 0
+  for (const level of batches) {
+    for (const batch of level) {
+      if (batch.name === CACHING_PLUGIN) {
+        installs++
+      }
+    }
+  }
+
+  if (installs > 1) {
+    throw configurationError(
+      `Cannot serve "${name}" on the ${application}: HTTP caching is installed more than once over it, among its server, routers and controller`,
+      'Keep one ".with(HTTPCaching(...))" or "@Use(HTTPCaching(...))" over the route, and remove the others',
+    )
+  }
+
+  if (installs === 0 && (route.config.has('cache') || route.config.has('cacheInvalidate'))) {
+    throw configurationError(
+      `Cannot serve "${name}" on the ${application}: it declares @CacheControl or @CacheInvalidate and no HTTP caching covers it`,
+      'Add ".with(HTTPCaching(...))" to the application builder',
+      'On a listener, add it there: ".listener(name, l => l.with(HTTPCaching(...)))"',
+      'Install it on the route group with "router.with(HTTPCaching(...))" or "@Use(HTTPCaching(...))"',
+    )
+  }
+}
+
 function lengthOf(payload: SendPayload | HeldStream): number | undefined {
   if (typeof payload === 'string') {
-    return byteLength(payload)
+    return Buffer.byteLength(payload)
   }
 
   return payload instanceof Uint8Array ? payload.byteLength : undefined

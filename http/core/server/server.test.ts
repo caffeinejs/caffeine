@@ -4,12 +4,14 @@ import { CaffeineIoC, Injectable, Scopes } from '@caffeinejs/di'
 import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
+import type { HTTPSetupContext } from '../../adapter.js'
 import { createWebApplication, type WebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { bindTo } from '../../decorators/bind_to.js'
 import { Catch, Controller, Get, Prefix } from '../../decorators/index.js'
 import { registerRouteGroup } from '../../decorators/registrar/index.js'
 import { $fst } from '../../platform/fastify/routing/picker.js'
+import { HTTPPlugin } from '../../plugin.js'
 import { Keys } from '../../symbols.js'
 import { kRouteConstraints } from '../constraints/keys.js'
 import { ErrConfiguration } from '../error/common.js'
@@ -480,14 +482,6 @@ describe('HTTPServer', () => {
           .handler(() => 'x'),
     ],
     [
-      '@CacheControl',
-      r =>
-        void r
-          .get('/x')
-          .config('cache', { maxAge: 1 })
-          .handler(() => 'x'),
-    ],
-    [
       'a @Timeout of 0',
       r =>
         void r
@@ -847,5 +841,87 @@ describe('HTTPServer middleware', () => {
 
     expect(await res.text()).toBe('denied')
     expect(seen).toEqual(['/admin/users'])
+  })
+})
+
+/**
+ * What the caching package does to a server and a route, without the package: a plugin registered under its name, and
+ * a `cache` entry in the route's config. The plugin adds a hook, as the real one does, so its batch is kept.
+ */
+describe('a route that declares caching', () => {
+  class Caching extends HTTPPlugin {
+    override readonly name = '@caffeinejs/caching'
+
+    register(context: HTTPSetupContext): void {
+      context.app.hook('onRoute', () => {})
+    }
+  }
+
+  const caching = () => new Caching()
+  function cached<R extends AnyRouter>(router: R): R {
+    router
+      .get('/x')
+      .config('cache', { ttl: 60 * Second })
+      .handler(() => 'x')
+    return router
+  }
+
+  async function failure(): Promise<unknown> {
+    return app!.bootstrap().then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+  }
+
+  // It would answer every request as if it declared nothing.
+  it('is refused when nothing installed caching', async () => {
+    app = createWebApplication().mount(cached(new Router('/cache-none')))
+
+    const err = await failure()
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect((err as Error).message).toContain(
+      'Cannot serve "GET /cache-none/x" on the fetch application: it declares @CacheControl or @CacheInvalidate and no HTTP caching covers it',
+    )
+  })
+
+  it('starts when the application installed caching', async () => {
+    app = createWebApplication()
+      .with(caching)
+      .mount(cached(new Router('/cache-root')))
+    await app.bootstrap()
+
+    expect((await fetchOn(app, '/cache-root/x')).status).toBe(200)
+  })
+
+  // A router's install covers its own routes and says nothing about its sibling's.
+  it('starts when its own router installed caching, and still refuses a sibling without it', async () => {
+    app = createWebApplication().mount(cached(new Router('/cache-own').with(caching)))
+    await app.bootstrap()
+    expect((await fetchOn(app, '/cache-own/x')).status).toBe(200)
+    await app.close()
+
+    app = createWebApplication().mount(
+      cached(new Router('/cache-own').with(caching)),
+      cached(new Router('/cache-sibling')),
+    )
+
+    const err = await failure()
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect((err as Error).message).toContain('"GET /cache-sibling/x"')
+    expect((err as Error).message).toContain('no HTTP caching covers it')
+  })
+
+  // Two installs over one route would run two caches, each reporting every outcome.
+  it('is refused when its router installed caching under a server that did', async () => {
+    const nested = new Router('/cache-twice').with(caching)
+    nested.get('/x').handler(() => 'x')
+    app = createWebApplication().with(caching).mount(nested)
+
+    const err = await failure()
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect((err as Error).message).toContain('HTTP caching is installed more than once over it')
   })
 })

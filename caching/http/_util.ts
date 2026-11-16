@@ -4,19 +4,19 @@ import {
   ErrConfiguration,
   appendVary,
   kRouteConstraints,
-  kVersionHeader,
+  type IContext,
+  type IRequest,
   type ResolvedRouteConstraint,
+  type RouteDefinition,
 } from '@caffeinejs/http'
-import { type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http/fastify'
 import { type Duration, formatDuration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { CacheControlOptions, ETagGenerator } from './cache_control.js'
 
-// A route definition's methods as one label, `GET|POST`. `onRoute` hands over an array for a framework route and
-// a string for Fastify's own HEAD twin.
-export function routeMethods(routeDef: AdapterRouteOptions): string {
-  return [routeDef.method].flat().join('|')
+// A route definition's methods as one label, `GET|POST`.
+export function routeMethods(route: RouteDefinition): string {
+  return route.methods.join('|')
 }
 
 // Canonicalizes a request URL so query parameters in a different order share one cache entry
@@ -68,14 +68,13 @@ export function buildCacheKey(
 }
 
 export function defaultCacheKey(
-  request: AdapterRequest,
+  req: Pick<IRequest, 'method' | 'url' | 'basePath' | 'header'>,
   vary?: readonly string[],
   varyByQuery?: ReadonlySet<string>,
 ): string {
   // Keyed by the URL as the browser asked for it, base path included: a page answering `/api/x` may link under
   // `/api`, and must not be replayed to `/x`. Without a base path the key is the URL alone, as it always was.
-  const basePath = request.httpContext?.req.basePath ?? ''
-  return buildCacheKey(request.method, basePath + request.url, vary, name => request.headers[name], varyByQuery)
+  return buildCacheKey(req.method, req.basePath + req.url, vary, name => req.header(name), varyByQuery)
 }
 
 /** The request directives the cache acts on. */
@@ -143,9 +142,9 @@ function seconds(argument: string): number | undefined {
 }
 
 // RFC 9111 §5.4 — `Pragma: no-cache` stands in for the directive only on a request that sent no Cache-Control.
-export function pragmaNoCache(request: AdapterRequest): boolean {
-  const pragma = request.headers.pragma
-  if (pragma === undefined || request.headers['cache-control'] !== undefined) {
+export function pragmaNoCache(req: Pick<IRequest, 'header'>): boolean {
+  const pragma = req.header('pragma')
+  if (pragma === undefined || req.header('cache-control') !== undefined) {
     return false
   }
 
@@ -176,16 +175,16 @@ export function matchesETag(ifNoneMatch: string, storedETag: string): boolean {
 // RFC 9110 §13.2.2 — If-None-Match, when present, decides alone; If-Modified-Since is read only without it,
 // and only when it is a valid date.
 export function isNotModified(
-  request: AdapterRequest,
+  req: Pick<IRequest, 'header'>,
   etag: string | undefined,
   lastModified: string | undefined,
 ): boolean {
-  const ifNoneMatch = request.headers['if-none-match']
+  const ifNoneMatch = req.header('if-none-match')
   if (ifNoneMatch) {
     return etag !== undefined && matchesETag(ifNoneMatch, etag)
   }
 
-  const ifModifiedSince = request.headers['if-modified-since']
+  const ifModifiedSince = req.header('if-modified-since')
   if (!ifModifiedSince || lastModified === undefined) {
     return false
   }
@@ -216,31 +215,25 @@ const NOT_STORED = new Set([
 ])
 
 // `statusHeader` is lower-cased by the caller, once per route.
-export function storedHeadersOf(reply: AdapterReply, statusHeader: string): Record<string, string | string[]> {
-  const all = reply.getHeaders()
-  const stored: Record<string, string | string[]> = {}
-  const connection = connectionFieldsOf(all.connection)
+export function storedHeadersOf(
+  ctx: Pick<IContext, 'getHeaders'>,
+  statusHeader: string,
+): Record<string, string | string[]> {
+  // A copy of the response's own: what is not stored is taken off it.
+  const stored = ctx.getHeaders()
+  const connection = connectionFieldsOf(stored.connection)
 
-  for (const name in all) {
-    const value = all[name]
-    if (
-      value === undefined ||
-      name === statusHeader ||
-      NOT_STORED.has(name) ||
-      name.startsWith('access-control-') ||
-      connection?.has(name)
-    ) {
-      continue
+  for (const name in stored) {
+    if (name === statusHeader || NOT_STORED.has(name) || name.startsWith('access-control-') || connection?.has(name)) {
+      delete stored[name]
     }
-
-    stored[name] = typeof value === 'number' ? String(value) : value
   }
 
   return stored
 }
 
 // RFC 9111 §3.1 — the fields a response's `Connection` names are that connection's, whatever they are called.
-function connectionFieldsOf(connection: unknown): Set<string> | undefined {
+function connectionFieldsOf(connection: string | string[] | undefined): Set<string> | undefined {
   if (connection === undefined) {
     return undefined
   }
@@ -248,7 +241,7 @@ function connectionFieldsOf(connection: unknown): Set<string> | undefined {
   return new Set(
     [connection]
       .flat()
-      .flatMap(value => String(value).split(','))
+      .flatMap(value => value.split(','))
       .map(name => name.trim().toLowerCase()),
   )
 }
@@ -262,22 +255,22 @@ function connectionFieldsOf(connection: unknown): Set<string> | undefined {
 export type StoredHeadersMode = 'hit' | 'revalidation' | 'replacement'
 
 export function applyStoredHeaders(
-  reply: AdapterReply,
+  ctx: Pick<IContext, 'hasHeader' | 'header' | 'appendHeader' | 'getHeader'>,
   headers: Record<string, string | string[]>,
   mode: StoredHeadersMode,
 ): void {
   if (mode === 'revalidation') {
     for (const name of REVALIDATION_HEADERS) {
       const value = headers[name]
-      if (value !== undefined && !reply.hasHeader(name)) {
-        reply.header(name, value)
+      if (value !== undefined && !ctx.hasHeader(name)) {
+        writeHeader(ctx, name, value)
       }
     }
   } else {
     const overwrite = mode === 'replacement'
     for (const name in headers) {
-      if (name !== 'vary' && (overwrite || !reply.hasHeader(name))) {
-        reply.header(name, headers[name])
+      if (name !== 'vary' && (overwrite || !ctx.hasHeader(name))) {
+        writeHeader(ctx, name, headers[name])
       }
     }
   }
@@ -285,7 +278,7 @@ export function applyStoredHeaders(
   const vary = headers.vary
   if (vary !== undefined) {
     appendVary(
-      reply,
+      ctx,
       (typeof vary === 'string' ? vary : vary.join(','))
         .split(',')
         .map(name => name.trim())
@@ -294,7 +287,20 @@ export function applyStoredHeaders(
   }
 }
 
-export async function generateETag(payload: string | Buffer, generator?: ETagGenerator): Promise<string> {
+// A list goes out as one field line per value, as it was stored.
+function writeHeader(ctx: Pick<IContext, 'header' | 'appendHeader'>, name: string, value: string | string[]): void {
+  if (typeof value === 'string') {
+    ctx.header(name, value)
+    return
+  }
+
+  ctx.header(name, value[0])
+  for (let i = 1; i < value.length; i++) {
+    ctx.appendHeader(name, value[i])
+  }
+}
+
+export async function generateETag(payload: string | Uint8Array, generator?: ETagGenerator): Promise<string> {
   const buf = typeof payload === 'string' ? Buffer.from(payload) : payload
 
   if (generator) {
@@ -365,18 +371,13 @@ export function buildCacheControl(opts: CacheControlOptions, privacyOverride?: '
 // A store reads a ttl of 0 as it pleases — `lru-cache` as "never expires" — so a duration is refused while the
 // route registers, not discovered in production. A `ttl` below one second is refused too: `max-age` is whole
 // seconds, and it would be sent as `max-age=0`.
-export function durationSeconds(
-  routeDef: AdapterRouteOptions,
-  option: string,
-  value: Duration,
-  minimum: 0 | 1,
-): number {
+export function durationSeconds(route: RouteDefinition, option: string, value: Duration, minimum: 0 | 1): number {
   const seconds = value / Second
 
   if (!Number.isFinite(seconds) || seconds < minimum) {
     throw new ErrConfiguration(
       errMessage(
-        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": ${option} must be ${
+        `Cannot install caching on "${routeMethods(route)} ${route.url}": ${option} must be ${
           minimum === 1 ? 'at least one second' : 'a non-negative duration'
         }, such as ${minimum === 1 ? '5 * Minute' : '0'}, got "${formatDuration(value)}"`,
       )
@@ -390,11 +391,11 @@ export function durationSeconds(
 
 // A tag names a counter in the store, and a brace in a key would decide its slot on a Redis cluster.
 export function assertTags(
-  routeDef: AdapterRouteOptions,
+  route: RouteDefinition,
   tags: unknown,
   { what, required }: { what: 'caching' | 'cache invalidation'; required: boolean },
 ): void {
-  const where = `Cannot install ${what} on "${routeMethods(routeDef)} ${routeDef.url}"`
+  const where = `Cannot install ${what} on "${routeMethods(route)} ${route.url}"`
 
   if (tags === undefined) {
     if (required) {
@@ -426,24 +427,16 @@ export function assertTags(
 // Routes that share a URL under different constraints share a default key too, so one would be served the
 // other's response. What tells them apart on the wire is the header the constraint reads, which the key carries
 // once the route varies on it; a key function of the route's own does the same job.
-export function assertConstraintsKeyed(routeDef: AdapterRouteOptions, opts: CacheControlOptions): void {
+export function assertConstraintsKeyed(route: RouteDefinition, opts: CacheControlOptions): void {
   if (opts.ttl === undefined || opts.key !== undefined || opts.vary?.includes('*')) {
     return
   }
 
-  const declared = (routeDef.config as Record<string, unknown> | undefined)?.[kRouteConstraints] as
-    | Map<string, ResolvedRouteConstraint>
-    | undefined
+  const declared = route.config.get(kRouteConstraints) as Map<string, ResolvedRouteConstraint> | undefined
   const headers = new Map<string, string | undefined>()
 
   for (const [name, constraint] of declared ?? []) {
     headers.set(name, constraint.header)
-  }
-
-  for (const name of Object.keys((routeDef.constraints as Record<string, unknown> | undefined) ?? {})) {
-    if (!headers.has(name)) {
-      headers.set(name, name === 'version' ? kVersionHeader : name === 'host' ? 'Host' : undefined)
-    }
   }
 
   const vary = new Set(opts.vary?.map(h => h.toLowerCase()))
@@ -452,7 +445,7 @@ export function assertConstraintsKeyed(routeDef: AdapterRouteOptions, opts: Cach
     if (header === undefined) {
       throw new ErrConfiguration(
         errMessage(
-          `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": constraint "${name}" reads no header the cache key can vary on: give the route a "key" function`,
+          `Cannot install caching on "${routeMethods(route)} ${route.url}": constraint "${name}" reads no header the cache key can vary on: give the route a "key" function`,
         )
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
@@ -462,26 +455,11 @@ export function assertConstraintsKeyed(routeDef: AdapterRouteOptions, opts: Cach
     if (!vary.has(header.toLowerCase())) {
       throw new ErrConfiguration(
         errMessage(
-          `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": the route is constrained on "${header}" and its cache key does not tell it from the other routes on that URL: add "${header}" to "vary", or give the route a "key" function`,
+          `Cannot install caching on "${routeMethods(route)} ${route.url}": the route is constrained on "${header}" and its cache key does not tell it from the other routes on that URL: add "${header}" to "vary", or give the route a "key" function`,
         )
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
       )
     }
   }
-}
-
-/** The payload shapes the server sends as a stream: a Node stream, a web stream, or a `Response`. */
-export function isStreamPayload(payload: unknown): boolean {
-  if (payload === null || typeof payload !== 'object') {
-    return false
-  }
-
-  const candidate = payload as { pipe?: unknown; getReader?: unknown }
-
-  return (
-    typeof candidate.pipe === 'function' ||
-    typeof candidate.getReader === 'function' ||
-    Object.prototype.toString.call(payload) === '[object Response]'
-  )
 }

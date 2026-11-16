@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream'
 
 import { Controller, ErrConfiguration, Get, Header, Post, Status } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
 import { afterEach, describe, expect, it, vi } from 'vitest'

@@ -77,6 +77,7 @@ export class PluginSlot implements WebApplicationOps<any, any> {
 
       if (extension instanceof HTTPPlugin) {
         batch.engineOnly = (extension as { [kEngineOnly]?: EngineOnly })[kEngineOnly]
+        batch.name = extension.name
         this.claim(extension, where)
         await extension.register(context)
       }

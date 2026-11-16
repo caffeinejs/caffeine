@@ -178,7 +178,7 @@ function slotValue(ctx: Context, slot: ValidationSlot): unknown {
       // A plain object, which the compiled check reads fast; lookups read own names only.
       return { ...ctx.req.query() }
     case 'headers':
-      return { ...ctx.req.header() }
+      return { ...ctx.req.allHeaders() }
     case 'body':
       return ctx.req.body()
   }

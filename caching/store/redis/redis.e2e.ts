@@ -4,7 +4,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 /**
  * `RedisHTTPCacheStore` against real servers: Redis and Valkey, each as one server and as a cluster. The cluster rows are
  * what prove the store never names keys from two slots — a one-node cluster still answers CROSSSLOT.

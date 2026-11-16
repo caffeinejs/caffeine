@@ -11,6 +11,9 @@ export class HookBatch {
   /** The `kEngineOnly` of the plugin that added these hooks: the Fastify adapter refuses the batch with it. */
   engineOnly: EngineOnly | undefined = undefined
 
+  /** The name of the plugin that added these hooks, when it has one. */
+  name: string | undefined = undefined
+
   /** The context the entry registered with: what its server hooks are handed. */
   readonly kit: HTTPSetupContext
 

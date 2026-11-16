@@ -1,9 +1,9 @@
 import { connect } from 'node:net'
 
+import { CaffeineIoC } from '@caffeinejs/di'
 import { Controller, Get } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { Second } from '@caffeinejs/std/duration'
-import fastify from 'fastify'
+import { createWebApplication, newRouter } from '@caffeinejs/http/node'
+import { type Duration, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -55,8 +55,8 @@ class RecordingStore implements HTTPCacheStore {
 }
 
 /**
- * On a server the adapter does not drive, so what is checked is the hooks' own doing: which signal each store
- * call is handed, and what the cache reports when one aborts.
+ * On a plugin given its dependencies, with an observer of failures alone, so what is checked is the hooks' own doing:
+ * which signal each store call is handed, and what the cache reports when one aborts.
  */
 describe('the signal a store call carries', () => {
   let close: (() => Promise<unknown>) | undefined
@@ -67,54 +67,55 @@ describe('the signal a store call carries', () => {
     close = undefined
   })
 
-  async function start(store: HTTPCacheStore, options: { storeTimeout?: number; handlerTimeout?: number } = {}) {
+  async function start(store: HTTPCacheStore, options: { storeTimeout?: Duration; handlerTimeout?: Duration } = {}) {
     const errors: CacheErrorEvent[] = []
     const sends = { n: 0 }
     const handled = { n: 0 }
-    const server = fastify(options.handlerTimeout === undefined ? {} : { handlerTimeout: options.handlerTimeout })
-    close = () => server.close()
-    // Ahead of the cache's own store hook, and finishing through `done` as that one does: what is counted is
-    // every send Fastify starts, and nothing here holds one open.
-    server.addHook('onSend', (_request, _reply, payload, done) => {
-      sends.n++
-      done(null, payload)
-    })
-    await server.register(
-      cachePlugin({
-        store,
-        etagGenerator: undefined,
-        statusHeader: 'X-Cache',
-        observer: { onError: event => errors.push(event) },
-        storeTimeout: options.storeTimeout,
-      }),
-    )
-    server.route({
-      method: 'GET',
-      url: '/data',
-      config: { cache: { ttl: 60 * Second, tags: ['data'] } },
-      handler: () => {
+    const router = newRouter()
+    router
+      .get('/data')
+      .config('cache', { ttl: 60 * Second, tags: ['data'] })
+      .handler(() => {
         handled.n++
         return { ok: true }
-      },
-    })
+      })
+    router
+      .post('/data')
+      .config('cacheInvalidate', { tags: ['data'] })
+      .handler(() => ({ ok: true }))
 
-    server.route({
-      method: 'POST',
-      url: '/data',
-      config: { cacheInvalidate: { tags: ['data'] } },
-      handler: () => ({ ok: true }),
+    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    if (options.handlerTimeout !== undefined) {
+      const handlerTimeout = options.handlerTimeout
+      app.server(() => ({ handlerTimeout }))
+    }
+    close = () => app.close()
+    // Ahead of the cache's own store hook: what is counted is every send the server starts.
+    app.hook('onSend', () => {
+      sends.n++
     })
-    await server.ready()
+    app
+      .with(() =>
+        cachePlugin({
+          store,
+          etagGenerator: undefined,
+          statusHeader: 'X-Cache',
+          observer: { onError: event => errors.push(event) },
+          storeTimeout: options.storeTimeout,
+        }),
+      )
+      .mount(router)
+    await app.bootstrap()
 
-    return { server, errors, sends, handled }
+    return { app, errors, sends, handled }
   }
 
   it('hands a read the request signal and a write no signal at all, with no storeTimeout', async () => {
     const store = new RecordingStore()
-    const { server, errors } = await start(store)
+    const { app, errors } = await start(store)
 
-    await server.inject('/data')
-    await server.inject({ method: 'POST', url: '/data' })
+    await app.request('/data')
+    await app.request('/data', { method: 'POST' })
 
     expect(store.calls.map(call => call.verb)).toEqual(['get', 'put', 'evict'])
     expect(store.signalOf('get')).toBeInstanceOf(AbortSignal)
@@ -130,10 +131,10 @@ describe('the signal a store call carries', () => {
     const store = new RecordingStore()
     store.hang = true
     const watched = new WatchedStore(store)
-    const { server, errors } = await start(watched, { storeTimeout: 20 })
+    const { app, errors } = await start(watched, { storeTimeout: 20 * Millisecond })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const pending = server.inject('/data')
+    const pending = app.request('/data')
     await watched.reads.reached(1)
     await vi.advanceTimersByTimeAsync(19)
     expect(store.signalOf('get')?.aborted).toBe(false)
@@ -143,8 +144,8 @@ describe('the signal a store call carries', () => {
     await vi.advanceTimersByTimeAsync(20)
     const res = await pending
 
-    expect(res.statusCode).toBe(200)
-    expect(res.headers['x-cache']).toBe('MISS')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-cache')).toBe('MISS')
     expect(store.signalOf('get')?.aborted).toBe(true)
     expect(store.signalOf('put')?.aborted).toBe(true)
     expect(errors.map(event => event.operation)).toEqual(['get', 'put'])
@@ -168,14 +169,14 @@ describe('the signal a store call carries', () => {
         throw thrown.evict
       },
     }
-    const { server, errors } = await start(store, { storeTimeout: 60_000 })
+    const { app, errors } = await start(store, { storeTimeout: 60 * Second })
 
-    const read = await server.inject('/data')
-    const mutation = await server.inject({ method: 'POST', url: '/data' })
+    const read = await app.request('/data')
+    const mutation = await app.request('/data', { method: 'POST' })
 
-    expect(read.statusCode).toBe(200)
-    expect(read.headers['x-cache']).toBe('MISS')
-    expect(mutation.statusCode).toBe(200)
+    expect(read.status).toBe(200)
+    expect(read.headers.get('x-cache')).toBe('MISS')
+    expect(mutation.status).toBe(200)
     expect(errors.map(event => [event.operation, event.error])).toEqual([
       ['get', thrown.get],
       ['put', thrown.put],
@@ -183,9 +184,8 @@ describe('the signal a store call carries', () => {
     ])
   })
 
-  // Fastify answers 503 and aborts the request signal; the read stops with it, and it is not a store failure.
-  // The 503 is over before the read hook returns, since the store hook finished it through `done` rather than
-  // a promise, so the lifecycle stops there: the handler never runs, and nothing is sent a second time.
+  // The server answers 503 and aborts the request signal; the read stops with it, and it is not a store failure.
+  // The handler never runs, and nothing is sent a second time.
   it('lets a handler timeout take the read out, and reports nothing', async () => {
     const unhandled: unknown[] = []
     const onUnhandled = (reason: unknown) => unhandled.push(reason)
@@ -193,18 +193,18 @@ describe('the signal a store call carries', () => {
     const store = new RecordingStore()
     store.hang = true
     const watched = new WatchedStore(store)
-    const { server, errors, sends, handled } = await start(watched, { handlerTimeout: 50 })
+    const { app, errors, sends, handled } = await start(watched, { handlerTimeout: 50 * Millisecond })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     try {
-      const pending = server.inject('/data')
+      const pending = app.request('/data')
       await watched.reads.reached(1)
       await vi.advanceTimersByTimeAsync(50)
       const res = await pending
 
-      expect(res.statusCode).toBe(503)
+      expect(res.status).toBe(503)
       expect(store.signalOf('get')?.aborted).toBe(true)
-      expect((store.signalOf('get')!.reason as { code?: string }).code).toBe('FST_ERR_HANDLER_TIMEOUT')
+      expect((store.signalOf('get')!.reason as { code?: string }).code).toBe('ERR_HTTP_SERVICE_UNAVAILABLE')
       expect(errors).toEqual([])
 
       await turn()
@@ -221,9 +221,9 @@ describe('the signal a store call carries', () => {
     const store = new RecordingStore()
     store.hang = true
     const watched = new WatchedStore(store)
-    const { server, errors } = await start(watched)
-    await server.listen({ port: 0, host: '127.0.0.1' })
-    const { port } = server.server.address() as { port: number }
+    const { app, errors } = await start(watched)
+    const { address } = await app.run({ host: '127.0.0.1', port: 0 })
+    const { port } = address
 
     const socket = connect({ host: '127.0.0.1', port })
     await new Promise(resolve => socket.once('connect', resolve))
@@ -232,6 +232,9 @@ describe('the signal a store call carries', () => {
     expect(store.signalOf('get')?.aborted).toBe(false)
 
     socket.destroy()
+    // As on Fastify, the request goes on after its client left: the handler runs and the store hook writes. That write
+    // gets no signal, so a store that hangs on it would hold the shutdown.
+    store.hang = false
     await whenAborted(store.signalOf('get')!)
 
     await turn()

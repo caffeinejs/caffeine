@@ -424,3 +424,30 @@ describe('ContextRequest.id', () => {
     await app.close()
   })
 })
+
+describe('Context.getHeaders', () => {
+  // Fastify keeps a header set from a number as that number; the context hands back the text it goes out as.
+  it("lists the reply's headers, a number as text", async () => {
+    let captured: Record<string, string | string[]> | undefined
+    const router = newRouter('/headers')
+    router
+      .get('/')
+      .hook('onSend', ctx => {
+        captured = ctx.getHeaders()
+      })
+      .handler(ctx => {
+        ctx.platform.reply.header('x-n', 5)
+        ctx.appendHeader('x-b', '1').appendHeader('x-b', '2')
+        return 'ok'
+      })
+    const app = createWebApplication().mount(router)
+    await app.bootstrap()
+
+    await (await app.request('/headers')).text()
+
+    expect(captured?.['x-n']).toBe('5')
+    expect(captured?.['x-b']).toEqual(['1', '2'])
+
+    await app.close()
+  })
+})

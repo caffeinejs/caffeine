@@ -1,7 +1,7 @@
 import { HTTPCaching, cacheControl } from '@caffeinejs/caching/http'
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
 import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 
 import { PRODUCTS, TTL_SECONDS } from '../payload.js'

@@ -31,9 +31,9 @@ import { normalizePath, sanitizeURL } from '../middleware/path.js'
 import type { AuthenticationState } from '../security/auth/authentication_state.js'
 import type { Principal } from '../security/identity.js'
 import type { CompiledSerializer } from '../validation/validation.js'
-import { asBytes, HeldStream, isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
+import { HeldStream, isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
 import { contentTooLarge, declaredOver, ErrRequestBodyConsumed, limitStream } from './body.js'
-import { configurationError, sendProblem } from './error.js'
+import { configurationError, sendProblem, USE_NODE } from './error.js'
 import type { ServerPlatform } from './platform.js'
 import { parseQuery } from './query.js'
 import type { RouteStore } from './server.js'
@@ -119,6 +119,8 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   #status = 200
   readonly #headers: Record<string, string | string[]> = Object.create(null)
   #payload: SendPayload | HeldStream | undefined
+  /** The Node stream the answer held before {@link payload} read it as web bytes. */
+  #held: HeldStream | undefined
   #answered = false
   #responded = false
   #expired = false
@@ -325,6 +327,25 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     return Array.isArray(value) ? value.join(', ') : value
   }
 
+  /** @see {@link IContext.getHeaders} */
+  getHeaders(): Record<string, string | string[]> {
+    const copy: Record<string, string | string[]> = Object.create(null)
+    for (const name in this.#headers) {
+      const value = this.#headers[name]
+      copy[name] = Array.isArray(value) ? [...value] : value
+    }
+    return copy
+  }
+
+  removeHeader(key: string): this {
+    if (this.#late('removeHeader')) {
+      return this
+    }
+
+    delete this.#headers[key.toLowerCase()]
+    return this
+  }
+
   /**
    * Sets a cookie, written as the answer goes out, ahead of every `onSend` hook.
    *
@@ -392,7 +413,8 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     const payload = this.#payload
 
     if (payload instanceof HeldStream) {
-      const bytes = asBytes(this, payload.source)
+      this.#held = payload
+      const bytes = payload.bytes(this)
       this.#payload = bytes
       return bytes
     }
@@ -400,9 +422,18 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     return payload
   }
 
-  /** The Node stream the answer holds, while nothing has read it as {@link payload}. */
+  /**
+   * The Node stream the answer holds, while nothing has read it: a hook handed it as {@link payload} that left the bytes
+   * alone, and kept them as the payload, has not read it.
+   */
   get heldStream(): HeldStream | undefined {
-    return this.#payload instanceof HeldStream ? this.#payload : undefined
+    const payload = this.#payload
+    if (payload instanceof HeldStream) {
+      return payload
+    }
+
+    const held = this.#held
+    return held !== undefined && held.untouched(payload) ? held : undefined
   }
 
   /** The response headers written so far, by lower-case name. */
@@ -625,6 +656,26 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   }
 }
 
+const VALIDATORS: ReadonlySet<string> = new Set(['if-none-match', 'if-modified-since'])
+
+/**
+ * Hides `If-None-Match` and `If-Modified-Since` from `ctx.req.header(...)` and `hasHeader(...)` until the returned
+ * function puts them back: what a cache calls on a miss it will store, so the handler answers whole rather than `304`.
+ * `ctx.req.raw` and Node's own request still carry them.
+ *
+ * @throws ErrConfiguration for a context the engine did not build, a Fastify application's.
+ */
+export function withholdValidators(ctx: IContext): () => void {
+  if (!(ctx instanceof Context)) {
+    throw configurationError(
+      'Cannot withhold the request validators: the context is not one the engine built',
+      USE_NODE,
+    )
+  }
+
+  return ctx.req.withholdValidators()
+}
+
 /** What a request handler reads of the request the engine is serving. */
 export class ContextRequest implements IRequest<
   Request,
@@ -658,6 +709,8 @@ export class ContextRequest implements IRequest<
   #validatedParams?: Record<string, string>
   /** The headers validation produced, by lower-case name: read in place of the platform's once set. */
   #validatedHeaders?: Record<string, string>
+  /** The header names `withholdValidators` hides, while it does. */
+  #withheld?: ReadonlySet<string>
 
   constructor(
     shared: ServerShared,
@@ -738,7 +791,7 @@ export class ContextRequest implements IRequest<
         // prototype, so a name only `Object.prototype` holds is no header.
         this.#validatedHeaders = Object.assign(
           Object.create(null) as Record<string, string>,
-          this.header(),
+          this.allHeaders(),
           value as Record<string, string>,
         )
         return
@@ -823,16 +876,42 @@ export class ContextRequest implements IRequest<
   header(): Record<string, string>
   header(key: string): string | undefined
   header(key?: string): Record<string, string> | string | undefined {
-    const validated = this.#validatedHeaders
-    if (validated !== undefined) {
-      return key === undefined ? validated : validated[key.toLowerCase()]
-    }
+    const withheld = this.#withheld
 
     if (key === undefined) {
-      return (this.#headers ??= this.#platform.headers(this.#native))
+      const all = this.allHeaders()
+      if (withheld === undefined) {
+        return all
+      }
+
+      const shown: Record<string, string> = Object.create(null)
+      for (const name in all) {
+        if (!withheld.has(name)) {
+          shown[name] = all[name]
+        }
+      }
+      return shown
     }
 
-    return this.#platform.header(this.#native, key)
+    if (withheld?.has(key.toLowerCase())) {
+      return undefined
+    }
+
+    const validated = this.#validatedHeaders
+    return validated === undefined ? this.#platform.header(this.#native, key) : validated[key.toLowerCase()]
+  }
+
+  /** Hides the validators from {@link header} and {@link hasHeader} until the returned function puts them back. */
+  withholdValidators(): () => void {
+    this.#withheld = VALIDATORS
+    return () => {
+      this.#withheld = undefined
+    }
+  }
+
+  /** The request's headers as they came, or as validation left them, whatever is withheld: what validation reads. */
+  allHeaders(): Record<string, string> {
+    return this.#validatedHeaders ?? (this.#headers ??= this.#platform.headers(this.#native))
   }
 
   hasHeader(key: string): boolean {

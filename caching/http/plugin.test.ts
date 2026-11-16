@@ -10,11 +10,12 @@ import {
   Identity,
   Principal,
   UseGuards,
+  authentication,
   type Guard,
   type GuardInput,
   type IContext,
 } from '@caffeinejs/http'
-import { authentication, createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 

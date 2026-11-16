@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { ErrConfiguration } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -16,8 +16,7 @@ describe('cache plugin wiring', () => {
     close = undefined
   })
 
-  // Named and fastify-plugin-wrapped like any other first-party plugin: a second registration on the exact
-  // same context is refused before Fastify ever sees it, same as two `.with(cors)` calls would be.
+  // Named, like any other first-party plugin: a second registration in the same slot is refused.
   it('refuses a second registration on the same context', async () => {
     const app = createWebApplication()
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-First')))
@@ -28,7 +27,7 @@ describe('cache plugin wiring', () => {
   })
 
   // A route group inherits the plugins its parent registered, so a group install under a root install is the
-  // same double registration — refused before any route could collect both sets of cache hooks and report every
+  // same double registration — refused by the server before any route could run two caches and report every
   // outcome twice.
   it('refuses a group install under a root install', async () => {
     const router = newRouter('/nested-install').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
@@ -39,7 +38,7 @@ describe('cache plugin wiring', () => {
       .mount(router)
     close = () => app.close()
 
-    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
+    await expect(app.bootstrap()).rejects.toThrow(/more than once/)
   })
 
   // The start-up refusal exists for a decorated route nothing serves. A group that installed the plugin for

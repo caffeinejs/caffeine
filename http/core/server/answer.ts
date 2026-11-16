@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import * as zlib from 'node:zlib'
 
 import { errMessage } from '@caffeinejs/std/err'
@@ -277,41 +278,53 @@ export function answer(ctx: Context, result: unknown, unwrapped = false): void |
   ctx.body(result)
 }
 
-/** The UTF-8 length of `text`, without encoding it. */
-export function byteLength(text: string): number {
-  let length = 0
-
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i)
-
-    if (code < 0x80) {
-      length += 1
-    } else if (code < 0x800) {
-      length += 2
-    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
-      const next = text.charCodeAt(i + 1)
-
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        // A surrogate pair is one code point of four bytes.
-        length += 4
-        i++
-      } else {
-        length += 3
-      }
-    } else {
-      length += 3
-    }
-  }
-
-  return length
-}
-
 /**
  * A Node stream answer kept as the handler returned it, so a platform that pipes Node streams sends it as it is. What
  * reads the payload through the context, an `onSend` hook among them, gets it as web bytes instead.
  */
 export class HeldStream {
+  #bytes?: ReadableStream<Uint8Array>
+  #read = false
+
   constructor(readonly source: object) {}
+
+  /**
+   * The stream as web bytes, built once. Nothing is read from the source until something reads them, so a hook handed
+   * them that leaves them alone leaves the platform free to pipe the source as it is.
+   */
+  bytes(ctx: Context): ReadableStream<Uint8Array> {
+    if (this.#bytes === undefined) {
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+      const open = (): ReadableStreamDefaultReader<Uint8Array> => {
+        this.#read = true
+        return (reader ??= asBytes(ctx, this.source).getReader())
+      }
+
+      this.#bytes = new ReadableStream<Uint8Array>(
+        {
+          async pull(controller) {
+            const next = await open().read()
+            if (next.done) {
+              controller.close()
+            } else {
+              controller.enqueue(next.value)
+            }
+          },
+          cancel: reason => open().cancel(reason),
+        },
+        // Pulled only when read: what makes `untouched` hold for bytes nobody read.
+        { highWaterMark: 0 },
+      )
+    }
+
+    return this.#bytes
+  }
+
+  /** Whether `payload` is this stream's {@link bytes} and nothing has read, locked or cancelled them. */
+  untouched(payload: unknown): boolean {
+    const bytes = this.#bytes
+    return bytes !== undefined && payload === bytes && !this.#read && !bytes.locked
+  }
 }
 
 // What `reply.send` does with what `payloadOf` hands it (`fastify/lib/reply.js`, `send`).
@@ -369,9 +382,13 @@ function serialize(ctx: Context, payload: unknown, status: number): SendPayload 
  * yields strings, which Fastify pipes as they are.
  */
 export function asBytes(ctx: Context, stream: object): ReadableStream<Uint8Array> {
+  // A Node stream through `Readable.toWeb`, whose cancel destroys it: `ReadableStream.from` would leave one nothing has
+  // read yet open, with what is behind it, a file or a socket.
   const source = isWebStream(stream)
     ? (stream as ReadableStream<unknown>)
-    : ReadableStream.from(stream as AsyncIterable<unknown>)
+    : stream instanceof Readable
+      ? (Readable.toWeb(stream) as ReadableStream<unknown>)
+      : ReadableStream.from(stream as AsyncIterable<unknown>)
 
   return source.pipeThrough(
     new TransformStream<unknown, Uint8Array>({

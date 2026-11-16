@@ -1,39 +1,32 @@
 import type { Logger } from '@caffeinejs/application/logger'
-import type { AdapterRouteOptions } from '@caffeinejs/http/fastify'
+import type { RouteDefinition } from '@caffeinejs/http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { cacheRouteOf, guardObserver, storeErrorLogger } from './_observe.js'
 import type { CacheBypassEvent, CacheErrorEvent, CacheObserver } from './observer.js'
 
-function routeDef(
-  method: string | string[],
-  caffeine?: { group: string; route: string | symbol },
-): AdapterRouteOptions {
+function routeDef(methods: string[], caffeine?: { group: string; route: string | symbol }): RouteDefinition {
   return {
-    method,
+    methods,
     url: '/api/pets/:id',
-    handler: () => {},
-    config: caffeine && {
-      $caffeine: {
-        skipAuthentication: false,
-        compiled: { group: { name: caffeine.group }, route: { name: caffeine.route } },
-      },
-    },
-  } as unknown as AdapterRouteOptions
+    config: new Map(),
+    route: { name: caffeine?.route },
+    group: { name: caffeine?.group },
+  } as unknown as RouteDefinition
 }
 
 describe('cacheRouteOf', () => {
   it('joins the methods of a framework route and keeps the single method of a HEAD twin', () => {
     expect(cacheRouteOf(routeDef(['GET', 'POST'])).method).toBe('GET|POST')
-    expect(cacheRouteOf(routeDef('HEAD')).method).toBe('HEAD')
+    expect(cacheRouteOf(routeDef(['GET']), 'HEAD').method).toBe('HEAD')
   })
 
   it('reports the registered pattern, not a request URL', () => {
     expect(cacheRouteOf(routeDef(['GET'])).url).toBe('/api/pets/:id')
   })
 
-  // A route straight on Fastify carries no `$caffeine`; a programmatic route may be unnamed; a symbol-named
-  // method would stringify to `Symbol(...)`. None of those is a name worth a metric attribute.
+  // A programmatic route may be unnamed; a symbol-named method would stringify to `Symbol(...)`. None of those is a
+  // name worth a metric attribute.
   it('leaves the handler out when there is no usable name', () => {
     expect(cacheRouteOf(routeDef(['GET']))).not.toHaveProperty('handler')
     expect(cacheRouteOf(routeDef(['GET'], { group: 'PetsController', route: '' }))).not.toHaveProperty('handler')

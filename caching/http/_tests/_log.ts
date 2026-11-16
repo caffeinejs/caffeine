@@ -9,8 +9,8 @@ export interface Written {
 
 /**
  * A `Logger` that keeps what it was asked to write. A child shares the records and tags what it writes with its
- * bindings, so a record written through `request.log`, the child Fastify makes with a `reqId`, is told apart from
- * one written on the logger itself.
+ * bindings, so a record written through a child bound to a `reqId` is told apart from one written on the logger
+ * itself.
  */
 export class RecordingLogger implements Logger {
   level = 'trace'

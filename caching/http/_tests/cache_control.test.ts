@@ -2,7 +2,7 @@ import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Controller, Get, Post, Status } from '@caffeinejs/http'
-import { createWebApplication as newWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication as newWebApplication } from '@caffeinejs/http/node'
 import { Hour, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 

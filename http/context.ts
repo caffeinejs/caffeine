@@ -135,6 +135,14 @@ export interface IContext<
    * the response goes out.
    */
   getHeader(key: string): string | undefined
+  /**
+   * Every response header written so far, by lower-case name: a copy, so writing to it changes nothing. A header
+   * holding several values comes back as its list. Cookies set with {@link IContext.cookie} are in it from the first
+   * `onSend` hook on.
+   */
+  getHeaders(): Record<string, string | string[]>
+  /** Removes a response header. Once the response is sent, outside an `onSend` hook, it changes nothing. */
+  removeHeader(key: string): this
 
   /**
    * Sets a cookie on the response, over the server's `parseOptions`. Written when the response is sent; a second
