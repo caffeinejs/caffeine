@@ -9,14 +9,16 @@ import {
   Args,
   Catch,
   Controller,
+  ErrHTTPNotFound,
   ErrHTTPPreconditionFailed,
   Get,
   Responder,
+  type ErrorHandler,
   type IContext,
   type Router,
   type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, inject, it, vi } from 'vitest'
 
@@ -44,10 +46,10 @@ class GuardedFilesController {
 void GuardedFilesController
 
 describe('sendFile', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   const start = async (configure: StaticConfigurer, routes?: Router<any, any, any, any, any, any>) => {
-    app = createWebApplication({}).with(staticFiles(configure)) as WebApplication
+    app = createWebApplication({}).with(staticFiles(configure)) as WebApplication<NodeAdapterTypes>
     if (routes !== undefined) {
       app.mount(routes)
     }
@@ -296,8 +298,8 @@ describe('sendFile', () => {
       await writeFile(join(root, 'slow.txt'), 'slow')
       await buildStatic({ root })
       app = createWebApplication({})
-        .server(() => ({ factory: { handlerTimeout: 30 * Millisecond } }))
-        .with(staticFiles(s => s.serve(root, { unrouted: ['**'] }))) as WebApplication
+        .server(() => ({ handlerTimeout: 30 * Millisecond }))
+        .with(staticFiles(s => s.serve(root, { unrouted: ['**'] }))) as WebApplication<NodeAdapterTypes>
       app.mount(newRouter().get('/pick', ctx => sendFile(ctx, 'slow.txt')))
       await app.bootstrap()
       const fifo = join(await realpath(root), 'slow.txt')
@@ -339,12 +341,42 @@ describe('sendFile', () => {
           throw err
         }
       }),
-    ) as WebApplication
+    ) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
 
     expect((await app.request('/pick')).status).toBe(500)
     expect(thrown).toBeInstanceOf(ErrSendFileUnavailable)
     expect((thrown as Error).message.split('\n')[0]).toBe('Cannot send a file: staticFiles(...) is not installed')
+  })
+
+  it('refuses sendFile on a request no route matched', async () => {
+    let thrown: unknown
+
+    @Catch(ErrHTTPNotFound)
+    class MissHandler implements ErrorHandler<ErrHTTPNotFound> {
+      handle(ctx: IContext) {
+        try {
+          return sendFile(ctx, 'index.html')
+        } catch (err) {
+          thrown = err
+          throw err
+        }
+      }
+    }
+
+    app = createWebApplication({})
+      .with(staticFiles(s => s.serve(fixtures)))
+      .errorHandling(e => e.globalHandlers(MissHandler)) as WebApplication<NodeAdapterTypes>
+    await app.bootstrap()
+
+    const res = await app.request('/nothing')
+
+    expect(thrown).toBeInstanceOf(ErrSendFileUnavailable)
+    expect((thrown as Error).message.split('\n')[0]).toBe(
+      'Cannot send a file: the request matched no route, so no mount can be found',
+    )
+    expect(res.status).toBe(500)
+    expect(((await res.json()) as { code: string }).code).toBe('ERR_INTERNAL')
   })
 
   // Installed, so "not installed" would send the reader to the wrong fix.

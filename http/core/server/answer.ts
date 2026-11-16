@@ -193,10 +193,11 @@ function defaultType(target: AnswerTarget, type: string): void {
 
 /** A Node stream or a web stream: what Fastify pipes rather than serializes. */
 function isStream(value: object): boolean {
-  return (
-    typeof (value as { pipe?: unknown }).pipe === 'function' ||
-    typeof (value as { getReader?: unknown }).getReader === 'function'
-  )
+  return typeof (value as { pipe?: unknown }).pipe === 'function' || isWebStream(value)
+}
+
+function isWebStream(value: object): boolean {
+  return typeof (value as { getReader?: unknown }).getReader === 'function'
 }
 
 /** What a server cannot send under the content type the answer carries. Answers as a 500. */
@@ -246,7 +247,12 @@ export function compileSerializers(
  * @throws ErrInvalidPayloadType for a value that is not text, bytes or a stream under a type that is not JSON.
  * @throws ErrResponseBodyConsumed for a `Response` whose body was read.
  */
-export function shapeAnswer(ctx: Context, value: unknown, keepStatus: boolean, status: number): SendPayload {
+export function shapeAnswer(
+  ctx: Context,
+  value: unknown,
+  keepStatus: boolean,
+  status: number,
+): SendPayload | HeldStream {
   return serialize(ctx, payloadOf(ctx, value, keepStatus), status)
 }
 
@@ -300,8 +306,16 @@ export function byteLength(text: string): number {
   return length
 }
 
+/**
+ * A Node stream answer kept as the handler returned it, so a platform that pipes Node streams sends it as it is. What
+ * reads the payload through the context, an `onSend` hook among them, gets it as web bytes instead.
+ */
+export class HeldStream {
+  constructor(readonly source: object) {}
+}
+
 // What `reply.send` does with what `payloadOf` hands it (`fastify/lib/reply.js`, `send`).
-function serialize(ctx: Context, payload: unknown, status: number): SendPayload {
+function serialize(ctx: Context, payload: unknown, status: number): SendPayload | HeldStream {
   if (payload === undefined) {
     return null
   }
@@ -325,7 +339,7 @@ function serialize(ctx: Context, payload: unknown, status: number): SendPayload 
   }
 
   if (typeof payload === 'object' && payload !== null && isStream(payload)) {
-    return asBytes(ctx, payload)
+    return isWebStream(payload) ? asBytes(ctx, payload) : new HeldStream(payload)
   }
 
   // An empty body under a type that is not JSON, as Fastify sends it.
@@ -354,11 +368,10 @@ function serialize(ctx: Context, payload: unknown, status: number): SendPayload 
  * A Node or web stream as a stream of bytes. A `Response` reads only `Uint8Array` chunks, and `Readable.from(['a'])`
  * yields strings, which Fastify pipes as they are.
  */
-function asBytes(ctx: Context, stream: object): ReadableStream<Uint8Array> {
-  const source =
-    typeof (stream as { getReader?: unknown }).getReader === 'function'
-      ? (stream as ReadableStream<unknown>)
-      : ReadableStream.from(stream as AsyncIterable<unknown>)
+export function asBytes(ctx: Context, stream: object): ReadableStream<Uint8Array> {
+  const source = isWebStream(stream)
+    ? (stream as ReadableStream<unknown>)
+    : ReadableStream.from(stream as AsyncIterable<unknown>)
 
   return source.pipeThrough(
     new TransformStream<unknown, Uint8Array>({

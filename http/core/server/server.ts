@@ -34,7 +34,7 @@ import { joinPaths, pathsOf } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import { assertGated, gateOf } from '../security/gate.js'
 import type { CompiledSerializer } from '../validation/validation.js'
-import { answer, byteLength, compileSerializers, connectionFields, NO_SERIALIZER } from './answer.js'
+import { answer, byteLength, compileSerializers, connectionFields, HeldStream, NO_SERIALIZER } from './answer.js'
 import { Context, kAppendCookies, type ServerShared } from './context.js'
 import { answerError, configurationError, defaultProblem, sendProblem, USE_FASTIFY } from './error.js'
 import { compileLevel, composeRouteHooks, type LevelInput, type StoreHooks } from './hooks.js'
@@ -1079,7 +1079,9 @@ class Pipeline<N, R> {
 
     const status = ctx.statusCode
     const head = this.#head
-    let payload: SendPayload = ctx.payload ?? null
+    // A Node stream nothing has read goes to a platform that pipes it as it is.
+    const held = this.#platform.respondStream === undefined ? undefined : ctx.heldStream
+    let payload: SendPayload | HeldStream = held ?? ctx.payload ?? null
 
     if (payload !== null && status === 204) {
       payload = dropped(payload)
@@ -1117,7 +1119,10 @@ class Pipeline<N, R> {
 
     let sent: R
     try {
-      sent = this.#platform.respond(this.#native, { status, headers }, payload, hooks)
+      sent =
+        payload instanceof HeldStream
+          ? this.#platform.respondStream!(this.#native, { status, headers }, payload.source, hooks)
+          : this.#platform.respond(this.#native, { status, headers }, payload, hooks)
     } catch (err) {
       this.#shared.logger.error({ reqId: ctx.req.id, err }, 'Cannot send the answer')
       hooks.sent()
@@ -1170,7 +1175,7 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
   }
 }
 
-function lengthOf(payload: SendPayload): number | undefined {
+function lengthOf(payload: SendPayload | HeldStream): number | undefined {
   if (typeof payload === 'string') {
     return byteLength(payload)
   }
@@ -1184,9 +1189,11 @@ function queryAfter(url: string): string {
 }
 
 // A body that will not go out: a stream is cancelled, so its source stops.
-function dropped(payload: SendPayload): null {
+function dropped(payload: SendPayload | HeldStream): null {
   if (payload instanceof ReadableStream) {
     void payload.cancel().catch(() => undefined)
+  } else if (payload instanceof HeldStream) {
+    ;(payload.source as { destroy?: () => void }).destroy?.()
   }
 
   return null

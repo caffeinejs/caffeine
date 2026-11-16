@@ -1,6 +1,6 @@
 import { CaffeineIoC, Injectable, Lifetime, Profile, Scopes } from '@caffeinejs/di'
 import { Catch, Controller, Get, type IContext, Post } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Hour, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 

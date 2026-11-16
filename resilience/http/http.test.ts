@@ -1,6 +1,6 @@
 import { CaffeineIoC, Profile } from '@caffeinejs/di'
 import { CatchWith, Controller, ErrHTTP, ErrHTTPBadRequest, ErrHTTPNotFound, Get } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 

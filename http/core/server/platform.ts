@@ -74,6 +74,11 @@ export interface ServerPlatform<N, P extends IContextPlatform, R> {
    */
   respond(native: N, head: ResponseHead, payload: SendPayload, hooks: SendHooks): R
   /**
+   * Sends an answer whose body is the Node stream a handler returned, piped as it is, as {@link respond} sends a web
+   * stream. Absent on a platform that cannot: the engine then hands `respond` the stream as web bytes.
+   */
+  respondStream?(native: N, head: ResponseHead, stream: object, hooks: SendHooks): R
+  /**
    * Runs a Node `(req, res, next)` middleware on the native request, with `req.url` set to `url` until it calls `next`.
    * `answered` is called when the response closed, by the middleware or the client, without `next`; a `next` after
    * that is ignored. Absent on a runtime with no Node request: a Node middleware is then refused at start-up.

@@ -1,5 +1,5 @@
 import { Controller, Get, Prefix, WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'
@@ -23,7 +23,7 @@ const isAdmin = (_group: unknown, _route: unknown, path: string) => path.startsW
 const isStorefront = (_group: unknown, _route: unknown, path: string) => !path.startsWith('/admin')
 
 describe('include on a prefixed controller', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -36,7 +36,7 @@ describe('include on a prefixed controller', () => {
       .install(OpenAPI())
       .with(openapi('storefront', o => o.docs(false).include(isStorefront)))
       .with(openapi('back-office', o => o.docs(false).include(isAdmin)))
-      .mount(catalog()) as WebApplication
+      .mount(catalog()) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
 
     const provider = app.container.get(OpenAPIProvider)

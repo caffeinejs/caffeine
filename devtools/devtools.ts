@@ -10,6 +10,7 @@ import type { ConfigStore } from '@caffeinejs/application/config'
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Container } from '@caffeinejs/di'
 import {
+  authentication,
   ErrHTTPMisdirectedRequest,
   ErrHTTPUnsupportedMediaType,
   HTTPPlugin,
@@ -22,7 +23,7 @@ import {
   type IContext,
   type RouteAuthzOptions,
 } from '@caffeinejs/http'
-import { authentication } from '@caffeinejs/http/fastify'
+import type { NodeContextPlatform, NodeServerSettings } from '@caffeinejs/http/node'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { configRouter } from './config/config.route.js'
@@ -244,7 +245,8 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
     const events = new EventsTool(kit.container.hooks)
 
     listenersOf(kit).add(this.#listener ?? DEVTOOLS_LISTENER, l => {
-      l.server(() => ({ listener: { ...address } }))
+      // The Node application's settings: a fetch application has no listener of its own to give an address.
+      l.server((): NodeServerSettings => ({ listen: { ...address } }))
 
       // A listener has no gate unless one is registered on it, and a route the fallback policy or `authorize(...)`
       // protects with no gate over it is refused at start-up. So the gate goes wherever authentication is installed,
@@ -518,13 +520,13 @@ function isLoopback(host: string): boolean {
  * A page on another site can resolve its own name to `127.0.0.1` (DNS rebinding) and become same-origin with a
  * server listening there, which takes it past every check a browser makes. Its requests still carry its own name as
  * the `Host`, so a server only this machine should reach answers loopback names alone. A request that came in on
- * another address, or with no socket at all (`app.request(...)`), is left alone.
+ * another address, or with no local address — the fetch application's, or `app.request(...)`'s — is left alone.
  *
  * @throws ErrHTTPMisdirectedRequest for a loopback request whose `Host` is not `localhost`, `*.localhost`,
  * `127.x.x.x` or `[::1]`.
  */
 export function assertLoopbackHost(ctx: IContext): void {
-  const local = (ctx.req.raw as { socket?: { localAddress?: string } } | undefined)?.socket?.localAddress
+  const local = localAddressOf(ctx)
 
   if (local === undefined || !isLoopback(local)) {
     return
@@ -540,5 +542,19 @@ export function assertLoopbackHost(ctx: IContext): void {
 
   if (name !== '[::1]' && name !== 'localhost' && !name.endsWith('.localhost') && !/^127\.\d+\.\d+\.\d+$/.test(name)) {
     throw new ErrHTTPMisdirectedRequest(`Cannot answer for host "${host}": this server answers loopback names alone`)
+  }
+}
+
+// Node hands its request on the platform; a raw request with a socket carries it elsewhere. An HTTP/2 socket proxy
+// throws once its session is gone.
+function localAddressOf(ctx: IContext): string | undefined {
+  try {
+    const platform = ctx.platform as { name: string }
+
+    return platform.name === 'node'
+      ? (platform as NodeContextPlatform).incoming.socket?.localAddress
+      : (ctx.req.raw as { socket?: { localAddress?: string } } | undefined)?.socket?.localAddress
+  } catch {
+    return undefined
   }
 }

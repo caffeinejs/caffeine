@@ -13,7 +13,8 @@ import type {
   ServerAddress,
 } from '../../adapter.js'
 import type { WebRunInfo } from '../../application.js'
-import { bindContext, buildEngine } from '../../core/server/adapter.js'
+import type { RouterFlags } from '../../core/matcher/matcher.js'
+import { bindContext, buildEngine, findMyWayFlags } from '../../core/server/adapter.js'
 import type { Context, EngineContextTypes } from '../../core/server/context.js'
 import type { ServerPlatform } from '../../core/server/platform.js'
 import type { HTTPServer } from '../../core/server/server.js'
@@ -44,6 +45,12 @@ export interface NodeAdapterTypes extends EngineContextTypes {
 
 type NodePlatform = ServerPlatform<NodeResponse, NodeContextPlatform, void>
 
+declare module '../../adapter.js' {
+  interface EngineAdapterRegistry {
+    node: NodeAdapterTypes
+  }
+}
+
 /** The adapter of the Node application, which serves the web-standards engine on a Node server. */
 export function nodeAdapterFactory(): AdapterFactory<NodeAdapterTypes> {
   return kit => new NodeAdapter(kit)
@@ -56,6 +63,10 @@ class NodeAdapter implements IAdapter<NodeAdapterTypes> {
   constructor(kit: AdapterFactoryIn) {
     this.#container = kit.container
     this.#contextKey = bindContext(kit.container)
+  }
+
+  routerFlags(server: NodeAdapterTypes['serverOptions']): RouterFlags | undefined {
+    return findMyWayFlags(resolveNodeServerSettings(server).engine)
   }
 
   async setup(input: AdapterIn<NodeAdapterTypes>): Promise<IAdapterServer<NodeAdapterTypes>> {

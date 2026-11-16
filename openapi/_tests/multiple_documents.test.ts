@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Authentication, Claim, Identity, Principal, WebApplication, bindTo } from '@caffeinejs/http'
-import { authentication, createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { Authentication, authentication, bindTo, Claim, Identity, Principal, WebApplication } from '@caffeinejs/http'
+import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from '../errors.js'
@@ -57,7 +57,7 @@ async function warningsDuring(run: () => Promise<void>): Promise<string[]> {
 }
 
 describe('several OpenAPI documents in one application', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -70,7 +70,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .with(openapi('storefront', o => o.info({ title: 'Storefront', version: '1.0.0' }).include(isStorefront)))
       .with(openapi('back-office', o => o.info({ title: 'Back office', version: '1.0.0' }).include(isAdmin)))
-      .mount(catalog(), backOffice()) as WebApplication
+      .mount(catalog(), backOffice()) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
 
     const storefront = await json(await app.request('/openapi/storefront.json'))
@@ -92,7 +92,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .with(openapi('storefront', o => o.include(isStorefront)))
       .with(openapi('back-office', o => o.include(isAdmin)))
-      .mount(catalog(), backOffice()) as WebApplication
+      .mount(catalog(), backOffice()) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
 
     expect((await app.request('/openapi/storefront.yaml')).status).toBe(200)
@@ -111,7 +111,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .listener('internal', l => l.with(openapi('internal', o => o.info({ title: 'Internal', version: '1.0.0' }))))
       .with(openapi(o => o.info({ title: 'Public', version: '1.0.0' })))
-      .mount(catalog(), backOffice().extend(bindTo('internal'))) as WebApplication
+      .mount(catalog(), backOffice().extend(bindTo('internal'))) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
 
     const internal = await json(await app.listeners.get('internal')!.request('/openapi/internal.json'))
@@ -135,7 +135,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .with(openapi(o => o.docs(false)))
       .with(openapi('legacy', o => o.document(legacy).docs(false)))
-      .mount(catalog()) as WebApplication
+      .mount(catalog()) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
 
     expect(Object.keys((await json(await app.request('/openapi.json'))).paths ?? {})).toEqual(['/products'])
@@ -164,7 +164,7 @@ describe('several OpenAPI documents in one application', () => {
         .mount(
           catalog().authorize({ allowAnonymous: true }),
           backOffice().authorize({ allowAnonymous: true }),
-        ) as WebApplication
+        ) as WebApplication<NodeAdapterTypes>
       await app.bootstrap()
     })
 
@@ -185,7 +185,7 @@ describe('several OpenAPI documents in one application', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.json(false).yaml(false).docs(false)))
-      .mount(catalog()) as WebApplication
+      .mount(catalog()) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
 
     expect((await app.request('/openapi.json')).status).toBe(404)
@@ -198,7 +198,7 @@ describe('several OpenAPI documents in one application', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.json(false).docs(false)))
-      .mount(catalog()) as WebApplication
+      .mount(catalog()) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
 
     expect((await app.request('/openapi.json')).status).toBe(404)
@@ -217,7 +217,7 @@ describe('several OpenAPI documents in one application', () => {
         .install(OpenAPI())
         .with(openapi('v31', o => o.version('3.1.1').docs(false)))
         .with(openapi('v32', o => o.version('3.2.0').docs(false)))
-        .mount(search()) as WebApplication
+        .mount(search()) as WebApplication<NodeAdapterTypes>
       await app.bootstrap()
     })
 
@@ -237,7 +237,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .with(openapi('storefront', o => o.include(isStorefront)))
       .with(openapi('back-office', o => o.include(isAdmin)))
-      .mount(catalog(), backOffice()) as WebApplication
+      .mount(catalog(), backOffice()) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
 
     const storefront = await json(await app.request('/shop/openapi/storefront.json'))
@@ -253,12 +253,12 @@ describe('several OpenAPI documents in one application', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi('a', o => o.json('/openapi.json').yaml(false).docs(false)))
-      .with(openapi('b', o => o.json('/openapi.json').yaml(false).docs(false))) as WebApplication
+      .with(openapi('b', o => o.json('/openapi.json').yaml(false).docs(false))) as WebApplication<NodeAdapterTypes>
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined
 
-    expect((failure as { code?: string }).code).toBe('FST_ERR_DUPLICATED_ROUTE')
+    expect((failure as { code?: string }).code).toBe('ERR_ROUTE_CONFLICT')
     expect((failure as Error).message).toContain('/openapi.json')
   })
 
@@ -266,7 +266,7 @@ describe('several OpenAPI documents in one application', () => {
   it('refuses a UI whose JSON endpoint is off', async () => {
     app = createWebApplication({})
       .install(OpenAPI())
-      .with(openapi('internal', o => o.json(false))) as WebApplication
+      .with(openapi('internal', o => o.json(false))) as WebApplication<NodeAdapterTypes>
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined

@@ -12,6 +12,8 @@ import type {
 } from '../../adapter.js'
 import { kFastifyOnly } from '../../plugin_marks.js'
 import { HookBatch } from '../lifecycle/batch.js'
+import { findMyWayMatcher } from '../matcher/find_my_way.js'
+import type { RouterFlags } from '../matcher/matcher.js'
 import { rebaseMiddlewares } from '../middleware/path.js'
 import type { IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import { assertAuthorizationConfigured } from '../security/authz/index.js'
@@ -36,6 +38,12 @@ export interface FetchAdapterTypes extends EngineContextTypes {
   runInfo: RunInfo
 }
 
+declare module '../../adapter.js' {
+  interface EngineAdapterRegistry {
+    fetch: FetchAdapterTypes
+  }
+}
+
 /** The adapter of the fetch application, which serves on the web-standards engine. */
 export function fetchAdapterFactory(): AdapterFactory<FetchAdapterTypes> {
   return kit => new FetchAdapter(kit)
@@ -48,6 +56,10 @@ class FetchAdapter implements IAdapter<FetchAdapterTypes> {
   constructor(kit: AdapterFactoryIn) {
     this.#container = kit.container
     this.#contextKey = bindContext(kit.container)
+  }
+
+  routerFlags(server: FetchAdapterTypes['serverOptions']): RouterFlags | undefined {
+    return findMyWayFlags(resolveServerSettings(server))
   }
 
   async setup(input: AdapterIn<FetchAdapterTypes>): Promise<IAdapterServer<FetchAdapterTypes>> {
@@ -70,6 +82,11 @@ class FetchAdapter implements IAdapter<FetchAdapterTypes> {
 
     return new FetchServer(engine)
   }
+}
+
+/** The router flags of an engine whose settings are `settings`, when it matches with find-my-way. */
+export function findMyWayFlags(settings: ResolvedServerSettings): RouterFlags | undefined {
+  return settings.matcher === findMyWayMatcher ? settings.router : undefined
 }
 
 /**

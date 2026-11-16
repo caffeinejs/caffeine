@@ -9,7 +9,7 @@ import {
   Principal,
   type IContext,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { inject } from 'vitest'
 
 import { isDocumentRequest, sendFile } from '../../index.js'

@@ -3,7 +3,7 @@ import type { InferConfig } from '@caffeinejs/application/config'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, inject, it } from 'vitest'
 
 import { staticFiles } from '../index.js'
@@ -11,7 +11,7 @@ import { staticFiles } from '../index.js'
 const { fixtures, fixtures2 } = inject('fixtures')
 
 describe('static feature', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -78,7 +78,7 @@ describe('static feature configured from the tree', () => {
   const schema = $t.Object({ static: $t.Object({ mounts: $t.Optional($t.Array(mount)) }, { default: {} }) })
   type AppConfig = InferConfig<typeof schema>
 
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     await app?.close()

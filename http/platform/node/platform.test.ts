@@ -312,6 +312,106 @@ describe('the Node platform', () => {
     expect(sending.length).toBe(1)
   })
 
+  // A Node stream goes to the response as the handler returned it, with what a web stream's answer guarantees.
+  it('pipes a Node stream answer to its end, text chunks included', async () => {
+    const chunk = Buffer.alloc(64 * 1024)
+    const total = 8 * MiB
+    const routes = newRouter('/a')
+    routes.get('/big').handler(() =>
+      Readable.from(
+        (function* () {
+          for (let sent = 0; sent < total; sent += chunk.byteLength) {
+            yield chunk
+          }
+        })(),
+      ),
+    )
+    routes.get('/text').handler(() => Readable.from(['a', 'b']))
+    const { origin } = await serve(routes)
+
+    const big = await fetch(`${origin}/a/big`)
+    expect(big.headers.get('content-type')).toBe('application/octet-stream')
+    expect((await big.arrayBuffer()).byteLength).toBe(total)
+    expect(await (await fetch(`${origin}/a/text`)).text()).toBe('ab')
+  })
+
+  it('destroys the Node stream of an answer whose client leaves part-way', async () => {
+    const closed = Promise.withResolvers<void>()
+    const error = vi.fn()
+    const routes = newRouter('/a')
+    routes.get('/endless').handler(() => {
+      const stream = new Readable({
+        read() {
+          this.push(Buffer.alloc(16 * 1024))
+        },
+      })
+      stream.on('close', () => closed.resolve())
+      return stream
+    })
+    const { port } = await serve(routes, { logger: { error } })
+
+    await raw(port, 'GET /a/endless HTTP/1.1\r\nHost: x\r\n\r\n', /\r\n\r\n/)
+    await closed.promise
+
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it('cuts the response when a Node stream answer fails part-way, and logs it', async () => {
+    const error = vi.fn()
+    const routes = newRouter('/a')
+    routes.get('/broken').handler(() => {
+      let sent = false
+      return new Readable({
+        read() {
+          if (sent) {
+            this.destroy(new Error('the source failed'))
+            return
+          }
+          sent = true
+          this.push('first')
+        },
+      })
+    })
+    const { origin } = await serve(routes, { logger: { error } })
+
+    // Cut before or after its head is flushed: either way the client never reads a whole answer.
+    await expect(fetch(`${origin}/a/broken`).then(res => res.text())).rejects.toThrow()
+
+    const sending = error.mock.calls.filter(call => call[1] === 'Cannot send the streamed answer')
+    expect(sending.length).toBe(1)
+  })
+
+  // Nothing reads a HEAD answer's body, so nothing would close its source.
+  it('destroys the Node stream of a HEAD answer, which sends no body', async () => {
+    const closed = Promise.withResolvers<void>()
+    const routes = newRouter('/a')
+    routes.get('/file').handler(() => {
+      const stream = Readable.from(['body'])
+      stream.on('close', () => closed.resolve())
+      return stream
+    })
+    const { origin } = await serve(routes)
+
+    const res = await fetch(`${origin}/a/file`, { method: 'HEAD' })
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('')
+    await closed.promise
+  })
+
+  // A hook is written against web bytes: a Node stream reaches it as one.
+  it('hands an onSend hook a Node stream answer as web bytes', async () => {
+    const seen: boolean[] = []
+    const routes = newRouter('/a')
+    routes.hook('onSend', (_ctx, payload) => {
+      seen.push(payload instanceof ReadableStream)
+    })
+    routes.get('/text').handler(() => Readable.from(['a', 'b']))
+    const { origin } = await serve(routes)
+
+    expect(await (await fetch(`${origin}/a/text`)).text()).toBe('ab')
+    expect(seen).toEqual([true])
+  })
+
   it('answers 500 rather than resetting the connection when a header value cannot be sent', async () => {
     const error = vi.fn()
     const routes = newRouter('/a')

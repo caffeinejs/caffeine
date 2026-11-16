@@ -1,7 +1,6 @@
 import { fileURLToPath } from 'node:url'
 
 import type { Logger } from '@caffeinejs/application/logger'
-import { DevTools } from '@caffeinejs/devtools'
 import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
 import { Claim, Identity, Principal, Authentication, healthProbes } from '@caffeinejs/http'
@@ -132,10 +131,6 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             .default('GitHub'),
         ),
       )
-      // The devtools, on their own port, never the one users reach: http://127.0.0.1:9090/devtools by default. Values
-      // are shown, and the GitHub client secret, the session secret and the docs password stay masked: their keys
-      // name a secret. With authentication installed, the devtools' server gets a gate of its own.
-      .install(DevTools((d, { config }) => d.config(config.devtools).showConfigValues()))
       // Holds the generated documents, so a component other than the HTTP endpoints can read them.
       .install(OpenAPI())
       .with(authentication())

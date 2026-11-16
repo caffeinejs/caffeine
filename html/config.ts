@@ -1,3 +1,5 @@
+import type { RouteDefinition } from '@caffeinejs/http'
+
 /**
  * Response settings every `HTMLResult` starts from.
  */
@@ -13,11 +15,5 @@ export const HTML_DEFAULTS: HTMLDefaults = {
   autoDoctype: true,
 }
 
-/**
- * Where the plugin leaves the settings: a decoration on the Fastify instance it registered into.
- *
- * A decoration rather than a container binding, because `HTML(...)` is called from application code holding
- * only a context — and because the instance a request was served by is the one whose settings apply, so a
- * plugin registered inside a route group parameterizes that group alone.
- */
-export const kHTMLOptions = Symbol.for('@caffeinejs/html:options')
+/** What each route's `html()` was given, keyed by the route as `onRoute` saw it: the innermost plugin's wins. */
+export const routeSettings = new WeakMap<RouteDefinition, Partial<HTMLDefaults>>()

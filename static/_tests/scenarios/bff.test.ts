@@ -4,8 +4,9 @@ import {
   type WebApplication,
   Authentication,
   Authorization,
+  authentication,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
@@ -32,7 +33,7 @@ const SECRET = 'bff-session-secret-that-is-at-least-32-bytes!'
  * `gatedPages` is the whole difference between the two postures, and it is one `authorize` on the
  * application's own router — not a setting the static plugin knows about.
  */
-function bff(gatedPages: boolean): WebApplication {
+function bff(gatedPages: boolean): WebApplication<NodeAdapterTypes> {
   const auth = newRouter('/auth')
     .authorize({ allowAnonymous: true })
     .inject({ service: AuthenticationService })
@@ -75,10 +76,10 @@ function bff(gatedPages: boolean): WebApplication {
     .with(authentication())
     .install(Authorization(z => z.requireAuthenticatedByDefault()))
     .with(staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
-    .mount(auth, api, signIn, pages, rest) as WebApplication
+    .mount(auth, api, signIn, pages, rest) as WebApplication<NodeAdapterTypes>
 }
 
-async function signIn(app: WebApplication, roles = ''): Promise<string> {
+async function signIn(app: WebApplication<NodeAdapterTypes>, roles = ''): Promise<string> {
   const res = await app.request('/auth/login', { method: 'POST', headers: { 'x-roles': roles } })
   expect(res.status).toBe(200)
 
@@ -86,7 +87,7 @@ async function signIn(app: WebApplication, roles = ''): Promise<string> {
 }
 
 describe('backend-for-frontend: same-origin page and /api, cookie session, authenticate by default', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     await app?.close()

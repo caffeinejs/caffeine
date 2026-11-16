@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 
 import { ErrHTTPNotAcceptable, ErrHTTPPreconditionFailed, type WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest'
 
 import { buildStatic } from './build/build.js'
@@ -245,7 +245,7 @@ describe('prepareFile', () => {
 
 describe('a file served by a route and by sendFile', () => {
   let site: string
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   beforeEach(async () => {
     site = await mkdtemp(join(tmpdir(), 'caffeine-serve-app-'))
@@ -253,7 +253,7 @@ describe('a file served by a route and by sendFile', () => {
     await buildStatic({ root: site })
     app = createWebApplication({})
       .with(staticFiles(s => s.serve(site, { anonymous: true })))
-      .mount(newRouter().get('/sent', ctx => sendFile(ctx, 'index.html'))) as WebApplication
+      .mount(newRouter().get('/sent', ctx => sendFile(ctx, 'index.html'))) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
   })
 

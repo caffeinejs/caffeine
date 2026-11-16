@@ -1,9 +1,10 @@
 import { errMessage } from '@caffeinejs/std/err'
 
-import type { HTTPSetupContext, WebApplicationOps } from './adapter.js'
+import type { HTTPSetupContext, SlotServer, WebApplicationOps } from './adapter.js'
 import { ErrConfiguration } from './core/error/common.js'
 import { HookBatch } from './core/lifecycle/batch.js'
 import { assertHookName, HOOK_NAMES, type HookFn, type HookName } from './core/lifecycle/lifecycle.js'
+import type { RouterFlags } from './core/matcher/matcher.js'
 import { parseUse } from './core/middleware/middleware.js'
 import { MiddlewarePipeline } from './core/middleware/pipeline.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
@@ -28,7 +29,7 @@ export class PluginSlot implements WebApplicationOps<any, any> {
   #open = false
   /** Where `hook(...)` adds: the batch of the slot entry running now. */
   #batch: HookBatch | undefined
-  #server: { readonly basePath: string } | undefined
+  #server: SlotServer | undefined
 
   /** @param mountable - `false` for a controller's slot: a class has no children to nest routers under. */
   constructor(middlewares: MiddlewarePipeline<string> = new MiddlewarePipeline(), mountable = true) {
@@ -37,13 +38,13 @@ export class PluginSlot implements WebApplicationOps<any, any> {
   }
 
   /** @see {@link WebApplicationOps.server} */
-  get server(): { readonly basePath: string } | undefined {
+  get server(): SlotServer | undefined {
     return this.#server
   }
 
   /** Marks this slot as a server's. Called once, before the slot opens. */
-  forServer(basePath: string): void {
-    this.#server = { basePath }
+  forServer(basePath: string, router: RouterFlags | undefined): void {
+    this.#server = { basePath, router }
   }
 
   /** Runs `work` with the slot open, and closes it on every way out. */

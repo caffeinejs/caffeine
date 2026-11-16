@@ -3,6 +3,7 @@ import type { Container } from '@caffeinejs/di'
 
 import type { HookBatch } from './core/lifecycle/batch.js'
 import type { HookFn, HookName } from './core/lifecycle/lifecycle.js'
+import type { RouterFlags } from './core/matcher/matcher.js'
 import type {
   MiddlewareFactory,
   MiddlewareFn,
@@ -85,8 +86,19 @@ export interface IAdapterTypes {
  */
 export interface AdapterRegistry {}
 
-/** Any registered adapter's types. */
-export type AnyAdapterTypes = AdapterRegistry[keyof AdapterRegistry]
+/**
+ * The engine's applications, each entered by its own module: what {@link AnyAdapterTypes} falls back to when no
+ * adapter is registered. Not one for applications to extend.
+ */
+export interface EngineAdapterRegistry {}
+
+/**
+ * Any registered adapter's types. With none registered, as in a program that never imports
+ * `@caffeinejs/http/fastify`, the types of the engine applications the program loads.
+ */
+export type AnyAdapterTypes = [keyof AdapterRegistry] extends [never]
+  ? EngineAdapterRegistry[keyof EngineAdapterRegistry]
+  : AdapterRegistry[keyof AdapterRegistry]
 
 /** The adapter types a context is typed with: the router's or plugin's own, or any registered adapter's when it has none. */
 export type ContextTypesOf<T extends IAdapterTypes> = [T] extends [never] ? AnyAdapterTypes : T
@@ -177,6 +189,9 @@ export interface IAdapter<T extends IAdapterTypes> {
    * application calls it for its own server, and once more for every other server it runs.
    */
   setup(input: AdapterIn<T>): Promise<IAdapterServer<T>>
+
+  /** The find-my-way flags a server built from `server` matches with; `undefined` when it matches otherwise. */
+  routerFlags?(server: T['serverOptions']): RouterFlags | undefined
 }
 
 /** A server an {@link IAdapter} built, lifecycle included: whoever asked for it runs it and tears it down. */
@@ -283,8 +298,17 @@ export interface WebApplicationOps<T extends IAdapterTypes = never, C = unknown>
    * The server this slot registers on: its base path as `.basePath(...)` resolved it, `''` when it set none.
    * `undefined` in a router's or a controller's slot, which every server serving it shares, and in the server's own
    * `.server(...)` and `.basePath(...)` callbacks, which run before it is known.
+   *
+   * `router` is the flags its router matches paths with, as `.server(...)` set them, when the server matches with
+   * find-my-way; `undefined` under a matcher of its own.
    */
-  readonly server: { readonly basePath: string } | undefined
+  readonly server: SlotServer | undefined
+}
+
+/** The server a plugin slot registers on, as {@link WebApplicationOps.server} reports it. */
+export interface SlotServer {
+  readonly basePath: string
+  readonly router: RouterFlags | undefined
 }
 
 /**

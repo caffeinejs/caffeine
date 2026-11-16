@@ -1,7 +1,7 @@
 import { brotliDecompressSync } from 'node:zlib'
 
 import { type WebApplication } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/fastify'
+import { newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
@@ -16,7 +16,7 @@ import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, SCRIPT, 
  * route: the shell is compressed without the application asking. And the variants never become routes of their
  * own: a `GET` of one under `.static-variants/` would otherwise answer with raw brotli, which no client asked for.
  */
-function site(): WebApplication {
+function site(): WebApplication<NodeAdapterTypes> {
   return isolated()
     .with(staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
     .mount(
@@ -26,13 +26,13 @@ function site(): WebApplication {
         .get('/', shellOf(dist))
         .get('/index.html', shellOf(dist))
         .get('/*', clientRouteOf(dist)),
-    ) as WebApplication
+    ) as WebApplication<NodeAdapterTypes>
 }
 
 const SCRIPT_URL = '/assets/app-eZr2sdaR.js'
 
 describe('a mount serving the compressed variants its build wrote', () => {
-  let app: WebApplication
+  let app: WebApplication<NodeAdapterTypes>
 
   afterEach(async () => {
     await app?.close()

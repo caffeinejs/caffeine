@@ -29,9 +29,9 @@ export interface AuthorizationOptions {
 
 export interface FallbackPolicyOptions {
   /**
-   * Path prefixes the fallback policy leaves open, for routes a plugin registered straight on the server —
-   * `/assets/` for the static files a login page loads. A route the application's own router compiled opts out
-   * with `@AllowAnonymous` instead, and is not affected by this list.
+   * Path prefixes the fallback policy leaves open, for routes a plugin registered straight on a Fastify server.
+   * Static files are not among them: a mount opts out with `anonymous: true`. A route the application's own router
+   * compiled opts out with `@AllowAnonymous` instead, and is not affected by this list.
    *
    * Matched against the path the route was registered under, never against the URL of the request, so no spelling
    * of a URL reaches a route on another route's exemption.

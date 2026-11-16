@@ -25,21 +25,26 @@ export function routerFlagsOf(server: FastifyInstance): RouterFlags {
 }
 
 /**
- * Records on `server` the flags its router was built with from `options`, as Fastify reads them: a key `routerOptions`
- * holds first, then the top-level one, then the default.
+ * The flags a router built from `options` matches with, as Fastify reads them: a key `routerOptions` holds first, then
+ * the top-level one, then the default.
  */
-export function recordRouterFlags(server: FastifyInstance, options: object): void {
+export function routerFlagsFrom(options: object): RouterFlags {
   const top = options as Partial<Record<keyof RouterFlags, boolean>> & { routerOptions?: object | null }
   const nested = (top.routerOptions ?? {}) as Partial<Record<keyof RouterFlags, boolean>>
   const flag = (name: keyof RouterFlags): boolean =>
     (Object.hasOwn(nested, name) ? nested[name] : top[name]) ?? DEFAULT_ROUTER_FLAGS[name]
 
-  server.decorate(kRouterFlags, {
+  return {
     caseSensitive: flag('caseSensitive'),
     ignoreTrailingSlash: flag('ignoreTrailingSlash'),
     ignoreDuplicateSlashes: flag('ignoreDuplicateSlashes'),
     useSemicolonDelimiter: flag('useSemicolonDelimiter'),
-  } satisfies RouterFlags)
+  }
+}
+
+/** Records on `server` the flags its router was built with from `options`: {@link routerFlagsFrom}. */
+export function recordRouterFlags(server: FastifyInstance, options: object): void {
+  server.decorate(kRouterFlags, routerFlagsFrom(options))
 }
 
 /**

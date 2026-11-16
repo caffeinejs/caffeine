@@ -16,7 +16,7 @@ import {
   type IContext,
   type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DevTools, devTools, type DevToolsBuilder, type DevToolsRoutes } from './devtools.js'
@@ -53,7 +53,7 @@ const conf = newConfiguration($t.Object({ app: $t.Object({ region: $t.String(), 
   .build().config
 
 describe('devtools', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     vi.unstubAllEnvs()
@@ -77,19 +77,19 @@ describe('devtools', () => {
       path?: string
       listener?: string
       brew?: BrewOptions
-      prepare?: (a: WebApplication) => void
+      prepare?: (a: WebApplication<NodeAdapterTypes>) => void
       logger?: ReturnType<typeof newConsoleLogger>
     } = {},
   ) {
     app = createWebApplication({ config: conf, logger: options.logger ?? false })
-      .server(() => ({ listener: loopback }))
+      .server(() => ({ listen: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
       .install(
         DevTools(d => {
           d.port(0)
           configure(d)
         }),
-      ) as WebApplication
+      ) as WebApplication<NodeAdapterTypes>
     options.prepare?.(app)
     await app.run()
     const server = app.listeners.get(options.listener ?? 'devtools')!
@@ -143,8 +143,8 @@ describe('devtools', () => {
 
     it("refuses a loopback request under another site's name, which DNS rebinding would send", async () => {
       app = createWebApplication()
-        .server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
-        .install(DevTools(d => d.port(0))) as WebApplication
+        .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+        .install(DevTools(d => d.port(0))) as WebApplication<NodeAdapterTypes>
       await app.run()
       const { port } = new URL(devtoolsServer().address!.origin)
 
@@ -216,14 +216,16 @@ describe('devtools', () => {
     })
 
     it('refuses authorize(...) without authentication installed, rather than serve the devtools unprotected', async () => {
-      app = createWebApplication().install(DevTools(d => d.authorize({ roles: ['ops'] }))) as WebApplication
+      app = createWebApplication().install(
+        DevTools(d => d.authorize({ roles: ['ops'] })),
+      ) as WebApplication<NodeAdapterTypes>
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_FEATURE_NOT_INSTALLED' })
     })
 
     it('refuses to start where NODE_ENV is production, naming the way out', async () => {
       vi.stubEnv('NODE_ENV', 'production')
-      app = createWebApplication().install(DevTools()) as WebApplication
+      app = createWebApplication().install(DevTools()) as WebApplication<NodeAdapterTypes>
 
       const err = await app.bootstrap().catch((e: unknown) => e)
 
@@ -245,7 +247,7 @@ describe('devtools', () => {
       ['a port out of range', d => d.port(70_000)],
       ['an empty host', d => d.host(' ')],
     ])('refuses %s', async (_, configure) => {
-      app = createWebApplication().install(DevTools(d => void configure(d))) as WebApplication
+      app = createWebApplication().install(DevTools(d => void configure(d))) as WebApplication<NodeAdapterTypes>
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_DEVTOOLS_CONFIGURATION' })
     })
@@ -253,7 +255,8 @@ describe('devtools', () => {
     it('takes the name it is given, beside a listener of the application already named devtools', async () => {
       const devtools = await serve(d => d.listener('ops'), {
         listener: 'ops',
-        prepare: a => a.listener('devtools', l => l.server(() => ({ listener: loopback }))),
+        // A listener's settings are typed by the registered adapter, Fastify's in this program: Node reads `listen`.
+        prepare: a => a.listener('devtools', l => l.server(() => ({ listen: loopback }) as never)),
       })
 
       expect((await devtools.info.get()).status).toBe(200)
@@ -273,8 +276,8 @@ describe('devtools', () => {
   describe('devTools()', () => {
     it("serves the devtools on the server it is registered on, under that server's gate", async () => {
       app = createWebApplication({ logger: false })
-        .server(() => ({ listener: loopback }))
-        .with(devTools()) as WebApplication
+        .server(() => ({ listen: loopback }))
+        .with(devTools()) as WebApplication<NodeAdapterTypes>
       await app.run()
       const devtools = brewer<DevToolsRoutes>(`${app.address!.origin}/devtools`)
 
@@ -286,8 +289,8 @@ describe('devtools', () => {
 
     it('takes what to show and mask, as DevTools() does', async () => {
       app = createWebApplication({ config: conf, logger: false })
-        .server(() => ({ listener: loopback }))
-        .with(devTools(d => d.showConfigValues().redact('app.pool'))) as WebApplication
+        .server(() => ({ listen: loopback }))
+        .with(devTools(d => d.showConfigValues().redact('app.pool'))) as WebApplication<NodeAdapterTypes>
       await app.run()
       const devtools = brewer<DevToolsRoutes>(`${app.address!.origin}/devtools`)
 
@@ -299,7 +302,7 @@ describe('devtools', () => {
 
     it('refuses to start where NODE_ENV is production, pointing at a server of their own', async () => {
       vi.stubEnv('NODE_ENV', 'production')
-      app = createWebApplication().with(devTools()) as WebApplication
+      app = createWebApplication().with(devTools()) as WebApplication<NodeAdapterTypes>
 
       const err = await app.bootstrap().catch((e: unknown) => e)
 
@@ -308,7 +311,7 @@ describe('devtools', () => {
     })
 
     it('refuses a change sent as anything but JSON, which a cross-site form could send', async () => {
-      app = createWebApplication().with(devTools()) as WebApplication
+      app = createWebApplication().with(devTools()) as WebApplication<NodeAdapterTypes>
       await app.bootstrap()
 
       for (const init of [

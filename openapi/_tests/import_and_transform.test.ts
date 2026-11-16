@@ -8,13 +8,15 @@ import {
   Controller,
   Get,
   Header,
+  HTTPPlugin,
   Produces,
-  RouteBuilder,
+  Router,
   Schema,
   WebApplication,
+  type HTTPSetupContext,
+  type AnyRouter,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import type { FastifyInstance } from 'fastify'
+import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from '../errors.js'
@@ -46,7 +48,7 @@ const HAND_WRITTEN: OpenAPIDocument = {
   },
 }
 
-function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication {
+function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication<NodeAdapterTypes> {
   return createWebApplication({})
     .install(OpenAPI())
     .with(
@@ -54,15 +56,15 @@ function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication {
         o.docs(false).public()
         configure(o)
       }),
-    ) as WebApplication
+    ) as WebApplication<NodeAdapterTypes>
 }
 
-async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {
+async function documentOf(app: WebApplication<NodeAdapterTypes>): Promise<OpenAPIDocument> {
   return (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 }
 
 describe('imported specifications', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -182,7 +184,7 @@ describe('imported specifications', () => {
 })
 
 describe('transformDocument', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -244,7 +246,7 @@ describe('transformDocument', () => {
 })
 
 describe('derived response detail', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -300,7 +302,7 @@ describe('derived response detail', () => {
 // Here rather than in `openapi.test.ts`: that file's controllers carry `@Roles`, and every application built in it
 // must install authentication to start, which is exactly what these tests leave out.
 describe('openapi without authentication', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -330,7 +332,7 @@ describe('openapi without authentication', () => {
     const warnings = await warningsDuring(async () => {
       app = createWebApplication({})
         .install(OpenAPI())
-        .with(openapi(o => o.docs(false))) as WebApplication
+        .with(openapi(o => o.docs(false))) as WebApplication<NodeAdapterTypes>
       await app.bootstrap()
     })
 
@@ -342,7 +344,7 @@ describe('openapi without authentication', () => {
   it('refuses to secure the document, pointing at Authentication(...)', async () => {
     app = createWebApplication({})
       .install(OpenAPI())
-      .with(openapi(o => o.docs(false).secure('Basic'))) as WebApplication
+      .with(openapi(o => o.docs(false).secure('Basic'))) as WebApplication<NodeAdapterTypes>
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined
@@ -360,19 +362,27 @@ describe('openapi without authentication', () => {
       app = createWebApplication({})
         .install(OpenAPI())
         .with(openapi(o => o.docs(false)))
-        .with(() => async (instance: FastifyInstance) => {
-          instance.$route('search', router => {
-            router.path('/search').routes([
-              new RouteBuilder()
-                .method('QUERY')
-                .path('/')
-                .handle(() => []),
-            ])
-          })
-        }) as WebApplication
+        .with(
+          mounting(
+            new Router('/search')
+              .name('search')
+              .query('/')
+              .handler(() => []),
+          ),
+        ) as WebApplication<NodeAdapterTypes>
       await app.bootstrap()
     })
 
     expect(warnings.filter(w => w.includes('OpenAPI 3.1.1 cannot represent the "QUERY" method'))).toHaveLength(1)
   })
 })
+
+/** A plugin that mounts `router`: the way a plugin adds routes of its own. */
+function mounting(router: AnyRouter): () => HTTPPlugin {
+  return () =>
+    new (class extends HTTPPlugin {
+      register({ app }: HTTPSetupContext): void {
+        app.mount(router)
+      }
+    })()
+}

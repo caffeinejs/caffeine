@@ -42,6 +42,7 @@ import { kErrorHandlingOptions } from '../../core/error/keys.js'
 import { HookBatch } from '../../core/lifecycle/batch.js'
 import { callOnRoute, type AuthoredHooks, type RouteDefinition } from '../../core/lifecycle/route_definition.js'
 import { starParameterRefusal } from '../../core/matcher/find_my_way.js'
+import type { RouterFlags } from '../../core/matcher/matcher.js'
 import { rebaseMiddlewares } from '../../core/middleware/path.js'
 import { RouteGroupBuilder } from '../../core/routing/builder.js'
 import { joinPaths, pathsOf } from '../../core/routing/paths.js'
@@ -74,7 +75,7 @@ import {
 } from './lifecycle/lifecycle.js'
 import { installMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
-import { recordRouterFlags, routerFlagsOf, trackPrefixedRootURL } from './router.js'
+import { recordRouterFlags, routerFlagsFrom, routerFlagsOf, trackPrefixedRootURL } from './router.js'
 import { routeRecordsOf } from './routing/inventory.js'
 import { installNotFoundHandler } from './routing/not_found.js'
 import { compileArgs, compileHandler } from './routing/parameters.js'
@@ -247,6 +248,10 @@ export class Adapter implements IAdapter<AdapterTypes> {
         .byPassPostProcessors()
         .internal(),
     )
+  }
+
+  routerFlags(server: ServerSettings): RouterFlags {
+    return routerFlagsFrom(server.factory ?? {})
   }
 
   /**

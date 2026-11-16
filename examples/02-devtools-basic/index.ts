@@ -19,7 +19,7 @@ import {
   Principal,
   type IContext,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http/node'
 
 // --- configuration ---
 
@@ -116,7 +116,7 @@ class DevToolsToken extends BaseAuthenticationHandler<object> {
 // --- bootstrap ---
 
 const app = createWebApplication({ config: configuration })
-  .server(({ config }) => ({ listener: config.server }))
+  .server(({ config }) => ({ listen: config.server }))
   .install(Authentication((a, { config }) => a.addStrategy('Token', new DevToolsToken(config.devtools.token))))
   // The devtools on a server of their own, on loopback, for an `ops` principal alone. The tasks API stays open: no
   // route of it declares anything, and the application sets no fallback policy.

@@ -51,6 +51,10 @@ export default defineConfig({
       // extend a *different* Responder than the adapter checks for, and every HTML route would come back as JSON.
       '@caffeinejs/html': fileURLToPath(new URL('../../html/index.ts', import.meta.url)),
       '@caffeinejs/openapi': fileURLToPath(new URL('../../openapi/index.ts', import.meta.url)),
+      // Source too: its plugin extends `HTTPPlugin`, which the server checks against the source copy above. The
+      // subpath first, for the prefix match the note above describes.
+      '@caffeinejs/static/build': fileURLToPath(new URL('../../static/build/index.ts', import.meta.url)),
+      '@caffeinejs/static': fileURLToPath(new URL('../../static/index.ts', import.meta.url)),
       // Source too: its plugin extends `HTTPPlugin`, which the server checks against the source copy above.
       '@caffeinejs/devtools': fileURLToPath(new URL('../../devtools/index.ts', import.meta.url)),
       '@caffeinejs/testing/http': fileURLToPath(new URL('../../testing/http/index.ts', import.meta.url)),

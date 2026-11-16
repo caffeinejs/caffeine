@@ -14,7 +14,7 @@ import { isThenable } from '../../core/lifecycle/lifecycle.js'
 import { ErrNextCalledTwice } from '../../core/middleware/errors.js'
 import type { Next, NodeMiddleware } from '../../core/middleware/middleware.js'
 import { contentTooLarge, declaredOver, ErrRequestBodyConsumed } from '../../core/server/body.js'
-import type { NodeMiddlewareStamp, ServerPlatform } from '../../core/server/platform.js'
+import type { NodeMiddlewareStamp, SendHooks, ServerPlatform } from '../../core/server/platform.js'
 import type { HTTPServer } from '../../core/server/server.js'
 
 /** The response of one request a Node server received, over HTTP/1.1 or HTTP/2. */
@@ -60,27 +60,9 @@ export function createNodePlatform(logger: Logger): NodePlatform {
       writeHead(res, head.status, head.headers as OutgoingHttpHeaders)
 
       if (payload instanceof ReadableStream) {
-        hooks.cancelWith(() => destroy(res))
         // Through a Node stream, not the web stream itself: `pipeline` reads what a `drain` event carries as a
         // failure when it pumps a web stream, and an in-process response hands `drain` the size it wants.
-        pipeline(Readable.fromWeb(payload as WebReadableStream<Uint8Array>), res as NodeJS.WritableStream, err => {
-          // A response closed early is the client leaving, a reset HTTP/2 stream included: nothing failed here.
-          if (
-            err !== null &&
-            err !== undefined &&
-            (err as NodeJS.ErrnoException).code !== 'ERR_STREAM_PREMATURE_CLOSE'
-          ) {
-            // The platform never sees the request ID, so the method and URL stand in for it.
-            logger.error({ err, method: res.req.method, url: res.req.url }, 'Cannot send the streamed answer')
-          }
-        })
-
-        // A stream may still read from the scope until it ends. A response already closed will not close again.
-        if (destroyed(res)) {
-          hooks.sent()
-        } else {
-          onceClose(res, hooks.sent)
-        }
+        pipeTo(res, Readable.fromWeb(payload as WebReadableStream<Uint8Array>), hooks, logger)
       } else {
         end(res, payload ?? undefined)
         // A body already whole needs nothing of its request once Node holds it, as on the fetch platform: released at
@@ -88,10 +70,34 @@ export function createNodePlatform(logger: Logger): NodePlatform {
         hooks.sent()
       }
     },
+    respondStream: (res, head, stream, hooks) => {
+      writeHead(res, head.status, head.headers as OutgoingHttpHeaders)
+      pipeTo(res, stream as NodeJS.ReadableStream, hooks, logger)
+    },
     runNodeMiddleware,
   }
 
   return platform
+}
+
+/** Pipes a streamed answer to `res`, logging a failure that is not the client leaving. */
+function pipeTo(res: NodeResponse, source: NodeJS.ReadableStream, hooks: SendHooks, logger: Logger): void {
+  hooks.cancelWith(() => destroy(res))
+
+  pipeline(source, res as NodeJS.WritableStream, err => {
+    // A response closed early is the client leaving, a reset HTTP/2 stream included: nothing failed here.
+    if (err !== null && err !== undefined && (err as NodeJS.ErrnoException).code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+      // The platform never sees the request ID, so the method and URL stand in for it.
+      logger.error({ err, method: res.req.method, url: res.req.url }, 'Cannot send the streamed answer')
+    }
+  })
+
+  // A stream may still read from the scope until it ends. A response already closed will not close again.
+  if (destroyed(res)) {
+    hooks.sent()
+  } else {
+    onceClose(res, hooks.sent)
+  }
 }
 
 /**

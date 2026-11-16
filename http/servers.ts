@@ -121,7 +121,7 @@ export class ServerSet<T extends IAdapterTypes> {
     // fails should do so before a factory with side effects has run.
     const server = await resolveServerOptions(definition.server, context)
     const basePath = normalizeBasePath(await definition.basePath?.(context))
-    slot.forServer(basePath ?? '')
+    slot.forServer(basePath ?? '', adapter.routerFlags?.(server))
 
     // Its own `.with(...)` factories, in the order they were written. The adapter installs the framework's head
     // slots ahead of them.

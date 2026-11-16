@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
 import { $p, Args, Controller, Post, Schema, WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'
@@ -32,19 +32,19 @@ function drafts() {
 
 // `hide` is the convention `@fastify/swagger` reads off a Fastify schema; Caffeine honours it the same way.
 describe('a route schema with hide: true', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<NodeAdapterTypes> | undefined
 
   afterEach(async () => {
     await app?.close()
     app = undefined
   })
 
-  async function boot(): Promise<WebApplication> {
+  async function boot(): Promise<WebApplication<NodeAdapterTypes>> {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.docs(false)))
       .with(openapi('internal', o => o.docs(false)))
-      .mount(drafts()) as WebApplication
+      .mount(drafts()) as WebApplication<NodeAdapterTypes>
     await app.bootstrap()
     return app
   }

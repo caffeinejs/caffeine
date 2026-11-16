@@ -31,7 +31,7 @@ import { normalizePath, sanitizeURL } from '../middleware/path.js'
 import type { AuthenticationState } from '../security/auth/authentication_state.js'
 import type { Principal } from '../security/identity.js'
 import type { CompiledSerializer } from '../validation/validation.js'
-import { isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
+import { asBytes, HeldStream, isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
 import { contentTooLarge, declaredOver, ErrRequestBodyConsumed, limitStream } from './body.js'
 import { configurationError, sendProblem } from './error.js'
 import type { ServerPlatform } from './platform.js'
@@ -118,7 +118,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   #status = 200
   readonly #headers: Record<string, string | string[]> = Object.create(null)
-  #payload: SendPayload | undefined
+  #payload: SendPayload | HeldStream | undefined
   #answered = false
   #responded = false
   #expired = false
@@ -387,9 +387,22 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     return this.#shared.logger
   }
 
-  /** What goes out as the body: `undefined` until the request is answered. */
+  /** What goes out as the body: `undefined` until the request is answered. A held Node stream is read as web bytes. */
   get payload(): SendPayload | undefined {
-    return this.#payload
+    const payload = this.#payload
+
+    if (payload instanceof HeldStream) {
+      const bytes = asBytes(this, payload.source)
+      this.#payload = bytes
+      return bytes
+    }
+
+    return payload
+  }
+
+  /** The Node stream the answer holds, while nothing has read it as {@link payload}. */
+  get heldStream(): HeldStream | undefined {
+    return this.#payload instanceof HeldStream ? this.#payload : undefined
   }
 
   /** The response headers written so far, by lower-case name. */

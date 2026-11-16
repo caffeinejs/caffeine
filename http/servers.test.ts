@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from './adapter.js'
 import { createWebApplication as createFetchApplication } from './application.js'
+import { findMyWayMatcher } from './core/matcher/find_my_way.js'
+import { DEFAULT_ROUTER_FLAGS } from './core/matcher/matcher.js'
 import { Router } from './core/routing/programmatic/programmatic.js'
 import { createWebApplication } from './platform/fastify/application.js'
+import { createWebApplication as createNodeApplication } from './platform/node/node.js'
 import { HTTPPlugin } from './plugin.js'
 import { ServerDefinition } from './server_definition.js'
 import { ServerSet } from './servers.js'
@@ -93,12 +96,14 @@ describe('context.app.server', () => {
 
   it("reports the base path on the application's own slot", async () => {
     expect(await serverSeen(seen => createFetchApplication().basePath('/api').with(recorder(seen)))).toEqual([
-      { basePath: '/api' },
+      { basePath: '/api', router: DEFAULT_ROUTER_FLAGS },
     ])
   })
 
   it('reports an empty base path when the application set none', async () => {
-    expect(await serverSeen(seen => createFetchApplication().with(recorder(seen)))).toEqual([{ basePath: '' }])
+    expect(await serverSeen(seen => createFetchApplication().with(recorder(seen)))).toEqual([
+      { basePath: '', router: DEFAULT_ROUTER_FLAGS },
+    ])
   })
 
   // A router's slot is shared by every server that serves it: it belongs to none.
@@ -122,6 +127,37 @@ describe('context.app.server', () => {
           .basePath('/api')
           .listener('admin', l => l.with(recorder(seen))),
       ),
-    ).toEqual([{ basePath: '' }])
+    ).toEqual([{ basePath: '', router: DEFAULT_ROUTER_FLAGS }])
+  })
+
+  it('reports the router flags .server(...) set', async () => {
+    expect(
+      await serverSeen(seen =>
+        createFetchApplication()
+          .server(() => ({ router: { caseSensitive: false } }))
+          .with(recorder(seen)),
+      ),
+    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false } }])
+  })
+
+  // Under a matcher of its own the flags say nothing of how a path is matched, so a plugin that keys on them refuses.
+  it("reports no router flags under a matcher of the server's own", async () => {
+    expect(
+      await serverSeen(seen =>
+        createFetchApplication()
+          .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
+          .with(recorder(seen)),
+      ),
+    ).toEqual([{ basePath: '', router: undefined }])
+  })
+
+  it("reports the Node application's router flags", async () => {
+    expect(
+      await serverSeen(seen =>
+        createNodeApplication()
+          .server(() => ({ router: { caseSensitive: false } }))
+          .with(recorder(seen)),
+      ),
+    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false } }])
   })
 })

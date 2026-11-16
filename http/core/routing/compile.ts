@@ -157,6 +157,19 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         hooks: compileHooks(spec.hooks, meta.hooks, route.hooks),
         authorization: (() => {
           if (exempt) {
+            // The mark drops authorization, so a route asking for it as well would be served without it, silently.
+            if (declaresAuthzProtection(route.authz)) {
+              throw new ErrConfiguration(
+                errMessage(`Cannot serve "${owner}": it is outside access control and declares authorization`)
+                  .solutions(
+                    'Remove accessControlExempt() from the route or its group',
+                    'Remove authorize(...) from the route',
+                  )
+                  .reference('@caffeinejs/http', ErrConfiguration)
+                  .build(),
+              )
+            }
+
             return { hasProtection: false, options: undefined, authorizer: undefined, schemes: [] }
           }
 

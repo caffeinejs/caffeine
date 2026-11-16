@@ -13,8 +13,9 @@ import {
   Authorization,
   type ActionResult,
   healthProbes,
+  authentication,
 } from '@caffeinejs/http'
-import { createWebApplication, newRouter, authentication } from '@caffeinejs/http/fastify'
+import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { isDocumentRequest, sendFile, staticFiles } from '../../index.js'
@@ -116,18 +117,18 @@ const auth = () =>
       return { ok: true }
     })
 
-function application(): WebApplication {
+function application(): WebApplication<NodeAdapterTypes> {
   return createWebApplication({})
     .with(healthProbes())
     .with(staticFiles(s => s.serve(DIST, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
     .install(Authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login'))))
     .with(authentication())
     .install(Authorization(z => z.requireAuthenticatedByDefault()))
-    .mount(auth(), apiMisses(), publicPages(), memberPages(), adminPages()) as WebApplication
+    .mount(auth(), apiMisses(), publicPages(), memberPages(), adminPages()) as WebApplication<NodeAdapterTypes>
 }
 
 describe('a realistic application: controllers, a router, health and a single-page application', () => {
-  let app: WebApplication
+  let app: WebApplication<NodeAdapterTypes>
   let member: string
   let admin: string
 
