@@ -1,9 +1,9 @@
 import { connect } from 'node:net'
 
-import { Controller, Get, Head, Header } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { Millisecond, Second } from '@caffeinejs/std/duration'
-import fastify from 'fastify'
+import { CaffeineIoC } from '@caffeinejs/di'
+import { Controller, Get, Head, Header, type NodeMiddleware, Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
+import { type Duration, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -19,6 +19,13 @@ import {
   type HTTPCacheStore,
 } from '../index.js'
 import { WatchedStore, counter, gate, turn, whenAborted } from './_latch.js'
+
+// What a reply ended outside the server looks like on the engine: a Node middleware after the cache's `onRequest` ends
+// the response itself, and no `onSend` runs. All three parameters are declared: a shorter function is taken for a
+// `(ctx, next)` middleware.
+const hijack: NodeMiddleware = (_req, res, _next) => {
+  res.end('raw')
+}
 
 class Recording {
   readonly hits: CacheHitEvent[] = []
@@ -62,7 +69,9 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -135,7 +144,7 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore(new FailingWrites())
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(store)
@@ -195,7 +204,7 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore(new HungWrites())
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(store)
@@ -242,7 +251,7 @@ describe('concurrent misses for one key', () => {
     }
     void [OICController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -280,7 +289,7 @@ describe('concurrent misses for one key', () => {
     void [OffController]
 
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
@@ -324,7 +333,7 @@ describe('concurrent misses for one key', () => {
     }
     void [DownController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new Down())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new Down())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -365,7 +374,9 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore(new Forgetful())
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -403,7 +414,9 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -461,7 +474,7 @@ describe('concurrent misses for one key', () => {
     const store = new WatchedStore(new FailsOnReread())
     const recording = new Recording()
     const errors: { operation: string; error: unknown }[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(store).observer({ ...recording.observer, onError: event => errors.push(event) })),
     )
     close = () => app.close()
@@ -511,7 +524,7 @@ describe('a HEAD and the flight', () => {
     void [HeadLeadsController]
 
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
@@ -545,7 +558,9 @@ describe('a HEAD and the flight', () => {
 
     const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -582,7 +597,7 @@ describe('a HEAD and the flight', () => {
     }
     void [OwnHeadController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -594,8 +609,8 @@ describe('a HEAD and the flight', () => {
 })
 
 /**
- * A leader reports back from its store hook. When that hook never runs — a hijacked reply, a handler that never
- * returns — `lockTimeout` alone releases the requests waiting on its run.
+ * A leader reports back from its store hook. When that hook never runs — a reply ended outside the server, a handler
+ * that never returns — `lockTimeout` alone releases the requests waiting on its run.
  */
 describe('a handler run its leader does not report back on in time', () => {
   let close: (() => Promise<unknown>) | undefined
@@ -607,48 +622,48 @@ describe('a handler run its leader does not report back on in time', () => {
   })
 
   async function start(options: {
-    lockTimeout: number
+    lockTimeout: Duration
     hijack?: boolean
-    handler?: (request: { signal: AbortSignal }) => Promise<unknown>
+    handler?: (ctx: { signal: AbortSignal }) => Promise<unknown>
   }) {
     const store = new WatchedStore()
     const recording = new Recording()
-    const server = fastify()
-    close = () => server.close()
-    await server.register(
-      cachePlugin({
-        store,
-        etagGenerator: undefined,
-        statusHeader: 'X-Cache',
-        observer: recording.observer,
-        flights: new Map(),
-        lockTimeout: options.lockTimeout,
-      }),
-    )
-    server.route({
-      method: 'GET',
-      url: '/data',
-      config: { cache: { ttl: 60 * Second } },
-      handler: options.hijack
-        ? (_request, reply) => {
-            reply.hijack()
-            reply.raw.end('raw')
-          }
-        : (options.handler ?? (() => Promise.resolve({ ok: true }))),
-    })
-    await server.ready()
+    const router = new Router('')
+    router
+      .get('/data')
+      .config('cache', { ttl: 60 * Second })
+      .handler(ctx => (options.handler === undefined ? Promise.resolve({ ok: true }) : options.handler(ctx)))
 
-    return { server, store, recording }
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .with(() =>
+        cachePlugin({
+          store,
+          etagGenerator: undefined,
+          statusHeader: 'X-Cache',
+          observer: recording.observer,
+          flights: new Map(),
+          lockTimeout: options.lockTimeout,
+        }),
+      )
+      .mount(router)
+    if (options.hijack) {
+      app.use('/data', hijack, { hook: 'preHandler' })
+    }
+    close = () => app.close()
+    await app.bootstrap()
+
+    return { app, store, recording }
   }
 
-  // Hooks do not run after a hijack, so nothing but lockTimeout releases the requests waiting on the run.
+  // No hook runs after a reply is ended outside the server, so nothing but lockTimeout releases the requests waiting
+  // on the run.
   it('releases the requests waiting on a leader that hijacked its reply at lockTimeout, and no sooner', async () => {
-    const { server, store, recording } = await start({ lockTimeout: 50, hijack: true })
+    const { app, store, recording } = await start({ lockTimeout: 50 * Millisecond, hijack: true })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    expect((await server.inject('/data')).body).toBe('raw')
+    expect(await (await app.request('/data')).text()).toBe('raw')
     let answered = false
-    const follower = server.inject('/data').then(res => {
+    const follower = app.request('/data').then(res => {
       answered = true
       return res
     })
@@ -659,19 +674,19 @@ describe('a handler run its leader does not report back on in time', () => {
     expect(answered).toBe(false)
 
     await vi.advanceTimersByTimeAsync(1)
-    expect((await follower).body).toBe('raw')
+    expect(await (await follower).text()).toBe('raw')
     expect(recording.reasons()).toEqual(['absent', 'not-coalesced'])
 
     // The run is over for good: a request arriving now finds nothing to wait on, and leads.
-    await server.inject('/data')
+    await app.request('/data')
     expect(recording.reasons()).toEqual(['absent', 'not-coalesced', 'absent'])
   })
 
   it('still stores what a leader produces after lockTimeout released the requests behind it', async () => {
     const g = gate()
     let calls = 0
-    const { server } = await start({
-      lockTimeout: 30,
+    const { app } = await start({
+      lockTimeout: 30 * Millisecond,
       handler: async () => {
         calls++
         if (calls === 1) {
@@ -682,15 +697,15 @@ describe('a handler run its leader does not report back on in time', () => {
     })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const slow = server.inject('/data')
+    const slow = app.request('/data')
     await g.seen
     await vi.advanceTimersByTimeAsync(30)
     g.open()
     await slow
 
-    const res = await server.inject('/data')
-    expect(res.headers['x-cache']).toBe('HIT')
-    expect(res.json()).toEqual({ arrival: 1 })
+    const res = await app.request('/data')
+    expect(res.headers.get('x-cache')).toBe('HIT')
+    expect(await res.json()).toEqual({ arrival: 1 })
     expect(calls).toBe(1)
   })
 
@@ -699,8 +714,8 @@ describe('a handler run its leader does not report back on in time', () => {
   it('lets a leader that outlived lockTimeout end only its own run, never a newer one', async () => {
     const gates = [gate(), gate()]
     let arrivals = 0
-    const { server, store, recording } = await start({
-      lockTimeout: 30,
+    const { app, store, recording } = await start({
+      lockTimeout: 30 * Millisecond,
       handler: async () => {
         const mine = arrivals++
         if (mine < gates.length) {
@@ -714,25 +729,25 @@ describe('a handler run its leader does not report back on in time', () => {
     })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const slow = server.inject('/data')
+    const slow = app.request('/data')
     await gates[0].seen
     await vi.advanceTimersByTimeAsync(30)
 
-    const next = server.inject('/data')
+    const next = app.request('/data')
     await gates[1].seen
     gates[0].open()
-    expect((await slow).statusCode).toBe(500)
+    expect((await slow).status).toBe(500)
 
-    const follower = server.inject('/data')
+    const follower = app.request('/data')
     await store.reads.reached(3)
     await turn()
     gates[1].open()
     const [led, followed] = await Promise.all([next, follower])
 
     expect(arrivals).toBe(2)
-    expect(led.json()).toEqual({ arrival: 1 })
-    expect(followed.headers['x-cache']).toBe('HIT')
-    expect(followed.json()).toEqual({ arrival: 1 })
+    expect(await led.json()).toEqual({ arrival: 1 })
+    expect(followed.headers.get('x-cache')).toBe('HIT')
+    expect(await followed.json()).toEqual({ arrival: 1 })
     expect(recording.coalesced).toBe(1)
     expect(recording.reasons()).toEqual(['absent', 'absent'])
   })
@@ -740,22 +755,21 @@ describe('a handler run its leader does not report back on in time', () => {
   it('still stores and releases the requests behind a leader whose client went away', async () => {
     const g = gate()
     let leaderSignal: AbortSignal | undefined
-    const { server, store, recording } = await start({
-      lockTimeout: 1000,
-      handler: async request => {
-        leaderSignal ??= request.signal
+    const { app, store, recording } = await start({
+      lockTimeout: 1 * Second,
+      handler: async ctx => {
+        leaderSignal ??= ctx.signal
         await g.hold()
         return { ok: true }
       },
     })
-    await server.listen({ port: 0, host: '127.0.0.1' })
-    const { port } = server.server.address() as { port: number }
+    const { address } = await app.run({ port: 0, host: '127.0.0.1' })
 
-    const socket = connect({ host: '127.0.0.1', port })
+    const socket = connect({ host: '127.0.0.1', port: address.port })
     await new Promise(resolve => socket.once('connect', resolve))
     socket.write('GET /data HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
     await g.seen
-    const follower = server.inject('/data')
+    const follower = app.request('/data')
     await store.reads.reached(2)
     await turn()
 
@@ -764,7 +778,7 @@ describe('a handler run its leader does not report back on in time', () => {
     g.open()
 
     const res = await follower
-    expect(res.headers['x-cache']).toBe('HIT')
+    expect(res.headers.get('x-cache')).toBe('HIT')
     expect(recording.coalesced).toBe(1)
   })
 })
@@ -779,61 +793,60 @@ describe('a follower whose request is over', () => {
   })
 
   async function start(options: {
-    lockTimeout: number
-    handlerTimeout?: number
+    lockTimeout: Duration
+    handlerTimeout?: Duration
     hijack?: boolean
     handler?: () => Promise<unknown>
   }) {
     const store = new WatchedStore()
     const recording = new Recording()
-    const server = fastify(options.handlerTimeout === undefined ? {} : { handlerTimeout: options.handlerTimeout })
-    close = () => server.close()
-    await server.register(
-      cachePlugin({
-        store,
-        etagGenerator: undefined,
-        statusHeader: 'X-Cache',
-        observer: recording.observer,
-        flights: new Map(),
-        lockTimeout: options.lockTimeout,
-      }),
-    )
-    server.route({
-      method: 'GET',
-      url: '/data',
-      config: { cache: { ttl: 60 * Second } },
-      handler: options.hijack
-        ? (_request, reply) => {
-            reply.hijack()
-            reply.raw.end('raw')
-          }
-        : (options.handler ?? (() => ({ ok: true }))),
-    })
-    await server.ready()
+    const router = new Router('')
+    router
+      .get('/data')
+      .config('cache', { ttl: 60 * Second })
+      .handler(() => (options.handler === undefined ? { ok: true } : options.handler()))
 
-    return { server, store, recording }
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => (options.handlerTimeout === undefined ? {} : { handlerTimeout: options.handlerTimeout }))
+      .with(() =>
+        cachePlugin({
+          store,
+          etagGenerator: undefined,
+          statusHeader: 'X-Cache',
+          observer: recording.observer,
+          flights: new Map(),
+          lockTimeout: options.lockTimeout,
+        }),
+      )
+      .mount(router)
+    if (options.hijack) {
+      app.use('/data', hijack, { hook: 'preHandler' })
+    }
+    close = () => app.close()
+    await app.bootstrap()
+
+    return { app, store, recording }
   }
 
   // A follower whose client left has nobody to serve. Waiting on would hold its hook, and a re-read, for as long
-  // as the leader takes; instead it goes on at once, and Fastify treats it as any request whose client left.
+  // as the leader takes; instead it goes on at once, and the server treats it as any request whose client left.
   it('stops waiting when its client leaves: no re-read, nothing reported', async () => {
     const runs = counter()
     const g = gate()
-    const { server, store, recording } = await start({
-      lockTimeout: 1000,
+    const { app, store, recording } = await start({
+      lockTimeout: 1 * Second,
       handler: async () => {
         runs.tick()
         await g.hold()
         return { ok: true }
       },
     })
-    await server.listen({ port: 0, host: '127.0.0.1' })
-    const { port } = server.server.address() as { port: number }
+    const { address } = await app.run({ port: 0, host: '127.0.0.1' })
 
-    const leader = server.inject('/data')
+    const leader = app.request('/data')
     await g.seen
 
-    const socket = connect({ host: '127.0.0.1', port })
+    const socket = connect({ host: '127.0.0.1', port: address.port })
     await new Promise(resolve => socket.once('connect', resolve))
     socket.write('GET /data HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
     await store.reads.reached(2)
@@ -847,7 +860,7 @@ describe('a follower whose request is over', () => {
 
     g.open()
     const led = await leader
-    expect(led.headers['x-cache']).toBe('MISS')
+    expect(led.headers.get('x-cache')).toBe('MISS')
     expect(recording.reasons()).toEqual(['absent'])
     expect(recording.hits).toEqual([])
   })
@@ -875,34 +888,35 @@ describe('a follower whose request is over', () => {
     }
     const recording = new Recording()
     const errors: unknown[] = []
-    const server = fastify({ handlerTimeout: 1000 })
-    close = () => server.close()
-    await server.register(
-      cachePlugin({
-        store,
-        etagGenerator: undefined,
-        statusHeader: 'X-Cache',
-        observer: { ...recording.observer, onError: event => errors.push(event) },
-        flights: new Map(),
-        lockTimeout: 60_000,
-      }),
-    )
-    server.route({
-      method: 'GET',
-      url: '/data',
-      config: { cache: { ttl: 60 * Second } },
-      handler: async () => {
+    const router = new Router('')
+    router
+      .get('/data')
+      .config('cache', { ttl: 60 * Second })
+      .handler(async () => {
         calls++
         await g.hold()
         return { ok: true }
-      },
-    })
-    await server.ready()
+      })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ handlerTimeout: 1 * Second }))
+      .with(() =>
+        cachePlugin({
+          store,
+          etagGenerator: undefined,
+          statusHeader: 'X-Cache',
+          observer: { ...recording.observer, onError: event => errors.push(event) },
+          flights: new Map(),
+          lockTimeout: 1 * Minute,
+        }),
+      )
+      .mount(router)
+    close = () => app.close()
+    await app.bootstrap()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const leader = server.inject('/data')
+    const leader = app.request('/data')
     await g.seen
-    const follower = server.inject('/data')
+    const follower = app.request('/data')
     await reads.reached(2)
     await turn()
     g.open()
@@ -910,32 +924,147 @@ describe('a follower whose request is over', () => {
     await vi.advanceTimersByTimeAsync(1000)
     const [led, followed] = await Promise.all([leader, follower])
 
-    expect(led.headers['x-cache']).toBe('MISS')
-    expect(followed.statusCode).toBe(503)
+    expect(led.headers.get('x-cache')).toBe('MISS')
+    expect(followed.status).toBe(503)
     expect(calls).toBe(1)
     expect(errors).toEqual([])
     expect(recording.reasons()).toEqual(['absent'])
     expect(recording.hits).toEqual([])
   })
 
-  // Fastify answers the follower 503 at its handler timeout. The follower's wait ends there: when the flight
+  // The server answers the follower 503 at its handler timeout. The follower's wait ends there: when the flight
   // settles later it is not there to re-read the store, nor to report a miss on a reply already sent.
   it('stops waiting at the handler timeout, and is not heard from when the flight settles', async () => {
-    const { server, store, recording } = await start({ lockTimeout: 200, handlerTimeout: 40, hijack: true })
+    const { app, store, recording } = await start({
+      lockTimeout: 200 * Millisecond,
+      handlerTimeout: 40 * Millisecond,
+      hijack: true,
+    })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    // The leader hijacks, which clears its own timeout and settles its flight only at lockTimeout.
-    const leader = await server.inject('/data')
-    expect(leader.body).toBe('raw')
+    // The leader's reply is ended outside the server, which clears its own timeout and settles its flight only at
+    // lockTimeout.
+    const leader = await app.request('/data')
+    expect(await leader.text()).toBe('raw')
 
-    const follower = server.inject('/data')
+    const follower = app.request('/data')
     await store.reads.reached(2)
     await turn()
     await vi.advanceTimersByTimeAsync(40)
-    expect((await follower).statusCode).toBe(503)
+    expect((await follower).status).toBe(503)
 
     await vi.advanceTimersByTimeAsync(160)
     expect(store.reads.count).toBe(2)
+    expect(recording.reasons()).toEqual(['absent'])
+  })
+})
+
+describe('a request whose store read outlives it', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    vi.useRealTimers()
+    await close?.()
+    close = undefined
+  })
+
+  // A store that ignores the signal, its `get` calls numbered from 1: the read numbered `late` waits for `release`.
+  function lateStore(late: number) {
+    let release!: (entry?: HTTPCacheEntry) => void
+    const reads = counter()
+    const inner = new MemoryHTTPCacheStore()
+    const store: HTTPCacheStore = {
+      get(key, options) {
+        reads.tick()
+        if (reads.count === late) {
+          return new Promise<HTTPCacheEntry | undefined>(resolve => {
+            release = entry => resolve(entry)
+          }).then(entry => entry ?? inner.get(key))
+        }
+        return inner.get(key, options)
+      },
+      put: (key, entry, options) => inner.put(key, entry, options),
+      evictByTag: tags => inner.evictByTag(tags),
+    }
+
+    return { store, reads, release: (entry?: HTTPCacheEntry) => release(entry) }
+  }
+
+  async function start(store: HTTPCacheStore, handler: () => unknown) {
+    const recording = new Recording()
+    const router = new Router('')
+    router
+      .get('/data')
+      .config('cache', { ttl: 60 * Second })
+      .handler(handler)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ handlerTimeout: 50 * Millisecond }))
+      .with(() =>
+        cachePlugin({
+          store,
+          etagGenerator: undefined,
+          statusHeader: 'X-Cache',
+          observer: recording.observer,
+          flights: new Map(),
+          lockTimeout: 1 * Minute,
+        }),
+      )
+      .mount(router)
+    close = () => app.close()
+    await app.bootstrap()
+
+    return { app, recording }
+  }
+
+  // The store answers after the handler timeout already did, and after the store hook ran for that answer. A run
+  // started then has nobody to settle it: the next request would wait on it until lockTimeout.
+  it('starts no run once its request was answered while it read the store', async () => {
+    const { store, reads, release } = lateStore(1)
+    let calls = 0
+    const { app, recording } = await start(store, () => ({ n: ++calls }))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    const timedOut = app.request('/data')
+    await reads.reached(1)
+    await vi.advanceTimersByTimeAsync(50)
+    expect((await timedOut).status).toBe(503)
+
+    release()
+    await turn()
+
+    const next = await app.request('/data')
+    expect(next.headers.get('x-cache')).toBe('MISS')
+    expect(recording.reasons()).toEqual(['absent'])
+    expect(calls).toBe(1)
+  })
+
+  // A follower's re-read answers after its own handler timeout did: serving it would report a hit, or a miss, for a
+  // request already answered.
+  it('reports nothing for a follower answered while it re-read the store', async () => {
+    const { store, reads, release } = lateStore(3)
+    const g = gate()
+    const { app, recording } = await start(store, async () => {
+      await g.hold()
+      return { ok: true }
+    })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    const leader = app.request('/data')
+    await g.seen
+    const follower = app.request('/data')
+    await reads.reached(2)
+    await turn()
+    g.open()
+    expect((await leader).headers.get('x-cache')).toBe('MISS')
+
+    await reads.reached(3)
+    await vi.advanceTimersByTimeAsync(50)
+    expect((await follower).status).toBe(503)
+
+    release()
+    await turn()
+
+    expect(recording.hits).toEqual([])
     expect(recording.reasons()).toEqual(['absent'])
   })
 })
@@ -949,7 +1078,7 @@ describe('lockTimeout', () => {
   })
 
   it.each([0, 'never'])('is refused when it is not a positive duration: %s', async value => {
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).lockTimeout(value as number)),
     )
     close = () => app.close()

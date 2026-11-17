@@ -1,7 +1,6 @@
-import { type FastifyInstance, type RouteShorthandOptions } from 'fastify'
-import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -13,13 +12,12 @@ import {
   Identity,
   Principal,
 } from '../../../index.js'
-import {
-  authentication,
-  authenticationExempt,
-  createWebApplication,
-  healthProbes,
-  newRouter,
-} from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
+import { healthProbes } from '../../health/index.js'
+import { Router } from '../../routing/programmatic/programmatic.js'
+import { accessControlExempt } from '../exempt.js'
+import { authentication } from '../security.js'
 
 /**
  * Which routes start-up refuses for want of an authentication gate. Installing `Authentication(...)` binds what
@@ -27,7 +25,7 @@ import {
  * reached by the fallback policy — must have one over it. A gate covers the context it installed on and every
  * context beneath it, whatever order they were created in, so where it sits among the plugins never decides.
  *
- * Programmatic routers and plain Fastify routes only: a `@Controller` registers into the process-global registry
+ * Programmatic routers only: a `@Controller` registers into the process-global registry
  * and would leak into every application this file builds after it.
  */
 
@@ -52,22 +50,16 @@ const signedIn = { headers: { 'x-user': 'alice' } }
 const header = () => Authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
 const byDefault = () => Authorization(authz => authz.requireAuthenticatedByDefault())
 
-/** A route registered straight on the root server, from a `fastify-plugin`-wrapped plugin. */
-function rootRoute(path: string, options: RouteShorthandOptions = {}) {
+/** A route a plugin mounts from its own slot, registered wherever the plugin was written. */
+function pluginRoute(path: string) {
   return () =>
-    fp(
-      async (instance: FastifyInstance) => {
-        instance.get(path, options, ok)
-      },
-      { name: `root-route:${path}` },
-    )
-}
+    new (class extends HTTPPlugin {
+      override readonly name = `plugin-route:${path}`
 
-/** A route registered in a context of its own: the plugin is not wrapped in `fastify-plugin`. */
-function childRoute(path: string) {
-  return () => async (instance: FastifyInstance) => {
-    instance.get(path, ok)
-  }
+      register({ app }: HTTPSetupContext): void {
+        app.mount(new Router(path).get('/', ok))
+      }
+    })()
 }
 
 /** What bootstrap rejected with. */
@@ -80,7 +72,9 @@ async function refusal(app: { bootstrap(): Promise<unknown> }): Promise<Error & 
 
 describe('routes no authentication gate covers', () => {
   it('refuses a protected route when the feature is installed and no gate is registered', async () => {
-    const app = createWebApplication().install(header()).mount(newRouter('/no-gate').authorize().get('/', ok))
+    const app = createWebApplication({ adapter: node() })
+      .install(header())
+      .mount(new Router('/no-gate').authorize().get('/', ok))
 
     const err = await refusal(app)
 
@@ -92,10 +86,10 @@ describe('routes no authentication gate covers', () => {
 
   // A scoped gate reaches its own router and nothing beside it.
   it('refuses a protected route outside the only gated router, naming that route alone', async () => {
-    const gated = newRouter('/sibling-gated').with(authentication()).authorize().get('/', ok)
-    const bare = newRouter('/sibling-bare').authorize().get('/', ok)
+    const gated = new Router('/sibling-gated').with(authentication()).authorize().get('/', ok)
+    const bare = new Router('/sibling-bare').authorize().get('/', ok)
 
-    const err = await refusal(createWebApplication().install(header()).mount(gated, bare))
+    const err = await refusal(createWebApplication({ adapter: node() }).install(header()).mount(gated, bare))
 
     expect(err.code).toBe('ERR_AUTHENTICATION_GATE_REQUIRED')
     expect(err.message).toContain('"GET|HEAD /sibling-bare"')
@@ -103,40 +97,32 @@ describe('routes no authentication gate covers', () => {
   })
 
   // The fallback policy protects every route that declares nothing, so with every gate scoped, what lies outside
-  // them would be served to anyone — a route compiled from a router and one registered straight on the server alike.
+  // them would be served to anyone.
   it('refuses what the fallback policy protects outside every scoped gate', async () => {
-    const gated = newRouter('/fallback-gated').with(authentication()).get('/', ok)
-    const open = newRouter('/fallback-open').get('/', ok)
+    const gated = new Router('/fallback-gated').with(authentication()).get('/', ok)
+    const open = new Router('/fallback-open').get('/', ok)
 
-    const app = createWebApplication()
-      .install(header())
-      .install(byDefault())
-      .with(rootRoute('/fallback-raw'))
-      .mount(gated, open)
+    const app = createWebApplication({ adapter: node() }).install(header()).install(byDefault()).mount(gated, open)
 
     const err = await refusal(app)
 
     expect(err.code).toBe('ERR_AUTHENTICATION_GATE_REQUIRED')
-    expect(err.message).toContain('"GET|HEAD /fallback-raw"')
     expect(err.message).toContain('"GET|HEAD /fallback-open"')
     expect(err.message).not.toContain('/fallback-gated')
   })
 
-  // A gate's request hook reaches every context beneath the one it installed on, including those created before
-  // it: an unwrapped plugin registered ahead of the root gate is still behind it, so starting is right.
+  // The root gate covers every route of its server, including one a plugin written ahead of it mounted, so starting
+  // is right.
   it('lets a route registered before the root gate through, and gates it', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(header())
       .install(byDefault())
-      .with(childRoute('/early-child'))
-      .with(rootRoute('/early-root'))
+      .with(pluginRoute('/early-root'))
       .with(authentication())
 
     try {
       await app.bootstrap()
 
-      expect((await app.request('/early-child')).status).toBe(401)
-      expect((await app.request('/early-child', signedIn)).status).toBe(200)
       expect((await app.request('/early-root')).status).toBe(401)
       expect((await app.request('/early-root', signedIn)).status).toBe(200)
     } finally {
@@ -145,12 +131,12 @@ describe('routes no authentication gate covers', () => {
   })
 
   it('starts with no gate at all when nothing a gate would authorize is left', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(header())
       .install(byDefault())
       .with(healthProbes())
-      .with(rootRoute('/exempt', { config: authenticationExempt() }))
-      .mount(newRouter('/anonymous').authorize({ allowAnonymous: true }).get('/', ok))
+      .mount(new Router('/exempt').extend(accessControlExempt()).get('/', ok))
+      .mount(new Router('/anonymous').authorize({ allowAnonymous: true }).get('/', ok))
 
     try {
       await app.bootstrap()
@@ -164,45 +150,15 @@ describe('routes no authentication gate covers', () => {
 
   // No gate can be registered without the feature, so the missing feature is the fix to name.
   it('names the missing feature when a fallback policy protects a route and authentication was never installed', async () => {
-    const app = createWebApplication().install(byDefault()).with(rootRoute('/unauthenticated'))
+    const app = createWebApplication({ adapter: node() })
+      .install(byDefault())
+      .mount(new Router('/unauthenticated').get('/', ok))
 
     expect((await refusal(app)).code).toBe('ERR_AUTHENTICATION_REQUIRED')
   })
 
-  // A plugin's `onRoute` hook can drop what the adapter put on the route. The gate cannot claim it then, but the
-  // route still registers, and the fallback policy still answers it.
-  it('keeps a route another hook stripped of its Caffeine config behind the gate', async () => {
-    const strip = () =>
-      fp(
-        async (instance: FastifyInstance) => {
-          instance.addHook('onRoute', route => {
-            if (route.url === '/stripped') {
-              delete route.config?.$caffeine
-            }
-          })
-        },
-        { name: 'strip-caffeine' },
-      )
-
-    const app = createWebApplication()
-      .install(header())
-      .install(byDefault())
-      .with(strip)
-      .with(authentication())
-      .with(rootRoute('/stripped'))
-
-    try {
-      await app.bootstrap()
-
-      expect((await app.request('/stripped')).status).toBe(401)
-      expect((await app.request('/stripped', signedIn)).status).toBe(200)
-    } finally {
-      await app.close()
-    }
-  })
-
   it('names the first five uncovered routes and counts the rest', async () => {
-    const bare = newRouter('/many')
+    const bare = new Router('/many')
       .authorize()
       .get('/r0', ok)
       .get('/r1', ok)
@@ -212,7 +168,7 @@ describe('routes no authentication gate covers', () => {
       .get('/r5', ok)
       .get('/r6', ok)
 
-    const err = await refusal(createWebApplication().install(header()).mount(bare))
+    const err = await refusal(createWebApplication({ adapter: node() }).install(header()).mount(bare))
 
     expect(err.message).toMatch(
       /^Cannot start application: routes "GET\|HEAD \/many\/r0", "GET\|HEAD \/many\/r1", "GET\|HEAD \/many\/r2", "GET\|HEAD \/many\/r3", "GET\|HEAD \/many\/r4" and 2 more require authentication and no authentication gate covers them/,

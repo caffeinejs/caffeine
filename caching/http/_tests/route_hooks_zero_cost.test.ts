@@ -1,17 +1,24 @@
-import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Get, Post, type WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { Controller, Get, Post, type WebApplication, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Minute } from '@caffeinejs/std/duration'
-import { type RouteOptions } from 'fastify'
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
-import { CacheControl, CacheInvalidate, HTTPCaching } from '../index.js'
+import {
+  CacheControl,
+  CacheInvalidate,
+  HTTPCaching,
+  type HTTPCacheCallOptions,
+  type HTTPCacheEntry,
+  type HTTPCacheGetOptions,
+  type HTTPCachePutOptions,
+  type HTTPCacheStore,
+} from '../index.js'
 
 /**
- * What the caching hooks cost a route that does not use them: nothing. The cache attaches per route, from
- * Fastify's own `onRoute` hook, so a route in the same application that declared nothing holds no hook of it.
- * This is the guard against a later change making a cache hook unconditional.
+ * What the cache does to a route that does not use it: nothing. The cache attaches per route, from the server's
+ * `onRoute` hook, so a route in the same application that declared nothing is never handled by it: no store call, no
+ * event, no status header. This is the guard against a later change making a cache hook unconditional.
  *
  * The plugin is installed with an observer, and none of that changes: observing adds no hook of its own.
  */
@@ -43,22 +50,43 @@ class HookController {
 }
 void [HookController]
 
-const registered = new Map<string, RouteOptions>()
+// Counts what the cache asks of the store.
+class CountingStore implements HTTPCacheStore {
+  readonly #inner = new MemoryHTTPCacheStore()
+  gets = 0
+  evicts = 0
+
+  get(key: string, options?: HTTPCacheGetOptions): Promise<HTTPCacheEntry | undefined> {
+    this.gets++
+    return this.#inner.get(key, options)
+  }
+
+  put(key: string, entry: HTTPCacheEntry, options: HTTPCachePutOptions): Promise<void> {
+    return this.#inner.put(key, entry, options)
+  }
+
+  evictByTag(tags: string | readonly string[], options?: HTTPCacheCallOptions): Promise<void> {
+    this.evicts++
+    return this.#inner.evictByTag(tags, options)
+  }
+}
+
+const store = new CountingStore()
+const events: string[] = []
 let app: WebApplication
 
 beforeAll(async () => {
-  app = createWebApplication()
-    // onRoute sees the route definition exactly as it was handed to Fastify, after everything attached to it.
-    .serverCallback((_context, server) => {
-      server.addHook('onRoute', route => {
-        registered.set(`${route.method} ${route.url}`, route as RouteOptions)
-      })
-    })
-    .with(
-      HTTPCaching(b =>
-        b.store(new MemoryHTTPCacheStore()).observer({ onHit() {}, onMiss() {}, onStore() {}, onInvalidate() {} }),
-      ),
-    )
+  app = createWebApplication({ adapter: node() }).with(
+    HTTPCaching(b =>
+      b.store(store).observer({
+        onHit: () => void events.push('hit'),
+        onMiss: () => void events.push('miss'),
+        onStore: () => void events.push('store'),
+        onBypass: () => void events.push('bypass'),
+        onInvalidate: () => void events.push('invalidate'),
+      }),
+    ),
+  )
   await app.bootstrap()
 })
 
@@ -66,51 +94,44 @@ afterAll(async () => {
   await app?.close()
 })
 
-describe('route hook slots', () => {
-  it('leaves both slots empty on a route that uses no feature', () => {
-    const route = registered.get('GET /hooks/plain')!
+beforeEach(() => {
+  store.gets = 0
+  store.evicts = 0
+  events.length = 0
+})
 
-    expect(route).toBeDefined()
-    expect(route.onRequest).toBeUndefined()
-    expect(route.onSend).toBeUndefined()
-  })
+describe('a route that uses no feature of the cache', () => {
+  it('is left alone: no store call, no event, no status header', async () => {
+    const res = await app.request('/hooks/plain')
 
-  it('gives a @CacheControl(false) route the store hook only — it has nothing to serve', () => {
-    const route = registered.get('GET /hooks/uncached')!
-
-    expect(route.onRequest).toBeUndefined()
-    expect(route.onSend).toBeDefined()
-  })
-
-  it('gives a @CacheInvalidate route the eviction hook only', () => {
-    const route = registered.get('POST /hooks/mutate')!
-
-    expect(route.onRequest).toBeUndefined()
-    expect(route.onSend).toBeDefined()
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-cache')).toBe(null)
+    expect(store.gets).toBe(0)
+    expect(events).toEqual([])
   })
 })
 
-describe('the server itself', () => {
-  async function routesOfAPlainApplication(withCaching: boolean): Promise<string> {
-    const router = newRouter('/zero')
-    router.get('/plain').handler(() => ({ ok: true }))
-    const plain = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-    if (withCaching) {
-      plain.with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    }
-    plain.mount(router)
-    await plain.bootstrap()
+describe('the routes that use it', () => {
+  // The guard that the counting store and the observer see what a cached route does.
+  it('reads the store and reports on a @CacheControl route', async () => {
+    await app.request('/hooks/cached')
 
-    try {
-      return plain.instance.printRoutes({ includeHooks: true, commonPrefix: false })
-    } finally {
-      await plain.close()
-    }
-  }
+    expect(store.gets).toBe(1)
+    expect(events).toEqual(['miss', 'store'])
+  })
 
-  // A hook attached to the server, rather than to the routes that declared caching, would run on every request
-  // of the application. A route that declared nothing lists the same hooks with the plugin installed as without.
-  it('carries no hook of the cache', async () => {
-    expect(await routesOfAPlainApplication(true)).toBe(await routesOfAPlainApplication(false))
+  it('only writes its headers on a @CacheControl(false) route: it has nothing to serve', async () => {
+    const res = await app.request('/hooks/uncached')
+
+    expect(res.headers.get('cache-control')).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
+    expect(store.gets).toBe(0)
+  })
+
+  it('only evicts on a @CacheInvalidate route', async () => {
+    await app.request('/hooks/mutate', { method: 'POST' })
+
+    expect(store.evicts).toBe(1)
+    expect(store.gets).toBe(0)
+    expect(events).toEqual(['invalidate'])
   })
 })

@@ -45,11 +45,12 @@ export class ExampleController {
 App:
 
 ```ts
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 
 import './presentation/example.controller.js'
 
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
 
 await app.run({ port: 3000 })
 ```

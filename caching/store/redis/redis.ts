@@ -70,7 +70,7 @@ export interface RedisHTTPCacheStoreOptions {
   prefix?: string
 }
 
-// s status code · k payload kind (s string, b Buffer) · h headers · t etag · l last-modified · a stored at ·
+// s status code · k payload kind (s string, b bytes) · h headers · t etag · l last-modified · a stored at ·
 // g the generation of each tag the entry was written under.
 interface HTTPMeta {
   s: number
@@ -191,7 +191,7 @@ export class RedisHTTPCacheStore implements HTTPCacheStore {
     // of fields can never inherit one from the entry it replaces.
     await commands.hSetEx(
       this.#entryKey(key),
-      { p: entry.payload, m: JSON.stringify(httpMetaOf(entry, generations)) },
+      { p: payloadOf(entry), m: JSON.stringify(httpMetaOf(entry, generations)) },
       { expiration: { type: 'PX', value: ms } },
     )
   }
@@ -252,13 +252,19 @@ function text(value: unknown): string | undefined {
 function httpMetaOf(entry: HTTPCacheEntry, generations: Record<string, string> | undefined): HTTPMeta {
   return {
     s: entry.statusCode,
-    k: Buffer.isBuffer(entry.payload) ? 'b' : 's',
+    k: typeof entry.payload === 'string' ? 's' : 'b',
     h: entry.headers,
     t: entry.etag,
     l: entry.lastModified,
     a: entry.storedAt,
     g: generations,
   }
+}
+
+// The bytes as a `Buffer` over the same memory, which is what the client sends as a bulk string.
+function payloadOf(entry: HTTPCacheEntry): string | Buffer {
+  const payload = entry.payload
+  return typeof payload === 'string' ? payload : Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength)
 }
 
 function decodeEntry(payload: Buffer, meta: HTTPMeta): HTTPCacheEntry {

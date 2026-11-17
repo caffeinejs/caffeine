@@ -1,6 +1,14 @@
 import { CaffeineIoC, Profile } from '@caffeinejs/di'
-import { CatchWith, Controller, ErrHTTP, ErrHTTPBadRequest, ErrHTTPNotFound, Get } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import {
+  CatchWith,
+  Controller,
+  ErrHTTP,
+  ErrHTTPBadRequest,
+  ErrHTTPNotFound,
+  Get,
+  createWebApplication,
+} from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -71,6 +79,7 @@ void StockController
 
 async function enrolled() {
   const app = createWebApplication({
+    adapter: node(),
     container: new CaffeineIoC({ profiles: ['resilience-http-handler'] }),
   }).errorHandling(e => e.globalHandlers(ResilienceErrorHandler))
   opened.push(() => app.close())
@@ -179,7 +188,10 @@ void ScopedController
 
 describe('ResilienceErrorHandler named with @CatchWith', () => {
   it('answers for the one controller that names it', async () => {
-    const app = createWebApplication({ container: new CaffeineIoC({ profiles: ['resilience-http-scoped'] }) })
+    const app = createWebApplication({
+      adapter: node(),
+      container: new CaffeineIoC({ profiles: ['resilience-http-scoped'] }),
+    })
     opened.push(() => app.close())
     await app.bootstrap()
 
@@ -241,6 +253,7 @@ describe('isClientError on a controller', () => {
   it('keeps 404s out of the retry and the breaker, while a server error is still retried', async () => {
     catalog.attempts = 0
     const app = createWebApplication({
+      adapter: node(),
       container: new CaffeineIoC({ profiles: ['resilience-http-client-errors'] }),
     })
       .install(

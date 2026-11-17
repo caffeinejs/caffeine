@@ -6,20 +6,23 @@ import { $t } from '@caffeinejs/application/schema'
 import {
   $p,
   AllowAnonymous,
+  Args,
+  Authentication,
+  authentication,
   Controller,
   Get,
-  Args,
+  HTTPPlugin,
   Post,
   Roles,
-  RouteBuilder,
+  Router,
   Schema,
   Status,
-  WebApplication,
-  Authentication,
+  type HTTPSetupContext,
+  type AnyRouter,
+  createWebApplication,
+  type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, authentication } from '@caffeinejs/http/fastify'
-import { $multipart } from '@caffeinejs/multipart'
-import { type FastifyInstance } from 'fastify'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -68,26 +71,18 @@ class PetsController {
   create(body: object) {
     return body
   }
-
-  @Post('/:id/images')
-  @Status(201)
-  @Roles('write:pets')
-  @Args([$p.param('id'), $multipart.file('file')])
-  upload() {
-    return { uploaded: true }
-  }
 }
 void [PetsController]
 
-function buildApp(configure: OpenAPIConfigurer = () => {}): WebApplication {
-  return newBuilder(configure) as WebApplication
+function buildApp(configure: OpenAPIConfigurer = () => {}): WebApplication<never, never, unknown, NodeAdapter> {
+  return newBuilder(configure) as WebApplication<never, never, unknown, NodeAdapter>
 }
 
 // Authentication is always configured: the fixture controller carries @Roles and @AllowAnonymous, and an
 // application declaring authorization without authentication refuses to start. It also means every test
 // exercises the securityScheme derivation rather than only the unauthenticated path.
 function newBuilder(configure?: OpenAPIConfigurer) {
-  return createWebApplication({})
+  return createWebApplication({ adapter: node() })
     .install(OpenAPI())
     .with(openapi(configure))
     .install(Authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())))
@@ -99,7 +94,7 @@ function operationAt(document: OpenAPIDocument, path: string, method = 'get'): O
 }
 
 describe('openapi endpoints', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -128,7 +123,7 @@ describe('openapi endpoints', () => {
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
-    expect(Object.keys(document.paths ?? {}).sort()).toEqual(['/pets', '/pets/{id}', '/pets/{id}/images'])
+    expect(Object.keys(document.paths ?? {}).sort()).toEqual(['/pets', '/pets/{id}'])
     expect(operationAt(document, '/pets')?.operationId).toBe('listPets')
     expect(operationAt(document, '/pets')?.tags).toEqual(['Pets'])
     expect(document.tags).toContainEqual({ name: 'Pets', description: 'Browse and manage pets' })
@@ -138,7 +133,7 @@ describe('openapi endpoints', () => {
   it('lists errors under every format error handling negotiates', async () => {
     app = newBuilder(o => o.docs(false).public()).errorHandling(e =>
       e.serializer('text/html', (_ctx, problem) => `<h1>${problem.title}</h1>`),
-    ) as WebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
@@ -163,18 +158,6 @@ describe('openapi endpoints', () => {
     })
   })
 
-  it('synthesizes a multipart body from the file picker', async () => {
-    app = buildApp(o => o.docs(false).public())
-    await app.bootstrap()
-
-    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
-    const body = operationAt(document, '/pets/{id}/images', 'post')?.requestBody
-
-    expect(body?.content['multipart/form-data'].schema).toMatchObject({
-      properties: { file: { type: 'string', format: 'binary' } },
-    })
-  })
-
   // The package's own endpoints register like every other route and are collected with them; their group is
   // marked hidden, which is what keeps them out of the document.
   it('does not describe its own endpoints', async () => {
@@ -189,16 +172,14 @@ describe('openapi endpoints', () => {
   // The document is generated once every route has registered, not when the plugin does, so the order the
   // plugins were installed in cannot drop a route from it.
   it('describes a route a plugin installed after it adds', async () => {
-    app = newBuilder(o => o.docs(false).public()).with(() => async (instance: FastifyInstance) => {
-      instance.$route('late', router => {
-        router.path('/late').routes([
-          new RouteBuilder()
-            .method('GET')
-            .path('/hello')
-            .handle(() => ({ ok: true })),
-        ])
-      })
-    }) as WebApplication
+    app = newBuilder(o => o.docs(false).public()).with(
+      mounting(
+        new Router('/late')
+          .name('late')
+          .get('/hello')
+          .handler(() => ({ ok: true })),
+      ),
+    ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
@@ -209,17 +190,15 @@ describe('openapi endpoints', () => {
   // A route a feature registers on the application's behalf — a single-page application's shell — is not part
   // of the API it describes. `detail('http', { internal: true })` is http's own marker for that.
   it('does not describe a group another feature marked internal', async () => {
-    app = newBuilder(o => o.docs(false).public()).with(() => async (instance: FastifyInstance) => {
-      instance.$route('shell', router => {
-        router.detail('http', { internal: true })
-        router.routes([
-          new RouteBuilder()
-            .method('GET')
-            .path('/*')
-            .handle(() => 'shell'),
-        ])
-      })
-    }) as WebApplication
+    app = newBuilder(o => o.docs(false).public()).with(
+      mounting(
+        new Router()
+          .name('shell')
+          .detail('http', { internal: true })
+          .get('/*')
+          .handler(() => 'shell'),
+      ),
+    ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
@@ -318,21 +297,24 @@ describe('openapi endpoints', () => {
  * the documentation page's links are followed by a browser, so they carry the base.
  */
 describe('openapi under a base path', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
     app = undefined
   })
 
-  async function documentOf(running: WebApplication, url = '/api/openapi.json'): Promise<OpenAPIDocument> {
+  async function documentOf(
+    running: WebApplication<never, never, unknown, NodeAdapter>,
+    url = '/api/openapi.json',
+  ): Promise<OpenAPIDocument> {
     const res = await running.request(url)
     expect(res.status).toBe(200)
     return (await res.json()) as OpenAPIDocument
   }
 
   it('names the base path as the server, keeping the paths as the application declares them', async () => {
-    app = newBuilder(o => o.docs(false).public()).basePath('/api') as WebApplication
+    app = newBuilder(o => o.docs(false).public()).basePath('/api') as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const document = await documentOf(app)
@@ -345,7 +327,7 @@ describe('openapi under a base path', () => {
   it('keeps the servers the application declared, adding none of its own', async () => {
     app = newBuilder(o => o.server('https://api.example.com/v1').docs(false).public()).basePath(
       '/api',
-    ) as WebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await documentOf(app)).servers).toEqual([{ url: 'https://api.example.com/v1' }])
@@ -363,14 +345,19 @@ describe('openapi under a base path', () => {
     const path = join(dir, 'spec.yaml')
     writeFileSync(path, 'openapi: 3.1.1\ninfo:\n  title: Imported\n  version: 1.0.0\npaths: {}\n')
 
-    app = newBuilder(o => o.specification({ path }).docs(false).public()).basePath('/api') as WebApplication
+    app = newBuilder(o => o.specification({ path }).docs(false).public()).basePath('/api') as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.bootstrap()
 
     expect('servers' in (await documentOf(app))).toBe(false)
   })
 
   it('links the documentation page to its document and bundle under the base', async () => {
-    app = newBuilder(o => o.public()).basePath('/api') as WebApplication
+    app = newBuilder(o => o.public()).basePath('/api') as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const html = await (await app.request('/api/docs')).text()
@@ -384,7 +371,12 @@ describe('openapi under a base path', () => {
   })
 
   it('puts the base path in front of a configured endpoint base', async () => {
-    app = newBuilder(o => o.base('/internal').public()).basePath('/api') as WebApplication
+    app = newBuilder(o => o.base('/internal').public()).basePath('/api') as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.bootstrap()
 
     const html = await (await app.request('/api/internal/docs')).text()
@@ -395,7 +387,7 @@ describe('openapi under a base path', () => {
 })
 
 describe('openapi endpoint protection', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -515,3 +507,13 @@ describe('multiple applications in one process', () => {
     }
   })
 })
+
+/** A plugin that mounts `router`: the way a plugin adds routes of its own. */
+function mounting(router: AnyRouter): () => HTTPPlugin {
+  return () =>
+    new (class extends HTTPPlugin {
+      register({ app }: HTTPSetupContext): void {
+        app.mount(router)
+      }
+    })()
+}

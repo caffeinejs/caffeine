@@ -13,6 +13,9 @@
   },
   "ignorePatterns": [
     "**/dist/**",
+    "multipart/**",
+    "view/**",
+    "parked/**",
     ".agents/**",
     ".claude/skills/**",
     "**/*.gen.mod.ts",

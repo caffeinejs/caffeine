@@ -9,7 +9,7 @@ const BACKSLASH = 92
 const TILDE = 126
 
 /**
- * Where the adapter records, on the raw request, the base it took off the path. Absent when it took none, so a
+ * Where the engine records, on the raw request, the base it took off the path. Absent when it took none, so a
  * request the base path did not match costs no write.
  */
 export const kRawBasePath: unique symbol = Symbol('caffeine.http.basePath')

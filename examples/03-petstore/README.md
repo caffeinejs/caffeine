@@ -11,11 +11,11 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** specificat
 - **Two layers only**: routes → repository. Repositories own every query and the row → API-DTO mapping; routes
   own validation and status codes.
 - **One schema file per feature**, in the `$t` dialect from `@caffeinejs/application/schema`. A `$t` schema is JSON
-  Schema, so it compiles straight into a Fastify Ajv validator — and the DTO types are inferred from it with
+  Schema, so it compiles straight into a validator — and the DTO types are inferred from it with
   `InferSchema`, so nothing is declared twice.
 - **Auth**: two segregated schemes — GitHub OAuth 2.0 as the default, and Basic guarding the API docs.
 - **Server-side rendering** with `@caffeinejs/html`: JSX components, no template engine and no render step.
-- **Multipart upload** (`$multipart.file()`), and the OpenAPI 3.2 **QUERY** search verb.
+- The OpenAPI 3.2 **QUERY** search verb.
 - **Generated API docs** via `@caffeinejs/openapi`: an OpenAPI 3.2 document derived from the routes themselves —
   controllers and routers alike — plus a Scalar UI at `/docs`.
 - **Configuration** in one YAML file, `config/application.yaml`, validated against the schema in
@@ -161,10 +161,8 @@ controller, `.schema()` and `.authorize()` on a router. `@APIGroup`/`@Operation`
 `operation()` extensions the routers use, which are the same implementations) add only what none of those can
 express: tag descriptions, summaries and `operationId`s.
 
-Two consequences worth noticing:
+One consequence worth noticing:
 
-- `POST /pets/:id/images` is documented as `multipart/form-data` with a binary `file` part purely because the
-  handler takes `$multipart.file('file')`. Nothing says so twice.
 - `QUERY /pets` is why the app asks for `.version('3.2.0')` — a 3.1 path item has no field for a method outside
   the fixed set, so a 3.1 document would silently omit the route.
 
@@ -298,8 +296,8 @@ capabilities. The following are **not** implemented:
 Notes:
 
 - Trailing slashes are **not** ignored: `GET /pets/` does not list pets. It is matched as `/pets/:id` with an
-  empty `id`, which fails the parameter schema and answers `400`. That is Fastify's default, and this example no
-  longer overrides it with `routerOptions: { ignoreTrailingSlash: true }`.
+  empty `id`, which fails the parameter schema and answers `400`. That is the router's default, and this example does
+  not override it with `router: { ignoreTrailingSlash: true }` in `.server(...)`.
 - Passwords are stored in clear text to keep the example small — **never** do this in production; hash with
   argon2/bcrypt.
 - The Order model follows the specification's `#/components/schemas/Order` (id, petId, userId, status,

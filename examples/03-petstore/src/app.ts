@@ -4,9 +4,16 @@ import type { Logger } from '@caffeinejs/application/logger'
 import { DevTools } from '@caffeinejs/devtools'
 import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
-import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
-import { createWebApplication, authentication, healthProbes } from '@caffeinejs/http/fastify'
-import { multipart } from '@caffeinejs/multipart'
+import {
+  Claim,
+  Identity,
+  Principal,
+  Authentication,
+  authentication,
+  healthProbes,
+  createWebApplication,
+} from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { OpenAPI, openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
 import { Second } from '@caffeinejs/std/duration'
@@ -37,6 +44,7 @@ export interface BuildAppOptions {
 export function buildApp(container: Container, options: BuildAppOptions = {}) {
   return (
     createWebApplication({
+      adapter: node(),
       container,
       config: configuration,
       logger: options.logger ?? createLogger(),
@@ -45,18 +53,18 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       // makes no difference to install order; they are grouped first because they read as configuration.
 
       // Server host/port come from `server` in config/application.yaml.
-      .server(({ config }) => ({ listener: config.server }))
+      .server(({ config }) => ({ listen: config.server }))
       // The two handlers that render every thrown error: HTTPErrorHandler for an ErrHTTP, FallbackErrorHandler
       // for a validation failure or anything unexpected. Declaring them is not enough — this is what puts them
       // in front of the whole application.
       .errorHandling(e => e.globalHandlers(HTTPErrorHandler, FallbackErrorHandler))
-      // The level follows configuration; the adapter builds Fastify on this logger, so the server follows it too.
+      // The level follows configuration.
       .logger((b, { config }) => b.level(config.log.level))
       // Graceful shutdown: SIGTERM makes /readyz answer 503 immediately, the drain delay covers the
       // routing-table lag while requests keep being served normally, and only then does the server close. No
       // preStop sleep in the manifest. Signals are on by default.
       //
-      // Tests never need the production shutdown budget; a hung Fastify close would sit on it until
+      // Tests never need the production shutdown budget; a hung close would sit on it until
       // hookTimeout. shutdownTimeout(0) waits forever — a small positive budget still force-tears down.
       .shutdown(s => {
         if (process.env.VITEST !== undefined) {
@@ -171,7 +179,6 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             .errorSchema(APIErrorSchema),
         ),
       )
-      .with(multipart())
       // Kubernetes probes: /livez, /readyz, /startupz.
       .with(healthProbes())
       // The two features written as routers rather than controllers. Mounting is what carries their route types

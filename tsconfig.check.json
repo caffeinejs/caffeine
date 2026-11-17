@@ -20,12 +20,6 @@
       "path": "./html"
     },
     {
-      "path": "./multipart"
-    },
-    {
-      "path": "./view"
-    },
-    {
       "path": "./static"
     },
     {

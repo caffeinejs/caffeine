@@ -48,24 +48,31 @@ export class ErrStaticRouteConflict extends ErrCaffeineWebApplication {
 
 /**
  * ErrSendFileUnavailable is thrown when `sendFile` is called on a server with no `staticFiles(...)` installed, on
- * one whose `staticFiles(...)` serves no root, or with a root no mount serves.
+ * one whose `staticFiles(...)` serves no root, with a root no mount serves, or on a request no route matched.
  */
 export class ErrSendFileUnavailable extends ErrCaffeineWebApplication {
-  /** @param installed - Whether `staticFiles(...)` is installed; read only without a `root` */
-  constructor(root?: string, installed = false) {
+  /**
+   * @param installed - Whether `staticFiles(...)` is installed; read only without a `root`
+   * @param matched - Whether the request matched a route; read only without a `root`
+   */
+  constructor(root?: string, installed = false, matched = true) {
     const message =
       root !== undefined
         ? errMessage(`Cannot send a file from "${root}": no mount serves it`).solutions(
             'Pass a root a .serve(...) call serves',
             `Add .serve("${root}") to staticFiles(...)`,
           )
-        : installed
-          ? errMessage('Cannot send a file: staticFiles(...) serves no root').solutions(
-              'Add .serve(root) to staticFiles(...)',
+        : !matched
+          ? errMessage('Cannot send a file: the request matched no route, so no mount can be found').solutions(
+              'Answer the request from a route, such as a "/*" route that calls sendFile',
             )
-          : errMessage('Cannot send a file: staticFiles(...) is not installed').solutions(
-              'Install staticFiles(s => s.serve(root)) on the server that serves this route',
-            )
+          : installed
+            ? errMessage('Cannot send a file: staticFiles(...) serves no root').solutions(
+                'Add .serve(root) to staticFiles(...)',
+              )
+            : errMessage('Cannot send a file: staticFiles(...) is not installed').solutions(
+                'Install staticFiles(s => s.serve(root)) on the server that serves this route',
+              )
 
     super(message.reference('@caffeinejs/static', ErrSendFileUnavailable).build(), 'ERR_SEND_FILE_UNAVAILABLE')
     this.name = 'ErrSendFileUnavailable'

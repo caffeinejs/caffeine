@@ -1,5 +1,5 @@
-import { type WebApplication, Authentication, Authorization } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { Authentication, Authorization, authentication, Router, type WebApplication } from '@caffeinejs/http'
+import { type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { sendFile, staticFiles } from '../../index.js'
@@ -18,7 +18,7 @@ import {
 /**
  * An administration site where the page *and* its bundle are for administrators.
  *
- * There is deliberately no routed mount: a mount's file routes are raw Fastify routes, which carry no
+ * There is deliberately no routed mount: a mount's file routes are routes of their own, which carry no
  * authorization of their own and fall to the application's fallback policy — so the bundle of a role-gated
  * site would be readable by anyone, or by any signed-in user. Serving the files from a compiled route instead
  * puts every byte behind the same `authorize` as the page. `sendFile` looks the path up in the manifest, so a
@@ -27,23 +27,21 @@ import {
  * `unrouted: ['**']` is what makes that possible: the mount registers no routes at all, and exists only to
  * name the files and the root `sendFile` resolves against.
  */
-function adminSite(authenticateByDefault: boolean): WebApplication {
+function adminSite(authenticateByDefault: boolean): WebApplication<never, never, unknown, NodeAdapter> {
   const app = isolated()
     .install(Authentication(a => a.addStrategy('header', new HeaderAuthenticationHandler())))
     .with(authentication())
     .with(staticFiles(s => s.serve(dist, { unrouted: ['**'] })))
     .mount(
-      newRouter('/api')
-        .authorize({ roles: ['admin'] })
-        .get('/report', () => ({ rows: [] })),
-      newRouter()
+      new Router('/api').authorize({ roles: ['admin'] }).get('/report', () => ({ rows: [] })),
+      new Router()
         .detail('http', { internal: true })
         .authorize({ roles: ['admin'] })
         .get('/', shellOf(dist))
         .get('/index.html', shellOf(dist))
         .get('/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!, dist))
         .get('/*', clientRouteOf(dist)),
-    ) as WebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 
   if (authenticateByDefault) {
     app.install(Authorization(z => z.requireAuthenticatedByDefault()))
@@ -57,7 +55,7 @@ const bob = { 'x-user': 'bob' }
 const ann = { 'x-user': 'ann', 'x-roles': 'admin' }
 
 describe('role-gated administration site', () => {
-  let app: WebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
 
   afterEach(async () => {
     await app?.close()

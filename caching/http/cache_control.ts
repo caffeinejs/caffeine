@@ -1,17 +1,15 @@
-import { appendVary, type Principal } from '@caffeinejs/http'
 import {
-  addRouteHook,
-  type AdapterReply,
-  type AdapterRequest,
-  type AdapterRouteOptions,
-  type ContextRequest,
-} from '@caffeinejs/http/fastify'
+  appendVary,
+  withholdValidators,
+  type IContext,
+  type Principal,
+  type RouteDefinition,
+  type SendPayload,
+} from '@caffeinejs/http'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import { type Duration, Second } from '@caffeinejs/std/duration'
-import type { FastifyRequest } from 'fastify'
 
-import './_fastify.js'
-import { cacheRouteOf } from './_observe.js'
+import { cacheRouteResolver } from './_observe.js'
 import {
   applyStoredHeaders,
   assertConstraintsKeyed,
@@ -21,7 +19,6 @@ import {
   durationSeconds,
   generateETag,
   isNotModified,
-  isStreamPayload,
   parseRequestCacheControl,
   pragmaNoCache,
   storedHeadersOf,
@@ -31,9 +28,6 @@ import { Flight, type FlightTable } from './flight.js'
 import type { CacheBypassReason, CacheMissReason, CacheObserver } from './observer.js'
 import type { HTTPCacheEntry, HTTPCacheStore } from './store.js'
 import { withStoreSignal } from './store_signal.js'
-
-/** What a hook that finishes synchronously calls, with the payload as Fastify hands it on. */
-type OnSendNext = (err: Error | null, payload?: unknown) => void
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
@@ -47,7 +41,7 @@ const CACHE_STALE = 'STALE'
 // RFC 5861 §4 — the responses a stale entry may stand in for.
 const SIE_STATUS = new Set([500, 502, 503, 504])
 
-export type ETagGenerator = (payload: Buffer) => string | Promise<string>
+export type ETagGenerator = (payload: Uint8Array) => string | Promise<string>
 
 export interface CacheControlOptions {
   /**
@@ -114,8 +108,8 @@ export interface CacheControlOptions {
   etag?: boolean
   /**
    * `false` lets every concurrent miss run the handler. On by default: the first miss for a key runs the handler
-   * and the others wait, up to the install's `lockTimeout`, for what it stores. A route whose handler hijacks
-   * the reply or streams should turn it off, since such a response settles nothing before the timeout.
+   * and the others wait, up to the install's `lockTimeout`, for what it stores. A route whose response is ended
+   * outside the server, or streams, should turn it off, since such a response settles nothing before the timeout.
    */
   lock?: boolean
   /**
@@ -131,12 +125,8 @@ export interface CacheControlOptions {
    * other status carries nothing of this policy but `noStore`.
    */
   statusCodes?: number[]
-  /**
-   * Derives the store key instead of the default. Eviction is by tag, so the key is the cache's own concern.
-   *
-   * `req` is the request of the handler's own context, so it needs a server the application's adapter drives.
-   */
-  key?: (req: ContextRequest) => string
+  /** Derives the store key instead of the default. Eviction is by tag, so the key is the cache's own concern. */
+  key?: (req: IContext['req']) => string
   /**
    * Hashes the payload into the `ETag`, instead of the one given to `HTTPCaching`. The default tag is strong and
    * computed before any content-coding.
@@ -169,6 +159,23 @@ export interface CacheDeps {
   lockTimeout?: Duration
 }
 
+/** What the read hook leaves for the store hook of the same request. */
+interface CacheRequestState {
+  /** Served or `304`'d from the store, so the store hook skips. */
+  cached: boolean
+  /** The store key the read hook derived, which the store hook writes under. */
+  key: string | null
+  /**
+   * The flight this request leads, so its store hook settles it — this one, never a newer flight under the same
+   * key.
+   */
+  flight: Flight | null
+  /** A stale entry the read hook found within `staleIfError`, for the store hook to replay over a 5xx. */
+  stale: HTTPCacheEntry | null
+  /** Puts back the validators a miss withheld from the handler, so the store hook answers them. */
+  restore: (() => void) | null
+}
+
 /**
  * Attaches the read and store hooks to one route, per its `@CacheControl` options.
  *
@@ -195,8 +202,7 @@ export interface CacheDeps {
  * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
  * handler ran and its response matches, that response goes out as the `304`, with its own headers and without
  * its body or `Content-Length`; a streamed body is closed unread, and so is a streamed `5xx` a stale entry
- * replaces. On a `HEAD`, Fastify's own HEAD route has taken the body before these hooks run: it resumes a Node
- * stream and cancels a web stream.
+ * replaces. On a `HEAD` the server drops the body after these hooks run, keeping its length.
  *
  * `@CacheControl(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
  * no-cache headers.
@@ -205,30 +211,23 @@ export interface CacheDeps {
  *   string without a brace, or the route is constrained and nothing in its key tells it from the other routes on
  *   its URL.
  */
-export function attachCacheHooks(
-  routeDef: AdapterRouteOptions,
-  opts: CacheControlOptions | false,
-  deps: CacheDeps,
-): void {
+export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptions | false, deps: CacheDeps): void {
   const { store, etagGenerator, statusHeader, observer, storeTimeout, maxEntrySize, flights, lockTimeout } = deps
 
-  // Resolved here, once per route, and only when someone is listening. Every call site below is
-  // `observer?.onX?.({...})`: the optional call short-circuits before its argument is built, so an unobserved
-  // route allocates no event.
-  const route = observer === undefined ? undefined : cacheRouteOf(routeDef)
+  // Resolved here, once per route. Every call site below is `observer?.onX?.({...})`: the optional call
+  // short-circuits before its argument is built, so an unobserved route allocates no event.
+  const routeOf = cacheRouteResolver(route)
 
   if (opts === false) {
     // @CacheControl(false): actively disable caching with the full set of no-cache headers. The restrictive
     // form, so it is written over whatever the handler set.
-    addRouteHook(routeDef, 'onSend', function onSend(_request, reply, payload, next: OnSendNext) {
-      reply.header('Cache-Control', 'no-store, max-age=0, must-revalidate, proxy-revalidate')
-      reply.header('Expires', '0')
-      reply.header('Pragma', 'no-cache')
-      reply.header('Surrogate-Control', 'no-store')
-      reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, reason: 'disabled' })
-
-      next(null, payload)
+    route.hook('onSend', ctx => {
+      ctx.header('Cache-Control', 'no-store, max-age=0, must-revalidate, proxy-revalidate')
+      ctx.header('Expires', '0')
+      ctx.header('Pragma', 'no-cache')
+      ctx.header('Surrogate-Control', 'no-store')
+      ctx.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: routeOf(ctx), reason: 'disabled' })
     })
 
     return
@@ -238,17 +237,17 @@ export function attachCacheHooks(
   const read: CacheControlOptions = opts
   const methods = read.methods?.map(method => method.toUpperCase()) ?? DEFAULT_METHODS
   const statusCodes = read.statusCodes ?? DEFAULT_STATUS_CODES
-  const ttlSeconds = read.ttl === undefined ? undefined : durationSeconds(routeDef, 'ttl', read.ttl, 1)
+  const ttlSeconds = read.ttl === undefined ? undefined : durationSeconds(route, 'ttl', read.ttl, 1)
 
   if (read.sharedMaxAge !== undefined) {
-    durationSeconds(routeDef, 'sharedMaxAge', read.sharedMaxAge, 0)
+    durationSeconds(route, 'sharedMaxAge', read.sharedMaxAge, 0)
   }
   const swrDeclared =
     read.staleWhileRevalidate === undefined
       ? undefined
-      : durationSeconds(routeDef, 'staleWhileRevalidate', read.staleWhileRevalidate, 0)
+      : durationSeconds(route, 'staleWhileRevalidate', read.staleWhileRevalidate, 0)
   const sieDeclared =
-    read.staleIfError === undefined ? undefined : durationSeconds(routeDef, 'staleIfError', read.staleIfError, 0)
+    read.staleIfError === undefined ? undefined : durationSeconds(route, 'staleIfError', read.staleIfError, 0)
 
   // RFC 9111 §4.2.4 — a response that must be revalidated is never served stale, whatever window it names.
   const staleAllowed = !read.mustRevalidate && !read.proxyRevalidate && !read.noCache
@@ -259,8 +258,8 @@ export function attachCacheHooks(
   const retentionSeconds =
     ttlSeconds === undefined ? undefined : ttlSeconds + Math.max(swrSeconds ?? 0, sieSeconds ?? 0)
 
-  assertTags(routeDef, read.tags, { what: 'caching', required: false })
-  assertConstraintsKeyed(routeDef, read)
+  assertTags(route, read.tags, { what: 'caching', required: false })
+  assertConstraintsKeyed(route, read)
 
   const tags: readonly string[] | undefined = read.tags?.length ? Object.freeze([...read.tags]) : undefined
   const varyByQuery = read.varyByQuery ?? deps.varyByQuery
@@ -280,119 +279,137 @@ export function attachCacheHooks(
   const varyAny = vary?.includes('*') === true
   const statusHeaderName = statusHeader.toLowerCase()
 
-  // The context is the one the adapter gave the request before any route hook ran: a key function reads the
-  // same request the handler will, and nothing is built for it here.
-  const keyOf = (request: AdapterRequest): string =>
-    read.key ? read.key((request as FastifyRequest).httpContext.req) : defaultCacheKey(request, vary, queryNames)
+  // One request's state, from its read hook to its store hook. Created on the first write: a request the read hook
+  // leaves alone allocates nothing.
+  const states = new WeakMap<IContext, CacheRequestState>()
+
+  function stateOf(ctx: IContext): CacheRequestState {
+    let state = states.get(ctx)
+    if (state === undefined) {
+      state = { cached: false, key: null, flight: null, stale: null, restore: null }
+      states.set(ctx, state)
+    }
+    return state
+  }
+
+  // A key function reads the same request the handler will.
+  const keyOf = (ctx: IContext): string => (read.key ? read.key(ctx.req) : defaultCacheKey(ctx.req, vary, queryNames))
 
   // Why this request's response belongs to one client, if it does. A route that says `public` has answered the
   // question; otherwise any proof of identity on the request makes it private — the `Authorization` header
   // (RFC 9111 §3.5), or a principal an authentication scheme established some other way, a session cookie for one.
-  function privacyOf(request: AdapterRequest): 'private' | 'authorization' | 'authenticated' | undefined {
+  function privacyOf(ctx: IContext): 'private' | 'authorization' | 'authenticated' | undefined {
     if (read.privacy !== undefined) {
       return read.privacy === 'private' ? 'private' : undefined
     }
 
-    if (request.headers.authorization) {
+    if (ctx.req.header('authorization')) {
       return 'authorization'
     }
 
-    // `null` until a scheme authenticates, and absent on a server the framework does not drive.
-    const user = (request as FastifyRequest).user as Principal | null | undefined
+    // `null` until a scheme authenticates.
+    const user = ctx.user as Principal | null
 
     return user?.authenticated === true ? 'authenticated' : undefined
   }
 
   // OnRequest phase: check if the request is cacheable and return the cached response if it is
-  async function onRequest(request: AdapterRequest, reply: AdapterReply) {
-    if (!methods.includes(request.method)) {
+  async function onRequest(ctx: IContext): Promise<void> {
+    if (!methods.includes(ctx.req.method)) {
       // No status header here, but the observer still hears of it: leaving it out would drop these requests from
       // every hit ratio computed off the events.
-      observer?.onBypass?.({ route: route!, reason: 'method' })
+      observer?.onBypass?.({ route: routeOf(ctx), reason: 'method' })
       return
     }
 
-    const privacy = privacyOf(request)
+    const privacy = privacyOf(ctx)
     if (privacy !== undefined) {
-      reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, reason: privacy })
+      ctx.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: routeOf(ctx), reason: privacy })
       return
     }
 
     // RFC 9111 §4.1 — Vary: * always fails to match; never serve from cache
     if (varyAny) {
-      reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, reason: 'vary-any' })
+      ctx.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: routeOf(ctx), reason: 'vary-any' })
       return
     }
 
     // RFC 9111 §5.2.1 — a client asking for a fresh response is not answered from the store
-    const directives = parseRequestCacheControl(request.headers['cache-control'])
+    const directives = parseRequestCacheControl(ctx.req.header('cache-control'))
     const bypass: CacheBypassReason | undefined = directives.noCache
       ? 'no-cache'
       : directives.noStore
         ? 'no-store'
         : directives.maxAge === 0
           ? 'max-age-0'
-          : pragmaNoCache(request)
+          : pragmaNoCache(ctx.req)
             ? 'pragma-no-cache'
             : undefined
     if (bypass !== undefined) {
-      reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, reason: bypass })
+      ctx.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: routeOf(ctx), reason: bypass })
       return
     }
 
     // RFC 9111 §4.3.2 — If-Match and If-Unmodified-Since are not a cache's to evaluate: answered from the store, a
     // precondition that no longer holds would get the stored 200 instead of the handler's 412. A request for the store
     // alone (§5.2.1.7) never reaches the handler that evaluates them, and no stored answer is consistent with them
-    if (request.headers['if-match'] !== undefined || request.headers['if-unmodified-since'] !== undefined) {
+    if (ctx.req.header('if-match') !== undefined || ctx.req.header('if-unmodified-since') !== undefined) {
       if (directives.onlyIfCached) {
-        observer?.onMiss?.({ route: route!, key: keyOf(request), reason: 'only-if-cached' })
-        return reply.code(504).send()
+        observer?.onMiss?.({ route: routeOf(ctx), key: keyOf(ctx), reason: 'only-if-cached' })
+        ctx.status(504).body()
+        return
       }
 
-      reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, reason: 'precondition' })
+      ctx.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: routeOf(ctx), reason: 'precondition' })
       return
     }
 
     // RFC 9110 §14.2 — a stored whole response does not answer a request for part of one; the handler does. A
     // request for the store alone is answered from it whole, which a server may send in place of a part.
-    if (request.headers.range !== undefined && !directives.onlyIfCached) {
-      reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, reason: 'range' })
+    if (ctx.req.header('range') !== undefined && !directives.onlyIfCached) {
+      ctx.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: routeOf(ctx), reason: 'range' })
       return
     }
 
     // Derived once and carried to the store hook, so the two cannot disagree on it.
-    const key = keyOf(request)
-    request.cacheKey = key
+    const key = keyOf(ctx)
+    stateOf(ctx).key = key
 
     let cached: HTTPCacheEntry | undefined
     let readFailed = false
     try {
-      cached = await withStoreSignal('get', request.signal, storeTimeout, signal => store.get(key, { tags, signal }))
+      cached = await withStoreSignal('get', ctx.signal, storeTimeout, signal => store.get(key, { tags, signal }))
     } catch (error) {
-      // The request is over — the client left, or Fastify has answered its handler timeout: nothing to serve,
+      // The request is over — the client left, or the server has answered its handler timeout: nothing to serve,
       // nothing to report.
-      if (request.signal.aborted) {
+      if (ctx.signal.aborted) {
         return
       }
 
       // A store that is down costs the cache, not the request.
       readFailed = true
-      observer?.onError?.({ route: route!, operation: 'get', error })
+      observer?.onError?.({ route: routeOf(ctx), operation: 'get', error })
+    }
+
+    // A store that does not honour the signal may answer after the request ended — its client left, or its handler
+    // timeout answered it — and a run started for it then may have no store hook to settle it.
+    if (ctx.signal.aborted) {
+      return
     }
 
     if (cached !== undefined) {
       const age = ageOf(cached)
       if (accepts(age, directives)) {
-        return serve(request, reply, cached, age, false, false)
+        return serve(ctx, cached, age, false, false)
       }
 
       if (!expired(age)) {
-        return miss(request, reply, key, directives, 'stale-for-request', !readFailed)
+        return miss(ctx, key, directives, 'stale-for-request', !readFailed)
       }
 
       // Past its ttl, yet not past what the route allows.
@@ -405,28 +422,28 @@ export function attachCacheHooks(
           age - ttlSeconds! <= directives.maxStale &&
           age <= retentionSeconds!
         ) {
-          return serve(request, reply, cached, age, false, true)
+          return serve(ctx, cached, age, false, true)
         }
 
         // Kept for the store hook to replay over a 5xx, and served as it is to whoever arrives while the handler
         // is already running for this key.
         if (!directives.onlyIfCached) {
           if (sieSeconds !== undefined && age <= ttlSeconds! + sieSeconds) {
-            request.cacheStale = cached
+            stateOf(ctx).stale = cached
           }
           if (swrSeconds !== undefined && age <= ttlSeconds! + swrSeconds && lockable && !readFailed) {
             const flight = flights!.get(key)
             if (flight !== undefined) {
-              return serve(request, reply, cached, age, false, true)
+              return serve(ctx, cached, age, false, true)
             }
           }
         }
       }
 
-      return miss(request, reply, key, directives, 'expired', !readFailed)
+      return miss(ctx, key, directives, 'expired', !readFailed)
     }
 
-    return miss(request, reply, key, directives, 'absent', !readFailed)
+    return miss(ctx, key, directives, 'absent', !readFailed)
   }
 
   // RFC 9111 §4.2.3 — apparent age of the stored response, in whole seconds.
@@ -457,52 +474,49 @@ export function attachCacheHooks(
   // runs the handler itself. A miss the store could not even be asked about does neither: there would be nothing
   // for a follower to read.
   async function miss(
-    request: AdapterRequest,
-    reply: AdapterReply,
+    ctx: IContext,
     key: string,
     directives: RequestCacheControl,
     reason: CacheMissReason,
     canJoin: boolean,
-  ): Promise<unknown> {
+  ): Promise<void> {
     if (directives.onlyIfCached) {
-      observer?.onMiss?.({ route: route!, key, reason: 'only-if-cached' })
-      return reply.code(504).send()
+      observer?.onMiss?.({ route: routeOf(ctx), key, reason: 'only-if-cached' })
+      ctx.status(504).body()
+      return
     }
 
     if (lockable && canJoin) {
       const flight = flights!.get(key)
       if (flight !== undefined) {
-        return follow(request, reply, key, directives, flight)
+        return follow(ctx, key, directives, flight)
       }
 
       // A HEAD never leads: its response is never stored, so it would release its followers to nothing.
-      if (request.method !== 'HEAD') {
-        request.cacheFlight = new Flight(flights!, key, lockTimeout!)
+      if (ctx.req.method !== 'HEAD') {
+        stateOf(ctx).flight = new Flight(flights!, key, lockTimeout!)
       }
     }
 
     // RFC 9111 §4.3.1 — a miss that may be stored asks the handler for the whole response, not a 304 of its own,
     // which would leave nothing to store: the store hook answers the client's validators from that response.
-    if (request.method !== 'HEAD' && ttlSeconds !== undefined && !read.noStore) {
-      request.cacheConditionals = withhold(request)
+    if (
+      ctx.req.method !== 'HEAD' &&
+      ttlSeconds !== undefined &&
+      !read.noStore &&
+      (ctx.req.hasHeader('if-none-match') || ctx.req.hasHeader('if-modified-since'))
+    ) {
+      stateOf(ctx).restore = withholdValidators(ctx)
     }
 
-    reply.header(statusHeader, CACHE_MISS)
-    observer?.onMiss?.({ route: route!, key, reason })
-
-    return
+    ctx.header(statusHeader, CACHE_MISS)
+    observer?.onMiss?.({ route: routeOf(ctx), key, reason })
   }
 
-  async function follow(
-    request: AdapterRequest,
-    reply: AdapterReply,
-    key: string,
-    directives: RequestCacheControl,
-    flight: Flight,
-  ): Promise<unknown> {
-    const outcome = await flight.wait(request.signal)
+  async function follow(ctx: IContext, key: string, directives: RequestCacheControl, flight: Flight): Promise<void> {
+    const outcome = await flight.wait(ctx.signal)
 
-    // The request is over — the client left, or Fastify has answered its handler timeout: nothing to serve,
+    // The request is over — the client left, or the server has answered its handler timeout: nothing to serve,
     // nobody to tell.
     if (outcome === undefined) {
       return
@@ -511,19 +525,23 @@ export function attachCacheHooks(
     if (outcome !== 'not-stored') {
       let again: HTTPCacheEntry | undefined
       try {
-        again = await withStoreSignal('get', request.signal, storeTimeout, signal => store.get(key, { tags, signal }))
+        again = await withStoreSignal('get', ctx.signal, storeTimeout, signal => store.get(key, { tags, signal }))
       } catch (error) {
-        if (request.signal.aborted) {
+        if (ctx.signal.aborted) {
           return
         }
 
-        observer?.onError?.({ route: route!, operation: 'get', error })
+        observer?.onError?.({ route: routeOf(ctx), operation: 'get', error })
+      }
+
+      if (ctx.signal.aborted) {
+        return
       }
 
       if (again !== undefined) {
         const age = ageOf(again)
         if (accepts(age, directives)) {
-          return serve(request, reply, again, age, true, false)
+          return serve(ctx, again, age, true, false)
         }
 
         // The leader was answered with the stale entry in place of its 5xx: so is a follower it still covers.
@@ -534,153 +552,125 @@ export function attachCacheHooks(
           age <= ttlSeconds! + sieSeconds &&
           requestAccepts(age, directives)
         ) {
-          return serve(request, reply, again, age, true, true)
+          return serve(ctx, again, age, true, true)
         }
       }
     }
 
     // What the leader did is no use to this request: it runs the handler itself, and leads nobody.
-    reply.header(statusHeader, CACHE_MISS)
-    observer?.onMiss?.({ route: route!, key, reason: 'not-coalesced' })
-
-    return
+    ctx.header(statusHeader, CACHE_MISS)
+    observer?.onMiss?.({ route: routeOf(ctx), key, reason: 'not-coalesced' })
   }
 
-  function serve(
-    request: AdapterRequest,
-    reply: AdapterReply,
-    cached: HTTPCacheEntry,
-    age: number,
-    coalesced: boolean,
-    stale: boolean,
-  ): unknown {
-    request.responseCached = true
+  function serve(ctx: IContext, cached: HTTPCacheEntry, age: number, coalesced: boolean, stale: boolean): void {
+    const state = stateOf(ctx)
+    state.cached = true
     const status = stale ? CACHE_STALE : CACHE_HIT
 
     // RFC 9110 §13.2.1 — preconditions apply to GET and HEAD, and only where the answer would be a 2xx.
     if (
-      (request.method === 'GET' || request.method === 'HEAD') &&
+      (ctx.req.method === 'GET' || ctx.req.method === 'HEAD') &&
       cached.statusCode >= 200 &&
       cached.statusCode < 300 &&
-      isNotModified(request, cached.etag, cached.lastModified)
+      isNotModified(ctx.req, cached.etag, cached.lastModified)
     ) {
       observer?.onHit?.({
-        route: route!,
-        key: request.cacheKey!,
+        route: routeOf(ctx),
+        key: state.key!,
         revalidated: true,
         age: age * Second,
         coalesced,
         stale,
       })
-      applyStoredHeaders(reply, cached.headers, 'revalidation')
-      return reply.code(304).header(statusHeader, status).header('Age', String(age)).send()
+      applyStoredHeaders(ctx, cached.headers, 'revalidation')
+      ctx.status(304).header(statusHeader, status).header('Age', String(age)).body()
+      return
     }
 
     observer?.onHit?.({
-      route: route!,
-      key: request.cacheKey!,
+      route: routeOf(ctx),
+      key: state.key!,
       revalidated: false,
       age: age * Second,
       coalesced,
       stale,
     })
-    applyStoredHeaders(reply, cached.headers, 'hit')
-    reply.status(cached.statusCode).header(statusHeader, status).header('Age', String(age))
+    applyStoredHeaders(ctx, cached.headers, 'hit')
 
     // The payload goes out on a HEAD too: the server drops the body and keeps its length, which is the
     // Content-Length a GET would have carried (RFC 9110 §8.6).
-    return reply.send(cached.payload)
+    ctx.status(cached.statusCode).header(statusHeader, status).header('Age', String(age)).body(cached.payload)
   }
 
   // The store hook: emits the cache headers and stores the response. A leader settles its flight here, whatever
   // happened — `stored` once the write landed, `not-stored` on every other way out, the throw included.
   //
-  // Fastify runs a hook on the promise it hands back, or on the `next` it calls. A response the policy caches
-  // awaits the store; every other one is finished here and now, so a response Fastify sends while this route's
-  // read hook is still waiting on the store — its handler timeout's 503 — is over before that hook returns, and
-  // the lifecycle stops there instead of sending a second time.
-  function onSend(
-    request: AdapterRequest,
-    reply: AdapterReply,
-    payload: unknown,
-    next: OnSendNext,
-  ): void | Promise<unknown> {
-    if (request.responseCached) {
-      next(null, payload)
+  // A response the policy caches awaits the store; every other one is finished here and now, so a response the
+  // server sends while this route's read hook is still waiting on the store — its handler timeout's 503 — goes
+  // out without waiting on it.
+  function onSend(ctx: IContext, payload: SendPayload): SendPayload | void | Promise<SendPayload | void> {
+    const state = states.get(ctx)
+    if (state?.cached) {
       return
     }
 
-    const withheld = request.cacheConditionals
-    if (withheld !== null) {
-      Object.assign(request.raw.headers, withheld)
-      request.cacheConditionals = null
-    }
+    state?.restore?.()
 
     // RFC 5861 §4 — the stale entry the read hook kept stands in for the handler's 5xx.
-    const stale = request.cacheStale
-    if (stale !== null && SIE_STATUS.has(reply.statusCode)) {
+    const stale = state?.stale ?? null
+    if (stale !== null && SIE_STATUS.has(ctx.statusCode)) {
       discard(payload)
-      next(null, replace(request, reply, stale))
-      return
+      return replace(ctx, state!, stale)
     }
 
     // On every response of the route, whatever its status (RFC 9110 §12.5.5), and added to what other plugins
     // already said the response varies on.
     if (vary !== undefined) {
-      appendVary(reply, vary)
+      appendVary(ctx, vary)
     }
 
     // A handler that wrote its own Cache-Control has decided for this response: it is left as written, and the
     // response is not stored under a policy it opted out of. `noStore` is the exception: the restrictive form is
     // written over whatever the handler said.
-    const handlerDecides = reply.hasHeader('cache-control')
+    const handlerDecides = ctx.hasHeader('cache-control')
 
     // The policy describes the responses the route caches. Anything else — an error, a method the route does not
     // cache, a part of a body, whatever `statusCodes` lists — gets nothing permissive from it, only the one directive
     // that restricts. A part answers one request only, and stored under the whole's key it would answer the next.
-    const part = reply.statusCode === 206 || reply.hasHeader('content-range')
-    if (!methods.includes(request.method) || !statusCodes.includes(reply.statusCode) || part) {
+    const part = ctx.statusCode === 206 || ctx.hasHeader('content-range')
+    if (!methods.includes(ctx.req.method) || !statusCodes.includes(ctx.statusCode) || part) {
       if (read.noStore) {
-        reply.header('Cache-Control', 'no-store')
+        ctx.header('Cache-Control', 'no-store')
       }
 
-      request.cacheFlight?.settle('not-stored')
-      next(null, payload)
+      state?.flight?.settle('not-stored')
       return
     }
 
-    return send(request, reply, payload, handlerDecides).finally(() => request.cacheFlight?.settle('not-stored'))
+    return send(ctx, state, payload, handlerDecides).finally(() => state?.flight?.settle('not-stored'))
   }
 
-  // The entry goes out as it was stored: its status, its headers over the error's, its payload. `Content-Length`
-  // is removed so the server computes it from the new payload; `Retry-After` belonged to the error. A HEAD gets
-  // the entry's length and no body: Fastify's own HEAD hook has already dropped the error's body and runs ahead
-  // of this one. Nothing is stored, and the leader's followers are told a stale entry was served in its place.
-  function replace(request: AdapterRequest, reply: AdapterReply, stale: HTTPCacheEntry): unknown {
-    const replaced = reply.statusCode
+  // The entry goes out as it was stored: its status, its headers over the error's, its payload. `Retry-After`
+  // belonged to the error. On a HEAD the server drops the payload after this hook and keeps its length. Nothing is
+  // stored, and the leader's followers are told a stale entry was served in its place.
+  function replace(ctx: IContext, state: CacheRequestState, stale: HTTPCacheEntry): SendPayload {
+    const replaced = ctx.statusCode
     const age = ageOf(stale)
 
-    reply.code(stale.statusCode)
-    reply.removeHeader('content-length')
-    reply.removeHeader('retry-after')
-    applyStoredHeaders(reply, stale.headers, 'replacement')
-    reply.header(statusHeader, CACHE_STALE).header('Age', String(age))
-    request.cacheFlight?.settle('rescued')
-    observer?.onStaleIfError?.({ route: route!, key: request.cacheKey!, age: age * Second, replaced })
+    ctx.status(stale.statusCode)
+    ctx.removeHeader('retry-after')
+    applyStoredHeaders(ctx, stale.headers, 'replacement')
+    ctx.header(statusHeader, CACHE_STALE).header('Age', String(age))
+    state.flight?.settle('rescued')
+    observer?.onStaleIfError?.({ route: routeOf(ctx), key: state.key!, age: age * Second, replaced })
 
     if (
-      (request.method === 'GET' || request.method === 'HEAD') &&
+      (ctx.req.method === 'GET' || ctx.req.method === 'HEAD') &&
       stale.statusCode >= 200 &&
       stale.statusCode < 300 &&
-      isNotModified(request, stale.etag, stale.lastModified)
+      isNotModified(ctx.req, stale.etag, stale.lastModified)
     ) {
-      reply.code(304)
-      return null
-    }
-
-    if (request.method === 'HEAD') {
-      const length = typeof stale.payload === 'string' ? Buffer.byteLength(stale.payload) : stale.payload.length
-      reply.header('Content-Length', String(length))
+      ctx.status(304)
       return null
     }
 
@@ -688,30 +678,30 @@ export function attachCacheHooks(
   }
 
   async function send(
-    request: AdapterRequest,
-    reply: AdapterReply,
-    payload: unknown,
+    ctx: IContext,
+    state: CacheRequestState | undefined,
+    payload: SendPayload,
     handlerDecides: boolean,
-  ): Promise<unknown> {
-    const isPrivate = privacyOf(request) !== undefined
+  ): Promise<SendPayload | void> {
+    const isPrivate = privacyOf(ctx) !== undefined
 
     if (!handlerDecides || read.noStore) {
       const cacheControl = isPrivate ? privateCacheControl : policyCacheControl
       if (cacheControl) {
-        reply.header('Cache-Control', cacheControl)
+        ctx.header('Cache-Control', cacheControl)
       }
     }
 
-    const isStringOrBuffer = typeof payload === 'string' || Buffer.isBuffer(payload)
+    const isBody = typeof payload === 'string' || payload instanceof Uint8Array
 
     // The handler's validators are the better ones — it knows the resource's version and when it changed.
-    let etag = headerText(reply.getHeader('etag'))
-    if (etag === undefined && read.etag !== false && !read.noStore && isStringOrBuffer) {
-      etag = await generateETag(payload as string | Buffer, read.etagGenerator ?? etagGenerator)
-      reply.header('ETag', etag)
+    let etag = ctx.getHeader('etag')
+    if (etag === undefined && read.etag !== false && !read.noStore && isBody) {
+      etag = await generateETag(payload, read.etagGenerator ?? etagGenerator)
+      ctx.header('ETag', etag)
     }
 
-    const handlerLastModified = headerText(reply.getHeader('last-modified'))
+    const handlerLastModified = ctx.getHeader('last-modified')
 
     // ETag and storage are independent — etag: false must not prevent caching
     // Private responses must not be stored in the shared server-side cache
@@ -720,39 +710,39 @@ export function attachCacheHooks(
     // RFC 9111 §4 — nor the response to a HEAD, which shares the GET's key and may have no body to offer it
     const wanted =
       ttlSeconds !== undefined &&
-      request.method !== 'HEAD' &&
+      ctx.req.method !== 'HEAD' &&
       !read.noStore &&
       !isPrivate &&
       !varyAny &&
       !handlerDecides &&
-      !parseRequestCacheControl(request.headers['cache-control']).noStore
+      !parseRequestCacheControl(ctx.req.header('cache-control')).noStore
 
-    // A stream is neither hashed nor stored — a compressor installed ahead of the cache hands one over — and the
-    // observer is told, since the response would have been stored otherwise.
-    if (wanted && !isStringOrBuffer && isStreamPayload(payload)) {
-      observer?.onSkip?.({ route: route!, key: request.cacheKey ?? keyOf(request), reason: 'stream' })
+    // A stream is neither hashed nor stored — a handler's, or one an earlier `onSend` hook made — and the observer is
+    // told, since the response would have been stored otherwise.
+    if (wanted && payload instanceof ReadableStream) {
+      observer?.onSkip?.({ route: routeOf(ctx), key: state?.key ?? keyOf(ctx), reason: 'stream' })
     }
 
     // A handler that returned nothing: the server sends an empty body, and there is nothing to hash or replay.
     // Reported, since the route asked for the response to be stored and it will be a miss again next time.
-    if (wanted && payload === undefined) {
-      observer?.onSkip?.({ route: route!, key: request.cacheKey ?? keyOf(request), reason: 'empty', size: 0 })
+    if (wanted && payload === null) {
+      observer?.onSkip?.({ route: routeOf(ctx), key: state?.key ?? keyOf(ctx), reason: 'empty', size: 0 })
     }
 
-    if (wanted && isStringOrBuffer) {
+    if (wanted && isBody) {
       // The read hook derived it unless it returned before getting that far.
-      const key = request.cacheKey ?? keyOf(request)
-      const size = typeof payload === 'string' ? Buffer.byteLength(payload) : (payload as Buffer).length
+      const key = state?.key ?? keyOf(ctx)
+      const size = typeof payload === 'string' ? Buffer.byteLength(payload) : payload.byteLength
 
-      if (read.privacy !== 'public' && reply.hasHeader('set-cookie')) {
+      if (read.privacy !== 'public' && ctx.hasHeader('set-cookie')) {
         // A response that sets a cookie is taken for one client's, unless the route said `public`.
-        observer?.onSkip?.({ route: route!, key, reason: 'set-cookie', size })
+        observer?.onSkip?.({ route: routeOf(ctx), key, reason: 'set-cookie', size })
       } else if (maxEntrySize !== undefined && size > maxEntrySize) {
-        observer?.onSkip?.({ route: route!, key, reason: 'entry-too-large', size })
+        observer?.onSkip?.({ route: routeOf(ctx), key, reason: 'entry-too-large', size })
       } else {
         const lastModified = handlerLastModified ?? new Date().toUTCString()
         if (handlerLastModified === undefined) {
-          reply.header('Last-Modified', lastModified)
+          ctx.header('Last-Modified', lastModified)
         }
 
         // Bounded by `storeTimeout` alone: the entry is for the requests that follow, whatever became of this one.
@@ -761,22 +751,22 @@ export function attachCacheHooks(
             store.put(
               key,
               {
-                payload: payload as string | Buffer,
-                statusCode: reply.statusCode,
+                payload,
+                statusCode: ctx.statusCode,
                 etag,
                 lastModified,
                 storedAt: Date.now(),
-                headers: storedHeadersOf(reply, statusHeaderName),
+                headers: storedHeadersOf(ctx, statusHeaderName),
               },
               { ttl: retentionSeconds! * Second, tags, signal },
             ),
           )
 
-          request.cacheFlight?.settle('stored')
-          observer?.onStore?.({ route: route!, key, size, ttl: read.ttl!, tags })
+          state?.flight?.settle('stored')
+          observer?.onStore?.({ route: routeOf(ctx), key, size, ttl: read.ttl!, tags })
         } catch (error) {
           // Nothing was stored; the response the handler produced still goes out.
-          observer?.onError?.({ route: route!, operation: 'put', error })
+          observer?.onError?.({ route: routeOf(ctx), operation: 'put', error })
         }
       }
     }
@@ -785,13 +775,12 @@ export function attachCacheHooks(
     // The cache's own Last-Modified is left out: stamped this second, it would match a copy from earlier in the
     // same second whatever had changed since.
     if (
-      (request.method === 'GET' || request.method === 'HEAD') &&
-      reply.statusCode >= 200 &&
-      reply.statusCode < 300 &&
-      isNotModified(request, etag, handlerLastModified)
+      (ctx.req.method === 'GET' || ctx.req.method === 'HEAD') &&
+      ctx.statusCode >= 200 &&
+      ctx.statusCode < 300 &&
+      isNotModified(ctx.req, etag, handlerLastModified)
     ) {
-      reply.code(304)
-      reply.removeHeader('content-length')
+      ctx.status(304)
       discard(payload)
 
       return null
@@ -800,50 +789,15 @@ export function attachCacheHooks(
     return payload
   }
 
-  addRouteHook(routeDef, 'onRequest', onRequest)
-  addRouteHook(routeDef, 'onSend', onSend)
-}
-
-// Takes the client's validators off the request, and hands back the ones it carried, or `null` for none.
-function withhold(request: AdapterRequest): FastifyRequest['cacheConditionals'] {
-  const headers = request.raw.headers
-  const withheld: NonNullable<FastifyRequest['cacheConditionals']> = {}
-  let any = false
-
-  for (const name of ['if-none-match', 'if-modified-since'] as const) {
-    const value = headers[name]
-    if (value !== undefined) {
-      withheld[name] = value
-      delete headers[name]
-      any = true
-    }
-  }
-
-  return any ? withheld : null
-}
-
-function headerText(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined
+  route.hook('onRequest', onRequest)
+  route.hook('onSend', onSend)
 }
 
 // The server closes only the stream it sends. A stream the cache answers in place of would keep the file, socket
-// or upstream connection behind it open until it is collected.
-function discard(payload: unknown): void {
-  if (!isStreamPayload(payload)) {
-    return
+// or upstream connection behind it open until it is collected. A source that fails to cancel is no reason to fail
+// the response.
+function discard(payload: SendPayload): void {
+  if (payload instanceof ReadableStream) {
+    payload.cancel().catch(() => undefined)
   }
-
-  const stream = payload as {
-    destroy?: () => void
-    cancel?: () => Promise<void>
-    body?: { cancel(): Promise<void> } | null
-  }
-  if (typeof stream.destroy === 'function') {
-    stream.destroy()
-    return
-  }
-
-  // A web stream, or a `Response` around one. A source that fails to cancel is no reason to fail the response.
-  const cancelled = typeof stream.cancel === 'function' ? stream.cancel() : stream.body?.cancel()
-  cancelled?.catch(() => undefined)
 }

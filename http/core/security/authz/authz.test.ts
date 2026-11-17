@@ -1,6 +1,8 @@
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
+import { authentication } from '../../../core/security/security.js'
 import {
   AuthenticateResult,
   AuthorizationBuilder,
@@ -9,8 +11,9 @@ import {
   ErrAuthzPolicyEmpty,
   type AuthzRequirement,
   Authentication,
+  Router,
 } from '../../../index.js'
-import { createWebApplication, newRouter, authentication } from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
 
 /**
  * What the authorization builder refuses. No controller is declared here, routers only: a controller registers
@@ -79,14 +82,10 @@ describe('AuthorizationBuilder — two handlers for one requirement kind', () =>
     const container = new CaffeineIoC()
     container.bind(AdmitsEveryRole, t => t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler))
 
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
       .install(Authentication(auth => auth.addStrategy('Never', new NeverAuthenticates())))
       .with(authentication())
-      .mount(
-        newRouter('/admin')
-          .authorize({ roles: ['admin'] })
-          .get('/', () => ({ ok: true })),
-      )
+      .mount(new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })))
 
     await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHZ_REQUIREMENT_HANDLER_DUPLICATE' })
   })

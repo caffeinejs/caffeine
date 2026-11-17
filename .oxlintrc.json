@@ -12,6 +12,9 @@
   },
   "ignorePatterns": [
     "**/dist/**",
+    "multipart/**",
+    "view/**",
+    "parked/**",
     ".agents/**",
     ".claude/skills/**",
     ".vscode/**",
@@ -102,10 +105,6 @@
               {
                 "regex": "(?:\\.\\./)+_",
                 "message": "Private (_*) modules cannot be imported from outside their directory."
-              },
-              {
-                "regex": "^(?:fastify|fastify-plugin|@fastify/)",
-                "message": "Only http/platform/fastify/ may import Fastify; http/ and http/core/ stay platform-agnostic."
               },
               {
                 "regex": "(?:^|/)platform/",

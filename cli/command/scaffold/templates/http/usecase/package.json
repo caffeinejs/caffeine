@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@caffeinejs/application": "0.0.0",
-    "fastify": "^5.0.0",
     "@caffeinejs/di": "0.0.0",
     "@caffeinejs/http": "0.0.0"
   },

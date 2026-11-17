@@ -1,18 +1,18 @@
 # Errors
 
-Three different “404s”. `@Catch` only sees the first.
+Three different “404s”. `@Catch(ErrHTTPNotFound)` sees the first two.
 
-| What                                   | Outcome                     | Mechanism                                            |
-| -------------------------------------- | --------------------------- | ---------------------------------------------------- |
-| Handler throws `ErrHTTPNotFound`       | JSON (or `@Catch` body)     | `http/core/error` — type-based                       |
-| No route matched                       | Fastify not-found           | Does **not** go through `@Catch`                     |
-| Browser client route (`GET /settings`) | 200 `index.html` for an SPA | A `GET /*` route the application wrote, not `@Catch` |
+| What                                   | Outcome                     | Mechanism                                                       |
+| -------------------------------------- | --------------------------- | --------------------------------------------------------------- |
+| Handler throws `ErrHTTPNotFound`       | JSON (or `@Catch` body)     | `http/core/error` — type-based                                  |
+| No route matched                       | JSON problem, 404           | The server throws `ErrHTTPNotFound` for it, so `@Catch` sees it |
+| Browser client route (`GET /settings`) | 200 `index.html` for an SPA | A `GET /*` route the application wrote, not `@Catch`            |
 
 `@Catch` is exception dispatch by **class**, not by URL path. `@Catch` declares the error types; the application enrols the handler with `.errorHandling(e => e.globalHandlers(H))`. One enrolled handler per error class. Per-controller: declare the handler and name it with `@CatchWith` instead of enrolling it, or use a `@Catch` method on the controller.
 
 `ctx.notFound(body)` sets status 404 on a request that **already matched**.
 
-Same-origin SPA + `/api` is routing, not error handling: the application writes `GET /*` for its client routes and `newRouter('/api').get('/*', …404)` so the API owns its own misses. See [spa.md](spa.md). Do not return `index.html` from `@Catch(ErrHTTPNotFound)`.
+Same-origin SPA + `/api` is routing, not error handling: the application writes `GET /*` for its client routes and `new Router('/api').get('/*', …404)` so the API owns its own misses. See [spa.md](spa.md). Do not return `index.html` from `@Catch(ErrHTTPNotFound)`.
 
 ## Problem details
 
@@ -33,9 +33,9 @@ Every error body the framework renders itself is an RFC 9457 problem, in the for
 - `type` is `about:blank` unless the error set one; `title` is a short summary of the kind of problem, the status phrase as RFC 9110 names it (`Unprocessable Content` for 422) unless the error or `.validation()` set one; `detail` is the error's message; `code` is the error's own code, such as `ERR_HTTP_NOT_FOUND` or `ERR_VALIDATION`. An error with no code gets the `ERR_HTTP_*` code of its status.
 - `instance`, `category` and `what_you_should_do` are present only when the error set them, `errors` only on a request that fails its schema and on an `ErrHTTP` given entries, and `stacktrace` only with `exposeStacktrace()`.
 - `category` classifies the error for a client to branch on (`rate_limit`, `billing`). `what_you_should_do` tells the reader, often an agent, what to do next. The framework sets neither on its own errors.
-- `correlation_id` is the request ID (`ctx.req.id`, which Fastify's `genReqId` and `requestIdHeader` server options decide), and is absent when there is none. `timestamp` is when the problem was sent, ISO 8601 in UTC.
+- `correlation_id` is the request ID (`ctx.req.id`, which the `requestIDHeader` server setting decides), and is absent when there is none. `timestamp` is when the problem was sent, ISO 8601 in UTC.
 - A request that fails its schema is a validation problem: 422 for the body, 400 for the other slots, with an entry in `errors` for each failed rule. See [Validation problems](#validation-problems).
-- A request Fastify refuses — malformed JSON, a body over the limit, an unsupported media type — is a problem too, its message as `detail` and Fastify's code as `code`.
+- A request the server refuses — malformed JSON, a body over `bodyLimit`, an unsupported media type — is a problem too, its message as `detail` and the error's own code as `code`.
 
 Set `type`, `title`, `instance`, `category`, `what_you_should_do`, `errors` and extension members on the error. An extension named like a member above is dropped:
 
@@ -91,7 +91,7 @@ An error the application did not anticipate — a plain `Error`, a driver error,
 
 ### Validation problems
 
-A request that fails its schema answers 422 for the body and 400 for path parameters, the query string and headers, whichever validator ran. Fastify validates the slots in turn and stops at the first that fails, so one problem describes one slot.
+A request that fails its schema answers 422 for the body and 400 for path parameters, the query string and headers, whichever validator ran. The slots are validated in turn, and the first that fails throws `ErrRequestValidation` (`slot`, `issues`), so one problem describes one slot.
 
 ```json
 {
@@ -104,8 +104,7 @@ A request that fails its schema answers 422 for the body and 400 for path parame
     {
       "code": "ERR_VALIDATION_MIN_LENGTH",
       "detail": "name must NOT have fewer than 1 characters",
-      "source": { "in": "body", "pointer": "/name" },
-      "params": { "limit": 1 }
+      "source": { "in": "body", "pointer": "/name" }
     }
   ],
   "correlation_id": "req-1",
@@ -115,34 +114,11 @@ A request that fails its schema answers 422 for the body and 400 for path parame
 
 `detail` is `Invalid request body`, `Invalid query string`, `Invalid path parameters` or `Invalid request headers`. Each error the validator reported is an entry of `errors`:
 
-- `code` is `ERR_VALIDATION_` and the JSON Schema keyword in capitals, words split at each change of case: `minLength` gives `ERR_VALIDATION_MIN_LENGTH`, `false schema` gives `ERR_VALIDATION_FALSE_SCHEMA`, and a keyword with no letter or digit gives `ERR_VALIDATION`. An application's own Ajv keyword gets one by the same rule, so keywords that differ only in separators or in the capital that starts a word, such as `fooBar`, `FooBar` and `foo-bar`, share a code.
-- `detail` is the field's name, then the validator's message: `q must be >= 1`. The field is the last member of the path, and an array item's is its index (`3 must be string`). A missing member reads after the object that lacks it, `user must have required property 'email'`, and a failure at the slot itself is the message alone. With Ajv's messages turned off, the message is `is invalid`.
+- `code` is `ERR_VALIDATION_` and the JSON Schema keyword in capitals, words split at each change of case: `minLength` gives `ERR_VALIDATION_MIN_LENGTH`, `false schema` gives `ERR_VALIDATION_FALSE_SCHEMA`, and a keyword with no letter or digit gives `ERR_VALIDATION`. Keywords that differ only in separators or in the capital that starts a word, such as `fooBar`, `FooBar` and `foo-bar`, share a code. A validator that names no rule gives `ERR_VALIDATION`.
+- `detail` is the field's name, then the validator's message: `q must be >= 1`. The field is the last member of the path, and an array item's is its index (`3 must be string`). A failure at the slot itself is the message alone.
 - `source` says where. For the body it is `{ in: 'body', pointer }`, an RFC 6901 pointer into the body: `''` is the body itself, and a missing member is pointed at where it would be (`/user/email`). For a parameter it is `{ in, name, pointer }`, with `in` one of `query`, `path` or `header`, as an OpenAPI document names them: `name` is the parameter, a header's in lowercase, and absent when the slot as a whole fails (too few query parameters); `pointer` goes into the parameter's value and is absent when the value as a whole fails (`?ids=1&ids=x` gives `{ in: 'query', name: 'ids', pointer: '/1' }`).
-- `params` is what the validator sent, as it sent it: `{ limit: 1 }`, `{ allowedValues: ['x', 'y'] }`, `{ missingProperty: 'email' }`.
 
-| Keyword                                                                                               | `params`                                                           | `code`                                        |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------- |
-| `type`                                                                                                | `{ type: 'integer' }`                                              | `ERR_VALIDATION_TYPE`                         |
-| `required`                                                                                            | `{ missingProperty: 'a' }`                                         | `ERR_VALIDATION_REQUIRED`                     |
-| `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`                                          | `{ comparison: '>=', limit: 5 }`                                   | `ERR_VALIDATION_MINIMUM`, and so on           |
-| `multipleOf`                                                                                          | `{ multipleOf: 3 }`                                                | `ERR_VALIDATION_MULTIPLE_OF`                  |
-| `minLength`, `maxLength`, `minItems`, `maxItems`, `additionalItems`, `minProperties`, `maxProperties` | `{ limit: 3 }`                                                     | `ERR_VALIDATION_MIN_LENGTH`, and so on        |
-| `pattern`                                                                                             | `{ pattern: '^a+$' }`                                              | `ERR_VALIDATION_PATTERN`                      |
-| `format`                                                                                              | `{ format: 'email' }`                                              | `ERR_VALIDATION_FORMAT`                       |
-| `uniqueItems`                                                                                         | `{ i: 1, j: 0 }`                                                   | `ERR_VALIDATION_UNIQUE_ITEMS`                 |
-| `enum`                                                                                                | `{ allowedValues: ['x', 'y'] }`                                    | `ERR_VALIDATION_ENUM`                         |
-| `const`                                                                                               | `{ allowedValue: 'x' }`                                            | `ERR_VALIDATION_CONST`                        |
-| `dependencies`                                                                                        | `{ property: 'a', missingProperty: 'b', depsCount: 1, deps: 'b' }` | `ERR_VALIDATION_DEPENDENCIES`                 |
-| `contains`                                                                                            | `{ minContains: 1 }`                                               | `ERR_VALIDATION_CONTAINS`                     |
-| `propertyNames`                                                                                       | `{ propertyName: 'badKey' }`                                       | `ERR_VALIDATION_PROPERTY_NAMES`               |
-| `anyOf`, `not`                                                                                        | `{}`                                                               | `ERR_VALIDATION_ANY_OF`, `ERR_VALIDATION_NOT` |
-| `oneOf`                                                                                               | `{ passingSchemas: [0, 1] }`                                       | `ERR_VALIDATION_ONE_OF`                       |
-| `if`                                                                                                  | `{ failingKeyword: 'then' }`                                       | `ERR_VALIDATION_IF`                           |
-| `false schema`                                                                                        | `{}`                                                               | `ERR_VALIDATION_FALSE_SCHEMA`                 |
-
-`anyOf` and `propertyNames` report after the errors of what they contain: a value that fails `anyOf: [string, integer]` gives three entries. `contains` does so only with `allErrors` on, and `if` is reported only with it on. A Zod email is a `pattern` beside the `format`, and the pattern fails first: `ERR_VALIDATION_PATTERN`.
-
-A problem lists at most 25 entries. When there were more, `detail` says so: `Invalid request body: showing the first 25 of 31 errors`. A validator the application compiled itself, through `setValidatorCompiler`, that returns an `Error` gives a problem with no `errors`, its message going to the log only. One that throws is the server's failure, not the request's: Fastify marks its error 500, and the framework answers the generic 500 `ERR_INTERNAL` and logs the error at level error.
+A problem lists at most 25 entries. When there were more, `detail` says so: `Invalid request body: showing the first 25 of 31 errors`. A validator that throws is the server's failure, not the request's: the framework answers the generic 500 `ERR_INTERNAL` and logs the error at level error.
 
 `.errorHandling(e => e.validation({ … }))` configures this problem. Each call merges over the last, key by key:
 
@@ -164,17 +140,7 @@ A problem lists at most 25 entries. When there were more, `detail` says so: `Inv
 
 `issue` is synchronous, runs only on the entries sent, and can rewrite an entry but not drop one. One that throws is logged once, and that entry and every later one go out as the framework built them.
 
-A `@Catch` or `@CatchWith` handler for the error still runs first, and is handed Fastify's error with its `validation` array. Its message is `Invalid request body: 31 errors` unless the application set a `schemaErrorFormatter`. An `$async` schema's failure is Ajv's own `ValidationError` instead, message `validation failed`, with the list under `errors`; its problem lists the entries as any other's. When no handler answers it, the framework renders the problem and, whichever formatter ran, logs one line at level info, `Invalid request body: 31 errors` with `{ validation: { slot, total, errors } }`: the entries sent, never the validator's own report.
-
-Ajv stops at the first error by default, as Fastify ships it. An application that wants every one turns on `allErrors`:
-
-```ts
-.server(() => ({ factory: { ajv: { customOptions: { allErrors: true } } } }))
-```
-
-That makes the validator record every error before any cap applies, as many as a body's items times the fields each one fails: 30,000 items, each missing 20 required fields, record 600,000 errors, and the work grows with the body. Bound every array a route accepts with `maxItems` before turning it on.
-
-A schema is public through its errors: `params` carries its `enum`, `const`, `pattern` and limits, even for a route left out of the OpenAPI document. Never write a secret into a schema, such as a header checked with `$t.Literal(config.apiKey)`; a route whose constraints must stay private drops `params` with `issue`.
+A `@Catch` or `@CatchWith` handler for `ErrRequestValidation` still runs first, and is handed it with its `slot` and `issues`. Its message names the route and the first failure: `Cannot accept the request body of "POST /pets": 1 error, the first at "name", which breaks "minLength"`. When no handler answers it, the framework renders the problem and logs one line at level info, `Invalid request body: 31 errors` with `{ validation: { slot, total, errors } }`: the entries sent, never the validator's own report.
 
 An entry can carry text the client chose. Where a schema admits keys it does not name (`additionalProperties` with a schema, `patternProperties`, `$t.Record`, an open query string), the key the client sent is in `name`, `pointer` and `detail`. JSON carries it as a string and the Markdown format escapes its inline markup; a serializer of the application's own, such as one writing HTML, escapes it too:
 

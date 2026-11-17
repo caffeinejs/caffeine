@@ -1,8 +1,10 @@
 import { SignJWT } from 'jose'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
+import { authentication } from '../../../../core/security/security.js'
 import { Authorize, Claim, Controller, Get, Identity, Principal, Authentication } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { node } from '../../../../platform/node/index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 const secretBytes = new TextEncoder().encode(TEST_SECRET)
@@ -21,7 +23,7 @@ async function signToken(payload: Record<string, unknown>): Promise<string> {
 
 describe('scheme negotiation (Forward, application)', () => {
   function forwardBuilder() {
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth =>

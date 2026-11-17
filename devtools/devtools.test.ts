@@ -14,9 +14,11 @@ import {
   Identity,
   Principal,
   type IContext,
+  createWebApplication,
   type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { bun } from '@caffeinejs/http/bun'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DevTools, devTools, type DevToolsBuilder, type DevToolsRoutes } from './devtools.js'
@@ -53,7 +55,7 @@ const conf = newConfiguration($t.Object({ app: $t.Object({ region: $t.String(), 
   .build().config
 
 describe('devtools', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     vi.unstubAllEnvs()
@@ -77,19 +79,19 @@ describe('devtools', () => {
       path?: string
       listener?: string
       brew?: BrewOptions
-      prepare?: (a: WebApplication) => void
+      prepare?: (a: WebApplication<never, never, unknown, NodeAdapter>) => void
       logger?: ReturnType<typeof newConsoleLogger>
     } = {},
   ) {
-    app = createWebApplication({ config: conf, logger: options.logger ?? false })
-      .server(() => ({ listener: loopback }))
+    app = createWebApplication({ adapter: node(), config: conf, logger: options.logger ?? false })
+      .server(() => ({ listen: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
       .install(
         DevTools(d => {
           d.port(0)
           configure(d)
         }),
-      ) as WebApplication
+      ) as WebApplication<never, never, unknown, NodeAdapter>
     options.prepare?.(app)
     await app.run()
     const server = app.listeners.get(options.listener ?? 'devtools')!
@@ -142,9 +144,9 @@ describe('devtools', () => {
     })
 
     it("refuses a loopback request under another site's name, which DNS rebinding would send", async () => {
-      app = createWebApplication()
-        .server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
-        .install(DevTools(d => d.port(0))) as WebApplication
+      app = createWebApplication({ adapter: node() })
+        .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+        .install(DevTools(d => d.port(0))) as WebApplication<never, never, unknown, NodeAdapter>
       await app.run()
       const { port } = new URL(devtoolsServer().address!.origin)
 
@@ -154,6 +156,48 @@ describe('devtools', () => {
       expect(await statusFor(Number(port), `localhost:${port}`)).toBe(200)
       // A name no URL can hold is no loopback name either.
       expect(await statusFor(Number(port), '[')).toBe(421)
+    })
+
+    // Bun's request carries no socket: the peer, from the Bun server, is what says a request came in on loopback.
+    it('refuses a rebound loopback request under bun() too', async () => {
+      const handlers: Array<(request: Request, server: unknown) => Response | Promise<Response>> = []
+      const bunServer = {
+        address: { address: '127.0.0.1', port: 9090 },
+        hostname: '127.0.0.1',
+        port: 9090,
+        url: new URL('http://127.0.0.1:9090/'),
+        requestIP: () => ({ address: '127.0.0.1' }),
+        timeout: () => undefined,
+        stop: () => Promise.resolve(),
+      }
+      vi.stubGlobal('Bun', {
+        serve: (options: { fetch: (request: Request, server: unknown) => Response | Promise<Response> }) => {
+          handlers.push(options.fetch)
+          return bunServer
+        },
+      })
+
+      try {
+        const bunApp = createWebApplication({ adapter: bun() })
+          .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+          .install(DevTools(d => d.port(0)))
+        await bunApp.run()
+
+        try {
+          // The application's own server first, then the devtools' listener.
+          const devtoolsFetch = handlers[1]!
+          const status = async (host: string): Promise<number> =>
+            (await devtoolsFetch(new Request('http://127.0.0.1:9090/devtools', { headers: { host } }), bunServer))
+              .status
+
+          expect(await status('evil.example')).toBe(421)
+          expect(await status('127.0.0.1:9090')).toBe(200)
+        } finally {
+          await bunApp.close()
+        }
+      } finally {
+        vi.unstubAllGlobals()
+      }
     })
 
     it("guards every core tool's routes as it guards the index", async () => {
@@ -216,14 +260,21 @@ describe('devtools', () => {
     })
 
     it('refuses authorize(...) without authentication installed, rather than serve the devtools unprotected', async () => {
-      app = createWebApplication().install(DevTools(d => d.authorize({ roles: ['ops'] }))) as WebApplication
+      app = createWebApplication({ adapter: node() }).install(
+        DevTools(d => d.authorize({ roles: ['ops'] })),
+      ) as WebApplication<never, never, unknown, NodeAdapter>
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_FEATURE_NOT_INSTALLED' })
     })
 
     it('refuses to start where NODE_ENV is production, naming the way out', async () => {
       vi.stubEnv('NODE_ENV', 'production')
-      app = createWebApplication().install(DevTools()) as WebApplication
+      app = createWebApplication({ adapter: node() }).install(DevTools()) as WebApplication<
+        never,
+        never,
+        unknown,
+        NodeAdapter
+      >
 
       const err = await app.bootstrap().catch((e: unknown) => e)
 
@@ -245,7 +296,12 @@ describe('devtools', () => {
       ['a port out of range', d => d.port(70_000)],
       ['an empty host', d => d.host(' ')],
     ])('refuses %s', async (_, configure) => {
-      app = createWebApplication().install(DevTools(d => void configure(d))) as WebApplication
+      app = createWebApplication({ adapter: node() }).install(DevTools(d => void configure(d))) as WebApplication<
+        never,
+        never,
+        unknown,
+        NodeAdapter
+      >
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_DEVTOOLS_CONFIGURATION' })
     })
@@ -253,7 +309,7 @@ describe('devtools', () => {
     it('takes the name it is given, beside a listener of the application already named devtools', async () => {
       const devtools = await serve(d => d.listener('ops'), {
         listener: 'ops',
-        prepare: a => a.listener('devtools', l => l.server(() => ({ listener: loopback }))),
+        prepare: a => a.listener('devtools', l => l.server(() => ({ listen: loopback }))),
       })
 
       expect((await devtools.info.get()).status).toBe(200)
@@ -272,9 +328,9 @@ describe('devtools', () => {
 
   describe('devTools()', () => {
     it("serves the devtools on the server it is registered on, under that server's gate", async () => {
-      app = createWebApplication({ logger: false })
-        .server(() => ({ listener: loopback }))
-        .with(devTools()) as WebApplication
+      app = createWebApplication({ adapter: node(), logger: false })
+        .server(() => ({ listen: loopback }))
+        .with(devTools()) as WebApplication<never, never, unknown, NodeAdapter>
       await app.run()
       const devtools = brewer<DevToolsRoutes>(`${app.address!.origin}/devtools`)
 
@@ -285,9 +341,14 @@ describe('devtools', () => {
     })
 
     it('takes what to show and mask, as DevTools() does', async () => {
-      app = createWebApplication({ config: conf, logger: false })
-        .server(() => ({ listener: loopback }))
-        .with(devTools(d => d.showConfigValues().redact('app.pool'))) as WebApplication
+      app = createWebApplication({ adapter: node(), config: conf, logger: false })
+        .server(() => ({ listen: loopback }))
+        .with(devTools(d => d.showConfigValues().redact('app.pool'))) as WebApplication<
+        never,
+        never,
+        unknown,
+        NodeAdapter
+      >
       await app.run()
       const devtools = brewer<DevToolsRoutes>(`${app.address!.origin}/devtools`)
 
@@ -299,7 +360,12 @@ describe('devtools', () => {
 
     it('refuses to start where NODE_ENV is production, pointing at a server of their own', async () => {
       vi.stubEnv('NODE_ENV', 'production')
-      app = createWebApplication().with(devTools()) as WebApplication
+      app = createWebApplication({ adapter: node() }).with(devTools()) as WebApplication<
+        never,
+        never,
+        unknown,
+        NodeAdapter
+      >
 
       const err = await app.bootstrap().catch((e: unknown) => e)
 
@@ -308,7 +374,12 @@ describe('devtools', () => {
     })
 
     it('refuses a change sent as anything but JSON, which a cross-site form could send', async () => {
-      app = createWebApplication().with(devTools()) as WebApplication
+      app = createWebApplication({ adapter: node() }).with(devTools()) as WebApplication<
+        never,
+        never,
+        unknown,
+        NodeAdapter
+      >
       await app.bootstrap()
 
       for (const init of [

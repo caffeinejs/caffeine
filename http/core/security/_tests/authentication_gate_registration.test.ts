@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -10,9 +11,11 @@ import {
   type IContext,
   Identity,
   Principal,
+  Router,
 } from '../../../index.js'
-import { authentication, createWebApplication } from '../../../platform/fastify/index.js'
-import { newRouter } from '../../../platform/fastify/routing/new_router.js'
+import { node } from '../../../platform/node/index.js'
+import { HTTPPlugin } from '../../../plugin.js'
+import { authentication } from '../security.js'
 
 /**
  * How the gate registers: once at the root, per route group, or both — and how it fails when the feature it
@@ -21,6 +24,11 @@ import { newRouter } from '../../../platform/fastify/routing/new_router.js'
  * Programmatic routers only: a `@Controller` registers into the process-global registry and would leak into
  * every application this file builds after it.
  */
+
+/** A plugin that does nothing, where a factory must return one. */
+class NoopPlugin extends HTTPPlugin {
+  register(): void {}
+}
 
 /** Authenticates any request carrying `header`, and counts what the gate asked of it. */
 class HeaderSchemeHandler extends BaseAuthenticationHandler<object> {
@@ -56,7 +64,7 @@ function schemes() {
 
 describe('gate registration', () => {
   it('refuses a gate whose feature was never installed, at bootstrap', async () => {
-    const app = createWebApplication().with(authentication())
+    const app = createWebApplication({ adapter: node() }).with(authentication())
 
     await expect(app.bootstrap()).rejects.toMatchObject({
       code: 'ERR_FEATURE_NOT_INSTALLED',
@@ -66,7 +74,7 @@ describe('gate registration', () => {
 
   it('refuses a gate default scheme nothing registered, at bootstrap', async () => {
     const { a } = schemes()
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .with(authentication(g => g.defaultScheme('Missing')))
 
@@ -75,28 +83,26 @@ describe('gate registration', () => {
 
   it('refuses two root gates under the default label', async () => {
     const { a } = schemes()
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .with(authentication())
       .with(authentication())
 
-    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_HTTP_DUPLICATE_PLUGIN' })
+    await expect(app.bootstrap()).rejects.toThrow('Cannot register plugin "caffeine-authentication" twice')
   })
 
   // A scoped chain inherits the root's registered plugin names, so a scoped gate under a root one must carry
   // its own label — explicitly, rather than silently authenticating every request twice.
   it('refuses a default-label scoped gate under a root gate', async () => {
     const { a } = schemes()
-    const guarded = newRouter('/dup-scoped')
-      .with(authentication())
-      .get('/', () => ({ ok: true }))
+    const guarded = new Router('/dup-scoped').with(authentication()).get('/', () => ({ ok: true }))
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .with(authentication())
       .mount(guarded)
 
-    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_HTTP_DUPLICATE_PLUGIN' })
+    await expect(app.bootstrap()).rejects.toThrow('Cannot register a second authentication gate labelled "default"')
   })
 
   // The ownership model: each gate stamps the routes its context registers and the innermost stamp wins, so a
@@ -104,12 +110,12 @@ describe('gate registration', () => {
   // default scheme.
   it('lets a named scoped gate own its group, under a root gate with a different default', async () => {
     const { a, b } = schemes()
-    const open = newRouter('/multi-root').get('/', () => ({ ok: true }))
-    const admin = newRouter('/multi-admin')
+    const open = new Router('/multi-root').get('/', () => ({ ok: true }))
+    const admin = new Router('/multi-admin')
       .with(authentication(g => g.name('admin').defaultScheme('B')))
       .get('/', () => ({ ok: true }))
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).addStrategy('B', b).default('A')))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .with(authentication())
@@ -143,13 +149,13 @@ describe('gate registration', () => {
   // refuse it for having no gate over it.
   it('guards only the gated group when every gate is scoped', async () => {
     const { a } = schemes()
-    const open = newRouter('/scoped-only-open').get('/', () => ({ ok: true }))
-    const gated = newRouter('/scoped-only-gated')
+    const open = new Router('/scoped-only-open').get('/', () => ({ ok: true }))
+    const gated = new Router('/scoped-only-gated')
       .with(authentication())
       .authorize()
       .get('/', () => ({ ok: true }))
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .mount(open, gated)
 
@@ -167,16 +173,21 @@ describe('gate registration', () => {
   // Installing the feature without any gate is a supported configuration: the services bind, nothing guards.
   it('serves ungated with the feature installed and no gate registered', async () => {
     const { a } = schemes()
-    const open = newRouter('/feature-no-gate').get('/', () => ({ ok: true }))
+    const open = new Router('/feature-no-gate').get('/', () => ({ ok: true }))
 
-    const app = createWebApplication()
+    let has: boolean | undefined
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
+      .with(context => {
+        has = context.hasFeature('auth')
+        return new NoopPlugin()
+      })
       .mount(open)
 
     try {
       await app.bootstrap()
 
-      expect(app.instance.$hasFeature('auth')).toBe(true)
+      expect(has).toBe(true)
       expect((await app.request('/feature-no-gate')).status).toBe(200)
     } finally {
       await app.close()

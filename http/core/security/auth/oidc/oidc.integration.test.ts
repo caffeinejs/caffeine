@@ -2,6 +2,7 @@ import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWK, JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
 import {
   AllowAnonymous,
   Authorize,
@@ -13,13 +14,11 @@ import {
   $p,
   Authentication,
   type AuthenticationGateBuilder,
+  Router,
 } from '../../../../index.js'
-import {
-  createWebApplication,
-  newRouter,
-  authentication,
-  type HTTPPluginConfigurer,
-} from '../../../../platform/fastify/index.js'
+import { node } from '../../../../platform/node/index.js'
+import type { HTTPPluginConfigurer } from '../../../../plugin.js'
+import { authentication } from '../../security.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 
@@ -37,9 +36,13 @@ function makeOIDCApp(
     basePath,
     callbackURL = CALLBACK_URL,
     gate,
-  }: { basePath?: string; callbackURL?: string; gate?: HTTPPluginConfigurer<AuthenticationGateBuilder> } = {},
+  }: {
+    basePath?: string
+    callbackURL?: string
+    gate?: HTTPPluginConfigurer<AuthenticationGateBuilder>
+  } = {},
 ) {
-  const builder = createWebApplication()
+  const builder = createWebApplication({ adapter: node() })
   if (basePath !== undefined) {
     builder.basePath(basePath)
   }
@@ -121,20 +124,6 @@ describe('OIDC integration', () => {
 
       expect((await app.request(`${CALLBACK_PATH}/login?returnTo=/x`)).status).toBe(404)
       expect((await app.request(`${CALLBACK_PATH}?code=code&state=oidc-st`)).status).toBe(404)
-    })
-
-    it('leaves them to a later gate when the root gate opts out', async () => {
-      const scoped = newRouter('/oidc-claim-scoped')
-        .with(authentication(g => g.name('scoped')))
-        .get('/', () => ({ ok: true }))
-
-      const app = makeOIDCApp(undefined, { gate: g => g.oidcRoutes(false) }).mount(scoped)
-      await app.bootstrap()
-
-      const res = await app.request(`${CALLBACK_PATH}/login?returnTo=/x`)
-
-      expect(res.status).toBe(302)
-      expect(res.headers.get('location')).toContain(`${ISSUER}/auth`)
     })
   })
 
@@ -260,11 +249,7 @@ describe('OIDC integration', () => {
       })
 
       it('challenges with the base callback URL, and a sign-in URL coming back under the base', async () => {
-        const app = basedApp().mount(
-          newRouter('/based-private')
-            .authorize()
-            .get('/', () => ({ ok: true })),
-        )
+        const app = basedApp().mount(new Router('/based-private').authorize().get('/', () => ({ ok: true })))
         await app.bootstrap()
 
         const navigation = await app.request('/api/based-private', { headers: { 'sec-fetch-mode': 'navigate' } })
@@ -301,7 +286,7 @@ describe('OIDC integration', () => {
       })
 
       it('refuses a route of the application at the callback path, both being relative to it', async () => {
-        const app = basedApp().mount(newRouter('/oidc').get('/callback', () => ({ ok: true })))
+        const app = basedApp().mount(new Router('/oidc').get('/callback', () => ({ ok: true })))
 
         await expect(app.bootstrap()).rejects.toThrow(/"\/oidc\/callback" conflicts with a registered controller route/)
       })

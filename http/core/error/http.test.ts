@@ -1,6 +1,8 @@
+import { newNoopLogger, type Logger, type LogFn } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
 import { describe, it, expect, vi } from 'vitest'
 
+import { createWebApplication } from '../../application.js'
 import {
   Catch,
   CatchWith,
@@ -41,21 +43,41 @@ import {
   Post,
   Schema,
   type ActionResult,
+  Router,
 } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
+import { node } from '../../platform/node/index.js'
 
 interface LogEntry {
-  level?: number
-  msg?: string
+  level: number
+  msg: string
+  [field: string]: unknown
 }
 
-/** Fastify's own logger, writing every line into `logged`. Named in the factory settings, so it is the server's. */
-function pinoTo(logged: LogEntry[], level = 'info') {
-  return { level, stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } }
+const LEVELS = { info: 30, warn: 40, error: 50 } as const
+
+/** The application logger, recording each line at `threshold` or above. */
+function recordTo(logged: LogEntry[], threshold: keyof typeof LEVELS = 'info'): Logger {
+  const at = (level: keyof typeof LEVELS): LogFn =>
+    ((obj: unknown, msg?: string) => {
+      if (LEVELS[level] < LEVELS[threshold]) {
+        return
+      }
+      const [fields, text] = typeof obj === 'string' ? [{}, obj] : [obj as Record<string, unknown>, msg ?? '']
+      logged.push({ ...fields, level: LEVELS[level], msg: text })
+    }) as LogFn
+  const logger: Logger = {
+    ...newNoopLogger(),
+    info: at('info'),
+    warn: at('warn'),
+    error: at('error'),
+    child: () => logger,
+  }
+  return logger
 }
 
+/** An application whose logger records every line into `logged`. */
 function loggingTo(logged: LogEntry[]) {
-  return createWebApplication().server(() => ({ factory: { logger: pinoTo(logged) } }))
+  return createWebApplication({ adapter: node() }).logger(b => b.use(recordTo(logged)))
 }
 
 async function bodyOf(response: Response): Promise<Problem> {
@@ -171,7 +193,7 @@ void [NeverEnrolledHandler]
 
 describe('ErrHTTP problem fallback', () => {
   it('renders an unhandled ErrHTTP as an RFC 9457 problem', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/http-err/conflict')
@@ -193,7 +215,7 @@ describe('ErrHTTP problem fallback', () => {
 
   // Only a client that asks for the problem media type is told the body is one; a JSON client gets plain JSON.
   it('sends the problem media type to a client that asks for it, and JSON to one that asks for JSON', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const problem = await app.request('/http-err/conflict', { headers: { accept: 'application/problem+json' } })
@@ -206,7 +228,7 @@ describe('ErrHTTP problem fallback', () => {
   })
 
   it('sends the type, instance and extensions the error carries', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/http-err/typed')
@@ -229,7 +251,7 @@ describe('ErrHTTP problem fallback', () => {
 
   // An extension cannot change what the status line says, nor slip a stack trace past `exposeStacktrace`.
   it('drops an extension named like a member the problem defines', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/http-err/forged')
@@ -250,7 +272,7 @@ describe('ErrHTTP problem fallback', () => {
 
   // A body the error carried is the author's: it keeps its media type, and none of the problem's fields join it.
   it('sends a body the error carried as it stands, without the problem fields or media type', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/http-err/typed-body')
@@ -264,7 +286,7 @@ describe('ErrHTTP problem fallback', () => {
 
   // The body does not stand in for a challenge: a client that authenticates reads `WWW-Authenticate`.
   it('keeps the headers an ErrHTTP carries beside the problem', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/http-err/challenge')
@@ -278,7 +300,7 @@ describe('ErrHTTP problem fallback', () => {
   })
 
   it('sends a falsy-but-defined body verbatim instead of the problem', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/http-err/zero-body')
@@ -292,7 +314,7 @@ describe('ErrHTTP problem fallback', () => {
   // `headers` is optional and stays undefined when the error carries none, so this is the only path that
   // reaches reply.headers at all.
   it('applies the headers an ErrHTTP carries', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/http-err/with-headers')
@@ -306,7 +328,7 @@ describe('ErrHTTP problem fallback', () => {
   // The problem is what an application gets for free. A @Catch class declared anywhere in the process used to
   // replace it by being imported; now only the application naming the handler does.
   it('keeps the problem when a matching handler was declared but never enrolled', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/http-err/conflict')
@@ -318,7 +340,7 @@ describe('ErrHTTP problem fallback', () => {
   })
 
   it('replaces the problem once the application enrols that same handler', async () => {
-    const app = createWebApplication().errorHandling(e => e.globalHandlers(NeverEnrolledHandler))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.globalHandlers(NeverEnrolledHandler))
     await app.bootstrap()
 
     const res = await app.request('/http-err/conflict')
@@ -344,7 +366,7 @@ void [ProblemHandler]
 
 describe('ErrHTTP.toProblem', () => {
   it('lets a @Catch handler answer with the problem under the media type it sets', async () => {
-    const app = createWebApplication().errorHandling(e => e.globalHandlers(ProblemHandler))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.globalHandlers(ProblemHandler))
     await app.bootstrap()
 
     const res = await app.request('/http-err/conflict')
@@ -402,7 +424,7 @@ describe('an unexpected failure', () => {
     // The name of the table a statement failed on is the caller's business in no deployment.
     expect(text).not.toContain('customers')
 
-    // On record for whoever looks, as a fault (pino: 30 is info, 50 is error).
+    // On record for whoever looks, as a fault (30 is info, 50 is error).
     const entries = logged.filter(entry => entry.msg?.includes('relation "customers" does not exist'))
     expect(entries.map(entry => entry.level)).toEqual([50])
 
@@ -411,7 +433,7 @@ describe('an unexpected failure', () => {
 
   // The status says how to react — retry, or do not. Only the message disclosed anything.
   it('keeps the status the error asked for rather than collapsing it to 500', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/unexpected/unavailable')
@@ -446,9 +468,8 @@ describe('an unexpected failure', () => {
 
     const issue = {
       code: 'ERR_VALIDATION_MIN_LENGTH',
-      detail: 'name must NOT have fewer than 1 characters',
+      detail: 'name Expected string length greater or equal to 1',
       source: { in: 'body', pointer: '/name' },
-      params: { limit: 1 },
     }
     expect(res.status).toBe(422)
     expect(res.headers.get('content-type')).toBe(JSON_UTF8)
@@ -473,7 +494,7 @@ describe('an unexpected failure', () => {
 
   // Ajv reports a missing property at the object that lacks it; the pointer goes on to the property itself.
   it('points at a missing property', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/unexpected/validated', {
@@ -486,42 +507,16 @@ describe('an unexpected failure', () => {
     expect((await bodyOf(res)).errors).toEqual([
       {
         code: 'ERR_VALIDATION_REQUIRED',
-        detail: "must have required property 'name'",
+        detail: 'name Expected required property',
         source: { in: 'body', pointer: '/name' },
-        params: { missingProperty: 'name' },
       },
     ])
 
     await app.close()
   })
 
-  // Fastify refuses a body it cannot parse before any handler runs; its code is what a client can look up.
-  it('renders a request Fastify refused as a problem with its own code', async () => {
-    const app = createWebApplication()
-    await app.bootstrap()
-
-    const res = await app.request('/unexpected/validated', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{',
-    })
-
-    expect(res.status).toBe(400)
-    expect(res.headers.get('content-type')).toBe(JSON_UTF8)
-    expect(await res.json()).toEqual({
-      type: 'about:blank',
-      title: 'Bad Request',
-      status: 400,
-      detail: "Body is not valid JSON but content-type is set to 'application/json'",
-      code: 'FST_ERR_CTP_INVALID_JSON_BODY',
-      ...STAMPED,
-    })
-
-    await app.close()
-  })
-
   it('names the status in the code of a 4xx that carries none', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/unexpected/teapot')
@@ -542,7 +537,7 @@ describe('an unexpected failure', () => {
 
 describe('exposeStacktrace', () => {
   it('adds the stack while the message stays generic', async () => {
-    const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.exposeStacktrace())
     await app.bootstrap()
 
     const body = await bodyOf(await app.request('/unexpected/boom'))
@@ -557,7 +552,7 @@ describe('exposeStacktrace', () => {
 
   // A rejected fetch says only "fetch failed" until its cause names the address.
   it('includes the chain of causes behind the error', async () => {
-    const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.exposeStacktrace())
     await app.bootstrap()
 
     const body = await bodyOf(await app.request('/unexpected/wrapped'))
@@ -570,7 +565,7 @@ describe('exposeStacktrace', () => {
   })
 
   it('adds it to a thrown ErrHTTP and to an error naming a public message', async () => {
-    const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.exposeStacktrace())
     await app.bootstrap()
 
     const conflict = await bodyOf(await app.request('/http-err/conflict'))
@@ -586,7 +581,7 @@ describe('exposeStacktrace', () => {
 
   // A body the error carried is the author's own and need not be an object, so there is nothing to add to.
   it('leaves a body the error carried verbatim', async () => {
-    const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.exposeStacktrace())
     await app.bootstrap()
 
     expect(await (await app.request('/http-err/zero-body')).text()).toBe('0')
@@ -595,7 +590,7 @@ describe('exposeStacktrace', () => {
   })
 
   it('is off unless the application asks for it', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     expect((await bodyOf(await app.request('/unexpected/boom'))).stacktrace).toBeUndefined()
@@ -640,13 +635,13 @@ describe('ErrHTTP subclasses', () => {
   ]
 
   it('renders each one thrown bare as the problem of its status', async () => {
-    const router = newRouter('/thrown')
+    const router = new Router('/thrown')
     for (const [index, [Class]] of classes.entries()) {
       router.get(`/${index}`, () => {
         throw new Class()
       })
     }
-    const app = createWebApplication().mount(router)
+    const app = createWebApplication({ adapter: node() }).mount(router)
     await app.bootstrap()
 
     for (const [index, [Class, status, code]] of classes.entries()) {
@@ -748,8 +743,8 @@ describe('ErrHTTP.builder', () => {
   // Every entry an application lists goes out: the cap is the validation problem's, which the framework builds.
   it('sends every entry it was given, past the validation cap', async () => {
     const entries = Array.from({ length: 40 }, (_, i) => ({ code: 'ERR_ROW', detail: `Row ${i} is invalid` }))
-    const app = createWebApplication().mount(
-      newRouter('/imports').post('/', () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router('/imports').post('/', () => {
         throw ErrHTTP.builder()
           .statusCode(422)
           .message('40 rows are invalid')
@@ -793,8 +788,8 @@ void [InventoryController]
 
 describe('failures from the real world', () => {
   it('answers a thrown string with the generic problem, from a plain route and from a controller with handlers', async () => {
-    const app = createWebApplication().mount(
-      newRouter('/legacy').get('/', () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router('/legacy').get('/', () => {
         throw 'socket hang up' as unknown as Error
       }),
     )
@@ -822,8 +817,8 @@ describe('failures from the real world', () => {
 
   // What a rate limiter throws: a 429 that tells the client when to come back.
   it('keeps the headers a 4xx from a library carries, beside the problem', async () => {
-    const app = createWebApplication().mount(
-      newRouter('/search').get('/', () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router('/search').get('/', () => {
         throw Object.assign(new Error('Rate limit exceeded, retry in 30 seconds'), {
           statusCode: 429,
           code: 'FST_ERR_RATE_LIMIT',
@@ -852,8 +847,8 @@ describe('failures from the real world', () => {
 
   // nginx's 499: a status with no phrase still gets a code a client can look up.
   it('names a status Node has no phrase for', async () => {
-    const app = createWebApplication().mount(
-      newRouter('/upload').get('/', () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router('/upload').get('/', () => {
         throw Object.assign(new Error('Client closed the request'), { statusCode: 499 })
       }),
     )
@@ -889,8 +884,8 @@ describe('failures from the real world', () => {
         params: { allowedValues: ['created', 'deleted'] },
       },
     ]
-    const app = createWebApplication().mount(
-      newRouter('/webhooks').post('/', () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router('/webhooks').post('/', () => {
         throw ErrHTTP.builder()
           .statusCode(422)
           .code('ERR_WEBHOOK_PAYLOAD')
@@ -920,8 +915,8 @@ describe('failures from the real world', () => {
   // Only a request validation names the slot its pointers are in. A `validation` array on any other error has none,
   // so its entries could not say where they failed, and the error answers as any other 4xx.
   it('lists nothing from a validation array on an error that is not a request validation', async () => {
-    const app = createWebApplication().mount(
-      newRouter('/webhooks').post('/', () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router('/webhooks').post('/', () => {
         throw Object.assign(new Error('Webhook payload is invalid'), {
           statusCode: 422,
           code: 'ERR_WEBHOOK_PAYLOAD',
@@ -953,7 +948,7 @@ describe('failures from the real world', () => {
   it('answers a 4xx naming a public message with that message, and logs it as information', async () => {
     const logged: LogEntry[] = []
     const app = loggingTo(logged).mount(
-      newRouter('/auth').get('/callback', () => {
+      new Router('/auth').get('/callback', () => {
         throw Object.assign(new Error('state abc did not match the one sent to https://idp.internal'), {
           statusCode: 400,
           code: 'ERR_OIDC_STATE',
@@ -987,10 +982,10 @@ describe('failures from the real world', () => {
       name: 'ErrLedger',
       message: 'ledger shard 3 is read-only',
     })
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.exposeStacktrace())
       .mount(
-        newRouter('/payments').post('/', () => {
+        new Router('/payments').post('/', () => {
           throw new Error('Cannot record the payment', { cause: remote })
         }),
       )
@@ -1010,7 +1005,7 @@ describe('a route that declares an error response schema', () => {
   const legacy = $t.Object({ code: $t.String(), message: $t.String() })
 
   function orders() {
-    return newRouter('/orders')
+    return new Router('/orders')
       .get('/:id', { response: { 200: $t.Object({ id: $t.String() }), 404: legacy } }, () => {
         throw new ErrHTTPNotFound('Order 42 not found')
       })
@@ -1024,7 +1019,7 @@ describe('a route that declares an error response schema', () => {
   }
 
   it('still answers a thrown error with its status and the whole problem', async () => {
-    const app = createWebApplication().mount(orders())
+    const app = createWebApplication({ adapter: node() }).mount(orders())
     await app.bootstrap()
 
     const res = await app.request('/orders/42')
@@ -1044,7 +1039,7 @@ describe('a route that declares an error response schema', () => {
   })
 
   it('still answers a failed validation with 400 and its entries', async () => {
-    const app = createWebApplication().mount(orders())
+    const app = createWebApplication({ adapter: node() }).mount(orders())
     await app.bootstrap()
 
     const res = await app.request('/orders?limit=many')
@@ -1056,9 +1051,8 @@ describe('a route that declares an error response schema', () => {
       errors: [
         {
           code: 'ERR_VALIDATION_TYPE',
-          detail: 'limit must be integer',
+          detail: 'limit Expected integer',
           source: { in: 'query', name: 'limit' },
-          params: { type: 'integer' },
         },
       ],
     })
@@ -1068,7 +1062,7 @@ describe('a route that declares an error response schema', () => {
 
   // A schema the problem happens to satisfy would otherwise keep only what it declares.
   it('keeps every member a narrower schema leaves out', async () => {
-    const app = createWebApplication().mount(orders())
+    const app = createWebApplication({ adapter: node() }).mount(orders())
     await app.bootstrap()
 
     const problem = (await (await app.request('/orders/narrow/42')).json()) as Record<string, unknown>
@@ -1087,7 +1081,7 @@ describe('a route that declares an error response schema', () => {
   })
 
   it('answers a ctx helper without a body with the problem', async () => {
-    const app = createWebApplication().mount(orders())
+    const app = createWebApplication({ adapter: node() }).mount(orders())
     await app.bootstrap()
 
     const res = await app.request('/orders/helper/42')
@@ -1101,7 +1095,7 @@ describe('a route that declares an error response schema', () => {
 
 describe('the members an agent acts on', () => {
   function checkout() {
-    return newRouter('/checkout')
+    return new Router('/checkout')
       .post('/', () => {
         throw ErrHTTP.builder()
           .statusCode(429)
@@ -1126,8 +1120,8 @@ describe('the members an agent acts on', () => {
   // An agent paying for an order hits a rate limit: it branches on the category and follows the guidance, with
   // no prose to interpret, and quotes the correlation ID if it has to escalate.
   it('tells an agent asking for Markdown what failed, what to do and how to quote it', async () => {
-    const app = createWebApplication()
-      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+    const app = createWebApplication({ adapter: node() })
+      .server(() => ({ requestIDHeader: 'x-request-id' }))
       .mount(checkout())
     await app.bootstrap()
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -1174,8 +1168,8 @@ describe('the members an agent acts on', () => {
 
   // The same members in JSON, set through the options a subclass takes.
   it('sends the category and the guidance an error was given in its options', async () => {
-    const app = createWebApplication()
-      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+    const app = createWebApplication({ adapter: node() })
+      .server(() => ({ requestIDHeader: 'x-request-id' }))
       .mount(checkout())
     await app.bootstrap()
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -1207,7 +1201,7 @@ describe('the members an agent acts on', () => {
 
   // Guidance is written by someone who knows the fix. A guess from the framework would mislead an agent.
   it('leaves the category and the guidance out unless the error was given them', async () => {
-    const app = createWebApplication().mount(checkout())
+    const app = createWebApplication({ adapter: node() }).mount(checkout())
     await app.bootstrap()
 
     const problem = await bodyOf(await app.request('/checkout/plain'))

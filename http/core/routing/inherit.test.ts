@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { foldAuthz, mergeAuthz } from './inherit.js'
+import { RouteGroupBuilder } from './builder.js'
+import { foldAuthz, inheritGroupSpec, mergeAuthz } from './inherit.js'
 import type { RouteAuthz, RouteAuthzOptions } from './spec.js'
 
 function declared(...options: RouteAuthzOptions[]): RouteAuthz | undefined {
@@ -99,5 +100,22 @@ describe('mergeAuthz — an outer level and an inner one', () => {
     )
 
     expect(merged).toMatchObject({ allowAnonymous: false, defaultPolicy: true, roleGroups: [['admin']] })
+  })
+})
+
+describe('inheritGroupSpec — hooks', () => {
+  // A parent router's hook (the tenant it resolves, the timing it starts) has run before a child's reads it.
+  it("runs an outer router's hooks before an inner router's, point by point", () => {
+    const outer = (): void => undefined
+    const inner = (): void => undefined
+    const send = (): void => undefined
+
+    const merged = inheritGroupSpec(
+      new RouteGroupBuilder().hook('onRequest', outer).hook('onSend', send).toRouteGroup(),
+      new RouteGroupBuilder().hook('onRequest', inner).toRouteGroup(),
+    )
+
+    expect(merged.hooks?.onRequest).toEqual([outer, inner])
+    expect(merged.hooks?.onSend).toEqual([send])
   })
 })

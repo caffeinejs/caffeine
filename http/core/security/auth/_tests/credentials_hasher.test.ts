@@ -1,6 +1,8 @@
 import { $cond, CaffeineIoC, mod } from '@caffeinejs/di'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
+import { authentication } from '../../../../core/security/security.js'
 import {
   type CredentialUser,
   PasswordHasher,
@@ -8,7 +10,7 @@ import {
   UserProvider,
   Authentication,
 } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { node } from '../../../../platform/node/index.js'
 
 const JWT_SECRET = 'a-jwt-secret-that-is-at-least-32-bytes!!'
 
@@ -21,7 +23,7 @@ class Users extends UserProvider {
 function credentialsApp(container: CaffeineIoC) {
   container.bind(UserProvider, t => t.toValue(new Users()))
 
-  return createWebApplication({ container })
+  return createWebApplication({ adapter: node(), container })
     .install(
       Authentication(a => a.addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local')).addCredentials()),
     )

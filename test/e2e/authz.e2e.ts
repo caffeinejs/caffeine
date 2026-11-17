@@ -1,4 +1,5 @@
 import {
+  authentication,
   $p,
   AllowAnonymous,
   Args,
@@ -10,8 +11,8 @@ import {
   Roles,
   Authentication,
   Authorization,
+  Router,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -217,36 +218,32 @@ void [
 const ok = () => ({ ok: true })
 
 function programmatic() {
-  return newRouter('/p').mount(
-    newRouter('/open').authorize({ allowAnonymous: true }).get('/', ok),
-    newRouter('/undecorated').get('/', ok),
-    newRouter('/any-role')
-      .authorize({ roles: ['admin', 'manager'] })
-      .get('/', ok),
+  return new Router('/p').mount(
+    new Router('/open').authorize({ allowAnonymous: true }).get('/', ok),
+    new Router('/undecorated').get('/', ok),
+    new Router('/any-role').authorize({ roles: ['admin', 'manager'] }).get('/', ok),
     // A route's own roles are required on top of its group's.
-    newRouter('/both-roles')
+    new Router('/both-roles')
       .authorize({ roles: ['admin'] })
       .get('/')
       .authorize({ roles: ['manager'] })
       .handler(ok),
-    newRouter('/claim').authorize({ policy: 'engineering' }).get('/', ok),
-    newRouter('/groups').authorize({ policy: 'on-call' }).get('/', ok),
+    new Router('/claim').authorize({ policy: 'engineering' }).get('/', ok),
+    new Router('/groups').authorize({ policy: 'on-call' }).get('/', ok),
     // Two declarations on one chain.
-    newRouter('/stacked')
+    new Router('/stacked')
       .get('/')
       .authorize({ roles: ['admin'] })
       .authorize({ policy: 'engineering' })
       .handler(ok),
     // A router nested in another: what the inner one declares is added to what the outer one declared.
-    newRouter('/admin')
+    new Router('/admin')
       .authorize({ roles: ['admin'] })
       .get('/', ok)
       .mount(
-        newRouter('/reports')
-          .authorize({ roles: ['manager'] })
-          .get('/', ok),
+        new Router('/reports').authorize({ roles: ['manager'] }).get('/', ok),
         // Declared public on purpose, inside a protected router: the explicit opt-out still works...
-        newRouter('/status')
+        new Router('/status')
           .authorize({ allowAnonymous: true })
           .get('/', ok)
           // ...and a route below it that asks for protection again gets all of it, the outer roles included.
@@ -254,7 +251,7 @@ function programmatic() {
           .authorize()
           .handler(ok),
       ),
-    newRouter('/open-group')
+    new Router('/open-group')
       .authorize({ allowAnonymous: true })
       .get('/', ok)
       .get('/admin')

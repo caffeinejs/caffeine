@@ -10,8 +10,8 @@ import { JSONConfigSource } from '@caffeinejs/application/config/json'
 import { SpringCloudConfigSource } from '@caffeinejs/application/config/spring'
 import { $t } from '@caffeinejs/application/schema'
 import { $i, CaffeineIoC, type Provider } from '@caffeinejs/di'
-import { Controller, Get, Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Controller, Get, Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -119,6 +119,7 @@ function buildApp(fileDir: string, overrides: ConfigSource) {
     .build().config
 
   return createWebApplication({
+    adapter: node(),
     container: new CaffeineIoC({ profiles: ['dev'] }),
     config: conf,
   }).mount(routes)

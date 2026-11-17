@@ -1,8 +1,8 @@
 import type { WebApplication } from '@caffeinejs/http'
-import type { AdapterTypes } from '@caffeinejs/http/fastify'
+import type { NodeAdapter } from '@caffeinejs/http/node'
 
-/** The application a client drives, whichever way it got one: a Fastify one. */
-export type TestApplication = WebApplication<AdapterTypes>
+/** The application a client drives, whichever way it got one: a Node one. */
+export type TestApplication = WebApplication<never, never, unknown, NodeAdapter>
 
 export type RouterCtor = abstract new (...args: never[]) => object
 

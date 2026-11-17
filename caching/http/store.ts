@@ -2,7 +2,8 @@ import type { Duration } from '@caffeinejs/std/duration'
 
 /** What the HTTP cache keeps of a response, and replays on a hit. */
 export interface HTTPCacheEntry {
-  payload: string | Buffer
+  /** Bytes come back as bytes; a store may hand back a `Buffer`. */
+  payload: string | Uint8Array
   /** Status code of the stored response, replayed as is on a hit. */
   statusCode: number
   etag?: string

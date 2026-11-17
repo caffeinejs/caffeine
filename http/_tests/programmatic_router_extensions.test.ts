@@ -1,6 +1,6 @@
-import { $t } from '@caffeinejs/application/schema'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { RouteBuilder } from '../core/routing/builder.js'
 import { $p } from '../core/routing/picker.js'
 import {
@@ -13,7 +13,7 @@ import {
   bodyAsStream,
   type RouteExtension,
 } from '../index.js'
-import { createWebApplication, fst } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 // A third party annotating a route it does not own: the namespace is declared here, exactly as
 // `@caffeinejs/openapi` declares its own.
@@ -54,7 +54,7 @@ describe('route extensions', () => {
       }
       void [DecoratedStreamController]
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const payload = Buffer.from('hello stream world')
@@ -78,7 +78,7 @@ describe('route extensions', () => {
           return { isBuffer: Buffer.isBuffer(body), text: body.toString() }
         })
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const res = await app.request('/ext-buffer/upload', {
@@ -125,7 +125,7 @@ describe('route extensions', () => {
       )
       router.get('/').handler(() => ({ ok: true }))
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const res = await app.request('/group-ext')
@@ -150,7 +150,7 @@ describe('route extensions', () => {
         nested.get('/').handler(() => null)
       })
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const outer = app.routeGroups.find(group => group.path === '/detailed')!
@@ -173,62 +173,6 @@ describe('route extensions', () => {
       viaDecoratorEquivalent.bodyAs('buffer')
 
       expect(viaExtension.toRoute().bodyAs).toEqual(viaDecoratorEquivalent.toRoute().bodyAs)
-    })
-  })
-})
-
-describe('fst', () => {
-  describe('given a lifecycle hook', () => {
-    it('should run it, ahead of the hooks the adapter attaches', async () => {
-      const order: string[] = []
-
-      const router = new Router('/fst')
-      router
-        .get('/hooked')
-        .extend(
-          fst({
-            onRequest: (_req, _res, done) => {
-              order.push('fst')
-              done()
-            },
-          }),
-        )
-        .handler(() => {
-          order.push('handler')
-          return { ok: true }
-        })
-
-      const app = createWebApplication().mount(router)
-      await app.bootstrap()
-
-      expect((await app.request('/fst/hooked')).status).toBe(200)
-      expect(order).toEqual(['fst', 'handler'])
-
-      await app.close()
-    })
-  })
-
-  describe('given a route option the router does not own', () => {
-    it('should pass it to the adapter', async () => {
-      const router = new Router('/fst-opts')
-      router
-        .get('/validated')
-        .extend(fst({ attachValidation: true }))
-        .schema({ querystring: $t.Object({ n: $t.Integer() }) })
-        .handler(ctx => {
-          const { validationError } = ctx.platform.request as { validationError?: unknown }
-          return { invalid: validationError !== undefined }
-        })
-
-      const app = createWebApplication().mount(router)
-      await app.bootstrap()
-
-      // attachValidation turns a validation failure into a flag on the request instead of a 400.
-      const res = await app.request('/fst-opts/validated?n=nope')
-      expect(res.status).toBe(200)
-      expect(await res.json()).toEqual({ invalid: true })
-
-      await app.close()
     })
   })
 })

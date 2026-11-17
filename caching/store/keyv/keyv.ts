@@ -57,7 +57,7 @@ export interface KeyvHTTPCacheStoreOptions {
   tagTtl?: Duration
 }
 
-// s status code · k payload kind (s string, b Buffer) · p the payload, base64 when it is bytes · h headers ·
+// s status code · k payload kind (s string, b bytes) · p the payload, base64 when it is bytes · h headers ·
 // t etag · l last-modified · a stored at · g the marker of each tag the entry was written under.
 interface HTTPEnvelope {
   s: number
@@ -234,12 +234,13 @@ function marker(value: unknown): string | undefined {
 }
 
 function envelopeOf(entry: HTTPCacheEntry, markers: Record<string, string> | undefined): HTTPEnvelope {
-  const bytes = Buffer.isBuffer(entry.payload)
+  const payload = entry.payload
+  const text = typeof payload === 'string'
 
   return {
     s: entry.statusCode,
-    k: bytes ? 'b' : 's',
-    p: bytes ? entry.payload.toString('base64') : (entry.payload as string),
+    k: text ? 's' : 'b',
+    p: text ? payload : Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength).toString('base64'),
     h: entry.headers,
     t: entry.etag,
     l: entry.lastModified,

@@ -1,8 +1,10 @@
 import type { ConfigSnapshot } from '@caffeinejs/application/config'
 
-import type { AnyAdapterTypes, IAdapterTypes } from './adapter.js'
+import type { CookieSerializeOptions } from './core/cookie/options.js'
+import type { RouteDefinition } from './core/lifecycle/route_definition.js'
 import type { AuthenticationState } from './core/security/auth/authentication_state.js'
 import { type Principal } from './core/security/identity.js'
+import type { ContextPlatform } from './core/server/platform.js'
 import type { IRequest } from './request.js'
 
 /**
@@ -34,27 +36,22 @@ export class ContextState<V = Record<never, never>> {
 
 /**
  * What a middleware, a guard, an error handler and a route handler see of the request they serve.
- *
- * `T` is the serving adapter's {@link IAdapterTypes}. Left out, it is any registered adapter's, which is what a
- * middleware or a `Responder` written without knowing its adapter gets.
  */
 export interface IContext<
   V = Record<never, never>,
   C = Record<never, never>,
-  T extends IAdapterTypes = AnyAdapterTypes,
   TParams = Record<string, string>,
   TQuery = Record<string, string>,
   THeaders = Record<string, string>,
   TBody = unknown,
 > {
-  get req(): IRequest<T['raw'], TParams, TQuery, THeaders, T['asyncCookies'], TBody>
+  get req(): IRequest<TParams, TQuery, THeaders, TBody>
 
   /**
-   * The server library's own objects behind this request: the escape hatch for what the context does not
-   * cover. What it holds belongs to the adapter. `name` says which adapter, and is what code written against
-   * one narrows on.
+   * The runtime's own objects behind this request: the escape hatch for what the context does not cover. Narrow on
+   * `name` to reach them: `'node'` holds Node's request and response, `'fetch'` what the runtime handed `fetch`.
    */
-  get platform(): T['platform']
+  get platform(): ContextPlatform
 
   /** The values this request carries between the middlewares, guards and handler serving it. */
   get state(): ContextState<V>
@@ -64,8 +61,7 @@ export interface IContext<
    * it is read. A reload that lands mid-request is not observed once the snapshot has been taken.
    *
    * `C` is declared where the routes are, with `.configType<C>()`. This is a getter, not a function: a package
-   * that needs its own settings cannot look them up from here. It binds them and resolves them, or reads a
-   * decoration off the Fastify instance as `@caffeinejs/html` does.
+   * that needs its own settings cannot look them up from here: it binds them and resolves them.
    */
   get config(): ConfigSnapshot<C>
 
@@ -103,10 +99,11 @@ export interface IContext<
   get sent(): boolean
 
   /**
-   * What the route declared, as the adapter recorded it. The shape belongs to the adapter — the Fastify one
-   * returns its `FastifyContextConfig` — so a consumer narrows it to the adapter it is written against.
+   * The route the request matched, as `onRoute` hooks saw it: how a hook that covers many routes, an application's
+   * or a plugin's, reads what one route declared, `ctx.route?.config.get('key')`. `undefined` when no route matched,
+   * and for a route Caffeine did not compile itself.
    */
-  get routeConfig(): unknown
+  get route(): RouteDefinition | undefined
 
   status(code: number): this
 
@@ -127,6 +124,14 @@ export interface IContext<
    * the response goes out.
    */
   getHeader(key: string): string | undefined
+  /**
+   * Every response header written so far, by lower-case name: a copy, so writing to it changes nothing. A header
+   * holding several values comes back as its list. Cookies set with {@link IContext.cookie} are in it from the first
+   * `onSend` hook on.
+   */
+  getHeaders(): Record<string, string | string[]>
+  /** Removes a response header. Once the response is sent, outside an `onSend` hook, it changes nothing. */
+  removeHeader(key: string): this
 
   /**
    * Sets a cookie on the response, over the server's `parseOptions`. Written when the response is sent; a second
@@ -141,7 +146,7 @@ export interface IContext<
    * @throws ErrCookieTooLate when the response's headers are already sent.
    * @throws ErrCookiesDisabled when the server has cookies off.
    */
-  cookie(name: string, value: string, opts?: T['cookieOptions']): this
+  cookie(name: string, value: string, opts?: CookieSerializeOptions): this
 
   /**
    * Tells the browser to drop a cookie. `opts` must name the domain and path, and for a partitioned cookie
@@ -151,7 +156,7 @@ export interface IContext<
    * @throws ErrCookieTooLate when the response's headers are already sent.
    * @throws ErrCookiesDisabled when the server has cookies off.
    */
-  deleteCookie(name: string, opts?: T['cookieOptions']): this
+  deleteCookie(name: string, opts?: CookieSerializeOptions): this
 
   /**
    * Sends `body` as the answer, shaped as a value the handler returns is: a `Blob`, bytes, a stream or a `Response` go

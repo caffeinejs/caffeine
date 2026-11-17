@@ -4,9 +4,11 @@ import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
-import type { AdapterExtensionFactory } from '../../adapter.js'
+import type { HTTPPluginFactory } from '../../plugin.js'
 import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
+import type { RequestHookName } from '../lifecycle/lifecycle.js'
+import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 
 /**
  * A group of routes, as authored. Inert: it describes routes, it does not know how any of them is called.
@@ -24,13 +26,16 @@ export interface RouteGroupSpec<R> {
   timeout?: Duration
   authz?: RouteAuthz
   config?: Map<string, unknown>
-  options?: Map<string, unknown>
   detail?: RouteGroupDetail
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
   /** A controller's `@Use(...)` factories, in the order written. */
-  plugins?: AdapterExtensionFactory<unknown>[]
+  plugins?: HTTPPluginFactory[]
+  /** Hooks covering every route of the group, in the order written. */
+  hooks?: AuthoredHooks
+  /** A controller's methods that are hooks, `@OnRequest()` and its siblings, with the point each runs at. */
+  methodHooks?: Array<[RequestHookName, string | symbol]>
   /** What labelled the group, keyed by whoever reads it: which server serves it, for one. */
   labels?: Map<symbol, unknown>
 }
@@ -57,10 +62,11 @@ export interface RouteSpec<R> {
   bodyAs?: BodyMode
   authz?: RouteAuthz
   config?: Map<string, unknown>
-  options?: Map<string, unknown>
   detail?: RouteDetail
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
+  /** Hooks for this route alone, in the order written. */
+  hooks?: AuthoredHooks
 }
 
 /** The function a route ultimately calls, with the picked arguments spread into it. */
@@ -68,11 +74,11 @@ export type RouteInvoker = (...args: unknown[]) => unknown
 
 /**
  * The validation contract of a route, as authored. Every slot takes the `$t` dialect (recommended) or any Standard
- * Schema that converts to JSON Schema.
+ * Schema; a Standard Schema response must convert to JSON Schema.
  *
- * This is the authoring shape, not the runtime one: each slot is compiled to JSON Schema once, while routes are
- * being registered, and Fastify's Ajv does all request-time validation. See
- * `platform/fastify/routing/schema/schema.ts` for the compilation and the per-slot strictness policy.
+ * This is the authoring shape, not the runtime one: each slot is compiled once, while routes are being registered.
+ * A `$t` slot is compiled by the server's `schemaCompiler` (TypeBox by default), and its codecs, such as
+ * `$t.Duration()`, are decoded; a Standard Schema slot is validated by its own library.
  */
 export interface RouteValidationSchema {
   params?: AnySchema
@@ -80,11 +86,12 @@ export interface RouteValidationSchema {
   headers?: AnySchema
   body?: AnySchema
   /**
-   * Response schemas keyed by status code, as Fastify requires: `{ 200: $t.Object({ ... }), '4xx': ErrorBody }`.
+   * Response schemas keyed by status code: `{ 200: $t.Object({ ... }), '4xx': ErrorBody }`.
    *
-   * Beware that a response schema *serializes*, it does not validate. Fastify hands it to fast-json-stringify,
-   * which emits only the declared properties — a handler returning a non-conforming object is not rejected, its
-   * extra fields are simply omitted.
+   * Beware that a response schema *serializes*, it does not validate. The server's schema compiler writes only the
+   * declared properties — a handler returning a non-conforming object is not rejected, its extra fields are simply
+   * omitted. A codec in it is encoded first, so `$t.Duration()` sends `"5s"`. A string the handler returns is sent as
+   * it is.
    */
   response?: Record<number | string, AnySchema>
 }

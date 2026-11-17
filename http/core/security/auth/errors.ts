@@ -101,7 +101,7 @@ export class ErrAuthenticationCookies extends ErrCaffeineWebApplication {
  * start.
  */
 export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
-  constructor(routes: readonly string[]) {
+  constructor(routes: readonly string[], ...solutions: string[]) {
     const one = routes.length === 1
     const named = routes
       .slice(0, 5)
@@ -121,8 +121,8 @@ export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
             '".listener(name, l => l.with(authentication()))"',
           'Or register one on the router holding the route: "router.with(authentication())"',
           'Or open the route to anyone: "@AllowAnonymous()" or ".authorize({ allowAnonymous: true })" where it ' +
-            'is declared, "authenticationExempt()" as a raw route\'s config, or "exemptFromAuthentication(route)" ' +
-            'from an "onRoute" hook for a route another plugin registers',
+            'is declared',
+          ...solutions,
         )
         .reference('@caffeinejs/http', ErrAuthenticationGateRequired)
         .build(),

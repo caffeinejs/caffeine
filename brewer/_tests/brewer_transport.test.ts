@@ -1,5 +1,6 @@
-import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
@@ -36,10 +37,10 @@ const routes = new Router('/transport')
   .get('/here')
   .handler(() => ({ here: true }))
 
-// An abort can leave the client a connection it opened and never finished a request on, which the server's graceful
-// close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
-const app = createWebApplication()
-  .server(() => ({ factory: { forceCloseConnections: true } }))
+// A client that stops part-way can leave a connection holding a partial request, which a graceful close would wait
+// out (caffeinejs/caffeine#131): the close cuts it after a second.
+const app = createWebApplication({ adapter: node() })
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(routes)
 
 let origin: string
@@ -120,7 +121,7 @@ describe('brewer over a socket', () => {
 
   describe('given an origin nothing listens on', () => {
     it('should reject, since no response exists to resolve with', async () => {
-      const gone = createWebApplication().mount(routes)
+      const gone = createWebApplication({ adapter: node() }).mount(routes)
       await gone.run()
       const address = gone.address!.origin
       await gone.close()

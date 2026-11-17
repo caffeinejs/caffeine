@@ -7,11 +7,10 @@ import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import cors from 'cors'
-import type { FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, it, expect } from 'vitest'
 
 import {
+  createWebApplication,
   type IContext,
   Controller,
   ErrHTTPForbidden,
@@ -25,8 +24,10 @@ import {
   type Next,
   Router,
   kMiddlewareHook,
+  HTTPPlugin,
+  type RequestHookName,
 } from '../../index.js'
-import { type MiddlewareHook, createWebApplication } from '../../platform/fastify/index.js'
+import { node as nodeAdapter } from '../../platform/node/index.js'
 
 @Controller('/mw')
 class MiddlewareController {
@@ -67,7 +68,7 @@ class Counter implements Middleware {
 function newApp(configure: (container: CaffeineIoC) => void = () => {}) {
   const container = new CaffeineIoC()
   configure(container)
-  return createWebApplication({ container })
+  return createWebApplication({ adapter: nodeAdapter(), container })
 }
 
 describe('middleware pipeline', () => {
@@ -110,7 +111,7 @@ describe('middleware pipeline', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ middleware: { tag: 'from-config' } }))
       .build().config
-    const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
+    const app = createWebApplication({ adapter: nodeAdapter(), container: new CaffeineIoC(), config: conf })
     const seen: string[] = []
 
     app.useFn('*', ({ config }) => ({
@@ -252,16 +253,20 @@ describe('middleware pipeline', () => {
   // the chain asks the context too; otherwise `next()` would run the handler, and its send over the first.
   it('ends the chain at a middleware that answered and still called next, under an onSend hook that awaits', async () => {
     let runs = 0
-    const slowSend: FastifyPluginAsync = async instance => {
-      instance.addHook('onSend', async (_request, _reply, payload) => {
-        runs++
-        await sleep(20)
-        return payload
-      })
+    class SlowSend extends HTTPPlugin {
+      override readonly name = 'slow-send'
+
+      register({ app }: HTTPSetupContext): void {
+        app.hook('onSend', async (_ctx, payload) => {
+          runs++
+          await sleep(20)
+          return payload
+        })
+      }
     }
     const reached: string[] = []
 
-    const app = newApp().with(() => fp(slowSend, { name: 'slow-send' }))
+    const app = newApp().with(() => new SlowSend())
     app.use((ctx, next) => {
       ctx.status(418).body({ answered: 'early' })
       next()
@@ -322,7 +327,7 @@ describe('middleware pipeline', () => {
     const order: string[] = []
 
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): MiddlewareHook {
+      static get [kMiddlewareHook](): RequestHookName {
         return 'preHandler'
       }
 
@@ -352,7 +357,7 @@ describe('middleware pipeline', () => {
     const order: string[] = []
 
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): MiddlewareHook {
+      static get [kMiddlewareHook](): RequestHookName {
         return 'preHandler'
       }
 
@@ -386,7 +391,7 @@ describe('middleware pipeline', () => {
       next()
     }
 
-    const app = newApp().server(() => ({ factory: { trustProxy: true } }))
+    const app = newApp().server(() => ({ trustProxy: true }))
     app.use(node)
     await app.bootstrap()
 

@@ -1,4 +1,3 @@
-import { sign as fastifySign, unsign as fastifyUnsign } from '@fastify/cookie'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrCookieConfiguration } from './errors.js'
@@ -7,12 +6,6 @@ import { HMACCookieSigner, MIN_COOKIE_SECRET_LENGTH, type CookieSigningAlgorithm
 const SECRET = 'a-cookie-secret-of-at-least-32-characters'
 const OLDER = 'an-older-cookie-secret-of-32-characters-or-more'
 const OTHER = 'a-third-cookie-secret-nobody-configured-here'
-
-const NODE_ALGORITHM: Record<CookieSigningAlgorithm, string> = {
-  'SHA-256': 'sha256',
-  'SHA-384': 'sha384',
-  'SHA-512': 'sha512',
-}
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
@@ -28,31 +21,46 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-// A cookie signed before the switch away from @fastify/cookie must still verify after it, and the reverse: a
-// deployment rolling between the two keeps its users' cookies.
-describe('HMACCookieSigner, against @fastify/cookie', () => {
+// Signatures in the format cookie-signature writes, as that library computed them: a cookie a deployment signed
+// before must still verify, and one it signs must verify there, so its users keep their cookies.
+const VECTORS: Record<CookieSigningAlgorithm, { dots: string; theirs: string; ours: string }> = {
+  'SHA-256': {
+    dots: 'value.with.dots.oG2bbE+sDN39MBwr7udi+9jb4SHrhtp6/YI7b8pQ5Wg',
+    theirs: 'theirs.KwuYaHWbRwK5i/Wl3eEKR8OnvcKInOOWXdlAEHeNU+o',
+    ours: 'ours.ZOLqjDLtHlDD+PP7JZReMiX0g/hfwvrHWuwFUQy2XGs',
+  },
+  'SHA-384': {
+    dots: 'value.with.dots.XKF1S6SXEPsiTjQfrKXUyjMuUJSW65ET7u+9aR2cLwbAZnds0aWACdzz/esjkVaG',
+    theirs: 'theirs.TpqlAj2SWh8j7AXp/gkWkxGO9xxa3skMstHBMpIH+d6/MqsVbicG2tS7UOPQzSM6',
+    ours: 'ours.kK62SHHkZhPrXZ4AJG9+ay8GKTk/8TVSYk2BwD2T9pWDKwCBrzWrUJeB8bRGNVfQ',
+  },
+  'SHA-512': {
+    dots: 'value.with.dots.KMuA/pbqjMCwkQ9N1y8s1uE4e5XL6tH9/jwJ0JOs8vbduUiIjkN7zyOlq8i9bkBpz5ciQdvrQK/EmbboZ8TcUQ',
+    theirs: 'theirs.M3SU7J6YuFkJE+fFY7XGKjH0mx7PDf6Q3tlhu+hGK41wbw9NNuRWEUs34Z92ldFQ0iwQRlqxvHS/22iSspXRYg',
+    ours: 'ours.7AaG9tLxkj19kOhuo4p/BiabQ13NKaZ1upH9XapjKQd0zaYAuCWyR5NvpZKLJMGDBGxF+3j3xl7p2CFKzvRl/g',
+  },
+}
+
+/** `'v'` signed with SHA-256 under each secret. */
+const V = {
+  secret: 'v.6t4mPFfDXLDCNEffi6lhdPvBRYjy6GtvRLnr/KpeeVc',
+  older: 'v.cpIiQiYw+hB+3BommUK3p9jEho3ULUJE8jUOG326fug',
+  other: 'v.E5agj4REOMaGU1ctManGF1/gWmnfzQj0LN9sKSl5zok',
+}
+
+describe('HMACCookieSigner, against signatures cookie-signature writes', () => {
   for (const algorithm of ['SHA-256', 'SHA-384', 'SHA-512'] as const) {
-    it(`writes the signature @fastify/cookie writes, with ${algorithm}`, async () => {
+    it(`writes the signature cookie-signature writes, with ${algorithm}`, async () => {
       const signer = new HMACCookieSigner({ secret: SECRET, algorithm })
 
-      expect(await signer.sign('value.with.dots')).toBe(
-        fastifySign('value.with.dots', SECRET, NODE_ALGORITHM[algorithm]),
-      )
+      expect(await signer.sign('value.with.dots')).toBe(VECTORS[algorithm].dots)
     })
 
-    it(`verifies what @fastify/cookie signs, and the other way round, with ${algorithm}`, async () => {
+    it(`verifies what cookie-signature signs, and signs what it verifies, with ${algorithm}`, async () => {
       const signer = new HMACCookieSigner({ secret: SECRET, algorithm })
 
-      expect(await signer.unsign(fastifySign('theirs', SECRET, NODE_ALGORITHM[algorithm]))).toEqual({
-        valid: true,
-        renew: false,
-        value: 'theirs',
-      })
-      expect(fastifyUnsign(await signer.sign('ours'), SECRET, NODE_ALGORITHM[algorithm])).toEqual({
-        valid: true,
-        renew: false,
-        value: 'ours',
-      })
+      expect(await signer.unsign(VECTORS[algorithm].theirs)).toEqual({ valid: true, renew: false, value: 'theirs' })
+      expect(await signer.sign('ours')).toBe(VECTORS[algorithm].ours)
     })
   }
 })
@@ -68,10 +76,10 @@ describe('HMACCookieSigner', () => {
   it('signs with the first secret and verifies with any, saying when an older one did', async () => {
     const signer = new HMACCookieSigner({ secret: [SECRET, OLDER] })
 
-    expect(await signer.sign('v')).toBe(fastifySign('v', SECRET))
-    expect(await signer.unsign(fastifySign('v', SECRET))).toEqual({ valid: true, renew: false, value: 'v' })
-    expect(await signer.unsign(fastifySign('v', OLDER))).toEqual({ valid: true, renew: true, value: 'v' })
-    expect(await signer.unsign(fastifySign('v', OTHER))).toEqual({ valid: false, renew: false, value: null })
+    expect(await signer.sign('v')).toBe(V.secret)
+    expect(await signer.unsign(V.secret)).toEqual({ valid: true, renew: false, value: 'v' })
+    expect(await signer.unsign(V.older)).toEqual({ valid: true, renew: true, value: 'v' })
+    expect(await signer.unsign(V.other)).toEqual({ valid: false, renew: false, value: null })
   })
 
   describe('answers { valid: false } without rejecting', () => {
@@ -135,7 +143,7 @@ describe('HMACCookieSigner', () => {
       const signer = new HMACCookieSigner({ secret: SECRET })
       const signed = await signer.sign('v', OTHER)
 
-      expect(signed).toBe(fastifySign('v', OTHER))
+      expect(signed).toBe(V.other)
       expect(await signer.unsign(signed, OTHER)).toEqual({ valid: true, renew: false, value: 'v' })
       expect(await signer.unsign(signed)).toEqual({ valid: false, renew: false, value: null })
     })
@@ -143,7 +151,7 @@ describe('HMACCookieSigner', () => {
     it('rotates as the configured ones do', async () => {
       const signer = new HMACCookieSigner()
 
-      expect(await signer.unsign(fastifySign('v', OLDER), [OTHER, OLDER])).toEqual({
+      expect(await signer.unsign(V.older, [OTHER, OLDER])).toEqual({
         valid: true,
         renew: true,
         value: 'v',

@@ -1,16 +1,24 @@
-import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, type WebApplication, type ActionResult } from '../index.js'
-import { createWebApplication, newRouter } from '../platform/fastify/index.js'
+import { createWebApplication } from '../application.js'
+import {
+  Controller,
+  Get,
+  HTTPPlugin,
+  type ActionResult,
+  type HTTPSetupContext,
+  type WebApplication,
+  Router,
+} from '../index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * What a group's prefix and a route at `/` compose to.
  *
  * Load-bearing for every prefixed application, and it was asserted only in prose until this file: the
- * documentation claimed `newRouter('/app')` with a route at `/` produced `/app/` and therefore did not answer
- * `GET /app`. It produces `/app` — `joinPaths` trims the trailing slash — and since the adapter leaves
- * Fastify's `ignoreTrailingSlash` off, `/app/` is then a different URL that nothing registered.
+ * documentation claimed `new Router('/app')` with a route at `/` produced `/app/` and therefore did not answer
+ * `GET /app`. It produces `/app` — `joinPaths` trims the trailing slash — and since the application leaves
+ * `ignoreTrailingSlash` off, `/app/` is then a different URL that nothing registered.
  *
  * The consequence that survives is the wildcard's: `/dash/*` does not match the bare `/dash`, which is why a
  * gated subtree still needs two routes.
@@ -19,27 +27,26 @@ import { createWebApplication, newRouter } from '../platform/fastify/index.js'
 /**
  * Collects every URL the application registers, from a plugin's `onRoute` hook.
  *
- * A plugin rather than `app.instance`: compiled routes register after every plugin, and the instance is not
- * reachable until `bootstrap()` — by which point the routes have already gone past.
+ * A plugin rather than `app.instance`: the instance is not reachable until `bootstrap()` — by which point the
+ * routes have already gone past.
  */
 function collectURLs(urls: string[]) {
   return () =>
-    fp(
-      async instance => {
-        instance.addHook('onRoute', route => {
-          urls.push(route.url)
-        })
-      },
-      { name: 'collect-urls' },
-    )
+    new (class extends HTTPPlugin {
+      override readonly name = 'collect-urls'
+
+      register({ app }: HTTPSetupContext): void {
+        app.hook('onRoute', r => void urls.push(r.url))
+      }
+    })()
 }
 
 describe('a group prefix and a route at "/"', () => {
   it('composes to the bare prefix, not to a trailing slash', async () => {
     const urls: string[] = []
-    const app = createWebApplication({})
+    const app = createWebApplication({ adapter: node() })
       .with(collectURLs(urls))
-      .mount(newRouter('/app').get('/', () => ({ ok: true }))) as WebApplication
+      .mount(new Router('/app').get('/', () => ({ ok: true }))) as WebApplication
     await app.bootstrap()
 
     try {
@@ -51,12 +58,14 @@ describe('a group prefix and a route at "/"', () => {
   })
 
   it('answers the bare path and not the trailing slash', async () => {
-    const app = createWebApplication({}).mount(newRouter('/app').get('/', () => ({ ok: true }))) as WebApplication
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router('/app').get('/', () => ({ ok: true })),
+    ) as WebApplication
     await app.bootstrap()
 
     try {
       expect((await app.request('/app')).status).toBe(200)
-      // `ignoreTrailingSlash` is left at Fastify's default, so this is a different URL.
+      // `ignoreTrailingSlash` is left at its default, so this is a different URL.
       expect((await app.request('/app/')).status).toBe(404)
     } finally {
       await app.close()
@@ -65,9 +74,9 @@ describe('a group prefix and a route at "/"', () => {
 
   it('composes a nested mount the same way', async () => {
     const urls: string[] = []
-    const app = createWebApplication({})
+    const app = createWebApplication({ adapter: node() })
       .with(collectURLs(urls))
-      .mount(newRouter('/api').mount(newRouter('/v1').get('/', () => ({ ok: true })))) as WebApplication
+      .mount(new Router('/api').mount(new Router('/v1').get('/', () => ({ ok: true })))) as WebApplication
     await app.bootstrap()
 
     try {
@@ -88,7 +97,7 @@ describe('a group prefix and a route at "/"', () => {
     }
     void [RootController]
 
-    const app = createWebApplication({}) as WebApplication
+    const app = createWebApplication({ adapter: node() }) as WebApplication
     await app.bootstrap()
 
     try {
@@ -100,7 +109,9 @@ describe('a group prefix and a route at "/"', () => {
 
   // The half of the documented papercut that is real: a wildcard covers the empty match but not the bare path.
   it('does not match a bare path against a sibling wildcard', async () => {
-    const app = createWebApplication({}).mount(newRouter().get('/dash/*', () => ({ ok: true }))) as WebApplication
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router().get('/dash/*', () => ({ ok: true })),
+    ) as WebApplication
     await app.bootstrap()
 
     try {

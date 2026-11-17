@@ -1,17 +1,49 @@
-import type { AnyAdapterTypes, IAdapterTypes, ServerAddress } from './adapter.js'
+import type { HTTPSetupContext } from './plugin.js'
 
 /**
- * An HTTP server the application runs: what it is, where it listens and a way to send it a request, but not its
- * lifecycle, which `app.run()` and `app.close()` drive.
- *
- * The {@link WebApplication} is one, for its own server, and so is each of `app.listeners`. `T` is the serving
- * adapter's {@link IAdapterTypes}; left out, it is any registered adapter's.
+ * Where the server ended up listening, as reported by the bound socket — which is not what was asked for:
+ * port `0` becomes an OS-assigned port, and a wildcard host stays a wildcard.
  */
-export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
-  get instance(): T['instance']
+export interface ServerAddress {
+  /** The bound host, verbatim — a wildcard bind reports `0.0.0.0` or `::`. `''` on a unix socket or a named pipe. */
+  readonly host: string
+  /** The bound port. Never `0` on a TCP bind, and `0` on a unix socket or a named pipe. */
+  readonly port: number
+  /** The unix socket or the named pipe the server is bound to. `''` on a TCP bind. */
+  readonly path: string
+  /**
+   * An origin that can be connected to: `https:` when the server serves TLS, `http:` otherwise. A wildcard
+   * {@link host} is rendered as the matching loopback address, since `0.0.0.0` is an address to accept on, not one
+   * to dial. `''` on a unix socket or a named pipe, which no URL reaches.
+   */
+  readonly origin: string
+}
 
+/**
+ * The callback `.server(configure)` takes: resolves the server's settings against the same context a plugin
+ * factory gets, so `config` is the resolved tree and the container resolves. `S` is what the application's adapter
+ * takes: `ServerSettings` under none, `NodeServerSettings` under `node()`, `BunServerSettings` under `bun()`.
+ */
+export type ServerConfigurer<S extends object, C = unknown> = (context: HTTPSetupContext<C>) => S | Promise<S>
+
+/** What `.serverCallback(...)` takes: the setup context, then the server the adapter built. */
+export type ServerCustomizer<C = unknown, I = unknown> = (
+  context: HTTPSetupContext<C>,
+  instance: I,
+) => void | Promise<void>
+
+/**
+ * An HTTP server the application runs: where it listens and a way to send it a request, but not its lifecycle,
+ * which `app.run()` and `app.close()` drive.
+ *
+ * The {@link WebApplication} is one, for its own server, and so is each of `app.listeners`.
+ */
+export interface IServer<I = unknown> {
   /** Where the server is listening, or `undefined` while it is not: before it runs, and once it has closed. */
   get address(): ServerAddress | undefined
+
+  /** What serves it on its runtime: Node's server under `node()`, Bun's under `bun()`, `undefined` under none. */
+  readonly instance: I
 
   /**
    * Sends `request` to this server without a socket, whether or not it is listening: a pass-through, not a client.
@@ -41,6 +73,19 @@ export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
    *
    * A runtime that calls its handler with a second argument of its own hands on the request alone, or that argument is
    * read as `options`: `Bun.serve({ fetch: request => app.request(request) })`.
+   *
+   * @throws ErrApplicationClosed once the application's close has torn the server down; while it drains, the answer
+   * is a 503.
    */
   request(request: Request | string | URL, options?: RequestInit): Promise<Response>
+
+  /**
+   * The runtime entry, as a fetch runtime calls it: Bun's and a worker's `fetch`, `Deno.serve`. What the runtime hands
+   * after the request reaches `ctx.platform.runtime`.
+   *
+   * Unlike {@link request}, it takes no `RequestInit`, and the request keeps the connection it came on. A server that
+   * listens itself answers it as `request` does. On a server that does not, a streamed body holds `app.close()` until
+   * it has been read or cancelled.
+   */
+  fetch(request: Request, ...runtime: unknown[]): Response | Promise<Response>
 }

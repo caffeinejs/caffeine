@@ -7,7 +7,7 @@ export interface CacheRoute {
   readonly method: string
   /** The registered path pattern, prefix included — `/api/pets/:id`, never the request URL. */
   readonly url: string
-  /** `PetsController.findOne`. Absent on a route registered straight on Fastify, or on an unnamed group or route. */
+  /** `PetsController.findOne`. Absent on an unnamed group or route. */
   readonly handler?: string
 }
 

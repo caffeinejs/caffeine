@@ -43,19 +43,12 @@
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
-  "dependencies": {
-    "fastify-plugin": "^6.0.0"
-  },
   "peerDependencies": {
     "@caffeinejs/http": "0.0.0",
-    "@caffeinejs/std": "0.0.0",
-    "fastify": "^5.0.0"
+    "@caffeinejs/std": "0.0.0"
   },
   "devDependencies": {
     "@caffeinejs/application": "0.0.0",
-    "@caffeinejs/di": "0.0.0",
-    "@fastify/compress": "^9.2.0",
-    "@fastify/cors": "^11.3.0",
-    "fastify": "^5.12.8"
+    "@caffeinejs/di": "0.0.0"
   }
 }

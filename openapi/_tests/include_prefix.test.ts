@@ -1,5 +1,5 @@
-import { Controller, Get, Prefix, WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { Controller, Get, Prefix, Router, createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'
@@ -17,13 +17,13 @@ class OrdersController {
 }
 void [OrdersController]
 
-const catalog = () => newRouter('/products').get('/', () => [])
+const catalog = () => new Router('/products').get('/', () => [])
 
 const isAdmin = (_group: unknown, _route: unknown, path: string) => path.startsWith('/admin')
 const isStorefront = (_group: unknown, _route: unknown, path: string) => !path.startsWith('/admin')
 
 describe('include on a prefixed controller', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -32,11 +32,11 @@ describe('include on a prefixed controller', () => {
 
   // Matching the router's path alone would publish the back office in the storefront's document.
   it('selects routes by the path the document publishes, prefix included', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi('storefront', o => o.docs(false).include(isStorefront)))
       .with(openapi('back-office', o => o.docs(false).include(isAdmin)))
-      .mount(catalog()) as WebApplication
+      .mount(catalog()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const provider = app.container.get(OpenAPIProvider)

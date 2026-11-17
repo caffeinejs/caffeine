@@ -7,13 +7,16 @@ import {
   Args,
   Catch,
   Controller,
+  ErrHTTPNotFound,
   ErrorHandler,
   Get,
   Produces,
+  Router,
   type ActionResult,
   type IContext,
+  createWebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { node } from '@caffeinejs/http/node'
 import { describe, it, expect } from 'vitest'
 
 import { HTML, html, type HTMLDefaults } from './index.js'
@@ -104,6 +107,14 @@ class RenderHTMLHandler implements ErrorHandler<ErrRenderHTML> {
   }
 }
 
+@Catch(ErrHTTPNotFound)
+class NotFoundPage implements ErrorHandler<ErrHTTPNotFound> {
+  handle(ctx: IContext): ActionResult {
+    ctx.status(404)
+    return HTML('<html><body>missing</body></html>')
+  }
+}
+
 @Controller('/html-error')
 class HTMLErrorController {
   @Get('/boom')
@@ -115,7 +126,7 @@ class HTMLErrorController {
 void [HTMLController, HTMLErrorController]
 
 function htmlApp(defaults?: Partial<HTMLDefaults>) {
-  return createWebApplication({})
+  return createWebApplication({ adapter: node() })
     .errorHandling(e => e.globalHandlers(RenderHTMLHandler))
     .with(defaults === undefined ? html() : html(() => defaults))
 }
@@ -133,10 +144,10 @@ describe('HTML', () => {
     expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
   })
 
-  // Rendering must not require any application wiring: with no plugin registered nothing decorated the
-  // instance and HTML_DEFAULTS applies. An application that only ever renders registers nothing.
+  // Rendering must not require any application wiring: with no plugin registered no route carries settings
+  // and HTML_DEFAULTS applies. An application that only ever renders registers nothing.
   it('renders in an application that never registered the HTML plugin', async () => {
-    const app = createWebApplication({})
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/html/document')
@@ -184,7 +195,7 @@ describe('HTML', () => {
     })
   })
 
-  // The plugin's autoDoctype setting only matters if it survives onto the instance decoration and back out
+  // The plugin's autoDoctype setting only matters if it survives onto the route and back out
   // in respond() — the only route a Responder has to application state. Content-Type has no app-level
   // default, so it stays the hardcoded one here.
   it('applies the application defaults', async () => {
@@ -203,7 +214,7 @@ describe('HTML', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ html: { autoDoctype: false } }))
       .build().config
-    const app = createWebApplication({ config: conf }).with(html(({ config }) => config.html))
+    const app = createWebApplication({ adapter: node(), config: conf }).with(html(({ config }) => config.html))
 
     await app.bootstrap()
 
@@ -275,5 +286,40 @@ describe('HTML', () => {
     expect(res.status).toBe(404)
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
     expect(await res.text()).toBe('<div>missing</div>')
+  })
+
+  // A router's plugin parameterizes its own routes, as it did a route group's Fastify context.
+  it("applies a router's html() settings to its routes alone", async () => {
+    const page = () => HTML('<html><body>x</body></html>')
+    const app = createWebApplication({ adapter: node() })
+      .with(html(() => ({ autoDoctype: true })))
+      .mount(
+        new Router('/top').get('/').handler(page),
+        new Router('/r')
+          .with(html(() => ({ autoDoctype: false })))
+          .get('/')
+          .handler(page),
+      )
+    await app.bootstrap()
+
+    expect(await (await app.request('/top')).text()).toBe('<!doctype html><html><body>x</body></html>')
+    expect(await (await app.request('/r')).text()).toBe('<html><body>x</body></html>')
+
+    await app.close()
+  })
+
+  // Settings belong to routes: a request none matched has none, whatever the application registered.
+  it('renders a request no route matched on the library defaults', async () => {
+    const app = createWebApplication({ adapter: node() })
+      .errorHandling(e => e.globalHandlers(NotFoundPage))
+      .with(html(() => ({ autoDoctype: false })))
+    await app.bootstrap()
+
+    const res = await app.request('/nope')
+
+    expect(res.status).toBe(404)
+    expect(await res.text()).toBe('<!doctype html><html><body>missing</body></html>')
+
+    await app.close()
   })
 })

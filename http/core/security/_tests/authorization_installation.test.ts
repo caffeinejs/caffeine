@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
+import { authentication } from '../../../core/security/security.js'
 import {
   AllowAnonymous,
   AuthenticateResult,
@@ -13,7 +15,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../index.js'
-import { createWebApplication, authentication } from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // Kept in its own file, protected-route cases last: `WebApplication` snapshots the global `@Controller`
 // registry at construction, and that registry only ever grows within a test file — so an `@Authorize`-
@@ -30,7 +32,7 @@ describe('authorization installation', () => {
     }
     void [NoneNeededController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/authz-none-needed')
@@ -50,7 +52,7 @@ describe('authorization installation', () => {
     }
     void [AnonOnlyController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/authz-anon-only')
@@ -67,7 +69,7 @@ describe('authorization installation', () => {
     }
     void [StandaloneController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     // Never named by a route: the policy is only there so `.install(Authorization(...))` has something to install.
     app.install(Authorization(authz => authz.addPolicy('SignedIn', p => p.requireAuthenticated())))
     await app.bootstrap()
@@ -76,7 +78,7 @@ describe('authorization installation', () => {
     expect(res.status).toBe(200)
   })
 
-  // Authentication is checked first (see `platform/fastify/adapter.ts`), so a protected route with neither feature configured
+  // Authentication is checked first (see `assertAuthenticationConfigured`), so a protected route with neither feature configured
   // is refused with the authentication-specific error — calling `.install(Authentication(...)).with(authentication())` would also auto-install
   // authorization, so that is the one actionable fix. This is unaffected by the authorization changes; it is
   // asserted here as a regression guard alongside the narrower authorization-only case below.
@@ -91,7 +93,7 @@ describe('authorization installation', () => {
     }
     void [NeitherConfiguredController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
 
     await expect(app.bootstrap()).rejects.toThrow(ErrAuthenticationRequired)
   })
@@ -109,7 +111,7 @@ describe('authorization installation', () => {
     }
     void [BypassedController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     app.container.bind(AuthenticationService, t => t.toValue({} as AuthenticationService))
 
     await expect(app.bootstrap()).rejects.toThrow(ErrAuthorizationRequired)
@@ -134,7 +136,7 @@ describe('authorization installation', () => {
       }
     }
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap((_config, application) => {
       application
         .install(Authentication(auth => auth.addStrategy('default', new None({})).default('default')))

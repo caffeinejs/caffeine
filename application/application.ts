@@ -130,11 +130,16 @@ export class ErrApplicationStarted extends ErrCaffeine {
   }
 }
 
-/** Thrown when an application is readied or run once {@link Application.close} has been called. */
+/**
+ * Thrown when an application is readied or run, or its server reached, once {@link Application.close} has been called.
+ */
 export class ErrApplicationClosed extends ErrCaffeine {
-  constructor() {
+  /**
+   * @param action - What was asked, as it reads after "Cannot", e.g. `reach the server`.
+   */
+  constructor(action = 'start the application') {
     super(
-      errMessage('Cannot start the application: it has been closed')
+      errMessage(`Cannot ${action}: the application has been closed`)
         .solutions('An application runs once: create a new one to start again')
         .reference('@caffeinejs/application', ErrApplicationClosed)
         .build(),

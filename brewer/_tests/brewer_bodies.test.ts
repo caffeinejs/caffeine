@@ -1,12 +1,13 @@
 import { runInNewContext } from 'node:vm'
 
 import { $t } from '@caffeinejs/application/schema'
-import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { formData, multipart } from '@caffeinejs/multipart'
+import { Router, bodyAsBuffer, bodyAsStream, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
+import { KiB } from '@caffeinejs/std/bytes'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
+import { formOf } from './_forms.js'
 
 /**
  * What a call sends, by content type, as the server reads it back; and what a call reads back from the server.
@@ -65,15 +66,21 @@ const echo = new Router('/echo')
     return { size }
   })
 
+const fileSize = 64 * KiB
+
 const uploads = new Router('/uploads')
   .post('/form')
+  .extend(bodyAsBuffer())
+  .bodyLimit(fileSize)
   .handler(async ctx => ({
     type: ctx.req.header('content-type') ?? null,
-    parts: await partsOf(await formData(ctx).form()),
+    parts: await partsOf(await formOf(ctx)),
   }))
   .post('/profile')
   .schema({ body: $t.Object({ caption: $t.String(), avatar: $t.File(), photos: $t.Optional($t.Files()) }) })
-  .handler(async ctx => ({ parts: await partsOf(await formData(ctx).form()) }))
+  .extend(bodyAsBuffer())
+  .bodyLimit(fileSize)
+  .handler(async ctx => ({ parts: await partsOf(await formOf(ctx)) }))
 
 const adoptions = new Router('/adoptions')
   .post('/')
@@ -102,11 +109,7 @@ const downloads = new Router('/downloads')
     return 'Read me first.'
   })
 
-const fileSize = 64 * 1024
-
-const app = createWebApplication()
-  .with(multipart(() => ({ limits: { fileSize } })))
-  .mount(echo, uploads, adoptions, downloads)
+const app = createWebApplication({ adapter: node() }).mount(echo, uploads, adoptions, downloads)
 
 let origin: string
 
@@ -304,7 +307,7 @@ describe('brewer sending a body', () => {
       })
     })
 
-    it('should resolve with 413 for a file over the server limit, rather than throw', async () => {
+    it('should resolve with 413 for a form over the route limit, rather than throw', async () => {
       const client = brewer(app)
       const data = new FormData()
       data.set('video', new File([new Uint8Array(fileSize + 1)], 'video.mp4', { type: 'video/mp4' }))
@@ -312,7 +315,7 @@ describe('brewer sending a body', () => {
       const res = await client.uploads.form.post({ body: data })
 
       expect(res.status).toBe(413)
-      expect(await res.json()).toMatchObject({ code: 'FST_REQ_FILE_TOO_LARGE' })
+      expect(await res.json()).toMatchObject({ code: 'ERR_HTTP_CONTENT_TOO_LARGE' })
     })
   })
 
@@ -466,7 +469,7 @@ describe('brewer sending a body', () => {
       })
 
       expect(res.status).toBe(413)
-      expect(await res.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
+      expect(await res.json()).toMatchObject({ code: 'ERR_HTTP_CONTENT_TOO_LARGE' })
     })
   })
 

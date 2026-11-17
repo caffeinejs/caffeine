@@ -117,7 +117,7 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * Sends the stack, and the chain of causes behind it, as `stacktrace` on every error body this package
    * renders — the generic 5xx an unexpected failure answers with, a thrown `ErrHTTP`, and an error naming a
-   * public message, and a request Fastify refused.
+   * public message.
    *
    * Off by default, and meant for a development deployment: a stack names source paths, and a cause names the
    * hosts and driver detail the generic body exists to withhold. A body an `ErrHTTP` carried and anything a
@@ -204,9 +204,7 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
    * Merges over earlier calls key by key. Unset, `type` is `about:blank`, `title` the status phrase, `code`
    * `ERR_VALIDATION`, and a problem lists at most 25 entries, its `detail` saying how many there were.
    *
-   * Fastify's validator reports the first error it meets. An application that wants every one turns on Ajv's
-   * `allErrors` through `.server()`, and pays for it: Ajv then records every error a request holds, as many as its
-   * items times the fields each one fails, before any cap applies.
+   * The default schema compiler reports the first issue of a TypeBox slot only.
    *
    * @throws ErrConfiguration when `maxErrors` is not an integer of at least 1.
    */
@@ -242,7 +240,7 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
         .internal(),
     )
 
-    // What the adapter installs the server's error handler with, ahead of everything `.with(...)` registers.
+    // What the engine installs the server's error handler with, ahead of everything `.with(...)` registers.
     kit.container.bind(kErrorHandlingOptions, t =>
       t
         .toValue({

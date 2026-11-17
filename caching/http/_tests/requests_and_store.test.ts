@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream'
 
-import { Controller, ErrConfiguration, Get, Header, Post, Status } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Controller, ErrConfiguration, Get, Header, Post, Status, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -46,7 +46,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [NoStoreRequestController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -70,7 +70,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [CaseController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -93,7 +93,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [PragmaController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -119,7 +119,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [OnlyIfCachedController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -176,7 +176,7 @@ describe('what of the query the key carries', () => {
     (await app.request(url)).headers.get('x-cache')
 
   it('keeps the parameters a route lists and drops the rest, in any order', async () => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -187,7 +187,9 @@ describe('what of the query the key carries', () => {
   })
 
   it('falls back to the install list, and a route may leave the whole query out', async () => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).varyByQuery(['q'])))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).varyByQuery(['q'])),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -201,7 +203,7 @@ describe('what of the query the key carries', () => {
   })
 
   it('counts the whole query when nobody lists anything', async () => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -255,7 +257,7 @@ describe('a response left out of the store', () => {
 
   it('is larger than maxEntrySize: it goes out, is not stored, and is reported', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(new MemoryHTTPCacheStore())
@@ -283,7 +285,7 @@ describe('a response left out of the store', () => {
 
   it('sets a cookie: it is reported the same way', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
     )
     close = () => app.close()
@@ -298,7 +300,7 @@ describe('a response left out of the store', () => {
   // is silently empty.
   it('is a stream: it goes out, is not stored, and is reported without a size', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
     )
     close = () => app.close()
@@ -325,7 +327,7 @@ describe('a response left out of the store', () => {
   it('has no body: it goes out, is not stored, and is reported with a size of zero', async () => {
     const skips: CacheSkipEvent[] = []
     const stores: unknown[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e), onStore: e => stores.push(e) }),
       ),
@@ -351,7 +353,7 @@ describe('a response left out of the store', () => {
   // response is still one the store would have kept, and is reported under the key it would have been kept by.
   it('is reported under its key when the request bypassed the read', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
     )
     close = () => app.close()
@@ -370,7 +372,7 @@ describe('a response left out of the store', () => {
 
   // A size is a count of bytes. Text such as '1MB' was one before sizes were counts; one left behind fails loudly.
   it.each([1.5, -1, Number.NaN, '1MB'])('refuses the maxEntrySize %o at start-up', async size => {
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).maxEntrySize(size as number)),
     )
     close = () => app.close()
@@ -385,7 +387,7 @@ describe('a response left out of the store', () => {
 
   it('stores a payload of exactly maxEntrySize and leaves out one a byte larger', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(new MemoryHTTPCacheStore())
@@ -402,7 +404,7 @@ describe('a response left out of the store', () => {
     expect(skips).toEqual([])
 
     await app.close()
-    const tighter = createWebApplication().with(
+    const tighter = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(new MemoryHTTPCacheStore())
@@ -487,7 +489,7 @@ describe('a store that rejects', () => {
       onInvalidate: event => invalidated.push(event),
     }
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(observer)))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(store).observer(observer)))
     close = () => app.close()
     await app.bootstrap()
 
@@ -519,7 +521,9 @@ describe('a store that rejects', () => {
     store.failGet = true
     const log = new RecordingLogger()
 
-    const app = createWebApplication({ logger: log }).with(HTTPCaching(b => b.store(store).observer({ onHit() {} })))
+    const app = createWebApplication({ adapter: node(), logger: log }).with(
+      HTTPCaching(b => b.store(store).observer({ onHit() {} })),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -538,7 +542,7 @@ describe('a store that rejects', () => {
     const log = new RecordingLogger()
     const errors: CacheErrorEvent[] = []
 
-    const app = createWebApplication({ logger: log }).with(
+    const app = createWebApplication({ adapter: node(), logger: log }).with(
       HTTPCaching(b => b.store(store).observer({ onError: event => errors.push(event) })),
     )
     close = () => app.close()
@@ -595,7 +599,7 @@ describe('a store that never answers', () => {
 
   it('gives up on each store call after storeTimeout, and reports it like a failure', async () => {
     const errors: CacheErrorEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(new HungStore())
@@ -623,7 +627,7 @@ describe('a store that never answers', () => {
   })
 
   it.each([0, -1, 'soon', Number.NaN])('refuses a storeTimeout of %s', async value => {
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).storeTimeout(value as number)),
     )
     close = () => app.close()
@@ -665,7 +669,7 @@ describe('an entry the application put in the store itself', () => {
       { ttl: 60 * Second },
     )
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(store)))
     close = () => app.close()
     await app.bootstrap()
     const res = await app.request('/store-warm/data')
@@ -703,7 +707,7 @@ describe('a store that hands back an entry past the route ttl', () => {
     }
     void [StaleStoreController]
 
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore(lru)).observer({ onMiss: event => misses.push(event) })),
     )
     close = () => app.close()

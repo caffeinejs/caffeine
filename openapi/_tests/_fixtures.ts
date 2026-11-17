@@ -60,7 +60,6 @@ export function fixtureRouter(
         // Empty, as on a compiled route that declares none: no response headers, no constraints.
         header: new Map(),
         config: new Map(),
-        options: new Map(),
         detail: route.detail,
         authorization: {
           hasProtection: authz !== undefined && !authz.allowAnonymous,

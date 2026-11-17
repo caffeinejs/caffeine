@@ -88,6 +88,13 @@ const servers: ServerConfig[] = [
     requiresBuild: true,
   },
   {
+    name: 'caffeine (codec)',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'caffeine-web-codec', 'caffeine-web-codec.js')],
+    port: 3031,
+    requiresBuild: true,
+  },
+  {
     name: 'elysia',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'request', 'elysia', 'elysia.js')],

@@ -21,8 +21,8 @@ await buildStatic({ root: 'site/dist' }) // the br and gzip variants, and the ma
 Start-up reads every file the manifest lists and checks its hash, so a file changed after the build fails the
 deployment instead of going out under the tag of the bytes it replaced.
 
-The build keeps its variants in `.static-variants/` under the root. It treats compressed files from an older
-`@fastify/static` setup as site files. A legacy `.br` or `.deflate` sidecar can fail the build, and a legacy
+The build keeps its variants in `.static-variants/` under the root. It treats compressed files an earlier
+precompressed setup left in the root as site files. A legacy `.br` or `.deflate` sidecar can fail the build, and a legacy
 `.gz` sidecar can become a downloadable archive.
 
 Build into an empty output directory when migrating. If you reuse an existing directory, list the candidate
@@ -50,8 +50,7 @@ handler returns it: a handler that drops the value answers with nothing in it.
 ```ts
 import { resolve } from 'node:path'
 
-import { ErrHTTPNotFound, type IContext } from '@caffeinejs/http'
-import { compress, newRouter } from '@caffeinejs/http/fastify'
+import { ErrHTTPNotFound, Router, type IContext } from '@caffeinejs/http'
 import { isDocumentRequest, sendFile, staticFiles } from '@caffeinejs/static'
 
 const DIST = resolve('site/dist')
@@ -62,8 +61,7 @@ const notFound = (ctx: IContext): never => {
 }
 const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
 
-const pages = newRouter()
-  .extend(compress(false))
+const pages = new Router()
   .detail('http', { internal: true }) // @caffeinejs/openapi does not describe client routes
   .authorize({ allowAnonymous: true })
   .get('/', shellDocument)
@@ -72,7 +70,7 @@ const pages = newRouter()
 
 // The API owns its own misses. **One line per API base, not per controller** — three controllers under
 // `/api/*` share this one. Without it a browser navigating to `/api/typo` sees the application.
-const apiMisses = newRouter('/api').get('/*', notFound)
+const apiMisses = new Router('/api').get('/*', notFound)
 
 app
   .with(staticFiles(s => s.serve(DIST, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
@@ -85,8 +83,7 @@ it: a miss under `/assets/` is the mount's own 404, and a miss at the root falls
 
 The `br` and `gzip` variants the build wrote to `.static-variants/` are negotiated by `Accept-Encoding` and are
 never URLs of their own.
-They apply to `sendFile` too. If the server uses `@fastify/compress`, use `compress(false)` on routes that
-return `sendFile` so the file's encoding and strong ETag still describe the bytes sent.
+They apply to `sendFile` too.
 
 `immutable: ['assets/**']` pins the content-hashed files for a year (`immutableMaxAge` changes it); every other
 file is revalidated on each use (`cacheControl`, default `'no-cache'`).
@@ -110,21 +107,15 @@ register both with `forward(...)` if you need each.
 One `authorize` per tier, on the application's own routers, over the same bundle:
 
 ```ts
-const publicPages = newRouter()
-  .extend(compress(false))
+const publicPages = new Router()
   .authorize({ allowAnonymous: true })
   .get('/', shellDocument)
   .get('/login', shellDocument)
   .get('/*', clientRoute)
 
-const memberPages = newRouter()
-  .extend(compress(false))
-  .authorize()
-  .get('/dashboard', shellDocument)
-  .get('/dashboard/*', clientRoute)
+const memberPages = new Router().authorize().get('/dashboard', shellDocument).get('/dashboard/*', clientRoute)
 
-const adminPages = newRouter()
-  .extend(compress(false))
+const adminPages = new Router()
   .authorize({ roles: ['admin'] })
   .get('/admin', shellDocument)
   .get('/admin/*', clientRoute)
@@ -140,25 +131,24 @@ it. The data is protected by the API.
 **Two routes per gated subtree** — `/dashboard` and `/dashboard/*`. find-my-way does not match `/dashboard`
 against `/dashboard/*`; the wildcard covers `/dashboard/` with an empty match, but not the bare path.
 
-A prefixed router needs no special handling for the bare path: `newRouter('/app')` with a route at `/`
+A prefixed router needs no special handling for the bare path: `new Router('/app')` with a route at `/`
 composes to `/app`, so the prefixed router declares the pair as follows.
 
 ```ts
-newRouter('/app').extend(compress(false)).get('/', shellDocument).get('/*', clientRoute)
+new Router('/app').get('/', shellDocument).get('/*', clientRoute)
 ```
 
 ## A separate application whose bundle must be gated too
 
-An administration build nobody else may even download. Its files are **not** routed: a mount's file routes are
-raw Fastify routes carrying no authorization, so they would fall to the application's fallback policy. Serving
+An administration build nobody else may even download. Its files are **not** routed: a mount's file routes
+carry no authorization, so they would fall to the application's fallback policy. Serving
 them from a compiled route puts every byte behind the same `authorize` as the page.
 
 ```ts
 const ADMIN = resolve('admin/dist')
 const adminDocument = (ctx: IContext) => sendFile(ctx, 'index.html', ADMIN)
 
-const admin = newRouter()
-  .extend(compress(false))
+const admin = new Router()
   .detail('http', { internal: true })
   .authorize({ roles: ['admin'] })
   .get('/admin', adminDocument)
@@ -242,6 +232,6 @@ A file the build lists is better served by a mount or `sendFile`, which never de
 ## Do not
 
 - Return `index.html` from `@Catch(ErrHTTPNotFound)`. Client routes are routes; write them.
-- Reach for `setNotFoundHandler`. The application's own stays its own.
+- Replace the server's not-found answer. A miss throws `ErrHTTPNotFound`, which the `@Catch` handlers already answer.
 - Read `Sec-Fetch-*` or `Accept` yourself — `isDocumentRequest` and the authentication schemes must agree, or
   a request is redirected to sign in by one and answered 404 by the other.

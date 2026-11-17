@@ -19,7 +19,7 @@ function line(
 }
 
 describe('the attributes a cookie goes out with', () => {
-  // What nobody wrote down: the whole application, and Lax, as `@fastify/cookie` defaulted.
+  // What nobody wrote down: the whole application, and Lax, as Fastify's cookie plugin defaulted.
   it('defaults to Path=/ and SameSite=Lax', () => {
     expect(line('set', 'theme', 'dark')).toBe('theme=dark; Path=/; SameSite=Lax')
   })
@@ -35,7 +35,7 @@ describe('the attributes a cookie goes out with', () => {
     )
   })
 
-  // How a call opts out of a default: the way `Object.assign` let it with `@fastify/cookie`.
+  // How a call opts out of a default: the way `Object.assign` let it with Fastify's cookie plugin.
   it('clears a default the call writes as undefined, and leaves SameSite off for false', () => {
     expect(line('set', 'theme', 'dark', { path: undefined, sameSite: false })).toBe('theme=dark')
   })

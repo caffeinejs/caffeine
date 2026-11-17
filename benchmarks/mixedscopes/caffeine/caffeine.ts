@@ -11,8 +11,10 @@ import {
   UseGuards,
   type Guard,
   type GuardInput,
+  type IContext,
+  createWebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, Context } from '@caffeinejs/http/fastify'
+import { node } from '@caffeinejs/http/node'
 
 const PORT = parseInt(process.env.PORT ?? '3030', 10)
 
@@ -85,7 +87,7 @@ class AppController {
   @UseGuards(APIKeyGuard)
   @Args([$p.param(), $p.query(), $p.body(), $p.header(), $p.context()])
   @Schema({ params: schema, querystring: schema, body: schema, headers: schema, response: responseSchema })
-  test(params: DataSchema, q: DataSchema, b: DataSchema, h: DataSchema, ctx: Context) {
+  test(params: DataSchema, q: DataSchema, b: DataSchema, h: DataSchema, ctx: IContext) {
     this.logger.get().log('request')
 
     ctx.header('text', h.text)
@@ -103,7 +105,7 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
 
 app.use((ctx, next) => {
   ctx.header('x-request-id', Math.random().toString(36).slice(2))

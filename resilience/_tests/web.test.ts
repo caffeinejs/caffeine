@@ -1,6 +1,6 @@
 import { CaffeineIoC, Injectable, Lifetime, Profile, Scopes } from '@caffeinejs/di'
-import { Catch, Controller, Get, type IContext, Post } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Catch, Controller, Get, type IContext, Post, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Hour, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -269,7 +269,7 @@ afterEach(async () => {
 
 // A fresh application per test, so every breaker and quota starts closed and full.
 async function storefront() {
-  const app = createWebApplication({ container: new CaffeineIoC({ profiles: ['resilience-web'] }) })
+  const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ profiles: ['resilience-web'] }) })
     .install(
       Resilience(r =>
         r

@@ -51,7 +51,7 @@ const PresetSchema = $t.Object({
  * fails the load instead of running on a value nobody wrote down.
  */
 export const ConfigSchema = $t.Object({
-  // Handed to `.server(...)` as the listen options, so the keys are Fastify's.
+  // Handed to `.server(...)` as `listen`, so the keys are node:net's listen options.
   server: $t.Object({
     host: $t.String(),
     port: $t.Number(),

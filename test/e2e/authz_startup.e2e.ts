@@ -1,5 +1,11 @@
-import { type AuthenticationBuilder, type AuthorizationBuilder, Authentication, Authorization } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import {
+  authentication,
+  type AuthenticationBuilder,
+  type AuthorizationBuilder,
+  Authentication,
+  Authorization,
+  Router,
+} from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { startApp, type E2EApplication } from './internal/app.js'
@@ -28,7 +34,7 @@ async function refusal(configure: (app: E2EApplication) => unknown): Promise<unk
 
 describe('an application that must not start', () => {
   it('protects a route and configures no authentication', async () => {
-    const error = await refusal(app => app.mount(newRouter('/private').authorize().get('/', ok)))
+    const error = await refusal(app => app.mount(new Router('/private').authorize().get('/', ok)))
 
     expect(error).toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
   })
@@ -39,7 +45,7 @@ describe('an application that must not start', () => {
         .install(Authentication(auth => auth.addJWTBearer(localJWT)))
         .with(authentication())
         .install(Authorization(authz => authz.addPolicy('engineering', p => p.requireAuthenticated())))
-        .mount(newRouter('/private').authorize({ policy: 'enginering' }).get('/', ok)),
+        .mount(new Router('/private').authorize({ policy: 'enginering' }).get('/', ok)),
     )
 
     expect(error).toMatchObject({ code: 'ERR_AUTHZ_POLICY_NOT_FOUND' })
@@ -71,11 +77,7 @@ describe('an application that must not start', () => {
       app
         .install(Authentication(auth => auth.addJWTBearer(localJWT)))
         .with(authentication())
-        .mount(
-          newRouter('/private')
-            .authorize({ schemes: ['Beaerer'] })
-            .get('/', ok),
-        ),
+        .mount(new Router('/private').authorize({ schemes: ['Beaerer'] }).get('/', ok)),
     )
 
     expect(error).toMatchObject({ code: 'ERR_AUTH_SCHEME_NOT_FOUND' })

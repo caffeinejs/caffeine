@@ -31,7 +31,7 @@ export function joinPaths(base: string, path: string): string {
   return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
 }
 
-/** The full URL a route answers on, matching how the adapter registers it. */
+/** The full URL a route answers on, matching how the server registers it. */
 export function routeURL(prefix: string | undefined, routerPath: string, routePath: string): string {
   return `${prefix ?? ''}${joinPaths(routerPath, routePath)}`
 }

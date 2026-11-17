@@ -37,7 +37,7 @@ createWebApplication({ container })
 `.install(Feature(configure))` takes features — PascalCase factories, container binders, deduplicated and
 order-free. `.with(factory)` takes server plugins — camelCase factories, registered in written order, HTTP only.
 A router takes `.with(factory)` too, for its own routes; route extensions are applied with `.extend(...)`. A factory
-may return an `HTTPPlugin`, written against Caffeine alone; either kind mounts routers and adds middleware where it
+returns an `HTTPPlugin`, written against Caffeine alone, which mounts routers and adds middleware and hooks where it
 was registered with `context.app`.
 The authentication gate is a plugin: `.install(Authentication(a => …))` binds the schemes, `.with(authentication())`
 gates requests where it is written.
@@ -74,16 +74,13 @@ In a configuration schema, declare the field `$t.Duration()`: it reads duration 
 Every size Caffeine takes is a `ByteSize` from `@caffeinejs/std/bytes`: a count of bytes. Write it with the constants, never as `1024 * 1024` or as text:
 
 ```ts
-import { bytes, KiB, MiB } from '@caffeinejs/std/bytes'
+import { KiB, MiB } from '@caffeinejs/std/bytes'
 
 @BodyLimit(10 * MiB)
 @Controller('/uploads')
 class UploadsController {}
 
 app.with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore({ maxSize: 64 * MiB })).maxEntrySize(512 * KiB)))
-
-// An option Caffeine does not type keeps its library's shape, in bytes as well.
-multipart(() => ({ limits: { fileSize: bytes('10mb') } }))
 ```
 
 Every unit is binary: `'1kb'` and `1 * KiB` are both 1024. There is no `KB` constant. Options that took text before (`@BodyLimit('10mb')`, `maxEntrySize('1MB')`, `maxSize: '64MB'`) take a count; wrap text that must stay text in `bytes(...)`.

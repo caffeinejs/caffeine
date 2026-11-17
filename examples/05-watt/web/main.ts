@@ -1,16 +1,17 @@
-import { createWebApplication, healthProbes, newRouter } from '@caffeinejs/http/fastify'
+import { healthProbes, Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { getBasePath } from '@platformatic/globals'
 
 import { registerWattChecks } from '../watt.js'
 
 // Every application in a Watt runtime answers the others at `http://<id>.plt.local`, in process.
-const routes = newRouter()
+const routes = new Router()
   .get('/', () => ({ application: 'web' }))
   .get('/orders', async () => (await fetch('http://orders.plt.local/orders')).json())
 
 // Script mode: the module starts the application exactly as it would outside Watt, which takes over the `listen()`
 // inside `run()` and binds the host and port `watt.json` names. The same file runs under plain Node.
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   // `/livez` on the public port as well: Watt's own `/status` also fails whenever readiness does, so a liveness
   // probe that must not restart the pod over a dependency points here instead.
   .with(healthProbes())

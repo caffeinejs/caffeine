@@ -1,5 +1,5 @@
-import { WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { HTTPPlugin, Router, createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -13,10 +13,10 @@ import { openapi } from './openapi.js'
 import { OpenAPIProvider } from './provider.js'
 import type { OpenAPIDocument } from './spec/spec.js'
 
-const items = () => newRouter('/items').get('/', () => [])
+const items = () => new Router('/items').get('/', () => [])
 
 describe('OpenAPIProvider', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -29,10 +29,10 @@ describe('OpenAPIProvider', () => {
 
   // Most applications have one document, so asking for "the document" needs no name.
   it('returns the default document without a name, the same object the endpoint serves', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Shop', version: '1.0.0' }).docs(false)))
-      .mount(items()) as WebApplication
+      .mount(items()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const served = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
@@ -43,19 +43,29 @@ describe('OpenAPIProvider', () => {
   })
 
   it('returns the only document without a name when it is not called default', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
-      .with(openapi('public', o => o.info({ title: 'Public', version: '1.0.0' }).docs(false))) as WebApplication
+      .with(openapi('public', o => o.info({ title: 'Public', version: '1.0.0' }).docs(false))) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.bootstrap()
 
     expect(provider().docs().info.title).toBe('Public')
   })
 
   it('prefers the default document when several are registered', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi('admin', o => o.info({ title: 'Admin', version: '1.0.0' }).docs(false)))
-      .with(openapi(o => o.info({ title: 'Main', version: '1.0.0' }).docs(false))) as WebApplication
+      .with(openapi(o => o.info({ title: 'Main', version: '1.0.0' }).docs(false))) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.bootstrap()
 
     expect(provider().docs().info.title).toBe('Main')
@@ -64,10 +74,10 @@ describe('OpenAPIProvider', () => {
 
   // Picking one of several would hand a consumer the wrong API without a word.
   it('refuses to guess between several documents when none is default', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi('public', o => o.docs(false)))
-      .with(openapi('admin', o => o.docs(false))) as WebApplication
+      .with(openapi('admin', o => o.docs(false))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect(() => provider().docs()).toThrow(ErrOpenAPIDocumentAmbiguous)
@@ -78,9 +88,9 @@ describe('OpenAPIProvider', () => {
   })
 
   it('names the registered documents when asked for one that does not exist', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
-      .with(openapi('public', o => o.docs(false))) as WebApplication
+      .with(openapi('public', o => o.docs(false))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect(() => provider().docs('admn')).toThrow(ErrOpenAPIDocumentNotFound)
@@ -92,7 +102,7 @@ describe('OpenAPIProvider', () => {
   it('refuses to hand out a document before the server is ready', async () => {
     let early: unknown
 
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi(o => o.docs(false)))
       .with(context => {
@@ -101,8 +111,10 @@ describe('OpenAPIProvider', () => {
         } catch (error) {
           early = error
         }
-        return async () => {}
-      }) as WebApplication
+        return new (class extends HTTPPlugin {
+          register(): void {}
+        })()
+      }) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect(early).toBeInstanceOf(ErrOpenAPIDocumentNotReady)
@@ -113,10 +125,15 @@ describe('OpenAPIProvider', () => {
 
   // Two plugins writing one name would leave one document unreachable, decided by plugin order.
   it('refuses two plugins registering the same name at start-up', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi('admin', o => o.docs(false)))
-      .with(openapi('admin', o => o.json('/other.json').yaml(false).docs(false))) as WebApplication
+      .with(openapi('admin', o => o.json('/other.json').yaml(false).docs(false))) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined
@@ -130,10 +147,10 @@ describe('OpenAPIProvider', () => {
   describe('the document it hands out', () => {
     // The provider returns the very object the endpoints serve; changing it would change the API's published shape.
     it('cannot be changed by a consumer', async () => {
-      app = createWebApplication({})
+      app = createWebApplication({ adapter: node() })
         .install(OpenAPI())
         .with(openapi(o => o.docs(false)))
-        .mount(items()) as WebApplication
+        .mount(items()) as WebApplication<never, never, unknown, NodeAdapter>
       await app.bootstrap()
 
       const document = provider().docs()
@@ -152,10 +169,15 @@ describe('OpenAPIProvider', () => {
       const info = { title: 'Shop', version: '1.0.0' }
       const imported: OpenAPIDocument = { openapi: '3.1.1', info: { title: 'Imported', version: '1.0.0' }, paths: {} }
 
-      app = createWebApplication({})
+      app = createWebApplication({ adapter: node() })
         .install(OpenAPI())
         .with(openapi(o => o.info(info).docs(false)))
-        .with(openapi('legacy', o => o.document(imported).docs(false))) as WebApplication
+        .with(openapi('legacy', o => o.document(imported).docs(false))) as WebApplication<
+        never,
+        never,
+        unknown,
+        NodeAdapter
+      >
       await app.bootstrap()
 
       expect(provider().docs().info).toEqual(info)

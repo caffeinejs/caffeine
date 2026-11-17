@@ -2,6 +2,8 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { Day, Minute } from '@caffeinejs/std/duration'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
+import { authentication } from '../../../../core/security/security.js'
 import {
   Authorize,
   Claim,
@@ -20,7 +22,7 @@ import {
   $p,
   Authentication,
 } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { node } from '../../../../platform/node/index.js'
 
 const SECRET = 'a-very-long-test-secret-key-32-bytes!'
 const ISSUER = 'https://test.example.com'
@@ -115,7 +117,7 @@ async function buildApp() {
   const container = new CaffeineIoC()
   const store = new InMemoryRefreshStore()
   container.bind(RefreshTokenStore, t => t.toValue(store))
-  const builder = createWebApplication({ container })
+  const builder = createWebApplication({ adapter: node(), container })
   builder
     .install(
       Authentication(a =>

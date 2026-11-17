@@ -71,16 +71,6 @@ class FakePetsRepository {
     return updated
   }
 
-  async addPhoto(id: string, url: string): Promise<PetDTO | undefined> {
-    const current = this.#pets.get(id)
-    if (!current) {
-      return undefined
-    }
-    const updated: PetDTO = { ...current, photos: [...current.photos, url] }
-    this.#pets.set(id, updated)
-    return updated
-  }
-
   async remove(id: string): Promise<boolean> {
     return this.#pets.delete(id)
   }

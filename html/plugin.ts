@@ -1,16 +1,14 @@
-import type { HTTPSetupContext } from '@caffeinejs/http'
-import type { HTTPPluginFactory, RouterTypes } from '@caffeinejs/http/fastify'
-import type { FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
+import { HTTPPlugin, type HTTPPluginFactory, type HTTPSetupContext } from '@caffeinejs/http'
 
-import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
+import { routeSettings, type HTMLDefaults } from './config.js'
 
 /**
- * Sets what every `HTML(...)` response on this instance starts from: `.with(html())`.
+ * Sets what every `HTML(...)` response starts from: `.with(html())`.
  *
- * Registering it is optional — `HTML(...)` renders on {@link HTML_DEFAULTS} without it. `fastify-plugin`
- * wrapped, so registering it on the application reaches every route group; registering it on one router
- * parameterizes that group's responses alone.
+ * Registering it is optional — `HTML(...)` renders on `HTML_DEFAULTS` without it. On the application it reaches
+ * every route; on a router, that router's routes, in place of what the application set. A request no route matched,
+ * such as one an error handler answers with a not-found page, renders on `HTML_DEFAULTS`. A second `html()` in one
+ * slot is refused.
  *
  * `options` runs once, when the factory builds the plugin, and the settings it returns are read on every
  * response, so handing it a configuration node lets a deployment change them without a rebuild.
@@ -20,18 +18,25 @@ import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
  * ```
  */
 export function html<C = unknown>(
-  options?: (context: HTTPSetupContext<C, RouterTypes>) => Partial<HTMLDefaults>,
+  options?: (context: HTTPSetupContext<C>) => Partial<HTMLDefaults>,
 ): HTTPPluginFactory<C> {
-  return context => {
-    const settings = options?.(context) ?? {}
-    const plugin: FastifyPluginAsync = async instance => {
-      instance.decorate(kHTMLOptions, {
-        get autoDoctype(): boolean {
-          return settings.autoDoctype ?? HTML_DEFAULTS.autoDoctype
-        },
-      })
-    }
+  return context => new HTMLPlugin(options?.(context) ?? {})
+}
 
-    return fp(plugin, { name: '@caffeinejs/html' })
+class HTMLPlugin extends HTTPPlugin {
+  override readonly name = '@caffeinejs/html'
+  readonly #settings: Partial<HTMLDefaults>
+
+  constructor(settings: Partial<HTMLDefaults>) {
+    super()
+    this.#settings = settings
+  }
+
+  register(context: HTTPSetupContext): void {
+    const settings = this.#settings
+
+    context.app.hook('onRoute', route => {
+      routeSettings.set(route, settings)
+    })
   }
 }

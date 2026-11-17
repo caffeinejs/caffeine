@@ -20,20 +20,6 @@ export function csrfExempt(exempt = true): AnyRouteExtension {
   }
 }
 
-/**
- * Route config for a route registered straight on the server that cross-origin protection must leave alone.
- *
- * A fresh object every call: Fastify hands a GET route's automatic HEAD twin the very same config object.
- *
- * @example
- * ```ts
- * instance.post('/hook', { config: csrfExemptConfig() }, handler)
- * ```
- */
-export function csrfExemptConfig(): { [kCSRFRoute]: CSRFRouteConfig } {
-  return { [kCSRFRoute]: { exempt: true } }
-}
-
 /** What a route's config says of the check: `true` exempt, `false` protected, `undefined` when it says nothing. */
 export function csrfMarkOf(config: unknown): boolean | undefined {
   return (config as Record<string, CSRFRouteConfig | undefined> | undefined)?.[kCSRFRoute]?.exempt

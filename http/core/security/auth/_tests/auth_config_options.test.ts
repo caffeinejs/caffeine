@@ -6,6 +6,8 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { Day, Hour, Minute } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
+import { authentication } from '../../../../core/security/security.js'
 import {
   AuthenticationService,
   AuthenticationTicket,
@@ -24,8 +26,9 @@ import {
   type SeriesTokenRotation,
   UserProvider,
   Authentication,
+  Router,
 } from '../../../../index.js'
-import { createWebApplication, newRouter, authentication } from '../../../../platform/fastify/index.js'
+import { node } from '../../../../platform/node/index.js'
 import type { AuthConfig } from '../config.js'
 
 /**
@@ -103,6 +106,7 @@ describe('authentication options set from the tree', () => {
     container.bind(UserProvider, t => t.toValue({ findByIdentifier: () => null } as unknown as UserProvider))
 
     const app = createWebApplication({
+      adapter: node(),
       container,
       config: configured({ schemes: { Cookie: { rememberMeAbsoluteMaxAge: 1 * Hour } } }),
     })
@@ -113,7 +117,7 @@ describe('authentication options set from the tree', () => {
       )
       .with(authentication())
       .mount(
-        newRouter('/session')
+        new Router('/session')
           .authorize({ allowAnonymous: true })
           .inject({ auth: AuthenticationService })
           .post('/', async (ctx, { auth }) => {
@@ -139,14 +143,13 @@ describe('authentication options set from the tree', () => {
   })
 
   describe('the sign-in path of an OAuth-family scheme', () => {
-    const protectedRoute = newRouter('/reports')
-      .authorize()
-      .get('/', () => ({ ok: true }))
+    const protectedRoute = new Router('/reports').authorize().get('/', () => ({ ok: true }))
 
     // The 401 names it and the route answers there. Were the key applied to nothing, a client would be sent to a
     // URL that was never registered.
     it('is where an OAuth 2.0 scheme sends a script, and where it starts the sign-in', async () => {
       const app = createWebApplication({
+        adapter: node(),
         config: configured({ schemes: { oauth: { loginPath: '/start' } } }),
       })
         .install(
@@ -187,6 +190,7 @@ describe('authentication options set from the tree', () => {
 
     it('is where an OpenID Connect scheme sends a script', async () => {
       const app = createWebApplication({
+        adapter: node(),
         config: configured({ schemes: { oidc: { loginPath: '/oidc/start' } } }),
       })
         .install(
@@ -238,9 +242,7 @@ describe('authentication options set from the tree', () => {
 
     const asNavigation = { headers: { 'sec-fetch-mode': 'navigate' }, redirect: 'manual' as const }
 
-    const protectedRoute = newRouter('/reports')
-      .authorize()
-      .get('/', () => ({ ok: true }))
+    const protectedRoute = new Router('/reports').authorize().get('/', () => ({ ok: true }))
 
     function discovered() {
       const fetched = vi.fn((url: string) => {
@@ -256,7 +258,7 @@ describe('authentication options set from the tree', () => {
     }
 
     const appWith = (oidc: Record<string, unknown>) =>
-      createWebApplication({ config: configured({ schemes: { oidc } }) })
+      createWebApplication({ adapter: node(), config: configured({ schemes: { oidc } }) })
         .install(
           Authentication((a, { config }) =>
             a
@@ -327,7 +329,7 @@ describe('authentication options set from the tree', () => {
     // and the options refuse to resolve without it rather than leave a scheme that cannot verify anything.
     it('completes a hand-assembled provider that has no discovery document', async () => {
       const manual = (oidc: Record<string, unknown>) =>
-        createWebApplication({ config: configured({ schemes: { oidc } }) })
+        createWebApplication({ adapter: node(), config: configured({ schemes: { oidc } }) })
           .install(
             Authentication((a, { config }) =>
               a
@@ -365,6 +367,7 @@ describe('authentication options set from the tree', () => {
     // application whose configured value never arrives strands every sign-out on the provider's own page.
     it('asks the provider to return the user to `postLogoutRedirectUri` after a sign-out', async () => {
       const app = createWebApplication({
+        adapter: node(),
         config: configured({ schemes: { oidc: { postLogoutRedirectUri: 'https://app.test/signed-out' } } }),
       })
         .install(
@@ -387,7 +390,7 @@ describe('authentication options set from the tree', () => {
         )
         .with(authentication())
         .mount(
-          newRouter('/session')
+          new Router('/session')
             .authorize({ allowAnonymous: true })
             .inject({ auth: AuthenticationService })
             .post('/out', (ctx, { auth }) => auth.signOut(ctx, 'oidc')),
@@ -412,6 +415,7 @@ describe('authentication options set from the tree', () => {
     container.bind(UserProvider, t => t.toValue({ findByIdentifier: () => null } as unknown as UserProvider))
 
     const app = createWebApplication({
+      adapter: node(),
       container,
       config: configured({ schemes: { Cookie: { returnUrlParameter: 'next' } } }),
     })
@@ -421,11 +425,7 @@ describe('authentication options set from the tree', () => {
         ),
       )
       .with(authentication())
-      .mount(
-        newRouter('/reports')
-          .authorize()
-          .get('/', () => ({ ok: true })),
-      )
+      .mount(new Router('/reports').authorize().get('/', () => ({ ok: true })))
     await app.bootstrap()
 
     const challenged = await app.request('/reports', {
@@ -456,6 +456,7 @@ describe('authentication options set from the tree', () => {
     )
 
     const app = createWebApplication({
+      adapter: node(),
       config: configured({ schemes: { oauth: { tokenEndpointAuthMethod: 'client_secret_basic' } } }),
     })
       .install(
@@ -506,6 +507,7 @@ describe('authentication options set from the tree', () => {
     container.bind(RefreshTokenStore, t => t.toValue(store as unknown as RefreshTokenStore))
 
     const app = createWebApplication({
+      adapter: node(),
       container,
       config: configured({ refresh: { absoluteTtl: 1 * Minute, refreshTtl: 30 * Day } }),
     })
@@ -544,6 +546,7 @@ describe('authentication options set from the tree', () => {
     container.bind(RefreshTokenStore, t => t.toValue(new SeriesStore() as unknown as RefreshTokenStore))
 
     const app = createWebApplication({
+      adapter: node(),
       container,
       config: configured({ refresh: { accessTtl: 1 * Minute } }),
     })
@@ -556,11 +559,7 @@ describe('authentication options set from the tree', () => {
         ),
       )
       .with(authentication())
-      .mount(
-        newRouter('/reports')
-          .authorize()
-          .get('/', () => ({ ok: true })),
-      )
+      .mount(new Router('/reports').authorize().get('/', () => ({ ok: true })))
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -595,10 +594,7 @@ describe('authentication options set from the tree', () => {
       container.bind(UserProvider, t => t.toValue(new Users(passwordHash)))
       container.bind(PasswordHasher, t => t.toValue(hasher))
 
-      return createWebApplication({
-        container,
-        config: configured({ credentials }),
-      })
+      return createWebApplication({ adapter: node(), container, config: configured({ credentials }) })
         .install(
           Authentication((a, { config }) =>
             a

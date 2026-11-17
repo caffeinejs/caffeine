@@ -34,9 +34,6 @@ export interface CookieOptions {
  * ```ts
  * .cookie((k, { config }) => k.config(config.app.cookie))
  * ```
- *
- * An application whose own server registers `@fastify/cookie`, for a plugin that needs it, keeps both: the context's
- * cookies are this feature's, and that plugin's decorations are its own.
  */
 export class CookieBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'cookie'
@@ -108,7 +105,7 @@ export class CookieBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    // What the adapter builds each server's cookie support from, ahead of everything `.with(...)` registers.
+    // What the engine builds each server's cookie support from, ahead of everything `.with(...)` registers.
     kit.container.bind(kCookieSettings, t => t.toValue(this.#settings()).lifetime(Scopes.SINGLETON).internal())
   }
 

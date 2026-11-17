@@ -1,16 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
+import { createWebApplication } from '../../application.js'
+import { Router } from '../../index.js'
+import { node } from '../../platform/node/index.js'
 import { ErrHTTPConflict } from './http.js'
 
 function orders() {
-  return newRouter('/orders').post('/:id/pay', () => {
+  return new Router('/orders').post('/:id/pay', () => {
     throw new ErrHTTPConflict('Order 42 is already paid')
   })
 }
 
 describe('problem negotiation', () => {
-  const app = createWebApplication()
+  const app = createWebApplication({ adapter: node() })
     .errorHandling(e => e.serializer('text/html', (_ctx, problem) => `<h1>${problem.title}</h1>`))
     .mount(orders())
 

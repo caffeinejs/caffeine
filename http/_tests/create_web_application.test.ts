@@ -9,11 +9,18 @@ import {
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Authentication, Authorization, Guards } from '../index.js'
-import { createWebApplication, authentication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../application.js'
+import { authentication } from '../core/security/security.js'
+import { Controller, Get, Authentication, Authorization, Guards, HTTPPlugin } from '../index.js'
+import { node } from '../platform/node/index.js'
 
-describe('createWebApplication default Fastify form', () => {
-  it('builds a working app with no adapter factory or Fastify instance', async () => {
+/** A plugin that does nothing, where a factory must return one. */
+class NoopPlugin extends HTTPPlugin {
+  register(): void {}
+}
+
+describe('createWebApplication default form', () => {
+  it('builds a working app with no adapter factory', async () => {
     @Controller('/default-app')
     class DefaultAppController {
       @Get('/data')
@@ -23,19 +30,12 @@ describe('createWebApplication default Fastify form', () => {
     }
     void [DefaultAppController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/default-app/data')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
-  })
-
-  it('exposes a Fastify instance', async () => {
-    const app = createWebApplication()
-    await app.bootstrap()
-
-    expect(typeof (app.instance as { inject?: unknown }).inject).toBe('function')
   })
 
   it('uses a container supplied through options', async () => {
@@ -49,7 +49,7 @@ describe('createWebApplication default Fastify form', () => {
     void [DefaultContainerController]
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
     await app.bootstrap()
 
     expect(app.container).toBe(container)
@@ -75,7 +75,7 @@ describe('createWebApplication default Fastify form', () => {
       },
     }
 
-    const app = createWebApplication().install(probe)
+    const app = createWebApplication({ adapter: node() }).install(probe)
     await app.bootstrap()
 
     expect(app.container.getOptional(kProbe)).toEqual({ value: 'hello' })
@@ -86,7 +86,7 @@ describe('configuring a started web application', () => {
   // The HTTP-only methods are refused the same way the shared ones are: once `bootstrap()` has read the feature
   // list, a server port or an authentication scheme written afterwards would never take effect.
   it('refuses server, authentication, guards and plugin configuration once bootstrap() has run', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     expect(() => app.server(() => ({}))).toThrow(ErrApplicationStarted)
@@ -95,6 +95,6 @@ describe('configuring a started web application', () => {
     )
     expect(() => app.install(Authorization(a => a.requireAuthenticatedByDefault()))).toThrow(ErrApplicationStarted)
     expect(() => app.install(Guards(() => undefined))).toThrow(ErrApplicationStarted)
-    expect(() => app.with(() => async () => undefined)).toThrow(ErrApplicationStarted)
+    expect(() => app.with(() => new NoopPlugin())).toThrow(ErrApplicationStarted)
   })
 })

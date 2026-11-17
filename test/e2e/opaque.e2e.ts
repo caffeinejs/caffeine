@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { Authentication } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { authentication, Authentication, Router } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -28,13 +27,9 @@ describe.skipIf(!up)('opaque bearer tokens held in Redis', () => {
     new Browser().xhr(`${app.origin}${path}`, authorization === undefined ? {} : { headers: { authorization } })
 
   function routes() {
-    return newRouter().mount(
-      newRouter('/whoami')
-        .authorize()
-        .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
-      newRouter('/admin')
-        .authorize({ roles: ['admin'] })
-        .get('/', () => ({ ok: true })),
+    return new Router().mount(
+      new Router('/whoami').authorize().get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
+      new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })),
     )
   }
 

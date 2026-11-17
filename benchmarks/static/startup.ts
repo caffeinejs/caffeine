@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { staticFiles } from '@caffeinejs/static'
 import { buildStatic } from '@caffeinejs/static/build'
 import { MiB } from '@caffeinejs/std/bytes'
@@ -42,7 +43,9 @@ async function bootstrap(root: string): Promise<{ time: number; heap: number }> 
   globalThis.gc!()
   const before = process.memoryUsage().heapUsed
   const started = performance.now()
-  const app = createWebApplication({ logger: false }).with(staticFiles(s => s.serve(root, { anonymous: true })))
+  const app = createWebApplication({ adapter: node(), logger: false }).with(
+    staticFiles(s => s.serve(root, { anonymous: true })),
+  )
   await app.bootstrap()
   const time = performance.now() - started
   globalThis.gc!()

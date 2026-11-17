@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
 
 import { $t } from '@caffeinejs/application/schema'
-import { Router, bodyAsBuffer } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Router, bodyAsBuffer, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import {
@@ -281,14 +282,14 @@ const cdn = new Router('/cdn')
     return { authorization: ctx.req.header('authorization') ?? null }
   })
 
-// An abort can leave the client a connection it opened and never finished a request on, which the server's graceful
-// close would otherwise wait out: a connection quiet for a second is dropped instead.
-const app = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 } }))
+// A client that stops part-way can leave a connection holding a partial request, which a graceful close would wait
+// out (caffeinejs/caffeine#131): the close cuts it after a second.
+const app = createWebApplication({ adapter: node() })
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(secure, schemes, redirects, oauth)
 
-const other = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 } }))
+const other = createWebApplication({ adapter: node() })
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(cdn)
 
 let origin: string
@@ -1288,7 +1289,7 @@ describe('brewer answering a 401 over a socket', () => {
   describe('given a token endpoint that cannot be reached', () => {
     // An outage of the authorization server fails the calls waiting on it, and the next call tries again.
     it('should reject the waiting calls with the failure, and refresh again on the next call', async () => {
-      const gone = createWebApplication().mount(oauth)
+      const gone = createWebApplication({ adapter: node() }).mount(oauth)
       await gone.run()
       const closed = gone.address!.origin
       await gone.close()

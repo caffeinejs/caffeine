@@ -1,5 +1,5 @@
-import { ErrConfiguration } from '@caffeinejs/http'
-import { type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
+import { ErrConfiguration, type HTTPPluginConfigurer } from '@caffeinejs/http'
+import { type HTTPPluginFactory, type RouterTypes } from '@caffeinejs/http/fastify'
 import { errMessage } from '@caffeinejs/std/err'
 import { fastifyView } from '@fastify/view'
 import { FastifyPluginAsync } from 'fastify'
@@ -12,7 +12,7 @@ import { ViewOptions } from './view.js'
 /**
  * Authors the view plugin's engines through {@link ViewBuilder}.
  */
-export type ViewConfigurer<C = unknown> = HTTPPluginConfigurer<ViewBuilder, C>
+export type ViewConfigurer<C = unknown> = HTTPPluginConfigurer<ViewBuilder, C, RouterTypes>
 
 /**
  * Template-based server-side rendering over `@fastify/view`.

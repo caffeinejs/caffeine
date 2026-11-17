@@ -1383,3 +1383,15 @@ describe('application health', () => {
     expect(() => app.health).toThrow(ErrApplicationNotReady)
   })
 })
+
+describe('ErrApplicationClosed', () => {
+  // Thrown for whatever a closed application was asked: the first line says which, for a reader holding only it.
+  it('names what the caller asked for, starting the application by default', () => {
+    expect(new ErrApplicationClosed('reach the server').message.split('\n')[0]).toBe(
+      'Cannot reach the server: the application has been closed',
+    )
+    expect(new ErrApplicationClosed().message.split('\n')[0]).toBe(
+      'Cannot start the application: the application has been closed',
+    )
+  })
+})

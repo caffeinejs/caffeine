@@ -10,11 +10,13 @@ import {
   Identity,
   Principal,
   UseGuards,
+  authentication,
   type Guard,
   type GuardInput,
   type IContext,
+  createWebApplication,
 } from '@caffeinejs/http'
-import { authentication, createWebApplication } from '@caffeinejs/http/fastify'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -80,7 +82,7 @@ describe('the cache on a protected route', () => {
   })
 
   async function start() {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('session', new SessionCookieHandler()).default('session')))
       .with(authentication())
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))

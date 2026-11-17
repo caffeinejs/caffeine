@@ -20,15 +20,6 @@ describe('RouteGroupBuilder cumulative merge', () => {
     expect(router.config?.get('cors')).toEqual({ origin: 'http://a.com', methods: ['GET'] })
   })
 
-  it('merges objects on the same options key', () => {
-    const router = new RouteGroupBuilder()
-      .options('compress', { threshold: 100 })
-      .options('compress', { encodings: ['gzip'] })
-      .toRouteGroup()
-
-    expect(router.options?.get('compress')).toEqual({ threshold: 100, encodings: ['gzip'] })
-  })
-
   it('overwrites on primitive config key', () => {
     const router = new RouteGroupBuilder().config('x', 1).config('x', 2).toRouteGroup()
 
@@ -37,11 +28,11 @@ describe('RouteGroupBuilder cumulative merge', () => {
 
   it('overwrites on type mismatch', () => {
     const router = new RouteGroupBuilder()
-      .options('compress', { threshold: 100 })
-      .options('compress', false as any)
+      .config('compress', { threshold: 100 })
+      .config('compress', false)
       .toRouteGroup()
 
-    expect(router.options?.get('compress')).toBe(false)
+    expect(router.config?.get('compress')).toBe(false)
   })
 })
 

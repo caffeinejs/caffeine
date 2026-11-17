@@ -3,6 +3,7 @@ import { gunzipSync, gzipSync } from 'node:zlib'
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import {
   Attachment,
   Catch,
@@ -14,7 +15,7 @@ import {
   type IContext,
   Router,
 } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 import {
   expectPatternedBody,
   expectRangeAnswer,
@@ -217,7 +218,7 @@ class GuardedReportsController {
 
 void [ReportsController, GuardedReportsController]
 
-const app = createWebApplication().mount(routes)
+const app = createWebApplication({ adapter: node() }).mount(routes)
 
 beforeAll(async () => {
   await app.bootstrap()

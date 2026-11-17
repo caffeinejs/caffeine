@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Responder, Router, blend, type RouteDef, type RoutesOf } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Responder, Router, blend, type RouteDef, type RoutesOf, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import type { Authenticator } from '../authenticator.js'
@@ -35,7 +35,7 @@ const pets = new Router('/pets')
   })
   .handler(ctx => ctx.body())
 
-const app = createWebApplication().mount(pets)
+const app = createWebApplication({ adapter: node() }).mount(pets)
 
 type App = typeof app
 type Pet = { id: number; name: string }
@@ -352,6 +352,21 @@ describe('the init argument', () => {
       expectTypeOf(client.list.fresh.get).toBeCallableWith()
       // @ts-expect-error -- the querystring schema says limit is an integer
       void client.list.get({ query: { limit: 'ten' } })
+    })
+  })
+
+  // The route decodes the text itself, so the client sends the text: a span written `'5s'`, not milliseconds.
+  it('takes the text a codec in the query reads', () => {
+    typeOnly(() => {
+      const jobs = new Router('/jobs')
+        .get('/')
+        .schema({ querystring: $t.Object({ timeout: $t.Duration() }) })
+        .handler(() => ({ ok: true }))
+      const client = brewer<typeof jobs>('http://localhost')
+
+      expectTypeOf(client.jobs.get).toBeCallableWith({ query: { timeout: '5s' } })
+      // @ts-expect-error -- the route reads duration text and refuses a number
+      void client.jobs.get({ query: { timeout: 5000 } })
     })
   })
 

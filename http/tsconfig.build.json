@@ -22,6 +22,7 @@
     "**/*.testkit.ts",
     "**/*.e2e.ts",
     "vitest.config.ts",
-    "vitest.leak.config.ts"
+    "vitest.leak.config.ts",
+    "vitest.engine.config.ts"
   ]
 }

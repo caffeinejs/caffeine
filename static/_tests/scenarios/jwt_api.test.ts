@@ -1,5 +1,5 @@
-import { JWTService, type WebApplication, Authentication } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { JWTService, Authentication, authentication, Router, type WebApplication } from '@caffeinejs/http'
+import { type NodeAdapter } from '@caffeinejs/http/node'
 import { Minute } from '@caffeinejs/std/duration'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 
@@ -27,32 +27,28 @@ const signer = new JWTService({ secret: SECRET, issuer: ISSUER, audience: AUDIEN
  * A public single-page application whose API takes bearer tokens: the page is for everyone, every call it
  * makes carries a token, and a token is never redirected anywhere.
  */
-function publicSPA(): WebApplication {
+function publicSPA(): WebApplication<never, never, unknown, NodeAdapter> {
   return isolated()
     .install(Authentication(a => a.addJWTBearer(j => j.secret(SECRET).issuer(ISSUER).audience(AUDIENCE))))
     .with(authentication())
     .with(staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
     .mount(
-      newRouter('/api')
+      new Router('/api')
         .authorize()
         .get('/me', ctx => ({ sub: ctx.user.findFirst('sub')?.value }))
-        .mount(
-          newRouter('/admin')
-            .authorize({ roles: ['admin'] })
-            .get('/', () => ({ ok: true })),
-        )
+        .mount(new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })))
         .get('/*', notFound),
-      newRouter()
+      new Router()
         .detail('http', { internal: true })
         .authorize({ allowAnonymous: true })
         .get('/', shellOf(dist))
         .get('/index.html', shellOf(dist))
         .get('/*', clientRouteOf(dist)),
-    ) as WebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 }
 
 describe('public single-page application with a bearer-token API', () => {
-  let app: WebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
   let user: string
   let admin: string
 

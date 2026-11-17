@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
+import { authentication } from '../../../core/security/security.js'
 import {
   AllowAnonymous,
   AuthenticateResult,
@@ -17,7 +19,7 @@ import {
   $p,
   Authentication,
 } from '../../../index.js'
-import { createWebApplication, authentication } from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
 
 /**
  * Per-route authentication scheme selection.
@@ -57,7 +59,7 @@ class DefaultSchemeHandler extends BaseAuthenticationHandler<object> {
 }
 
 function buildApp(): WebApplication {
-  const builder = createWebApplication()
+  const builder = createWebApplication({ adapter: node() })
 
   builder
     .install(

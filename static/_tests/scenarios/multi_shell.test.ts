@@ -1,5 +1,5 @@
-import { type WebApplication, Authentication, Authorization } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { Authentication, Authorization, authentication, Router, type WebApplication } from '@caffeinejs/http'
+import { type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { sendFile, staticFiles } from '../../index.js'
@@ -24,7 +24,7 @@ import {
  * that happen to be neighbours. The public bundle is anonymous because the sign-in page needs it; the
  * administration bundle is served from a compiled route, so it carries the same role as its page.
  */
-function origin(authenticateByDefault: boolean): WebApplication {
+function origin(authenticateByDefault: boolean): WebApplication<never, never, unknown, NodeAdapter> {
   const app = isolated()
     .install(Authentication(a => a.addStrategy('header', new HeaderAuthenticationHandler())))
     .with(authentication())
@@ -34,22 +34,20 @@ function origin(authenticateByDefault: boolean): WebApplication {
       ),
     )
     .mount(
-      newRouter('/api')
-        .get('/pets', () => ({ pets: [] }))
-        .get('/*', notFound),
-      newRouter()
+      new Router('/api').get('/pets', () => ({ pets: [] })).get('/*', notFound),
+      new Router()
         .detail('http', { internal: true })
         .authorize({ allowAnonymous: true })
         .get('/', shellOf(dist))
         .get('/index.html', shellOf(dist))
         .get('/*', clientRouteOf(dist)),
-      newRouter()
+      new Router()
         .detail('http', { internal: true })
         .authorize({ roles: ['admin'] })
         .get('/admin', shellOf(adminDist))
         .get('/admin/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!.slice('/admin'.length), adminDist))
         .get('/admin/*', clientRouteOf(adminDist)),
-    ) as WebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 
   if (authenticateByDefault) {
     app.install(Authorization(z => z.requireAuthenticatedByDefault()))
@@ -62,7 +60,7 @@ const bob = { 'x-user': 'bob' }
 const ann = { 'x-user': 'ann', 'x-roles': 'admin' }
 
 describe('two applications on one origin', () => {
-  let app: WebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
 
   afterEach(async () => {
     await app?.close()

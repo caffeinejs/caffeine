@@ -1,6 +1,6 @@
 # Caffeine
 
-> TypeScript application framework: TC39 decorators, Fastify HTTP, Spring-shaped Kafka. Not NestJS, not Express, not Spring Boot.
+> TypeScript application framework: TC39 decorators, web-standards HTTP, Spring-shaped Kafka. Not NestJS, not Express, not Spring Boot.
 
 Agents: this is not the NestJS or Express you were trained on. Read `docs/rules.md` before writing code. Skills are workflows, not a substitute for those rules.
 

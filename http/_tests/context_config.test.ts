@@ -5,8 +5,9 @@ import { type InferSchema, $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { type MiddlewareFn, Router } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 const schema = $t.Object({
   catalog: $t.Object({ pageSize: $t.Number() }),
@@ -32,10 +33,7 @@ describe('ctx.config', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build().config
-    const app = createWebApplication({
-      container: new CaffeineIoC(),
-      config: conf,
-    }).mount(routes)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC(), config: conf }).mount(routes)
 
     await app.bootstrap()
 
@@ -65,10 +63,7 @@ describe('ctx.config', () => {
     const conf = newConfiguration(schema)
       .source(liveSource(() => current))
       .build().config
-    const app = createWebApplication({
-      container: new CaffeineIoC(),
-      config: conf,
-    }).mount(routes)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC(), config: conf }).mount(routes)
 
     app.use(churn, { hook: 'onRequest' })
 
@@ -88,7 +83,7 @@ describe('ctx.config', () => {
   it('serves an application that declared no configuration at all', async () => {
     const routes = new Router('/plain').get('/', ctx => ({ keys: Object.keys(ctx.config) }))
 
-    const app = createWebApplication({ container: new CaffeineIoC() }).mount(routes)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC() }).mount(routes)
 
     await app.bootstrap()
 
@@ -113,10 +108,7 @@ describe('ctx.config', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build().config
-    const app = createWebApplication({
-      container: new CaffeineIoC(),
-      config: conf,
-    }).mount(routes)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC(), config: conf }).mount(routes)
 
     await app.bootstrap()
 
@@ -196,8 +188,8 @@ describe('ctx.config with an application schema', () => {
     const conf = newConfiguration(ownSchema)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build().config
-    const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
-      .server(({ config }) => ({ listener: config.server }))
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC(), config: conf })
+      .server(({ config }) => ({ listen: config.server }))
       .mount(routes)
 
     await app.bootstrap()
@@ -217,8 +209,8 @@ describe('ctx.config with an application schema', () => {
     const conf = newConfiguration(ownSchema)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build().config
-    const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
-      .server(({ config }) => ({ listener: config.server }))
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC(), config: conf })
+      .server(({ config }) => ({ listen: config.server }))
       .mount(routes)
 
     await app.bootstrap()
@@ -236,10 +228,7 @@ describe('ctx.config with an application schema', () => {
     const conf = newConfiguration($t.Object({ catalog: $t.Object({ pageSize: $t.Number() }) }))
       .source(new InlineConfigSource({ catalog: { pageSize: 25 }, server: { host: '127.0.0.1' } }))
       .build().config
-    const app = createWebApplication({
-      container: new CaffeineIoC(),
-      config: conf,
-    }).mount(routes)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC(), config: conf }).mount(routes)
 
     await app.bootstrap()
 
@@ -257,10 +246,9 @@ describe('ctx.config with an application schema', () => {
     })
 
     const conf = newConfiguration(withServer).build().config
-    const app = createWebApplication({
-      container: new CaffeineIoC(),
-      config: conf,
-    }).server(({ config }) => ({ listener: config.server }))
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC(), config: conf }).server(
+      ({ config }) => ({ listen: config.server }),
+    )
 
     await app.run()
 

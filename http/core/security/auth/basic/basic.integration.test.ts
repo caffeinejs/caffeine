@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
+import { authentication } from '../../../../core/security/security.js'
 import {
   Authorize,
   Claim,
@@ -12,7 +14,7 @@ import {
   $p,
   Authentication,
 } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { node } from '../../../../platform/node/index.js'
 
 function basicHeader(user: string, pass: string): string {
   return `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`
@@ -31,7 +33,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     }
     void [BasicOkController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth =>
@@ -64,7 +66,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     }
     void [BasicChallengeController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addBasic(b => b.realm('My App').validate(() => null))))
       .with(authentication())
@@ -87,7 +89,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     }
     void [BasicBadController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder.install(Authentication(auth => auth.addBasic(b => b.validate(() => null)))).with(authentication())
     const app = builder
     await app.bootstrap()

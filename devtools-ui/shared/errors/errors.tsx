@@ -1,6 +1,6 @@
+import { logToken, type Logger } from '@caffeinejs/application/logger'
 import { HTML } from '@caffeinejs/html'
 import { Catch, ErrHTTP, type ActionResult, type ErrorHandler, type IContext } from '@caffeinejs/http'
-import type { ContextPlatform } from '@caffeinejs/http/fastify'
 
 import { TARGET_AUTHORIZATION_VARIABLE, TARGET_URL_VARIABLE, type Config } from '../../app.config.js'
 import { Layout } from '../layout/Layout.js'
@@ -31,13 +31,15 @@ export function TargetErrorPage(props: { target: string; status: number | undefi
  * Renders a page that failed to read the devtools, keeping the status the devtools answered, and any other failure
  * as what it is: a page of the UI that failed.
  */
-@Catch(Error)
+@Catch(Error, [logToken()])
 export class TargetErrorHandler implements ErrorHandler<Error> {
+  constructor(private readonly log: Logger) {}
+
   handle(ctx: IContext, err: Error): ActionResult {
     const config = ctx.config as Config
 
     if (!(err instanceof ErrDevToolsAnswered) && !isNetworkFailure(err)) {
-      ;(ctx.platform as ContextPlatform).request.log.error({ err }, 'Cannot render the page')
+      this.log.error({ err, reqId: ctx.req.id }, 'Cannot render the page')
       ctx.status(500)
       return HTML(
         Layout({

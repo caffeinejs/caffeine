@@ -1,8 +1,7 @@
 import type { Logger } from '@caffeinejs/application/logger'
-import { Controller, Get, Post, Status } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Controller, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
-import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -59,7 +58,9 @@ afterEach(async () => {
 
 async function start(observer: CacheObserver, options: { store?: HTTPCacheStore; logger?: Logger } = {}) {
   const store = options.store ?? new MemoryHTTPCacheStore()
-  const app = createWebApplication({ logger: options.logger }).with(HTTPCaching(b => b.store(store).observer(observer)))
+  const app = createWebApplication({ adapter: node(), logger: options.logger }).with(
+    HTTPCaching(b => b.store(store).observer(observer)),
+  )
   close = () => app.close()
   await app.bootstrap()
   return app
@@ -496,8 +497,7 @@ describe('route identity', () => {
     expect(Object.isFrozen(first)).toBe(true)
   })
 
-  // Fastify registers the HEAD twin of a GET route separately, so it reports its own method — while serving the
-  // entry the GET stored.
+  // The HEAD route of a GET shares its hooks, and reports its own method — while serving the entry the GET stored.
   it('reports a HEAD request under the HEAD twin of the route', async () => {
     @Controller('/obs-head')
     class HeadController {
@@ -553,7 +553,7 @@ describe('a throwing observer', () => {
   })
 
   // On the application logger the cache was set up with, not on `request.log`: that one is silent under a
-  // caller-supplied `fastify()`, and a report through it would carry the request it happened on.
+  // server the application does not drive, and a report through it would carry the request it happened on.
   it('is reported once per method on the application logger', async () => {
     @Controller('/obs-throws-logged')
     class ThrowsLoggedController {

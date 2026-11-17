@@ -61,8 +61,6 @@ export const SecuritySchema = $t.Object({
   authorization: $t.Object({
     /** The policy a route that declares nothing answers to; absent when such a route is open. */
     fallbackPolicy: $t.Optional($t.String()),
-    /** The path prefixes of raw routes the fallback policy leaves open. */
-    fallbackExcept: Strings,
     /** The policy a bare `@Authorize()` asks for. */
     defaultPolicy: $t.Optional($t.String()),
   }),

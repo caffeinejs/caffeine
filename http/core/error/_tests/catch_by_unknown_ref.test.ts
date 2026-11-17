@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   CatchWith,
   type IContext,
@@ -9,7 +10,7 @@ import {
   Get,
   type ActionResult,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // Isolated: the unresolvable reference poisons every app build in its module, so it must be the only
 // error-handler concern in this file.
@@ -29,7 +30,7 @@ void [UnknownRefController]
 
 describe('@CatchWith with an unregistered handler', () => {
   it('rejects when the referenced handler has no binding', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
 
     await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
