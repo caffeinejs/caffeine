@@ -7,8 +7,9 @@ import {
   type IContext,
   bindTo,
   type WebApplication,
+  Router,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 /**
  * A listener's own plugins and middleware: registered on its builder, `l.with(...)`, `l.use(...)` and
@@ -51,17 +52,11 @@ function tagging(header: string) {
   }
 }
 
-const jobs = () =>
-  newRouter('/jobs')
-    .extend(bindTo('admin'))
-    .get('/', () => ({ jobs: true }))
+const jobs = () => new Router('/jobs').extend(bindTo('admin')).get('/', () => ({ jobs: true }))
 
-const status = () =>
-  newRouter('/status')
-    .extend(bindTo('admin'))
-    .get('/', () => ({ up: true }))
+const status = () => new Router('/status').extend(bindTo('admin')).get('/', () => ({ up: true }))
 
-const api = () => newRouter('/api').get('/', () => ({ api: true }))
+const api = () => new Router('/api').get('/', () => ({ api: true }))
 
 describe("a listener's own plugins and middleware", () => {
   let app: WebApplication | undefined

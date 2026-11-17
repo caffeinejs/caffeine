@@ -1,7 +1,7 @@
 import { errMessage } from '@caffeinejs/std/err'
 
-import type { HTTPSetupContext } from '../../../../adapter.js'
 import { stripBasePath } from '../../../../base_path.js'
+import type { HTTPSetupContext } from '../../../../plugin.js'
 import { Router } from '../../../routing/programmatic/programmatic.js'
 import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../../exempt.js'
 import { ErrAuthConfiguration } from '../errors.js'

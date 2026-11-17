@@ -1,13 +1,13 @@
+import { kFeatureConfigure, kFeatureName, type Feature } from '@caffeinejs/application'
 import { Byte } from '@caffeinejs/std/bytes'
 import { describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from './adapter.js'
 import { createWebApplication as createFetchApplication } from './application.js'
 import { findMyWayMatcher } from './core/matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS } from './core/matcher/matcher.js'
 import { Router } from './core/routing/programmatic/programmatic.js'
 import { createWebApplication as createNodeApplication } from './platform/node/node.js'
-import { HTTPPlugin } from './plugin.js'
+import { HTTPPlugin, type HTTPSetupContext } from './plugin.js'
 import { ServerDefinition } from './server_definition.js'
 import { ServerSet } from './servers.js'
 
@@ -56,6 +56,8 @@ describe('ServerSet', () => {
             }
           })(),
       )
+      // A feature takes no slot: it leaves the order of the hooks around it as written.
+      .install(slotless)
       .hook('onRequest', () => void order.push('last'))
       .mount(new Router('/x').get('/').handler(() => 'x'))
 
@@ -68,7 +70,47 @@ describe('ServerSet', () => {
 
     expect(order).toEqual(['first', 'plugin', 'last'])
   })
+
+  // Only an object section merges over the one before it: a list merged by index would keep stale entries. An
+  // in-process request comes from 127.0.0.1, which only the first list trusts.
+  it('replaces an array section, never merging it', async () => {
+    const app = createNodeApplication()
+      .server(() => ({ trustProxy: ['10.0.0.1', '127.0.0.1'] }))
+      .server(() => ({ trustProxy: ['10.0.0.2'] }))
+      .mount(new Router('/h').get('/', ctx => ctx.req.host))
+
+    try {
+      await app.bootstrap()
+
+      const res = await app.request('http://localhost/h', { headers: { 'x-forwarded-host': 'proxied.example' } })
+
+      expect(await res.text()).toBe('localhost')
+    } finally {
+      await app.close()
+    }
+  })
+
+  // Only `undefined` leaves an earlier section in place: `null` is a value like any other, and the router refuses it.
+  it('takes null as a section that replaces the one before it', async () => {
+    const app = createNodeApplication()
+      .server(() => ({ router: { caseSensitive: false } }))
+      .server(() => ({ router: null }) as never)
+
+    try {
+      await expect(app.bootstrap()).rejects.toThrow('Cannot set router to "null"')
+    } finally {
+      await app.close()
+    }
+  })
 })
+
+/** A feature that binds nothing. */
+const slotless = {
+  get [kFeatureName]() {
+    return 'slotless'
+  },
+  [kFeatureConfigure]() {},
+} as Feature
 
 describe('context.app.server', () => {
   /** A plugin that records what its slot says of the server it registers on. */
@@ -98,6 +140,26 @@ describe('context.app.server', () => {
     expect(await serverSeen(seen => createFetchApplication().basePath('/api').with(recorder(seen)))).toEqual([
       { basePath: '/api', router: DEFAULT_ROUTER_FLAGS },
     ])
+  })
+
+  it.each([
+    ['/api/', '/api'],
+    ['/', ''],
+  ])('normalizes the base path %s to %s', async (given, expected) => {
+    expect(await serverSeen(seen => createFetchApplication().basePath(given).with(recorder(seen)))).toEqual([
+      { basePath: expected, router: DEFAULT_ROUTER_FLAGS },
+    ])
+  })
+
+  it('merges an object section over the one before it', async () => {
+    expect(
+      await serverSeen(seen =>
+        createNodeApplication()
+          .server(() => ({ router: { caseSensitive: false } }))
+          .server(() => ({ router: { ignoreTrailingSlash: true } }))
+          .with(recorder(seen)),
+      ),
+    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false, ignoreTrailingSlash: true } }])
   })
 
   it('reports an empty base path when the application set none', async () => {

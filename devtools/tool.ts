@@ -16,7 +16,7 @@ export interface ToolInfo {
 export type ToolRouter<T, P extends string> = Router<Record<never, never>, Record<never, never>, { tool: T }, P>
 
 /** Groups a tool's routes, handing each of them `tool` as `deps.tool`. */
-export function toolRoutes<T, const RS extends ReadonlyArray<Router<any, any, { tool: T }, any, any, never>>>(
+export function toolRoutes<T, const RS extends ReadonlyArray<Router<any, any, { tool: T }, any, any>>>(
   tool: T,
   ...routes: RS
 ) {

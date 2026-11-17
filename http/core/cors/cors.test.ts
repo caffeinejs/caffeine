@@ -18,7 +18,7 @@ import { authentication } from '../security/security.js'
 import { cors, corsPolicy, kCORSRoute, type CORSBuilder } from './cors.js'
 
 // Any router, as `mount` takes them: the route types each carries are not under test here.
-type AnyRouter = Router<any, any, any, any, any, any>
+type AnyRouter = Router<any, any, any, any, any>
 
 const A = 'https://app.example'
 const PARTNER = 'https://partner.example'

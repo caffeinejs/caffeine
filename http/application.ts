@@ -6,20 +6,9 @@ import {
   type FeatureConfigurer,
   type RunInfo,
 } from '@caffeinejs/application'
+import type { ContextKey } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import {
-  type IAdapter,
-  type AdapterExtensionFactory,
-  type AnyAdapterTypes,
-  type AdapterFactory,
-  type IAdapterServer,
-  type IAdapterTypes,
-  type HTTPSetupContext,
-  type ServerAddress,
-  type ServerConfigurer,
-  type ServerCustomizer,
-} from './adapter.js'
 import { CookieBuilder } from './core/cookie/cookie.js'
 import { ErrConfiguration } from './core/error/common.js'
 import { ErrorHandlingBuilder } from './core/error/error.js'
@@ -40,17 +29,20 @@ import {
 import { parseUse } from './core/middleware/middleware.js'
 import { ControllerRouteSource } from './core/routing/decorated.js'
 import { buildRouting, RouteInventory, type RouteSource } from './core/routing/index.js'
-import type { Router } from './core/routing/programmatic/programmatic.js'
+import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
 import { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './core/routing/programmatic/source.js'
+import type { RoutesOf } from './core/routing/programmatic/types.js'
 import type { IRouteGroup } from './core/routing/route.js'
 import { AuthorizationBuilder } from './core/security/authz/index.js'
-import { fetchAdapterFactory, type FetchAdapterTypes } from './core/server/adapter.js'
+import type { Context } from './core/server/context.js'
+import { bindContext, FetchServer, kHosting, type HostedServer, type ServerHosting } from './core/server/hosting.js'
+import { resolveServerSettings, type ServerSettings } from './core/server/settings.js'
 import { getRouteGroup } from './decorators/registrar/registrar.js'
-import type { HTTPPlugin } from './plugin.js'
+import type { HTTPPluginFactory, HTTPSetupContext } from './plugin.js'
 import { assertPluginFactory } from './plugin_factory.js'
 import { closedApplicationOps } from './plugin_slot.js'
-import type { IServer } from './server.js'
+import type { IServer, ServerAddress, ServerConfigurer } from './server.js'
 import { ServerDefinition, type BasePathConfigurer } from './server_definition.js'
 import { ServerSet } from './servers.js'
 import { Keys } from './symbols.js'
@@ -64,10 +56,11 @@ export interface WebRunInfo extends RunInfo {
 export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfig>
 
 /**
- * The HTTP application: an {@link Application} whose lifecycle steps drive an {@link IAdapter}: the Node application's,
- * through `createWebApplication()` from `@caffeinejs/http/node`, the fetch application's, through the one from
- * `@caffeinejs/http`, or the one given to the constructor. `setup()` builds routing and sets the adapter up; `start()`
- * runs it; `stop()` tears it down. `Application` handles the container, features, and lifecycle hooks.
+ * The HTTP application: an {@link Application} whose lifecycle steps build, start and tear down its servers. This is
+ * the fetch application, from `createWebApplication()` in `@caffeinejs/http`, which answers through {@link fetch};
+ * the Node application, from `@caffeinejs/http/node`, extends it to serve on a Node server. `setup()` builds routing
+ * and the servers; `start()` starts them; `stop()` tears them down. `Application` handles the container, features,
+ * and lifecycle hooks.
  *
  * Configures fluently, and is itself the running instance — there is no separate builder. Features (container
  * binders) are installed with `.install(...)`, in any order; server plugins are registered with `.with(...)`,
@@ -78,34 +71,30 @@ export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfi
  *   .install(Authentication(auth => auth.addJWTBearer(b => b.secret(SECRET))))
  *   .with(authentication())
  *   .with(staticFiles(s => s.serve('public')))
- *   .server(() => ({ listen: { port: 3000 } }))
  * ```
  */
-export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = never, DEPS = never, C = unknown>
-  extends Application<C>
-  implements IServer<T>
-{
+export class WebApplication<ROUTES = never, DEPS = never, C = unknown> extends Application<C> implements IServer {
   /** Phantom — names the routes mounted on this application, for `RoutesOf`. Never assigned, never read. */
   declare readonly __routes?: ROUTES
 
   /** Phantom — names what the mounted routers injected, for `DepsOf`. Never assigned, never read. */
   declare readonly __deps?: DEPS
 
-  readonly #adapter: IAdapter<T>
+  /** The slot every engine sets in each request's frame, read by the request-scoped `Context` binding. */
+  readonly #contextKey: ContextKey<Context>
   /** What the application's own server is built from: what its fluent methods registered. */
-  readonly #own = new ServerDefinition<T, C>()
+  readonly #own = new ServerDefinition<C>()
   /** Every server, the application's own first, once {@link setup} has read them. */
-  #servers: ServerSet<T> | undefined
+  #servers: ServerSet | undefined
   /** What {@link listener} and the features added, in that order of calls. */
   readonly #listeners = new Listeners<C>()
   /** The listeners, once {@link setup} has built them. */
-  #listenerServers: ReadonlyMap<string, IServer<T>> | undefined
-  #runArgs: T['runArgs'] | undefined
-  #routeGroups: IRouteGroup<T['request']>[] = []
-  #mounted: Router<any, any, any, any, any, any>[] = []
+  #listenerServers: ReadonlyMap<string, IServer> | undefined
+  #routeGroups: IRouteGroup<Context>[] = []
+  #mounted: AnyRouter[] = []
   #built = false
   /** What routers and controllers registered for themselves, resolved once during start-up. */
-  readonly #plugins = new ScopedPlugins<T>()
+  readonly #plugins = new ScopedPlugins()
   /** Every server's routes, filled as each is built. */
   readonly #inventory = new RouteInventory()
 
@@ -113,11 +102,11 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   readonly #errorHandling = new ErrorHandlingBuilder<C>()
   readonly #cookieBuilder = new CookieBuilder<C>()
 
-  constructor(adapterFactory: AdapterFactory<T>, options: WebApplicationOptions<C> = {}) {
+  constructor(options: WebApplicationOptions<C> = {}) {
     super(options)
 
-    // Installed unconditionally, so their names are dedupe-protected and `$hasFeature` answers for them. The
-    // order here is configure order only: each binds what its server half runs on, and the adapter installs those
+    // Installed unconditionally, so their names are dedupe-protected and `hasFeature` answers for them. The
+    // order here is configure order only: each binds what its server half runs on, and the engine installs those
     // halves ahead of everything `.with(...)` registers, error handling first, then cookies. Cookies are read lazily,
     // so no plugin that reads one has an order to get right, and the cookie writer's `onSend` hook leads every
     // later plugin's.
@@ -126,17 +115,8 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
 
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
 
-    this.#adapter = adapterFactory({ container: this.container })
+    this.#contextKey = bindContext(this.container)
     this.container.bind(RouteInventory, t => t.toValue(this.#inventory).internal())
-  }
-
-  /**
-   * The server the adapter built.
-   *
-   * @throws ErrApplicationNotReady before {@link ready} has built it.
-   */
-  get instance(): T['instance'] {
-    return this.#ownServer().instance
   }
 
   /**
@@ -153,7 +133,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    *
    * @throws ErrApplicationNotReady before {@link ready} has built them.
    */
-  get listeners(): ReadonlyMap<string, IServer<T>> {
+  get listeners(): ReadonlyMap<string, IServer> {
     if (this.#listenerServers === undefined) {
       throw new ErrApplicationNotReady('reach the listeners')
     }
@@ -167,7 +147,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    *
    * @throws ErrApplicationNotReady before {@link ready} has built them.
    */
-  get routeGroups(): IRouteGroup<T['request']>[] {
+  get routeGroups(): IRouteGroup<Context>[] {
     if (!this.started) {
       throw new ErrApplicationNotReady('read the route groups')
     }
@@ -208,8 +188,8 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * be a Node `(req, res, next)` function, a Caffeine `(ctx, next)` function, an instance, a class, or a
    * container key.
    *
-   * Which hooks exist is the adapter's: on the fetch and Node applications, a request hook point (`onRequest`,
-   * `preHandler`, `onSend`, `onResponse`, `onError`); `onRequest` by default. A
+   * `{ hook }` is a request hook point (`onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`); `onRequest` by
+   * default. A
    * Caffeine middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call
    * overrides that hint. Answer the request with `ctx.body()` and do not call `next`. A Node `(req, res, next)`
    * middleware runs on the Node application; the fetch application, which has no Node request, refuses one at
@@ -228,32 +208,25 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,
-    options?: MiddlewareOptions<T['hook']>,
+    options?: MiddlewareOptions,
   ): this
-  use(target: NodeMiddleware, options?: MiddlewareOptions<T['hook']>): this
-  use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions<T['hook']>): this
-  use(target: MiddlewareResolvable, options?: MiddlewareOptions<T['hook']>): this
+  use(target: NodeMiddleware, options?: MiddlewareOptions): this
+  use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
+  use(target: MiddlewareResolvable, options?: MiddlewareOptions): this
   use<V = Record<never, never>, Conf = Record<never, never>>(
     path: MiddlewarePath,
     target: MiddlewareFn<V, Conf>,
-    options?: MiddlewareOptions<T['hook']>,
+    options?: MiddlewareOptions,
   ): this
-  use(path: MiddlewarePath, target: NodeMiddleware, options?: MiddlewareOptions<T['hook']>): this
-  use(
-    path: MiddlewarePath,
-    target: (req: never, res: never, next: Next) => void,
-    options?: MiddlewareOptions<T['hook']>,
-  ): this
-  use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions<T['hook']>): this
+  use(path: MiddlewarePath, target: NodeMiddleware, options?: MiddlewareOptions): this
+  use(path: MiddlewarePath, target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
+  use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions): this
   use(
     pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
-    targetOrOptions?:
-      | MiddlewareTarget<C>
-      | MiddlewareOptions<T['hook']>
-      | ((req: never, res: never, next: Next) => void),
-    options?: MiddlewareOptions<T['hook']>,
+    targetOrOptions?: MiddlewareTarget<C> | MiddlewareOptions | ((req: never, res: never, next: Next) => void),
+    options?: MiddlewareOptions,
   ): this {
-    const parsed = parseUse<C, T['hook']>(pathOrTarget, targetOrOptions, options, arguments.length)
+    const parsed = parseUse<C>(pathOrTarget, targetOrOptions, options, arguments.length)
     this.#own.middlewares.add(parsed.path, parsed.target, parsed.hook)
     return this
   }
@@ -271,14 +244,14 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    *
    * Like {@link use}, it reaches the application's own server and no listener.
    */
-  useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
-  useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
+  useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
+  useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
   useFn(
     pathOrTarget: MiddlewarePath | MiddlewareFactory<C>,
-    targetOrOptions?: MiddlewareFactory<C> | MiddlewareOptions<T['hook']>,
-    options?: MiddlewareOptions<T['hook']>,
+    targetOrOptions?: MiddlewareFactory<C> | MiddlewareOptions,
+    options?: MiddlewareOptions,
   ): this {
-    const parsed = parseUse<C, T['hook']>(pathOrTarget, targetOrOptions, options, arguments.length)
+    const parsed = parseUse<C>(pathOrTarget, targetOrOptions, options, arguments.length)
     this.#own.middlewares.addFactory(parsed.path, parsed.target, parsed.hook)
     return this
   }
@@ -297,17 +270,17 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * A listener installs none of them. It has its own: `.listener(name, l => l.with(...))`.
    *
    * A factory is never deduplicated — two calls register two plugins. A plugin `name` already on that server is
-   * refused at start-up. A factory producing another adapter's extension does not compile.
+   * refused at start-up, and so is a factory that returns anything but an `HTTPPlugin`.
    *
    * The plugin's `register` runs in this slot. A factory may mount routers on this server and add middleware to its
-   * pipeline with `context.app`, which takes this application's adapter.
+   * pipeline with `context.app`.
    *
    * A feature is not a plugin: install it with {@link Application.install}, at any position in the chain — a
    * feature binds into the container before any factory here runs, so only `.with(...)` order matters.
    *
    * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
-  with(factory: AdapterExtensionFactory<T['extension'] | HTTPPlugin<T>, C, T>): this {
+  with(factory: HTTPPluginFactory<C>): this {
     this.assertConfigurable()
     assertPluginFactory(factory)
 
@@ -331,7 +304,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    * @throws ErrConfiguration for a point that is not a hook.
    */
-  hook<K extends HookName>(name: K, fn: HookFn<K, C, T>): this {
+  hook<K extends HookName>(name: K, fn: HookFn<K, C>): this {
     this.assertConfigurable()
     assertHookName(name, HOOK_NAMES, 'with app.hook')
 
@@ -348,16 +321,19 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    *
    * ```ts
    * createWebApplication({ config })
-   *   .listener('admin', (l, { config }) => l.server(() => ({ listen: config.app.admin })).with(healthProbes()))
-   *   .mount(newRouter('/jobs').extend(bindTo('admin')).get('/', () => listJobs()))
+   *   .listener('admin', (l, { config }) =>
+   *     l.server(() => ({ bodyLimit: config.app.adminBodyLimit })).with(healthProbes()),
+   *   )
+   *   .mount(new Router('/jobs').extend(bindTo('admin')).get('/', () => listJobs()))
    * ```
    *
-   * A feature adds one from its configure step with `listenersOf(kit).add(name, configure)`.
+   * The fetch application has no socket: the runtime serves each listener's `app.listeners.get(name).fetch` itself. A
+   * feature adds one from its configure step with `listenersOf(kit).add(name, configure)`.
    *
    * @throws ErrConfiguration when a listener of that name is already added.
    * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
-  listener(name: string, configure?: ListenerConfigurer<C>): this {
+  listener(name: string, configure?: ListenerConfigurer<C, ServerSettings>): this {
     this.assertConfigurable()
     this.#listeners.add(name, configure)
     return this
@@ -380,45 +356,24 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   }
 
   /**
-   * Configures the server the adapter builds at {@link ready}: the application's own. A listener takes its
-   * settings from `.listener(name, l => l.server(...))`.
+   * Configures the server the application builds at {@link ready}: its own. A listener takes its settings from
+   * `.listener(name, l => l.server(...))`.
    *
-   * `configure` resolves against the same context a plugin factory gets and returns the adapter's own settings — on
-   * the Node application `listen` and Node's `http`, `https` or `http2` options beside the server settings. To reach
-   * the server itself, use {@link serverCallback}.
+   * `configure` resolves against the same context a plugin factory gets and returns the application's settings — on
+   * the Node application also `listen` and Node's `http`, `https` or `http2` options.
    *
    * Calls accumulate: the settings shallow-merge section by section in call order. A configuration node handed
    * over as a section is copied, never mutated.
    *
    * ```ts
-   * .server(({ config }) => ({ listen: config.app.server }))
+   * .server(({ config }) => ({ bodyLimit: config.app.bodyLimit, handlerTimeout: 30 * Second }))
    * ```
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */
-  server(configure: ServerConfigurer<T, C>): this {
+  server(configure: ServerConfigurer<ServerSettings, C>): this {
     this.assertConfigurable()
     this.#own.server.push(configure)
-    return this
-  }
-
-  /**
-   * Hands `callback` the setup context and then the server the adapter builds at {@link bootstrap}, right after it
-   * is constructed and before the adapter decorates or registers anything on it: a plugin registered here loads
-   * ahead of every head slot and `.with(...)` plugin, and a not-found handler set here is kept. A listener is
-   * never handed over.
-   *
-   * Calls accumulate and run in call order.
-   *
-   * ```ts
-   * .serverCallback(({ logger }, instance) => instance.addHook('onRoute', r => logger.debug(r.url)))
-   * ```
-   *
-   * @throws ErrApplicationStarted when {@link ready} has already started.
-   */
-  serverCallback(callback: ServerCustomizer<T, C>): this {
-    this.assertConfigurable()
-    this.#own.customizers.push(callback)
     return this
   }
 
@@ -515,12 +470,12 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * ```
    *
    * The application comes back carrying the mounted routers' routes in its type, so `RoutesOf<typeof app>` is the
-   * whole surface a generated client would call. A router bound to another adapter does not compile.
+   * whole surface a generated client would call.
    */
-  mount<const RS extends ReadonlyArray<Router<any, any, any, any, any, T>>>(
+  mount<const RS extends ReadonlyArray<AnyRouter>>(
     ...routers: RS
-  ): WebApplication<T, ROUTES | RoutesOfRouter<RS[number]>, DEPS | DepsOfRouter<RS[number]>, C>
-  mount(...routers: Router<any, any, any, any, any, any>[]): this {
+  ): WebApplication<ROUTES | RoutesOf<RS[number]>, DEPS | NonNullable<RS[number]['__deps']>, C>
+  mount(...routers: AnyRouter[]): this {
     if (this.#built) {
       throw new ErrConfiguration(
         errMessage('Cannot mount a router: routing has already been built')
@@ -542,14 +497,23 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * The programmatic source is added only when something was mounted, so an application declaring every route
    * with decorators builds exactly what it built before there was a second way.
    */
-  protected routeSources(): RouteSource<T['request']>[] {
-    const sources: RouteSource<T['request']>[] = [new ControllerRouteSource<T['request']>()]
+  protected routeSources(): RouteSource<Context>[] {
+    const sources: RouteSource<Context>[] = [new ControllerRouteSource<Context>()]
 
     if (this.#mounted.length > 0) {
-      sources.push(new FluentRouteSource<T['request']>(this.#mounted, this.#plugins.childrenOf))
+      sources.push(new FluentRouteSource<Context>(this.#mounted, this.#plugins.childrenOf))
     }
 
     return sources
+  }
+
+  /** How each server is hosted: answering through `fetch`. */
+  protected [kHosting](settings: object, _name: string | undefined): ServerHosting {
+    return {
+      settings: resolveServerSettings(settings),
+      nodeMiddleware: false,
+      serve: engine => Promise.resolve(new FetchServer(engine)),
+    }
   }
 
   protected override async setup(): Promise<void> {
@@ -569,11 +533,8 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     await this.#controllerPlugins(context)
 
     const listeners = this.#listeners.build(context as HTTPSetupContext<C>)
-    const routing = buildRouting<T['request']>(this.routeSources(), this.container)
-    const servers = new ServerSet<T>([
-      this.#own as ServerDefinition<T>,
-      ...(listeners as unknown as ServerDefinition<T>[]),
-    ])
+    const routing = buildRouting<Context>(this.routeSources(), this.container)
+    const servers = new ServerSet([this.#own as ServerDefinition, ...(listeners as unknown as ServerDefinition[])])
     this.#servers = servers
 
     // Every group compiles here, before any server is built, so a route that cannot compile fails before anything
@@ -581,20 +542,21 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     this.#routeGroups = servers.select(routing)
     this.#built = true
 
-    await servers.setup(this.#adapter, {
+    await servers.setup({
       context,
       plugins: this.#plugins,
       compileRouteGroup: routing.compileRouteGroup,
       inventory: this.#inventory,
+      contextKey: this.#contextKey,
+      hosting: (settings, name) => this[kHosting](settings, name),
     })
 
     this.#listenerServers = listenerServers(servers.named!)
   }
 
   protected override async start(): Promise<void> {
-    // The application's own server first: under Watt, the first listen to complete is the one it takes over. Only
-    // `run()` gets here, and it records its arguments before it does.
-    await this.#servers?.run(this.#runArgs!)
+    // The application's own server first: under Watt, the first listen to complete is the one it takes over.
+    await this.#servers?.run()
   }
 
   protected override runInfo(): RunInfo & { address?: ServerAddress } {
@@ -603,23 +565,6 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     const address = this.address
 
     return address === undefined ? super.runInfo() : { ...super.runInfo(), address }
-  }
-
-  /**
-   * Readies the application if needed and starts the server with what the adapter's `run` takes — on the Node
-   * application, listen options merged over the `listen` that `.server(...)` returned, these winning key by key. Each
-   * listener starts after it, on its own settings alone.
-   *
-   * Runs once: a second call is refused rather than joined, since it would otherwise lose its listen options.
-   *
-   * @throws ErrApplicationRunning when `run()` has already been called, whatever became of that call.
-   * @throws ErrApplicationClosed once {@link close} has been called, including while `run()` was still booting.
-   */
-  override run(...args: T['runArgs']): Promise<T['runInfo']> {
-    // The first call's: a second one is refused, and must not change what the first listens with while it boots.
-    this.#runArgs ??= args
-    // runInfo() is overridden, so what base run() resolves to carries the address of a server that listens.
-    return super.run() as Promise<T['runInfo']>
   }
 
   // Tolerates a server that was never built: `close()` runs `stop()` whether or not `bootstrap()` got that far.
@@ -641,7 +586,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   }
 
   /** @throws ErrApplicationNotReady before {@link setup} has built the server. */
-  #ownServer(): IAdapterServer<T> {
+  #ownServer(): HostedServer {
     const server = this.#servers?.own
 
     if (server === undefined) {
@@ -651,17 +596,6 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     return server
   }
 }
-
-/** The routes one router declares, distributed so a union of routers folds into a union of their routes. */
-type RoutesOfRouter<T> = T extends Router<any, any, any, any, infer R, any> ? R : never
-
-/**
- * What one router injected, distributed the same way — `DepsOf` intersects the union back into one bag.
- *
- * A router that injected nothing carries `undefined` rather than `never`, and unioning that in would make every
- * application that mounted one report `undefined` as its dependencies. It contributes nothing instead.
- */
-type DepsOfRouter<T> = T extends Router<any, any, infer D, any, any, any> ? (D extends undefined ? never : D) : never
 
 /**
  * Creates the fetch application: served by the web-standards engine, with no socket of its own. Hand `app.fetch` to
@@ -675,11 +609,10 @@ type DepsOfRouter<T> = T extends Router<any, any, infer D, any, any, any> ? (D e
  * ```
  *
  * What the fetch application cannot serve, such as a Node middleware, is refused at start-up, pointing at
- * `createWebApplication()` from `@caffeinejs/http/node`. A handler typed with a plain `IContext` sees the `raw` and
- * `platform` types of every engine application the program loads; read them through `ctx.platform.name === 'fetch'`.
+ * `createWebApplication()` from `@caffeinejs/http/node`. `ctx.platform.name` is `'fetch'` on it.
  */
 export function createWebApplication<TConfig = unknown>(
   options?: WebApplicationOptions<TConfig>,
-): WebApplication<FetchAdapterTypes, never, never, TConfig> {
-  return new WebApplication(fetchAdapterFactory(), options)
+): WebApplication<never, never, TConfig> {
+  return new WebApplication(options)
 }

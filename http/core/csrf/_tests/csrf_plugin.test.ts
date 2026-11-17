@@ -4,7 +4,6 @@ import { newNoopLogger, type LogFn, type Logger } from '@caffeinejs/application/
 import { $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { HTTPSetupContext } from '../../../adapter.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -27,9 +26,10 @@ import {
   type ErrorHandler,
   type OriginPredicate,
   type WebApplication,
+  Router,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
-import { HTTPPlugin } from '../../../plugin.js'
+import { createWebApplication } from '../../../platform/node/index.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
 import { authentication } from '../../security/security.js'
 import { csrf } from '../csrf.js'
 
@@ -88,7 +88,7 @@ const listener = { host: '127.0.0.1', port: 0 }
 const ok = () => ({ ok: true })
 
 /** `GET` and `POST /echo`. */
-const echo = () => newRouter('/echo').get('/', ok).post('/', ok)
+const echo = () => new Router('/echo').get('/', ok).post('/', ok)
 
 interface Requesting {
   request(url: string, init?: RequestInit): Promise<Response>
@@ -487,7 +487,7 @@ describe('csrf()', () => {
     // A route's own mark is the more specific word: an application route under a prefix excluded for somebody
     // else's routes stays protected when it says so.
     it('keeps a route marked csrfExempt(false) protected under an excluded prefix', async () => {
-      const hooks = newRouter('/hooks').post('/provider', ok).post('/settings').extend(csrfExempt(false)).handler(ok)
+      const hooks = new Router('/hooks').post('/provider', ok).post('/settings').extend(csrfExempt(false)).handler(ok)
 
       const app = await ready(
         createWebApplication()
@@ -500,7 +500,7 @@ describe('csrf()', () => {
     })
 
     it('takes csrfExempt() on a router, and csrfExempt(false) on one of its routes', async () => {
-      const hooks = newRouter('/hooks')
+      const hooks = new Router('/hooks')
         .extend(csrfExempt())
         .post('/open', ok)
         .post('/closed')
@@ -517,9 +517,9 @@ describe('csrf()', () => {
     // A prefix is a run of whole segments, judged by the path a route was registered under: no spelling of a URL
     // borrows the exemption of a route it did not match.
     it('leaves the registered paths under an excluded prefix alone, and no other', async () => {
-      const hooks = newRouter('/webhooks').post('/', ok).post('/:id', ok)
-      const near = newRouter('/webhooksx').post('/', ok)
-      const wild = newRouter('/catch').post('/*', ok)
+      const hooks = new Router('/webhooks').post('/', ok).post('/:id', ok)
+      const near = new Router('/webhooksx').post('/', ok)
+      const wild = new Router('/catch').post('/*', ok)
 
       const app = await ready(
         createWebApplication()
@@ -570,7 +570,11 @@ describe('csrf()', () => {
                 .allowSecFetchSite((_ctx, site) => asked.push(site) < 0),
             ),
           )
-          .mount(echo(), newRouter('/hooks').extend(csrfExempt()).post('/', ok), newRouter('/excluded').post('/', ok)),
+          .mount(
+            echo(),
+            new Router('/hooks').extend(csrfExempt()).post('/', ok),
+            new Router('/excluded').post('/', ok),
+          ),
       )
 
       expect((await post(app, '/echo', SAME_ORIGIN)).status).toBe(200)
@@ -726,7 +730,7 @@ describe('csrf()', () => {
         createWebApplication()
           .with(csrf(c => c.trustOrigin(ctx => failures[ctx.req.header('x-failure')!]!() as boolean)))
           .with(afterwards)
-          .mount(newRouter('/echo').post('/', () => (handled++, ok()))),
+          .mount(new Router('/echo').post('/', () => (handled++, ok()))),
       )
 
       for (const failure of Object.keys(failures)) {
@@ -808,9 +812,7 @@ describe('csrf()', () => {
 
     // A check widens the plugin it was given to, and no other: a route group's own plugin decides for itself.
     it('does not widen a route group plugin of its own', async () => {
-      const admin = newRouter('/admin')
-        .with(csrf(c => c.name('admin')))
-        .post('/', ok)
+      const admin = new Router('/admin').with(csrf(c => c.name('admin'))).post('/', ok)
 
       const app = await ready(
         createWebApplication()
@@ -933,10 +935,8 @@ describe('csrf()', () => {
     })
 
     it('covers one route group when registered with router.with(...)', async () => {
-      const admin = newRouter('/admin')
-        .with(csrf(c => c.name('admin')))
-        .post('/', ok)
-      const open = newRouter('/open').post('/', ok)
+      const admin = new Router('/admin').with(csrf(c => c.name('admin'))).post('/', ok)
+      const open = new Router('/open').post('/', ok)
 
       const app = await ready(createWebApplication().mount(admin, open))
 
@@ -946,8 +946,8 @@ describe('csrf()', () => {
 
     // A plugin covers the server it was registered on, and only that one.
     it('covers a listener through its own l.with(csrf()), and no other server', async () => {
-      const metrics = newRouter('/metrics').extend(bindTo('admin')).post('/', ok)
-      const api = newRouter('/api').post('/', ok)
+      const metrics = new Router('/metrics').extend(bindTo('admin')).post('/', ok)
+      const api = new Router('/api').post('/', ok)
 
       const app = (await running(
         createWebApplication()

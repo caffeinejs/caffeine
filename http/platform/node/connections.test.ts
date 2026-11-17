@@ -8,7 +8,8 @@ import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createWebApplication, newRouter } from './node.js'
+import { Router, type AnyRouter } from '../../index.js'
+import { createWebApplication } from './node.js'
 
 const key = readFileSync(new URL('../../_tests/_testdata/tls/localhost.key', import.meta.url))
 const cert = readFileSync(new URL('../../_tests/_testdata/tls/localhost.crt', import.meta.url))
@@ -32,7 +33,7 @@ afterEach(async () => {
 function routes() {
   const inFlight = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
-  const router = newRouter('/drain')
+  const router = new Router('/drain')
   router.get('/fast').handler(() => ({ ok: true }))
   router.get('/slow').handler(async () => {
     inFlight.resolve()
@@ -42,7 +43,7 @@ function routes() {
   return { router, inFlight, release }
 }
 
-async function start(router: ReturnType<typeof newRouter>, settings: object = {}, budget = 5 * Second) {
+async function start(router: AnyRouter, settings: object = {}, budget = 5 * Second) {
   const app = createWebApplication()
     .logger(b => b.use(newNoopLogger()))
     .server(() => settings as never)

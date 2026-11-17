@@ -1,8 +1,9 @@
 import { type InjectionToken, Scopes } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import type { HTTPSetupContext } from '../../adapter.js'
+import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
+import type { RequestHookName } from '../lifecycle/lifecycle.js'
 import { ErrNextCalledTwice, ErrPipelineSealed } from './errors.js'
 import {
   type Middleware,
@@ -32,13 +33,13 @@ interface Forms {
 
 type Resolved = Forms & { readonly hint: unknown }
 
-/** One middleware as the adapter installs it: resolved, adapted to the Node signature, and placed. */
+/** One middleware as the engine installs it: resolved, adapted to the Node signature, and placed. */
 export interface ResolvedMiddleware {
   /** Where it applies, or `undefined` for every request. */
   readonly path: MiddlewarePath | undefined
   /**
    * The hook `use()` named, else the middleware's own {@link kMiddlewareHook} hint, else `undefined` for the
-   * adapter's default. The adapter validates it: nothing here knows which names exist.
+   * default, `onRequest`. The engine refuses a hint that is not a request hook point.
    */
   readonly hook: string | undefined
   readonly fn: NodeMiddleware
@@ -48,26 +49,23 @@ export interface ResolvedMiddleware {
 
 /**
  * The application's middleware pipeline: what `app.use()` and `app.useFn()` register, resolved once at start-up
- * for the adapter to install.
- *
- * Entries keep their registration order. Which hooks exist, and how a middleware is attached to one, is the
- * adapter's business: `H` is the names its hooks go by.
+ * for the engine to install. Entries keep their registration order.
  */
-export class MiddlewarePipeline<H extends string = string> {
+export class MiddlewarePipeline {
   readonly #entries: Entry[] = []
   #sealed = false
 
   /** Registers `target` at `hook`, optionally restricted to `path`. Throws once the pipeline has been resolved. */
-  add(path: MiddlewarePath | undefined, target: unknown, hook?: H): this {
+  add(path: MiddlewarePath | undefined, target: unknown, hook?: RequestHookName): this {
     return this.#add(path, target, hook, false)
   }
 
   /** Registers a factory that produces middleware once at start-up. */
-  addFactory(path: MiddlewarePath | undefined, target: unknown, hook?: H): this {
+  addFactory(path: MiddlewarePath | undefined, target: unknown, hook?: RequestHookName): this {
     return this.#add(path, target, hook, true)
   }
 
-  #add(path: MiddlewarePath | undefined, target: unknown, hook: H | undefined, factory: boolean): this {
+  #add(path: MiddlewarePath | undefined, target: unknown, hook: RequestHookName | undefined, factory: boolean): this {
     if (this.#sealed) {
       throw new ErrPipelineSealed()
     }

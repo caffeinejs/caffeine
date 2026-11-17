@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { type WebApplication } from '@caffeinejs/http'
-import type { NodeAdapterTypes } from '@caffeinejs/http/node'
+import type { NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
@@ -16,16 +15,16 @@ import { expectNotFoundJSON, fixtures, isolated, NAVIGATION } from './_headers.j
  */
 
 describe('a file mount under a base path', () => {
-  let app: WebApplication<NodeAdapterTypes>
+  let app: NodeWebApplication
 
   afterEach(async () => {
     await app?.close()
   })
 
-  function site(): WebApplication<NodeAdapterTypes> {
+  function site(): NodeWebApplication {
     return isolated()
       .basePath('/api')
-      .with(staticFiles(s => s.serve(fixtures, { prefix: '/static' }))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(fixtures, { prefix: '/static' }))) as NodeWebApplication
   }
 
   it('serves a file under the base with its bytes, and the same file without the base', async () => {

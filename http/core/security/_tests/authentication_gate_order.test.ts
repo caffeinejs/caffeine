@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import type { AdapterExtensionFactory, HTTPSetupContext } from '../../../adapter.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -11,7 +10,7 @@ import {
   type IContext,
 } from '../../../index.js'
 import { createWebApplication } from '../../../platform/node/index.js'
-import { HTTPPlugin } from '../../../plugin.js'
+import { HTTPPlugin, type HTTPPluginFactory, type HTTPSetupContext } from '../../../plugin.js'
 import { authentication } from '../security.js'
 
 /**
@@ -39,7 +38,7 @@ class NeverAuthenticates extends BaseAuthenticationHandler<object> {
 }
 
 /** Stands in for `@caffeinejs/cors`: stamps a header from an `onRequest` hook, and records that it ran. */
-function stamping(name: string, ran: string[]): AdapterExtensionFactory<HTTPPlugin> {
+function stamping(name: string, ran: string[]): HTTPPluginFactory {
   return () =>
     new (class extends HTTPPlugin {
       override readonly name = name

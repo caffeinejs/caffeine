@@ -3,10 +3,9 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { newNoopLogger, type LogFn, type Logger } from '@caffeinejs/application/logger'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { HTTPSetupContext } from '../../../../adapter.js'
-import { type IContext, Authentication } from '../../../../index.js'
-import { createWebApplication, newRouter } from '../../../../platform/node/index.js'
-import { HTTPPlugin } from '../../../../plugin.js'
+import { type IContext, Authentication, Router } from '../../../../index.js'
+import { createWebApplication } from '../../../../platform/node/index.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../../../plugin.js'
 import { authentication } from '../../security.js'
 import { ErrOAuthCallback } from '../internal/remote/errors.js'
 import { ErrOIDCDiscovery } from './errors.js'
@@ -97,11 +96,9 @@ function application(onFail?: (ctx: IContext, error: Error) => void, logged: Log
     )
     .with(authentication())
     .mount(
-      newRouter().mount(
-        newRouter('/account')
-          .authorize()
-          .get('/', () => ({ ok: true })),
-        newRouter('/sign-out').get('/', () => {
+      new Router().mount(
+        new Router('/account').authorize().get('/', () => ({ ok: true })),
+        new Router('/sign-out').get('/', () => {
           throw new ErrOIDCDiscovery(`Cannot fetch OIDC discovery document: "${ISSUER}": ${UNREACHABLE}`)
         }),
       ),
@@ -160,7 +157,7 @@ describe('a sign-in that cannot go ahead', () => {
       // At `info`, since that is the level the record is expected at.
       .logger(b => b.use(recordTo(logged, 'info')))
       .mount(
-        newRouter('/finish').get('/', () => {
+        new Router('/finish').get('/', () => {
           throw new ErrOAuthCallback('state mismatch for subject jane@example.com')
         }),
       )
@@ -183,7 +180,7 @@ describe('a sign-in that cannot go ahead', () => {
 
   it('still describes an ordinary error the ordinary way', async () => {
     const app = createWebApplication().mount(
-      newRouter('/broken').get('/', () => {
+      new Router('/broken').get('/', () => {
         throw Object.assign(new Error('teapot'), { statusCode: 418 })
       }),
     )

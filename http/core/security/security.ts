@@ -1,9 +1,8 @@
 import type { Container } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
-import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
+import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import { kCookieSettings } from '../cookie/keys.js'
 import type { IRouteGroup } from '../routing/route.js'
 import {
@@ -146,7 +145,7 @@ export class AuthenticationGateBuilder {
  */
 export function authentication<C = unknown>(
   configure?: HTTPPluginConfigurer<AuthenticationGateBuilder, C>,
-): AdapterExtensionFactory<HTTPPlugin, C> {
+): HTTPPluginFactory<C> {
   return context => {
     const builder = new AuthenticationGateBuilder()
     configure?.(builder, context)

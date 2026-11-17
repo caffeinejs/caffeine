@@ -1,7 +1,6 @@
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../../adapter.js'
 import { createWebApplication as createFetchApplication } from '../../application.js'
 import { bindTo } from '../../decorators/bind_to.js'
 import {
@@ -19,13 +18,13 @@ import {
   type ServerRoutes,
   type WebApplication,
 } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/node/index.js'
+import { createWebApplication } from '../../platform/node/index.js'
+import type { HTTPSetupContext } from '../../plugin.js'
 import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../security/exempt.js'
-import type { FetchAdapterTypes } from '../server/adapter.js'
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
-type AnyRouter = Router<any, any, any, any, any, any>
-type FetchApp = WebApplication<FetchAdapterTypes, any, any, any>
+type AnyRouter = Router<any, any, any, any, any>
+type FetchApp = WebApplication<any, any, any>
 
 /** A scheme that authenticates nobody: enough for a gate to be built. */
 class NobodyScheme extends BaseAuthenticationHandler<object> {
@@ -217,10 +216,8 @@ describe('route inventory across listeners', () => {
     app = createWebApplication()
       .listener('admin')
       .mount(
-        newRouter('/api').get('/', () => 'api'),
-        newRouter('/jobs')
-          .extend(bindTo('admin'))
-          .get('/', () => 'jobs'),
+        new Router('/api').get('/', () => 'api'),
+        new Router('/jobs').extend(bindTo('admin')).get('/', () => 'jobs'),
       ) as WebApplication
 
     await app.bootstrap()

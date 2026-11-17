@@ -1,16 +1,11 @@
-import {
-  AdapterExtensions,
-  type AdapterExtensionFactory,
-  type IAdapterTypes,
-  type HTTPSetupContext,
-} from '../../../adapter.js'
-import { HTTPPlugin } from '../../../plugin.js'
+import type { HTTPPluginFactory, HTTPSetupContext } from '../../../plugin.js'
 import { PluginSlot } from '../../../plugin_slot.js'
-import { MiddlewarePipeline } from '../../middleware/pipeline.js'
+import type { HookBatch } from '../../lifecycle/batch.js'
+import { MiddlewarePipeline, type ResolvedMiddleware } from '../../middleware/pipeline.js'
 import type { AnyRouter } from './programmatic.js'
 import { stateOf, type RouterState } from './state.js'
 
-type ScopeFactory = AdapterExtensionFactory<unknown, unknown, any>
+type ScopeFactory = HTTPPluginFactory<any>
 
 /**
  * The plugins an application's routers and controllers registered for themselves, resolved once each during
@@ -21,9 +16,11 @@ type ScopeFactory = AdapterExtensionFactory<unknown, unknown, any>
  * relative to it, and what a router's plugin mounts nests under the router. What it mounts is kept here, never
  * written into the router, so the same router mounted into two applications starts from what it declared in both.
  */
-export class ScopedPlugins<T extends IAdapterTypes> {
-  /** Per router or controller: the adapter's plugins, and the middleware its plugins added. */
-  readonly extensions = new AdapterExtensions<T['extension']>()
+export class ScopedPlugins {
+  /** Per router or controller: the hooks its plugins added, in the order they were registered. */
+  readonly #batches = new Map<object, HookBatch[]>()
+  /** Per router or controller: the middleware its plugins added, run in front of its routes after its plugins. */
+  readonly #middlewares = new Map<object, readonly ResolvedMiddleware[]>()
 
   readonly #resolved = new Set<RouterState>()
   readonly #mounted = new Map<RouterState, RouterState[]>()
@@ -32,6 +29,19 @@ export class ScopedPlugins<T extends IAdapterTypes> {
   readonly childrenOf = (state: RouterState): readonly RouterState[] => {
     const mounted = this.#mounted.get(state)
     return mounted === undefined ? state.children : [...state.children, ...mounted]
+  }
+
+  /** The hooks `scope`, a router or a controller class, installs in front of its own routes. */
+  batchesOf(scope: object): readonly HookBatch[] {
+    return this.#batches.get(scope) ?? []
+  }
+
+  /**
+   * The middleware `scope`'s plugins added, run in front of its routes after its plugins. Paths are relative to it:
+   * the engine rebases them under each group's `RouteGroupScope.path`.
+   */
+  middlewaresOf(scope: object): readonly ResolvedMiddleware[] {
+    return this.#middlewares.get(scope) ?? []
   }
 
   /**
@@ -80,16 +90,11 @@ export class ScopedPlugins<T extends IAdapterTypes> {
 
     await slot.during(async () => {
       for (const factory of factories) {
-        const { batch, extension } = await slot.run(factory, scoped, where)
+        const batch = await slot.run(factory, scoped, where)
 
         // The hooks it added keep its place among the scope's plugins.
         if (!batch.empty) {
-          this.extensions.add(batch, key)
-        }
-
-        if (!(extension instanceof HTTPPlugin)) {
-          // Unchecked: the adapter refuses what it cannot install.
-          this.extensions.add(extension as T['extension'], key)
+          this.#add(key, batch)
         }
       }
     })
@@ -97,10 +102,20 @@ export class ScopedPlugins<T extends IAdapterTypes> {
     // Factories run here, handed the context outside the slot, so a middleware factory cannot mount.
     const resolved = middlewares.resolve(context)
     if (resolved.length > 0) {
-      this.extensions.addMiddlewares(key, resolved)
+      this.#middlewares.set(key, resolved)
     }
 
     return slot.mounted
+  }
+
+  #add(scope: object, batch: HookBatch): void {
+    let batches = this.#batches.get(scope)
+    if (batches === undefined) {
+      batches = []
+      this.#batches.set(scope, batches)
+    }
+
+    batches.push(batch)
   }
 
   // Siblings only, as `Router.mount` adopts: the same router twice under one parent is the same routes twice. Called

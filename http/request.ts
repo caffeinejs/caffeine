@@ -6,14 +6,12 @@ import type { RouteValidationSchema } from './core/routing/spec.js'
 export type UnsignedCookie = string | false | undefined
 
 export interface IRequest<
-  RAW = unknown,
   TParams = Record<string, string>,
   TQuery = Record<string, string>,
   THeaders = Record<string, string>,
-  TAsync extends boolean = false,
   TBody = unknown,
 > {
-  get raw(): RAW
+  get raw(): Request
 
   /**
    * The ID the server gave this request, the one its log lines carry: the value of the request header the server was
@@ -48,7 +46,7 @@ export interface IRequest<
   get protocol(): string
 
   /**
-   * The parsed request body, as the adapter's content-type parser produced it, typed by the route's `body`
+   * The parsed request body, as the server's body parser produced it, typed by the route's `body`
    * schema when it declares one.
    *
    * A handler that takes its arguments through pickers reaches the body with `$p.body()` instead; this is the
@@ -82,7 +80,7 @@ export interface IRequest<
    * Every cookie the request carries, verified with the server's signer: the value, or `false` for one that does not
    * verify. A cookie signed with a secret of its own reads as `false` here.
    */
-  signedCookie(): TAsync extends true ? Promise<Record<string, UnsignedCookie>> : Record<string, UnsignedCookie>
+  signedCookie(): Promise<Record<string, UnsignedCookie>>
   /**
    * The value a signed cookie carries, `false` when it does not verify, or `undefined` when the request did not send
    * it.
@@ -92,7 +90,7 @@ export interface IRequest<
    *
    * @throws ErrCookieConfiguration when there is no secret to verify with.
    */
-  signedCookie(name: string, secret?: CookieSecret): TAsync extends true ? Promise<UnsignedCookie> : UnsignedCookie
+  signedCookie(name: string, secret?: CookieSecret): Promise<UnsignedCookie>
 
   /**
    * Verifies a signed value, a cookie's as the request carries it, and says what the verifying found: `{ valid, renew,
@@ -114,10 +112,7 @@ export interface IRequest<
    * @throws ErrCookieConfiguration when there is no secret to verify with.
    * @throws ErrCookiesDisabled when the server has cookies off.
    */
-  unsignCookie(
-    value: string,
-    secret?: CookieSecret,
-  ): TAsync extends true ? Promise<CookieUnsignResult> : CookieUnsignResult
+  unsignCookie(value: string, secret?: CookieSecret): Promise<CookieUnsignResult>
 }
 
 /**

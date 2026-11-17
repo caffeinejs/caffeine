@@ -42,8 +42,9 @@ import {
   Post,
   Schema,
   type ActionResult,
+  Router,
 } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/node/index.js'
+import { createWebApplication } from '../../platform/node/index.js'
 
 interface LogEntry {
   level: number
@@ -633,7 +634,7 @@ describe('ErrHTTP subclasses', () => {
   ]
 
   it('renders each one thrown bare as the problem of its status', async () => {
-    const router = newRouter('/thrown')
+    const router = new Router('/thrown')
     for (const [index, [Class]] of classes.entries()) {
       router.get(`/${index}`, () => {
         throw new Class()
@@ -742,7 +743,7 @@ describe('ErrHTTP.builder', () => {
   it('sends every entry it was given, past the validation cap', async () => {
     const entries = Array.from({ length: 40 }, (_, i) => ({ code: 'ERR_ROW', detail: `Row ${i} is invalid` }))
     const app = createWebApplication().mount(
-      newRouter('/imports').post('/', () => {
+      new Router('/imports').post('/', () => {
         throw ErrHTTP.builder()
           .statusCode(422)
           .message('40 rows are invalid')
@@ -787,7 +788,7 @@ void [InventoryController]
 describe('failures from the real world', () => {
   it('answers a thrown string with the generic problem, from a plain route and from a controller with handlers', async () => {
     const app = createWebApplication().mount(
-      newRouter('/legacy').get('/', () => {
+      new Router('/legacy').get('/', () => {
         throw 'socket hang up' as unknown as Error
       }),
     )
@@ -816,7 +817,7 @@ describe('failures from the real world', () => {
   // What a rate limiter throws: a 429 that tells the client when to come back.
   it('keeps the headers a 4xx from a library carries, beside the problem', async () => {
     const app = createWebApplication().mount(
-      newRouter('/search').get('/', () => {
+      new Router('/search').get('/', () => {
         throw Object.assign(new Error('Rate limit exceeded, retry in 30 seconds'), {
           statusCode: 429,
           code: 'FST_ERR_RATE_LIMIT',
@@ -846,7 +847,7 @@ describe('failures from the real world', () => {
   // nginx's 499: a status with no phrase still gets a code a client can look up.
   it('names a status Node has no phrase for', async () => {
     const app = createWebApplication().mount(
-      newRouter('/upload').get('/', () => {
+      new Router('/upload').get('/', () => {
         throw Object.assign(new Error('Client closed the request'), { statusCode: 499 })
       }),
     )
@@ -883,7 +884,7 @@ describe('failures from the real world', () => {
       },
     ]
     const app = createWebApplication().mount(
-      newRouter('/webhooks').post('/', () => {
+      new Router('/webhooks').post('/', () => {
         throw ErrHTTP.builder()
           .statusCode(422)
           .code('ERR_WEBHOOK_PAYLOAD')
@@ -914,7 +915,7 @@ describe('failures from the real world', () => {
   // so its entries could not say where they failed, and the error answers as any other 4xx.
   it('lists nothing from a validation array on an error that is not a request validation', async () => {
     const app = createWebApplication().mount(
-      newRouter('/webhooks').post('/', () => {
+      new Router('/webhooks').post('/', () => {
         throw Object.assign(new Error('Webhook payload is invalid'), {
           statusCode: 422,
           code: 'ERR_WEBHOOK_PAYLOAD',
@@ -946,7 +947,7 @@ describe('failures from the real world', () => {
   it('answers a 4xx naming a public message with that message, and logs it as information', async () => {
     const logged: LogEntry[] = []
     const app = loggingTo(logged).mount(
-      newRouter('/auth').get('/callback', () => {
+      new Router('/auth').get('/callback', () => {
         throw Object.assign(new Error('state abc did not match the one sent to https://idp.internal'), {
           statusCode: 400,
           code: 'ERR_OIDC_STATE',
@@ -983,7 +984,7 @@ describe('failures from the real world', () => {
     const app = createWebApplication()
       .errorHandling(e => e.exposeStacktrace())
       .mount(
-        newRouter('/payments').post('/', () => {
+        new Router('/payments').post('/', () => {
           throw new Error('Cannot record the payment', { cause: remote })
         }),
       )
@@ -1003,7 +1004,7 @@ describe('a route that declares an error response schema', () => {
   const legacy = $t.Object({ code: $t.String(), message: $t.String() })
 
   function orders() {
-    return newRouter('/orders')
+    return new Router('/orders')
       .get('/:id', { response: { 200: $t.Object({ id: $t.String() }), 404: legacy } }, () => {
         throw new ErrHTTPNotFound('Order 42 not found')
       })
@@ -1093,7 +1094,7 @@ describe('a route that declares an error response schema', () => {
 
 describe('the members an agent acts on', () => {
   function checkout() {
-    return newRouter('/checkout')
+    return new Router('/checkout')
       .post('/', () => {
         throw ErrHTTP.builder()
           .statusCode(429)

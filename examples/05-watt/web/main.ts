@@ -1,11 +1,11 @@
-import { healthProbes } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/node'
+import { healthProbes, Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { getBasePath } from '@platformatic/globals'
 
 import { registerWattChecks } from '../watt.js'
 
 // Every application in a Watt runtime answers the others at `http://<id>.plt.local`, in process.
-const routes = newRouter()
+const routes = new Router()
   .get('/', () => ({ application: 'web' }))
   .get('/orders', async () => (await fetch('http://orders.plt.local/orders')).json())
 

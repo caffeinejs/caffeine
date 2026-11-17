@@ -1,6 +1,5 @@
 import type { AnySchema, InferWire } from '@caffeinejs/application/schema'
 
-import type { ContextTypesOf, IAdapterTypes } from '../../../adapter.js'
 import type { IContext } from '../../../context.js'
 import type { InferBody, InferHeaders, InferParams, InferQuery } from '../../../request.js'
 import type { RouteValidationSchema } from '../spec.js'
@@ -106,15 +105,16 @@ type WireSlot<S, Slot extends keyof RouteValidationSchema, Fallback> =
  * The context a programmatic handler receives, typed by the route's schema and path.
  *
  * The same object a decorated handler gets from `$p.context()`, with the request slots narrowed to what this route
- * declared. `T` is the adapter the router is bound to; a router bound to none types it as a plain `IContext` would.
+ * declared.
  */
-export type RouteContext<
-  S extends RouteValidationSchema,
-  P extends string,
+export type RouteContext<S extends RouteValidationSchema, P extends string, V, C> = IContext<
   V,
   C,
-  T extends IAdapterTypes = never,
-> = IContext<V, C, ContextTypesOf<T>, ParamsOf<S, P>, InferQuery<S>, InferHeaders<S>, InferBody<S>>
+  ParamsOf<S, P>,
+  InferQuery<S>,
+  InferHeaders<S>,
+  InferBody<S>
+>
 
 /**
  * What a route's handler is called with: the context, then the dependencies the route and its enclosing groups
@@ -124,15 +124,10 @@ export type RouteContext<
  * `Response`, a `Responder`, or nothing at all when the handler answered through the context. It is a type parameter
  * so that a route can carry what its handler answers with — see {@link DeclaredRoute}.
  */
-export type RouteHandler<
-  S extends RouteValidationSchema,
-  P extends string,
-  V,
-  C,
-  D,
-  O = unknown,
-  T extends IAdapterTypes = never,
-> = (ctx: RouteContext<S, P, V, C, T>, deps: D) => O
+export type RouteHandler<S extends RouteValidationSchema, P extends string, V, C, D, O = unknown> = (
+  ctx: RouteContext<S, P, V, C>,
+  deps: D,
+) => O
 
 /**
  * The dependencies visible to a route: what its groups injected, with anything the route injected under the same
@@ -252,12 +247,6 @@ export type PrefixRoutePaths<R, Prefix extends string> =
  * value per statement; `blend` unions them. The variable the routes were opened from carries none of them.
  */
 export type RoutesOf<T> = T extends { readonly __routes?: infer R } ? NonNullable<R> : never
-
-/**
- * The adapter a `Router` is bound to, read back the same way {@link RoutesOf} reads routes: `never` for a router
- * bound to none.
- */
-export type AdapterOf<T> = T extends { readonly __adapter?: infer A } ? Extract<NonNullable<A>, IAdapterTypes> : never
 
 /**
  * What `ctx.state` carries under a `Router`, as the router declared it.

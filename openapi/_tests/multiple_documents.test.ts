@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Authentication, authentication, bindTo, Claim, Identity, Principal, WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { Authentication, authentication, bindTo, Claim, Identity, Principal, Router } from '@caffeinejs/http'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from '../errors.js'
@@ -14,7 +14,7 @@ const Order = $t.Object({ id: $t.String(), total: $t.Number() }, { $id: 'Order' 
 
 // A shop: the storefront's public API, and the back office under /admin on the same server.
 function catalog() {
-  const router = newRouter('/products').name('Catalog')
+  const router = new Router('/products').name('Catalog')
   router
     .get('/')
     .schema({ response: { 200: $t.Array(Product) } })
@@ -23,7 +23,7 @@ function catalog() {
 }
 
 function backOffice() {
-  const router = newRouter('/admin/orders').name('BackOffice')
+  const router = new Router('/admin/orders').name('BackOffice')
   router
     .get('/')
     .schema({ response: { 200: $t.Array(Order) } })
@@ -57,7 +57,7 @@ async function warningsDuring(run: () => Promise<void>): Promise<string[]> {
 }
 
 describe('several OpenAPI documents in one application', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -70,7 +70,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .with(openapi('storefront', o => o.info({ title: 'Storefront', version: '1.0.0' }).include(isStorefront)))
       .with(openapi('back-office', o => o.info({ title: 'Back office', version: '1.0.0' }).include(isAdmin)))
-      .mount(catalog(), backOffice()) as WebApplication<NodeAdapterTypes>
+      .mount(catalog(), backOffice()) as NodeWebApplication
     await app.bootstrap()
 
     const storefront = await json(await app.request('/openapi/storefront.json'))
@@ -92,7 +92,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .with(openapi('storefront', o => o.include(isStorefront)))
       .with(openapi('back-office', o => o.include(isAdmin)))
-      .mount(catalog(), backOffice()) as WebApplication<NodeAdapterTypes>
+      .mount(catalog(), backOffice()) as NodeWebApplication
     await app.bootstrap()
 
     expect((await app.request('/openapi/storefront.yaml')).status).toBe(200)
@@ -111,7 +111,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .listener('internal', l => l.with(openapi('internal', o => o.info({ title: 'Internal', version: '1.0.0' }))))
       .with(openapi(o => o.info({ title: 'Public', version: '1.0.0' })))
-      .mount(catalog(), backOffice().extend(bindTo('internal'))) as WebApplication<NodeAdapterTypes>
+      .mount(catalog(), backOffice().extend(bindTo('internal'))) as NodeWebApplication
     await app.bootstrap()
 
     const internal = await json(await app.listeners.get('internal')!.request('/openapi/internal.json'))
@@ -135,7 +135,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .with(openapi(o => o.docs(false)))
       .with(openapi('legacy', o => o.document(legacy).docs(false)))
-      .mount(catalog()) as WebApplication<NodeAdapterTypes>
+      .mount(catalog()) as NodeWebApplication
     await app.bootstrap()
 
     expect(Object.keys((await json(await app.request('/openapi.json'))).paths ?? {})).toEqual(['/products'])
@@ -164,7 +164,7 @@ describe('several OpenAPI documents in one application', () => {
         .mount(
           catalog().authorize({ allowAnonymous: true }),
           backOffice().authorize({ allowAnonymous: true }),
-        ) as WebApplication<NodeAdapterTypes>
+        ) as NodeWebApplication
       await app.bootstrap()
     })
 
@@ -185,7 +185,7 @@ describe('several OpenAPI documents in one application', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.json(false).yaml(false).docs(false)))
-      .mount(catalog()) as WebApplication<NodeAdapterTypes>
+      .mount(catalog()) as NodeWebApplication
     await app.bootstrap()
 
     expect((await app.request('/openapi.json')).status).toBe(404)
@@ -198,7 +198,7 @@ describe('several OpenAPI documents in one application', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.json(false).docs(false)))
-      .mount(catalog()) as WebApplication<NodeAdapterTypes>
+      .mount(catalog()) as NodeWebApplication
     await app.bootstrap()
 
     expect((await app.request('/openapi.json')).status).toBe(404)
@@ -207,17 +207,14 @@ describe('several OpenAPI documents in one application', () => {
 
   // A route the 3.1 document cannot hold is dropped from it alone, and the warning says which document dropped it.
   it('emits a 3.1.1 and a 3.2.0 document side by side', async () => {
-    const search = () =>
-      newRouter('/search')
-        .name('Search')
-        .route('QUERY', '/', () => [])
+    const search = () => new Router('/search').name('Search').route('QUERY', '/', () => [])
 
     const warnings = await warningsDuring(async () => {
       app = createWebApplication({})
         .install(OpenAPI())
         .with(openapi('v31', o => o.version('3.1.1').docs(false)))
         .with(openapi('v32', o => o.version('3.2.0').docs(false)))
-        .mount(search()) as WebApplication<NodeAdapterTypes>
+        .mount(search()) as NodeWebApplication
       await app.bootstrap()
     })
 
@@ -237,7 +234,7 @@ describe('several OpenAPI documents in one application', () => {
       .install(OpenAPI())
       .with(openapi('storefront', o => o.include(isStorefront)))
       .with(openapi('back-office', o => o.include(isAdmin)))
-      .mount(catalog(), backOffice()) as WebApplication<NodeAdapterTypes>
+      .mount(catalog(), backOffice()) as NodeWebApplication
     await app.bootstrap()
 
     const storefront = await json(await app.request('/shop/openapi/storefront.json'))
@@ -253,7 +250,7 @@ describe('several OpenAPI documents in one application', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi('a', o => o.json('/openapi.json').yaml(false).docs(false)))
-      .with(openapi('b', o => o.json('/openapi.json').yaml(false).docs(false))) as WebApplication<NodeAdapterTypes>
+      .with(openapi('b', o => o.json('/openapi.json').yaml(false).docs(false))) as NodeWebApplication
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined
@@ -266,7 +263,7 @@ describe('several OpenAPI documents in one application', () => {
   it('refuses a UI whose JSON endpoint is off', async () => {
     app = createWebApplication({})
       .install(OpenAPI())
-      .with(openapi('internal', o => o.json(false))) as WebApplication<NodeAdapterTypes>
+      .with(openapi('internal', o => o.json(false))) as NodeWebApplication
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined

@@ -5,7 +5,6 @@ import type { Logger } from '@caffeinejs/application/logger'
 import { ContextStorage, ExecutionContext, type Container, type ContextKey, type Ctor } from '@caffeinejs/di'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
-import type { IContextPlatform } from '../../adapter.js'
 import { stripBasePath } from '../../base_path.js'
 import { CACHING_PLUGIN } from '../../plugin_marks.js'
 import { compileConstraints, type CompiledConstraints } from '../constraints/derive.js'
@@ -43,7 +42,7 @@ import { answerError, configurationError, defaultProblem, sendProblem } from './
 import { compileLevel, composeRouteHooks, type LevelInput, type StoreHooks } from './hooks.js'
 import { compileRouteInput, readInput, type RouteInput } from './input.js'
 import { engineCompilers } from './parameters.js'
-import type { SendHooks, ServerPlatform } from './platform.js'
+import type { ContextPlatform, SendHooks, ServerPlatform } from './platform.js'
 import { isTimeout, MAX_TIMEOUT, type ResolvedServerSettings } from './settings.js'
 
 /** What one route resolves to in the matcher. A miss resolves to the server's not-found store. */
@@ -215,7 +214,7 @@ export class HTTPServer {
    *   when it has left: `request()`'s, whose body a test may never read.
    */
   serve<N, R>(
-    platform: ServerPlatform<N, IContextPlatform, R>,
+    platform: ServerPlatform<N, ContextPlatform, R>,
     native: N,
     extra: unknown,
     drainAtRespond = false,
@@ -703,7 +702,7 @@ class InFlight implements SendHooks {
 /** One request through the engine: hooks, handler and answer, then respond, with no `async` function on the way. */
 class Pipeline<N, R> {
   readonly #shared: ServerShared
-  readonly #platform: ServerPlatform<N, IContextPlatform, R>
+  readonly #platform: ServerPlatform<N, ContextPlatform, R>
   readonly #native: N
   readonly #ctx: Context
   readonly #store: RouteStore
@@ -713,7 +712,7 @@ class Pipeline<N, R> {
 
   constructor(
     shared: ServerShared,
-    platform: ServerPlatform<N, IContextPlatform, R>,
+    platform: ServerPlatform<N, ContextPlatform, R>,
     native: N,
     ctx: Context,
     store: RouteStore,

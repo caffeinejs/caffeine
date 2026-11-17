@@ -6,33 +6,29 @@ import {
   HTTPPlugin,
   Router,
   type ActionResult,
-  type AdapterExtensionFactory,
+  type HTTPPluginFactory,
   type ErrorHandler,
   type HTTPSetupContext,
   type IContext,
-  type WebApplication,
   type AnyRouter,
 } from '@caffeinejs/http'
-import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
 import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, notFound, PROBE, shellOf } from './_headers.js'
 
-const api = () =>
-  newRouter('/api')
-    .get('/pets', () => ({ pets: [] }))
-    .get('/*', notFound)
+const api = () => new Router('/api').get('/pets', () => ({ pets: [] })).get('/*', notFound)
 
 const pages = () =>
-  newRouter()
+  new Router()
     .detail('http', { internal: true })
     .authorize({ allowAnonymous: true })
     .get('/', shellOf(dist))
     .get('/index.html', shellOf(dist))
     .get('/*', clientRouteOf(dist))
 
-function mounting(router: AnyRouter): AdapterExtensionFactory<HTTPPlugin> {
+function mounting(router: AnyRouter): HTTPPluginFactory {
   return () =>
     new (class extends HTTPPlugin {
       register({ app }: HTTPSetupContext) {
@@ -51,14 +47,14 @@ class MissHandler implements ErrorHandler<ErrHTTPNotFound> {
 const files = () => staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true }))
 
 describe('a single-page application next to the plugins an application runs in production', () => {
-  let app: WebApplication<NodeAdapterTypes>
+  let app: NodeWebApplication
 
   afterEach(async () => {
     await app?.close()
   })
 
   it('leaves the health probes to the health plugin', async () => {
-    app = isolated().with(healthProbes()).with(files()).mount(api(), pages()) as WebApplication<NodeAdapterTypes>
+    app = isolated().with(healthProbes()).with(files()).mount(api(), pages()) as NodeWebApplication
     await app.bootstrap()
 
     const live = await app.request('/livez', { headers: PROBE })
@@ -75,7 +71,7 @@ describe('a single-page application next to the plugins an application runs in p
     app = isolated()
       .with(healthProbes(h => h.enabled(false)))
       .with(files())
-      .mount(api(), pages()) as WebApplication<NodeAdapterTypes>
+      .mount(api(), pages()) as NodeWebApplication
     await app.bootstrap()
 
     await expectNotFoundJSON(await app.request('/livez', { headers: PROBE }))
@@ -85,7 +81,7 @@ describe('a single-page application next to the plugins an application runs in p
     app = isolated()
       .with(corsPolicy(c => c.origins('https://app.example')))
       .with(files())
-      .mount(api(), pages()) as WebApplication<NodeAdapterTypes>
+      .mount(api(), pages()) as NodeWebApplication
     await app.bootstrap()
 
     const preflight = await app.request('/api/pets', {
@@ -106,7 +102,7 @@ describe('a single-page application next to the plugins an application runs in p
     app = createWebApplication({})
       .errorHandling(e => e.globalHandlers(MissHandler))
       .with(files())
-      .mount(api(), pages()) as WebApplication<NodeAdapterTypes>
+      .mount(api(), pages()) as NodeWebApplication
     await app.bootstrap()
 
     expect((await app.request('/nope', { method: 'POST' })).status).toBe(418)
@@ -121,7 +117,7 @@ describe('a single-page application next to the plugins an application runs in p
     app = isolated()
       .with(mounting(new Router().get('/metrics').handler(() => 'up 1')))
       .with(files())
-      .mount(api(), pages()) as WebApplication<NodeAdapterTypes>
+      .mount(api(), pages()) as NodeWebApplication
     await app.bootstrap()
 
     const metrics = await app.request('/metrics', { headers: PROBE })

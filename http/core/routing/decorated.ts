@@ -11,7 +11,7 @@ import { kErrorUnhandled, type CompiledHooks, type RouteDispatch, type RouteGrou
 import type { DeclaredRouteGroup, RouteSource } from './routing.js'
 import type { RouteSpec, RouteGroupSpec } from './spec.js'
 
-/** The instance a route is dispatched on, as the adapter stashes it for the request. */
+/** The instance a route is dispatched on, as the engine stashes it for the request. */
 interface RequestWithTarget {
   routeTarget: ControllerInstance | null
 }
@@ -23,7 +23,7 @@ type ControllerInstance = Record<string | symbol, (...args: unknown[]) => unknow
  *
  * This is the only place that knows a route may live on a class: it reads the decorator registry, resolves the
  * controller from the container, and turns each method key into a dispatch. Everything downstream — the
- * compiler, the adapter, the error handler — sees routes with no class in them.
+ * compiler, the engine, the error handler — sees routes with no class in them.
  */
 export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
   readonly name = 'controller'

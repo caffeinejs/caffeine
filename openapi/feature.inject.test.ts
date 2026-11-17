@@ -1,6 +1,5 @@
 import { Injectable } from '@caffeinejs/di'
-import { WebApplication } from '@caffeinejs/http'
-import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from './feature.js'
@@ -19,7 +18,7 @@ class DocumentPublisher {
 }
 
 describe('OpenAPI() and constructor injection', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -30,7 +29,7 @@ describe('OpenAPI() and constructor injection', () => {
   it('injects OpenAPIProvider by its class', async () => {
     app = createWebApplication({})
       .install(OpenAPI())
-      .with(openapi(o => o.info({ title: 'Shop', version: '1.0.0' }).docs(false))) as WebApplication<NodeAdapterTypes>
+      .with(openapi(o => o.info({ title: 'Shop', version: '1.0.0' }).docs(false))) as NodeWebApplication
     await app.bootstrap()
 
     const publisher = app.container.get(DocumentPublisher)

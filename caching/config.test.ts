@@ -4,7 +4,8 @@ import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { createWebApplication, newRouter } from '@caffeinejs/http/node'
+import { Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -73,7 +74,7 @@ async function start(
   const conf = newConfiguration(appConfigSchema).source(source).build().config
   const errors: unknown[] = []
 
-  const router = newRouter('/cfg')
+  const router = new Router('/cfg')
   router
     .get('/data')
     .extend(cacheControl({ ttl: 60 * Second }))

@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../../adapter.js'
 import { createWebApplication, type WebApplication } from '../../application.js'
-import { HTTPPlugin } from '../../plugin.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 
-let app: WebApplication<any, any, any, any> | undefined
+let app: WebApplication<any, any, any> | undefined
 const trace: string[] = []
 
 afterEach(async () => {

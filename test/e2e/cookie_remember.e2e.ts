@@ -14,8 +14,8 @@ import {
   ScryptPasswordHasher,
   UserProvider,
   Authentication,
+  Router,
 } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
 import { Hour, Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -52,8 +52,8 @@ class Users extends UserProvider {
 }
 
 function routes() {
-  return newRouter().mount(
-    newRouter('/auth')
+  return new Router().mount(
+    new Router('/auth')
       .inject({ auth: AuthenticationService, credentials: CredentialsService })
       .post('/login', async (ctx, { auth, credentials }) => {
         const body = ctx.req.body() as { identifier: string; password: string }
@@ -71,7 +71,7 @@ function routes() {
         await auth.revoke(ctx, SCHEME)
         return { ok: true }
       }),
-    newRouter('/private')
+    new Router('/private')
       .authorize()
       .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value, remembered: ctx.user.hasClaim(REMEMBERED_CLAIM) })),
   )

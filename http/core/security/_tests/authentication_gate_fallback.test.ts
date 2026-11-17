@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../../../adapter.js'
 import {
   AuthenticateResult,
   AuthenticationTicket,
@@ -15,8 +14,8 @@ import {
   CookieAuthenticationOptionsBuilder,
   ErrAuthenticationCookies,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
-import { HTTPPlugin } from '../../../plugin.js'
+import { createWebApplication } from '../../../platform/node/index.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
 import { healthProbes } from '../../health/index.js'
 import { Router } from '../../routing/programmatic/programmatic.js'
 import { accessControlExempt } from '../exempt.js'
@@ -107,7 +106,7 @@ describe('the authentication gate and routes a plugin mounted', () => {
           .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
           .with(healthProbes())
           .with(() => new PlainRoutes())
-          .mount(newRouter('/compiled').get('/', ok)),
+          .mount(new Router('/compiled').get('/', ok)),
       )
     }
 
@@ -152,7 +151,7 @@ describe('the authentication gate and routes a plugin mounted', () => {
         .install(Authentication(auth => auth.addStrategy('Broken', new BrokenScheme())))
         .with(authentication())
         .with(healthProbes())
-        .mount(newRouter('/compiled').get('/', ok)),
+        .mount(new Router('/compiled').get('/', ok)),
     )
 
     expect((await app.request('/compiled')).status).toBe(500)
@@ -197,7 +196,7 @@ describe('the challenge of a route that names several schemes', () => {
           ),
         )
         .with(authentication())
-        .mount(newRouter('/named').authorize({ schemes }).get('/', ok)),
+        .mount(new Router('/named').authorize({ schemes }).get('/', ok)),
     )
   }
 

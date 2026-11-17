@@ -1,9 +1,7 @@
-import type { RunInfo } from '@caffeinejs/application'
 import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 
-import type { IAdapterTypes, IContextPlatform } from '../../adapter.js'
 import { resolveAppURL } from '../../base_path.js'
 import { ContextState, type IContext } from '../../context.js'
 import type { InferBody, IRequest, UnsignedCookie } from '../../request.js'
@@ -24,7 +22,7 @@ import type { GlobalErrorHandlerOptions } from '../error/error.js'
 import type { ErrorHandlerProvider } from '../error/handler.js'
 import { newProblem } from '../error/problem.js'
 import type { ValidationSlot } from '../error/validation.js'
-import { isThenable, type RequestHookName, type SendPayload } from '../lifecycle/lifecycle.js'
+import { isThenable, type SendPayload } from '../lifecycle/lifecycle.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import type { Next, NodeMiddleware } from '../middleware/middleware.js'
 import { normalizePath, sanitizeURL } from '../middleware/path.js'
@@ -34,7 +32,7 @@ import type { CompiledSerializer } from '../validation/validation.js'
 import { HeldStream, isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
 import { contentTooLarge, declaredOver, ErrRequestBodyConsumed, limitStream } from './body.js'
 import { configurationError, sendProblem, USE_NODE } from './error.js'
-import type { ServerPlatform } from './platform.js'
+import type { ContextPlatform, ServerPlatform } from './platform.js'
 import { parseQuery } from './query.js'
 import type { RouteStore } from './server.js'
 import type { ResolvedServerSettings } from './settings.js'
@@ -64,28 +62,13 @@ export interface ServerShared extends Pick<
   readonly routeOf: (method: string, url: string) => readonly RouteDefinition[] | undefined
 }
 
-/** What a context of the engine is typed with on every platform: `ctx.req.raw` is a `Request`. */
-export interface EngineContextTypes extends IAdapterTypes {
-  instance: unknown
-  request: unknown
-  extension: never
-  hook: RequestHookName
-  raw: Request
-  cookieOptions: CookieSerializeOptions
-  asyncCookies: true
-  platform: IContextPlatform
-  serverOptions: object
-  runArgs: readonly unknown[]
-  runInfo: RunInfo
-}
-
 type Params = Readonly<Record<string, string | undefined>>
 
 /**
  * The {@link IContext} the engine builds for every request. Also what routes compile against, and what a group's
  * `onRequest` hook is handed as both its request and its reply.
  */
-export class Context implements IContext<Record<never, never>, Record<never, never>, EngineContextTypes>, CookieJar {
+export class Context implements IContext<Record<never, never>, Record<never, never>>, CookieJar {
   [kPendingCookies]: Map<string, PendingCookie> | null = null;
   [kCookieFlush]: CookieFlushState = 'open'
 
@@ -99,7 +82,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   routeTarget: Record<string | symbol, (...args: unknown[]) => unknown> | null = null
 
   readonly #shared: ServerShared
-  readonly #platform: ServerPlatform<unknown, IContextPlatform, unknown>
+  readonly #platform: ServerPlatform<unknown, ContextPlatform, unknown>
   readonly #native: unknown
   readonly #extra: unknown
   readonly #id: number
@@ -112,7 +95,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   #req?: ContextRequest
   #normalized?: { path: string; error: Error | undefined }
-  #context?: IContextPlatform
+  #context?: ContextPlatform
   #state?: ContextState
   #config?: ConfigSnapshot<Record<never, never>>
 
@@ -135,7 +118,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   constructor(
     shared: ServerShared,
-    platform: ServerPlatform<unknown, IContextPlatform, unknown>,
+    platform: ServerPlatform<unknown, ContextPlatform, unknown>,
     native: unknown,
     extra: unknown,
     id: number,
@@ -182,7 +165,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   }
 
   /** Where the request came from. See {@link IContext.platform}. */
-  get platform(): IContextPlatform {
+  get platform(): ContextPlatform {
     return (this.#context ??= this.#platform.context(this.#native, this.#extra))
   }
 
@@ -678,15 +661,13 @@ export function withholdValidators(ctx: IContext): () => void {
 
 /** What a request handler reads of the request the engine is serving. */
 export class ContextRequest implements IRequest<
-  Request,
   Record<string, string>,
   Record<string, string>,
   Record<string, string>,
-  true,
   unknown
 > {
   readonly #shared: ServerShared
-  readonly #platform: ServerPlatform<unknown, IContextPlatform, unknown>
+  readonly #platform: ServerPlatform<unknown, ContextPlatform, unknown>
   readonly #native: unknown
   readonly #id: number
   readonly #method: string
@@ -714,7 +695,7 @@ export class ContextRequest implements IRequest<
 
   constructor(
     shared: ServerShared,
-    platform: ServerPlatform<unknown, IContextPlatform, unknown>,
+    platform: ServerPlatform<unknown, ContextPlatform, unknown>,
     native: unknown,
     id: number,
     method: string,

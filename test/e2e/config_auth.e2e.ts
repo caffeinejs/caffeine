@@ -1,8 +1,7 @@
 import { newConfiguration } from '@caffeinejs/application'
 import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { $t } from '@caffeinejs/application/schema'
-import { authentication, Authentication } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
+import { authentication, Authentication, Router } from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { startApp } from './internal/app.js'
@@ -44,11 +43,7 @@ function start(env: Record<string, string>) {
         // Named in lower case: an environment variable cannot address a scheme called `Bearer`.
         .install(Authentication((auth, { config }) => auth.config(config.auth).addJWTBearer('jwt', localJWT)))
         .with(authentication())
-        .mount(
-          newRouter('/whoami')
-            .authorize()
-            .get('/', () => ({ ok: true })),
-        ),
+        .mount(new Router('/whoami').authorize().get('/', () => ({ ok: true }))),
     { config: configuredFrom(env) },
   )
 }

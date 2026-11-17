@@ -19,8 +19,9 @@ import {
   Schema,
   $p,
   type ActionResult,
+  Router,
 } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/node/index.js'
+import { createWebApplication } from '../../platform/node/index.js'
 import { ErrConfiguration } from './common.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
@@ -618,7 +619,7 @@ describe('@CatchWith', () => {
 
 describe('serializer', () => {
   function orders() {
-    return newRouter('/orders')
+    return new Router('/orders')
       .get('/:id', () => {
         throw new ErrHTTPConflict('Order 42 is already paid')
       })
@@ -770,7 +771,7 @@ function recordTo(logged: LogEntry[], threshold: keyof typeof LEVELS = 'info'): 
 
 describe('correlationID', () => {
   function payments() {
-    return newRouter('/payments')
+    return new Router('/payments')
       .post('/', () => {
         throw new ErrHTTPConflict('Payment already captured')
       })
@@ -858,7 +859,7 @@ describe('correlationID', () => {
 
 describe('validation', () => {
   function signup() {
-    return newRouter('/signup').post('/', { body: $t.Object({ email: $t.String({ minLength: 3 }) }) }, () => ({}))
+    return new Router('/signup').post('/', { body: $t.Object({ email: $t.String({ minLength: 3 }) }) }, () => ({}))
   }
 
   // A cap of 0 would send a problem that lists nothing and says so; a fraction or Infinity is a typo for a number.

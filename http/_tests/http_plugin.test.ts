@@ -3,7 +3,7 @@ import { Injectable } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
-  type AdapterExtensionFactory,
+  type HTTPPluginFactory,
   type IContext,
   ErrAuthenticationRequired,
   type Guard,
@@ -16,7 +16,7 @@ import {
   bindTo,
   type WebApplication,
 } from '../index.js'
-import { createWebApplication, newRouter, type NodeAdapterTypes } from '../platform/node/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 /**
  * Scenario: a plugin written against Caffeine alone. An `HTTPPlugin` registers in its `.with(...)` slot, and
@@ -77,7 +77,7 @@ class Greeter {
 
 void [DenyGuard, TokenGuard, Greeter]
 
-/** The simplest plugin: one router, mounted from `register`. Written for no adapter. */
+/** The simplest plugin: one router, mounted from `register`. */
 class Metrics extends HTTPPlugin {
   register({ app }: HTTPSetupContext): void {
     app.mount(new Router('/metrics').get('/', () => ({ metrics: true })))
@@ -163,9 +163,9 @@ class Building extends HTTPPlugin {
 
 /** Mounts the routers it was built with, wherever it registers. */
 class Mounter extends HTTPPlugin {
-  readonly #routers: Router<any, any, any, any, any, never>[]
+  readonly #routers: Router<any, any, any, any, any>[]
 
-  constructor(...routers: Router<any, any, any, any, any, never>[]) {
+  constructor(...routers: Router<any, any, any, any, any>[]) {
     super()
     this.#routers = routers
   }
@@ -226,7 +226,7 @@ describe('HTTPPlugin', () => {
 
   it('lets a plugin factory mount from context.app and still return its plugin', async () => {
     app = createWebApplication().with(context => {
-      context.app.mount(newRouter('/from-factory').get('/', () => ({ ok: true })))
+      context.app.mount(new Router('/from-factory').get('/', () => ({ ok: true })))
       return new Marking('x-marked')
     })
     await app.bootstrap()
@@ -286,13 +286,13 @@ describe('HTTPPlugin', () => {
   })
 
   it('types an HTTPPlugin factory as what .with(...) takes on a server and on a router', () => {
-    const factory: AdapterExtensionFactory<HTTPPlugin> = () => new Metrics()
+    const factory: HTTPPluginFactory = () => new Metrics()
 
     const typed = createWebApplication()
       .with(factory)
       .listener('admin', l => l.with(factory))
     new Router('/typed').with(factory)
-    newRouter('/typed-bound').with(factory)
+    new Router('/typed-bound').with(factory)
 
     expect(typeof typed.bootstrap).toBe('function')
   })
@@ -397,9 +397,9 @@ describe('HTTPPlugin', () => {
       expect((await app.request('/own')).headers.get('x-admin')).toBeNull()
     })
 
-    it("matches a path of the server's own and takes the adapter's hook", async () => {
-      class Hooked extends HTTPPlugin<NodeAdapterTypes> {
-        register({ app }: HTTPSetupContext<unknown, NodeAdapterTypes>): void {
+    it("matches a path of the server's own and takes a request hook point", async () => {
+      class Hooked extends HTTPPlugin {
+        register({ app }: HTTPSetupContext): void {
           app.use('/only', stamp('x-hooked'), { hook: 'preHandler' })
         }
       }

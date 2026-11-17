@@ -24,7 +24,7 @@ afterEach(async () => {
 
 const CROSS_SITE = { 'sec-fetch-site': 'cross-site' }
 
-function routes(): Router<any, any, any, any, any, any> {
+function routes(): Router<any, any, any, any, any> {
   return new Router()
     .post('/form')
     .handler(() => 'ok')

@@ -1,6 +1,6 @@
 export { ErrInvalidPayloadType, ErrResponseBodyConsumed } from './answer.js'
 export { ErrRequestBodyConsumed, ErrRequestBodyDiscarded } from './body.js'
-export type { FetchAdapterTypes } from './adapter.js'
 export type { FetchContextPlatform } from './fetch.js'
+export type { ContextPlatform, NodeContextPlatform } from './platform.js'
 export type { ServerSettings } from './settings.js'
 export { withholdValidators } from './context.js'

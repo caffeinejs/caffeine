@@ -1,7 +1,7 @@
 import { errMessage } from '@caffeinejs/std/err'
 
-import type { AnyAdapterTypes, ContextTypesOf, HTTPSetupContext, IAdapterTypes } from '../../adapter.js'
 import type { IContext } from '../../context.js'
+import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import type { RouteDefinition } from './route_definition.js'
 
@@ -9,47 +9,39 @@ import type { RouteDefinition } from './route_definition.js'
 export type SendPayload = string | Uint8Array | ReadableStream<Uint8Array> | null
 
 /** A request hook: runs for each request at its point, and answers with `ctx.body(...)` or fails by throwing. */
-export type RequestHook<
-  V = Record<never, never>,
-  C = Record<never, never>,
-  T extends IAdapterTypes = AnyAdapterTypes,
-> = (ctx: IContext<V, C, T>) => void | Promise<void>
+export type RequestHook<V = Record<never, never>, C = Record<never, never>> = (
+  ctx: IContext<V, C>,
+) => void | Promise<void>
 
 /**
  * Runs once the request is answered, before the answer goes out: may write the status and headers, and replace the
  * body. Returning `undefined` keeps the payload; returning `null` sends no body.
  */
-export type OnSendHook<
-  V = Record<never, never>,
-  C = Record<never, never>,
-  T extends IAdapterTypes = AnyAdapterTypes,
-> = (ctx: IContext<V, C, T>, payload: SendPayload) => SendPayload | void | Promise<SendPayload | void>
+export type OnSendHook<V = Record<never, never>, C = Record<never, never>> = (
+  ctx: IContext<V, C>,
+  payload: SendPayload,
+) => SendPayload | void | Promise<SendPayload | void>
 
 /**
  * Runs when the request fails, before the error handlers answer it. It observes: it cannot handle the error, and a
  * throw from it is logged while the error goes on to the handlers.
  */
-export type OnErrorHook<
-  V = Record<never, never>,
-  C = Record<never, never>,
-  T extends IAdapterTypes = AnyAdapterTypes,
-> = (ctx: IContext<V, C, T>, err: Error) => void | Promise<void>
+export type OnErrorHook<V = Record<never, never>, C = Record<never, never>> = (
+  ctx: IContext<V, C>,
+  err: Error,
+) => void | Promise<void>
 
 /**
  * The request lifecycle, in the order a request meets it: `onRequest` once the route is matched, `preHandler` right
  * before the handler, `onSend` before the answer goes out, `onResponse` once it has left, and `onError` when the
  * request fails at any point before `onSend`.
  */
-export interface RequestHooks<
-  V = Record<never, never>,
-  C = Record<never, never>,
-  T extends IAdapterTypes = AnyAdapterTypes,
-> {
-  onRequest: RequestHook<V, C, T>
-  preHandler: RequestHook<V, C, T>
-  onSend: OnSendHook<V, C, T>
-  onResponse: RequestHook<V, C, T>
-  onError: OnErrorHook<V, C, T>
+export interface RequestHooks<V = Record<never, never>, C = Record<never, never>> {
+  onRequest: RequestHook<V, C>
+  preHandler: RequestHook<V, C>
+  onSend: OnSendHook<V, C>
+  onResponse: RequestHook<V, C>
+  onError: OnErrorHook<V, C>
 }
 
 /** The server lifecycle, handed the context of the plugin or application that added the hook. */
@@ -69,13 +61,8 @@ export type RequestHookName = keyof RequestHooks
 
 export type HookName = RequestHookName | keyof ServerHooks
 
-/** The function a hook at `K` takes. `T` is the adapter it runs on; `never`, for code written for none, is any. */
-export type HookFn<K extends HookName, C = unknown, T extends IAdapterTypes = never> = (RequestHooks<
-  Record<never, never>,
-  C,
-  ContextTypesOf<T>
-> &
-  ServerHooks<C>)[K]
+/** The function a hook at `K` takes. */
+export type HookFn<K extends HookName, C = unknown> = (RequestHooks<Record<never, never>, C> & ServerHooks<C>)[K]
 
 /** The request points, in the order a request meets them. */
 export const REQUEST_HOOK_NAMES: readonly RequestHookName[] = [

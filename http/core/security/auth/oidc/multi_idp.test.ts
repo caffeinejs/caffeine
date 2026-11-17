@@ -1,8 +1,8 @@
 import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/application'
 import { describe, it, expect, vi } from 'vitest'
 
-import type { HTTPSetupContext } from '../../../../adapter.js'
 import type { IContext } from '../../../../context.js'
+import type { HTTPSetupContext } from '../../../../plugin.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'

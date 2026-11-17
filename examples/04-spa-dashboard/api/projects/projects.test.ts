@@ -6,7 +6,7 @@ import { CURL, NAVIGATION, XHR, expectNotFoundJSON, newApp, signIn, type Session
 /**
  * The API, from both route sources.
  *
- * `/api/profile` and `/api/admin` are `@Controller` classes; `/api/projects` is a programmatic `newRouter`.
+ * `/api/profile` and `/api/admin` are `@Controller` classes; `/api/projects` is a programmatic `new Router`.
  * They are asserted side by side on purpose: both compile through `compileRouteGroup`, so authorization,
  * validation and error handling must be indistinguishable — and one `/api/*` catch-all has to cover all three.
  */

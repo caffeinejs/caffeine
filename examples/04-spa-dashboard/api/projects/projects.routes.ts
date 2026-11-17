@@ -1,5 +1,4 @@
-import { ErrHTTPNotFound } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
+import { ErrHTTPNotFound, Router } from '@caffeinejs/http'
 import { apiGroup, operation } from '@caffeinejs/openapi'
 
 import { ProjectIdParamSchema, ProjectListSchema, ProjectSchema } from './projects.schemas.js'
@@ -19,7 +18,7 @@ const PROJECTS = [
  * worth noticing is what it is *not*: there is no catch-all here. `/api/*` in `spa/pages.ts` covers a miss
  * under this base and under both controllers, which is why it stays one line however many of these there are.
  */
-const projects = newRouter('/api/projects')
+const projects = new Router('/api/projects')
   .name('Projects')
   .extend(apiGroup({ name: 'Projects', description: 'The signed-in user’s projects.' }))
   // Bare, so it asks for the application's default policy — an authenticated caller.

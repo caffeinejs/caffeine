@@ -1,5 +1,5 @@
-import { Controller, Get, Prefix, WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { Controller, Get, Prefix, Router } from '@caffeinejs/http'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'
@@ -17,13 +17,13 @@ class OrdersController {
 }
 void [OrdersController]
 
-const catalog = () => newRouter('/products').get('/', () => [])
+const catalog = () => new Router('/products').get('/', () => [])
 
 const isAdmin = (_group: unknown, _route: unknown, path: string) => path.startsWith('/admin')
 const isStorefront = (_group: unknown, _route: unknown, path: string) => !path.startsWith('/admin')
 
 describe('include on a prefixed controller', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -36,7 +36,7 @@ describe('include on a prefixed controller', () => {
       .install(OpenAPI())
       .with(openapi('storefront', o => o.docs(false).include(isStorefront)))
       .with(openapi('back-office', o => o.docs(false).include(isAdmin)))
-      .mount(catalog()) as WebApplication<NodeAdapterTypes>
+      .mount(catalog()) as NodeWebApplication
     await app.bootstrap()
 
     const provider = app.container.get(OpenAPIProvider)

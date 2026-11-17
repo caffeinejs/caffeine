@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Router, WebApplication, version } from '@caffeinejs/http'
-import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { Router, version } from '@caffeinejs/http'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apiGroup, operation } from '../decorators/index.js'
@@ -15,7 +15,7 @@ function operationAt(document: OpenAPIDocument, path: string, method = 'get'): O
 }
 
 describe('openapi from a programmatic router', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -43,7 +43,7 @@ describe('openapi from a programmatic router', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public()))
-      .mount(pets) as WebApplication<NodeAdapterTypes>
+      .mount(pets) as NodeWebApplication
 
     await app.bootstrap()
 
@@ -66,7 +66,7 @@ describe('openapi from a programmatic router', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.docs(false).public()))
-      .mount(stores) as WebApplication<NodeAdapterTypes>
+      .mount(stores) as NodeWebApplication
     await app.bootstrap()
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
@@ -96,7 +96,7 @@ describe('openapi from a programmatic router', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public()))
-      .mount(pets) as WebApplication<NodeAdapterTypes>
+      .mount(pets) as NodeWebApplication
 
     await app.bootstrap()
 
@@ -122,7 +122,7 @@ describe('openapi from a programmatic router', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Geo', version: '1.0.0' }).docs(false).public()))
-      .mount(geo) as WebApplication<NodeAdapterTypes>
+      .mount(geo) as NodeWebApplication
 
     await app.bootstrap()
 
@@ -144,7 +144,7 @@ describe('openapi from a programmatic router', () => {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public()))
-      .mount(pets) as WebApplication<NodeAdapterTypes>
+      .mount(pets) as NodeWebApplication
 
     await app.bootstrap()
 

@@ -338,7 +338,7 @@ describe('cookies', () => {
   type Configure = (app: ReturnType<typeof createWebApplication>) => ReturnType<typeof createWebApplication>
 
   // Any router, as `mount` takes it: the route types each carries are not under test here.
-  async function serve(router: Router<any, any, any, any, any, any>, configure: Configure = app => app) {
+  async function serve(router: Router<any, any, any, any, any>, configure: Configure = app => app) {
     cookieLogged.mockClear()
     const served = configure(
       createWebApplication().logger(b => b.use({ ...newNoopLogger(), error: cookieLogged })),

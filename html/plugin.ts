@@ -1,4 +1,4 @@
-import { HTTPPlugin, type AdapterExtensionFactory, type HTTPSetupContext } from '@caffeinejs/http'
+import { HTTPPlugin, type HTTPPluginFactory, type HTTPSetupContext } from '@caffeinejs/http'
 
 import { routeSettings, type HTMLDefaults } from './config.js'
 
@@ -19,7 +19,7 @@ import { routeSettings, type HTMLDefaults } from './config.js'
  */
 export function html<C = unknown>(
   options?: (context: HTTPSetupContext<C>) => Partial<HTMLDefaults>,
-): AdapterExtensionFactory<HTTPPlugin, C> {
+): HTTPPluginFactory<C> {
   return context => new HTMLPlugin(options?.(context) ?? {})
 }
 

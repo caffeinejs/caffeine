@@ -14,8 +14,8 @@ import {
   ScryptPasswordHasher,
   UserProvider,
   Authentication,
+  Router,
 } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
 import { Hour, Minute } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -55,7 +55,7 @@ function principalOf(subject: string): Principal | null {
 }
 
 function routes() {
-  const tokens = newRouter('/token')
+  const tokens = new Router('/token')
     .inject({ credentials: CredentialsService, refresh: RefreshTokenService })
     .post('/', async (ctx, { credentials, refresh }) => {
       const body = ctx.req.body() as { identifier: string; password: string }
@@ -74,7 +74,7 @@ function routes() {
       return { ok: true }
     })
 
-  const account = newRouter('/account')
+  const account = new Router('/account')
     .authorize()
     .inject({ refresh: RefreshTokenService })
     .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value, roles: ctx.user.findFirst('roles')?.value }))
@@ -83,7 +83,7 @@ function routes() {
       return { ok: true }
     })
 
-  return newRouter().mount(tokens, account)
+  return new Router().mount(tokens, account)
 }
 
 const up = required('redis', await reachable(REDIS_URL))

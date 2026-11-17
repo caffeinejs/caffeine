@@ -17,13 +17,14 @@ import {
   listenersOf,
   RouteInventory,
   Router,
-  type AdapterExtensionFactory,
+  type HTTPPluginFactory,
   type HTTPPluginConfigurer,
   type HTTPSetupContext,
   type IContext,
+  type NodeContextPlatform,
   type RouteAuthzOptions,
 } from '@caffeinejs/http'
-import type { NodeContextPlatform, NodeServerSettings } from '@caffeinejs/http/node'
+import type { NodeServerSettings } from '@caffeinejs/http/node'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { configRouter } from './config/config.route.js'
@@ -244,9 +245,8 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
     // Attached before the container initializes, so its start-up is recorded.
     const events = new EventsTool(kit.container.hooks)
 
-    listenersOf(kit).add(this.#listener ?? DEVTOOLS_LISTENER, l => {
-      // The Node application's settings: a fetch application has no listener of its own to give an address.
-      l.server((): NodeServerSettings => ({ listen: { ...address } }))
+    listenersOf<C, NodeServerSettings>(kit).add(this.#listener ?? DEVTOOLS_LISTENER, l => {
+      l.server(() => ({ listen: { ...address } }))
 
       // A listener has no gate unless one is registered on it, and a route the fallback policy or `authorize(...)`
       // protects with no gate over it is refused at start-up. So the gate goes wherever authentication is installed,
@@ -306,7 +306,7 @@ export function DevTools<C = unknown>(configure?: FeatureConfigurer<DevToolsBuil
  */
 export function devTools<C = unknown>(
   configure?: HTTPPluginConfigurer<DevToolsPluginBuilder, C>,
-): AdapterExtensionFactory<HTTPPlugin, C> {
+): HTTPPluginFactory<C> {
   return context => {
     const builder = new DevToolsPluginBuilder()
     configure?.(builder, context)
@@ -318,7 +318,7 @@ export function devTools<C = unknown>(
   }
 }
 
-function devToolsPlugin<C>(options: DevToolsOptions, events?: EventsTool): AdapterExtensionFactory<HTTPPlugin, C> {
+function devToolsPlugin<C>(options: DevToolsOptions, events?: EventsTool): HTTPPluginFactory<C> {
   return context => {
     if (options.allowProduction && isProduction()) {
       context.logger.warn({ path: options.path }, 'Devtools are running in production')

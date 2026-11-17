@@ -23,7 +23,7 @@ export interface FlatRouteGroup<R> {
  * Turns a router and everything nested under it into one flat list of groups.
  *
  * Flat is what registration wants: a nested group is a group whose path and configuration start from its
- * parent's, not a structure the adapter has to walk. Nothing here mutates the router, so mounting the same one
+ * parent's, not a structure the engine has to walk. Nothing here mutates the router, so mounting the same one
  * into two applications — as tests do — builds it twice rather than accumulating.
  *
  * @param childrenOf - A router's children as start-up sees them: those it declared, by default, and for an
@@ -182,7 +182,7 @@ function compileRoute<R>(
   }
 
   // The context first, the dependencies second — the shape the handler is typed against. Both are pickers, so
-  // the route compiles to the adapter's arity-specialized handler like any other.
+  // the route compiles to the engine's arity-specialized handler like any other.
   const deps = compileInjection(container, merge(groupInjection, state.injection))
   spec.parameters = deps === undefined ? [$p.context()] : [$p.context(), deps]
 

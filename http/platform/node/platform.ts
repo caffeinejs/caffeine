@@ -9,7 +9,6 @@ import type { TLSSocket } from 'node:tls'
 import type { Logger } from '@caffeinejs/application/logger'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 
-import type { IContextPlatform } from '../../adapter.js'
 import { ErrHTTPBadRequest, ErrHTTPServiceUnavailable } from '../../core/error/http.js'
 import { isThenable } from '../../core/lifecycle/lifecycle.js'
 import { ErrNextCalledTwice } from '../../core/middleware/errors.js'
@@ -20,20 +19,14 @@ import {
   ErrRequestBodyConsumed,
   ErrRequestBodyDiscarded,
 } from '../../core/server/body.js'
-import type { NodeMiddlewareStamp, SendHooks, ServerPlatform } from '../../core/server/platform.js'
+import type { NodeContextPlatform, NodeMiddlewareStamp, SendHooks, ServerPlatform } from '../../core/server/platform.js'
 import type { HTTPServer } from '../../core/server/server.js'
 
 /** The response of one request a Node server received, over HTTP/1.1 or HTTP/2. */
-export type NodeResponse = ServerResponse | Http2ServerResponse
+export type NodeResponse = NodeContextPlatform['outgoing']
 
-/** What `ctx.platform` is on the Node application: Node's request and response. */
-export interface NodeContextPlatform extends IContextPlatform {
-  readonly name: 'node'
-  readonly incoming: IncomingMessage | Http2ServerRequest
-  readonly outgoing: NodeResponse
-}
-
-type NodePlatform = ServerPlatform<NodeResponse, NodeContextPlatform, void>
+/** The Node application's platform: what serves each request a Node server received. */
+export type NodePlatform = ServerPlatform<NodeResponse, NodeContextPlatform, void>
 
 /** What the platform keeps for a request that declares a body: the keep-alive it closed, and the bytes it read. */
 interface BodyState {

@@ -7,8 +7,9 @@ import {
   BaseAuthenticationHandler,
   bindTo,
   type WebApplication,
+  Router,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 import { healthProbes } from '../../health/index.js'
 import { authentication } from '../../security/security.js'
 
@@ -81,11 +82,7 @@ describe('health probes on a listener', () => {
           .with(authentication())
           .with(healthProbes()),
       )
-      .mount(
-        newRouter('/jobs')
-          .extend(bindTo('admin'))
-          .get('/', () => ({})),
-      ) as WebApplication
+      .mount(new Router('/jobs').extend(bindTo('admin')).get('/', () => ({}))) as WebApplication
 
     await app.run()
     const admin = app.listeners.get('admin')!.address!.origin
@@ -98,7 +95,7 @@ describe('health probes on a listener', () => {
     app = createWebApplication()
       .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
       .server(() => ({ listen: listener }))
-      .mount(newRouter().get('/livez', () => ({ mine: true }))) as WebApplication
+      .mount(new Router().get('/livez', () => ({ mine: true }))) as WebApplication
 
     await app.run()
 
@@ -109,11 +106,7 @@ describe('health probes on a listener', () => {
   it('refuses a route of the server serving the probes that takes a probe path', async () => {
     app = createWebApplication()
       .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
-      .mount(
-        newRouter()
-          .extend(bindTo('admin'))
-          .get('/readyz', () => ({})),
-      ) as WebApplication
+      .mount(new Router().extend(bindTo('admin')).get('/readyz', () => ({}))) as WebApplication
 
     await expect(app.bootstrap()).rejects.toThrow(/already registered at "\/readyz"/)
   })

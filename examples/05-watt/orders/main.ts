@@ -1,4 +1,5 @@
-import { createWebApplication, newRouter, type NodeHTTPServer } from '@caffeinejs/http/node'
+import { Router } from '@caffeinejs/http'
+import { createWebApplication, type NodeHTTPServer } from '@caffeinejs/http/node'
 import { OpenAPI, OpenAPIProvider, openapi } from '@caffeinejs/openapi'
 import { setOpenapiSchema } from '@platformatic/globals'
 
@@ -8,7 +9,7 @@ const app = createWebApplication()
   .install(OpenAPI())
   // Watt's gateway is the one to publish the document, so the application serves no endpoint for it.
   .with(openapi(o => o.info({ title: 'Orders', version: '1.0.0' }).json(false).yaml(false).docs(false)))
-  .mount(newRouter().get('/orders', () => [{ id: 1, item: 'espresso' }]))
+  .mount(new Router().get('/orders', () => [{ id: 1, item: 'espresso' }]))
   // Only other applications reach this one, through the runtime, and Watt stops it after the entrypoint: no
   // routing table has to catch up, so a drain delay would only hold up the shutdown.
   .shutdown(s => s.drainDelay(0))

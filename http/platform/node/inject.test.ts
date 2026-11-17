@@ -1,3 +1,4 @@
+import assert from 'node:assert'
 import { once } from 'node:events'
 
 import { ErrApplicationClosed } from '@caffeinejs/application'
@@ -6,7 +7,8 @@ import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrHTTPServiceUnavailable } from '../../core/error/http.js'
-import { createWebApplication, newRouter } from './node.js'
+import { Router, type AnyRouter } from '../../index.js'
+import { createWebApplication } from './node.js'
 
 type App = ReturnType<typeof createWebApplication>
 
@@ -21,7 +23,7 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map(app => app.close()))
 })
 
-async function ready(routes: ReturnType<typeof newRouter>): Promise<App> {
+async function ready(routes: AnyRouter): Promise<App> {
   const app = createWebApplication().mount(routes)
   apps.push(app)
   await app.bootstrap()
@@ -31,7 +33,7 @@ async function ready(routes: ReturnType<typeof newRouter>): Promise<App> {
 describe('request() on the Node application', () => {
   // A dead application stops answering as if it still served: a test that reaches one after close() learns it at once.
   it('rejects with ErrApplicationClosed once close() has torn the server down', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/hi').handler(() => 'hi')
     const app = await ready(routes)
     expect((await app.request('/a/hi')).status).toBe(200)
@@ -46,7 +48,7 @@ describe('request() on the Node application', () => {
   it('fails a pending call that a forced close cuts with the 503 error, rather than answering it 500', async () => {
     const started = Promise.withResolvers<void>()
     const held = Promise.withResolvers<void>()
-    const routes = newRouter('/hold')
+    const routes = new Router('/hold')
     routes.get('/').handler(async () => {
       started.resolve()
       await held.promise
@@ -89,7 +91,7 @@ describe('request() on the Node application', () => {
   // nothing is logged.
   it('sends a streamed answer whole and logs no failure', async () => {
     const error = vi.fn()
-    const routes = newRouter('/s')
+    const routes = new Router('/s')
     routes.get('/').handler(() => {
       let sent = 0
       return new ReadableStream<Uint8Array>({
@@ -117,12 +119,15 @@ describe('request() on the Node application', () => {
   })
 
   it('serves a path on localhost through the Node platform, seen from 127.0.0.1', async () => {
-    const routes = newRouter('/who')
-    routes.get('/').handler(ctx => ({
-      platform: ctx.platform.name,
-      address: ctx.platform.incoming.socket.remoteAddress,
-      host: ctx.req.host,
-    }))
+    const routes = new Router('/who')
+    routes.get('/').handler(ctx => {
+      assert(ctx.platform.name === 'node')
+      return {
+        platform: ctx.platform.name,
+        address: ctx.platform.incoming.socket.remoteAddress,
+        host: ctx.req.host,
+      }
+    })
     const app = await ready(routes)
 
     expect(await (await app.request('/who')).json()).toEqual({
@@ -133,7 +138,7 @@ describe('request() on the Node application', () => {
   })
 
   it('streams an upload the handler reads from ctx.req.raw', async () => {
-    const routes = newRouter('/echo')
+    const routes = new Router('/echo')
     routes.post('/').handler(async ctx => ctx.req.raw.text())
     const app = await ready(routes)
 
@@ -154,7 +159,7 @@ describe('request() on the Node application', () => {
   })
 
   it('refuses a body longer than its Content-Length, as fetch does', async () => {
-    const routes = newRouter('/echo')
+    const routes = new Router('/echo')
     routes.post('/').handler(async ctx => ctx.req.raw.text())
     const app = await ready(routes)
 
@@ -167,7 +172,7 @@ describe('request() on the Node application', () => {
   it("rejects with an abort's reason while the handler runs, and aborts ctx.signal", async () => {
     const started = Promise.withResolvers<void>()
     const aborted = Promise.withResolvers<boolean>()
-    const routes = newRouter('/hold')
+    const routes = new Router('/hold')
     routes.get('/').handler(async ctx => {
       started.resolve()
       await once(ctx.signal, 'abort')
@@ -187,7 +192,7 @@ describe('request() on the Node application', () => {
   })
 
   it('lets close() resolve while an answer streams unread', async () => {
-    const routes = newRouter('/endless')
+    const routes = new Router('/endless')
     routes.get('/').handler(
       () =>
         new ReadableStream<Uint8Array>({
@@ -207,7 +212,7 @@ describe('request() on the Node application', () => {
   it('answers 503 while close() drains a request in flight', async () => {
     const started = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/hold').handler(async () => {
       started.resolve()
       await release.promise

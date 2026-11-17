@@ -25,8 +25,9 @@ import {
   type SeriesTokenRotation,
   UserProvider,
   Authentication,
+  Router,
 } from '../../../../index.js'
-import { createWebApplication, newRouter } from '../../../../platform/node/index.js'
+import { createWebApplication } from '../../../../platform/node/index.js'
 import type { AuthConfig } from '../config.js'
 
 /**
@@ -114,7 +115,7 @@ describe('authentication options set from the tree', () => {
       )
       .with(authentication())
       .mount(
-        newRouter('/session')
+        new Router('/session')
           .authorize({ allowAnonymous: true })
           .inject({ auth: AuthenticationService })
           .post('/', async (ctx, { auth }) => {
@@ -140,9 +141,7 @@ describe('authentication options set from the tree', () => {
   })
 
   describe('the sign-in path of an OAuth-family scheme', () => {
-    const protectedRoute = newRouter('/reports')
-      .authorize()
-      .get('/', () => ({ ok: true }))
+    const protectedRoute = new Router('/reports').authorize().get('/', () => ({ ok: true }))
 
     // The 401 names it and the route answers there. Were the key applied to nothing, a client would be sent to a
     // URL that was never registered.
@@ -239,9 +238,7 @@ describe('authentication options set from the tree', () => {
 
     const asNavigation = { headers: { 'sec-fetch-mode': 'navigate' }, redirect: 'manual' as const }
 
-    const protectedRoute = newRouter('/reports')
-      .authorize()
-      .get('/', () => ({ ok: true }))
+    const protectedRoute = new Router('/reports').authorize().get('/', () => ({ ok: true }))
 
     function discovered() {
       const fetched = vi.fn((url: string) => {
@@ -388,7 +385,7 @@ describe('authentication options set from the tree', () => {
         )
         .with(authentication())
         .mount(
-          newRouter('/session')
+          new Router('/session')
             .authorize({ allowAnonymous: true })
             .inject({ auth: AuthenticationService })
             .post('/out', (ctx, { auth }) => auth.signOut(ctx, 'oidc')),
@@ -422,11 +419,7 @@ describe('authentication options set from the tree', () => {
         ),
       )
       .with(authentication())
-      .mount(
-        newRouter('/reports')
-          .authorize()
-          .get('/', () => ({ ok: true })),
-      )
+      .mount(new Router('/reports').authorize().get('/', () => ({ ok: true })))
     await app.bootstrap()
 
     const challenged = await app.request('/reports', {
@@ -557,11 +550,7 @@ describe('authentication options set from the tree', () => {
         ),
       )
       .with(authentication())
-      .mount(
-        newRouter('/reports')
-          .authorize()
-          .get('/', () => ({ ok: true })),
-      )
+      .mount(new Router('/reports').authorize().get('/', () => ({ ok: true })))
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })

@@ -13,12 +13,12 @@ import {
   Identity,
   Principal,
   HTTPPlugin,
-  type AdapterExtensionFactory,
+  type HTTPPluginFactory,
   type HTTPSetupContext,
   bindTo,
-  type WebApplication,
+  Router,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { createWebApplication, type NodeWebApplication } from '../../../platform/node/index.js'
 import { healthProbes } from '../../health/index.js'
 import { authentication } from '../../security/security.js'
 
@@ -73,10 +73,7 @@ const operator = { 'x-ops': 'alice:operator' }
  * Two listeners: `admin`, its router authorized behind a gate of its own and with a small body limit, and `metrics`, open and
  * serving the probes. `adminPlugin` is one more plugin on `admin`.
  */
-function twoServers({
-  metricsPort = 0,
-  adminPlugin,
-}: { metricsPort?: number; adminPlugin?: AdapterExtensionFactory<HTTPPlugin> } = {}) {
+function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; adminPlugin?: HTTPPluginFactory } = {}) {
   return createWebApplication()
     .install(Authentication(a => a.addStrategy('Ops', new OpsScheme()).default('Ops')))
     .listener('admin', l => {
@@ -89,19 +86,17 @@ function twoServers({
     .listener('metrics', l => l.server(() => ({ listen: { ...listener, port: metricsPort } })).with(healthProbes()))
     .server(() => ({ listen: listener }))
     .mount(
-      newRouter('/admin')
+      new Router('/admin')
         .extend(bindTo('admin'))
         .authorize({ schemes: ['Ops'], roles: ['operator'] })
         .post('/echo', ctx => ({ received: ctx.req.body() })),
-      newRouter('/metrics')
-        .extend(bindTo('metrics'))
-        .get('/', () => ({ up: true })),
-      newRouter('/api').post('/echo', ctx => ({ received: ctx.req.body() })),
-    ) as WebApplication
+      new Router('/metrics').extend(bindTo('metrics')).get('/', () => ({ up: true })),
+      new Router('/api').post('/echo', ctx => ({ received: ctx.req.body() })),
+    ) as NodeWebApplication
 }
 
 describe('several listeners with different settings', () => {
-  let app: WebApplication | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     await app?.close().catch(() => undefined)

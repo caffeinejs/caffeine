@@ -11,8 +11,8 @@ import {
   UserProvider,
   isSafeReturnPath,
   Authentication,
+  Router,
 } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -52,7 +52,7 @@ interface LoginBody {
 }
 
 function routes() {
-  const session = newRouter()
+  const session = new Router()
     .inject({ auth: AuthenticationService, credentials: CredentialsService })
     .get('/login', ctx => ({ page: 'login', returnUrl: ctx.req.query('returnUrl') ?? null }))
     .get('/denied', () => ({ page: 'denied' }))
@@ -91,14 +91,10 @@ function routes() {
       await auth.challenge(ctx, SCHEME, { redirectURI: ctx.req.query('to') })
     })
 
-  return newRouter().mount(
+  return new Router().mount(
     session,
-    newRouter('/private')
-      .authorize()
-      .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
-    newRouter('/admin')
-      .authorize({ roles: ['admin'] })
-      .get('/', () => ({ ok: true })),
+    new Router('/private').authorize().get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
+    new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })),
   )
 }
 

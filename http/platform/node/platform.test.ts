@@ -1,3 +1,4 @@
+import assert from 'node:assert'
 import { once } from 'node:events'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { connect as http2Connect, constants as http2Constants } from 'node:http2'
@@ -16,8 +17,9 @@ import type { Next } from '../../core/middleware/middleware.js'
 import { $p } from '../../core/routing/picker.js'
 import { bodyAsStream } from '../../decorators/body_as_stream.js'
 import { Args, Catch, Controller, Get } from '../../decorators/index.js'
+import { Router, type AnyRouter } from '../../index.js'
 import type { ActionResult } from '../../response.js'
-import { createWebApplication, newRouter } from './node.js'
+import { createWebApplication } from './node.js'
 
 @Controller('/peer')
 class Peer {
@@ -39,7 +41,7 @@ afterEach(async () => {
 })
 
 async function serve(
-  routes: ReturnType<typeof newRouter>,
+  routes: AnyRouter,
   options: { settings?: object; logger?: { error?: (...args: unknown[]) => void } } = {},
 ): Promise<{ app: App; origin: string; port: number }> {
   const app = createWebApplication()
@@ -108,7 +110,7 @@ async function readAll(stream: ReadableStream<Uint8Array>): Promise<void> {
 
 describe('the Node platform', () => {
   it('writes text, bytes and an empty answer under their lengths', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/text').handler(() => 'hi')
     routes.get('/bytes').handler(() => new Uint8Array([1, 2, 3]))
     routes.get('/none').handler(ctx => ctx.status(204).body())
@@ -131,7 +133,7 @@ describe('the Node platform', () => {
   it('streams a body larger than the socket buffer to its end', async () => {
     const chunk = new Uint8Array(64 * 1024)
     const total = 8 * MiB
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/big').handler(() => {
       let sent = 0
       return new ReadableStream<Uint8Array>({
@@ -152,7 +154,7 @@ describe('the Node platform', () => {
   })
 
   it('sends each value of a list-valued header on a line of its own', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/cookies').handler(ctx => {
       ctx.appendHeader('set-cookie', 'a=1').appendHeader('set-cookie', 'b=2')
       return 'ok'
@@ -163,7 +165,7 @@ describe('the Node platform', () => {
   })
 
   it('sends each cookie set on a Set-Cookie line of its own', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/set').handler(ctx => {
       ctx.cookie('a', 'b')
       ctx.cookie('c', 'd')
@@ -178,7 +180,7 @@ describe('the Node platform', () => {
   })
 
   it('answers HEAD on a GET route with its length and no body', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/text').handler(() => 'hi')
     const { origin } = await serve(routes)
 
@@ -188,7 +190,7 @@ describe('the Node platform', () => {
   })
 
   it('hands ctx.req.raw a Request built from the Node request', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.post('/echo').handler(async ctx => {
       const raw = ctx.req.raw
       return { url: raw.url, method: raw.method, xa: raw.headers.get('x-a'), body: await raw.text() }
@@ -206,7 +208,7 @@ describe('the Node platform', () => {
 
   // A hook that reads only the headers of `raw` leaves the body to the route, which reads it next.
   it('takes no body byte when ctx.req.raw is built', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes
       .post('/headers-first')
       .hook('onRequest', ctx => void ctx.req.raw.headers)
@@ -218,7 +220,7 @@ describe('the Node platform', () => {
   })
 
   it('builds ctx.req.raw on localhost when the Host header names no host', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/url').handler(ctx => ctx.req.raw.url)
     const { port } = await serve(routes)
 
@@ -227,8 +229,9 @@ describe('the Node platform', () => {
   })
 
   it('is ctx.platform: the Node request and its response', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/platform').handler(ctx => {
+      assert(ctx.platform.name === 'node')
       const platform = ctx.platform
       return { name: platform.name, paired: platform.incoming === platform.outgoing.req }
     })
@@ -240,7 +243,7 @@ describe('the Node platform', () => {
   it('aborts ctx.signal when the client leaves while the handler runs', async () => {
     const started = Promise.withResolvers<void>()
     const seen = Promise.withResolvers<{ aborted: boolean; reason: string }>()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/hold').handler(async ctx => {
       started.resolve()
       await once(ctx.signal, 'abort')
@@ -259,7 +262,7 @@ describe('the Node platform', () => {
 
   it('leaves ctx.signal unaborted for a request answered in full', async () => {
     let signal: AbortSignal | undefined
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/done').handler(ctx => {
       signal = ctx.signal
       return 'done'
@@ -275,7 +278,7 @@ describe('the Node platform', () => {
   it('aborts ctx.signal when an HTTP/2 client cancels its stream while the handler runs', async () => {
     const started = Promise.withResolvers<void>()
     const seen = Promise.withResolvers<boolean>()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/hold').handler(async ctx => {
       started.resolve()
       await once(ctx.signal, 'abort')
@@ -300,7 +303,7 @@ describe('the Node platform', () => {
   it('cancels the source of a streamed answer whose client leaves part-way', async () => {
     const cancelled = Promise.withResolvers<void>()
     const error = vi.fn()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/endless').handler(
       () =>
         new ReadableStream<Uint8Array>({
@@ -322,7 +325,7 @@ describe('the Node platform', () => {
 
   it('cuts the response when the source of a streamed answer fails part-way, and logs it', async () => {
     const error = vi.fn()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/broken').handler(() => {
       let sent = false
       return new ReadableStream<Uint8Array>({
@@ -349,7 +352,7 @@ describe('the Node platform', () => {
   it('pipes a Node stream answer to its end, text chunks included', async () => {
     const chunk = Buffer.alloc(64 * 1024)
     const total = 8 * MiB
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/big').handler(() =>
       Readable.from(
         (function* () {
@@ -371,7 +374,7 @@ describe('the Node platform', () => {
   it('destroys the Node stream of an answer whose client leaves part-way', async () => {
     const closed = Promise.withResolvers<void>()
     const error = vi.fn()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/endless').handler(() => {
       const stream = new Readable({
         read() {
@@ -391,7 +394,7 @@ describe('the Node platform', () => {
 
   it('cuts the response when a Node stream answer fails part-way, and logs it', async () => {
     const error = vi.fn()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/broken').handler(() => {
       let sent = false
       return new Readable({
@@ -417,7 +420,7 @@ describe('the Node platform', () => {
   // Nothing reads a HEAD answer's body, so nothing would close its source.
   it('destroys the Node stream of a HEAD answer, which sends no body', async () => {
     const closed = Promise.withResolvers<void>()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/file').handler(() => {
       const stream = Readable.from(['body'])
       stream.on('close', () => closed.resolve())
@@ -434,7 +437,7 @@ describe('the Node platform', () => {
   // A hook is written against web bytes: a Node stream reaches it as one.
   it('hands an onSend hook a Node stream answer as web bytes', async () => {
     const seen: boolean[] = []
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.hook('onSend', (_ctx, payload) => {
       seen.push(payload instanceof ReadableStream)
     })
@@ -447,7 +450,7 @@ describe('the Node platform', () => {
 
   it('answers 500 rather than resetting the connection when a header value cannot be sent', async () => {
     const error = vi.fn()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/bad-header').handler(ctx => {
       ctx.header('x-bad', 'a\r\nb')
       return 'never'
@@ -464,7 +467,7 @@ describe('the Node platform', () => {
   // The request never reached its handler, so nothing else tells the operator why it was answered 500.
   it('logs a request it cannot serve at all, and answers 500', async () => {
     const error = vi.fn()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/').handler(() => 'never')
     const { app } = await serve(routes, { logger: { error } })
 
@@ -477,7 +480,7 @@ describe('the Node platform', () => {
   })
 
   it('answers 100 Continue before reading a body the client holds back', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.post('/echo').handler(async ctx => ctx.req.raw.text())
     const { port } = await serve(routes)
 
@@ -511,7 +514,7 @@ describe('the Node platform', () => {
   it('fails the body read of a client that aborts its upload', async () => {
     const reading = Promise.withResolvers<void>()
     const failed = Promise.withResolvers<boolean>()
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes
       .post('/upload')
       .extend(bodyAsStream())
@@ -547,7 +550,7 @@ describe('the Node platform', () => {
         .lifetime(Scopes.REQUEST)
         .preDestroy(() => ended.resolve()),
     )
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes
       .get('/large')
       .inject(i => ({ session: i.provide(Session) }))
@@ -581,7 +584,7 @@ describe('the Node platform', () => {
           destroyed = true
         }),
     )
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes
       .get('/streamed')
       .inject(i => ({ session: i.provide(Session) }))
@@ -625,7 +628,7 @@ describe('the Node platform', () => {
         .lifetime(Scopes.REQUEST)
         .preDestroy(() => destroyed()),
     )
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes
       .get('/late')
       .inject(i => ({ session: i.provide(Session) }))
@@ -659,13 +662,13 @@ describe('the Node platform', () => {
   })
 
   it('answers the address pick with the peer of the socket', async () => {
-    const { origin } = await serve(newRouter('/unused'))
+    const { origin } = await serve(new Router('/unused'))
 
     expect(await (await fetch(`${origin}/peer`)).json()).toEqual({ address: '127.0.0.1' })
   })
 
   it('follows the forwarding headers of a proxy trusted by address, and only of one', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes.get('/scheme').handler(ctx => ctx.req.protocol)
 
     const trusted = createWebApplication()
@@ -683,7 +686,7 @@ describe('the Node platform', () => {
   })
 
   it('refuses at start-up a cached route no HTTP caching covers', async () => {
-    const routes = newRouter('/a')
+    const routes = new Router('/a')
     routes
       .get('/cached')
       .config('cache', { maxAge: 1 })
@@ -721,7 +724,12 @@ describe('Node middleware', () => {
           seen.push(req.url!)
           next()
         })
-        .mount(newRouter('/admin').get('/users', ctx => ctx.platform.incoming.url ?? '')),
+        .mount(
+          new Router('/admin').get('/users', ctx => {
+            assert(ctx.platform.name === 'node')
+            return ctx.platform.incoming.url ?? ''
+          }),
+        ),
     )
 
     const res = await fetch(`${origin}/admin/users?page=2`)
@@ -743,7 +751,7 @@ describe('Node middleware', () => {
         })
         .hook('onSend', onSend)
         .hook('onResponse', () => ended.release())
-        .mount(newRouter('/x').get('/', () => 'handler')),
+        .mount(new Router('/x').get('/', () => 'handler')),
     )
 
     const res = await fetch(`${origin}/x`)
@@ -765,7 +773,7 @@ describe('Node middleware', () => {
           next()
         })
         .mount(
-          newRouter('/x').get('/', () => {
+          new Router('/x').get('/', () => {
             handled += 1
             return 'handler'
           }),
@@ -786,7 +794,7 @@ describe('Node middleware', () => {
           res.setHeader('x-frame-options', 'DENY')
           next()
         })
-        .mount(newRouter('/x').get('/', () => 'x')),
+        .mount(new Router('/x').get('/', () => 'x')),
     )
 
     const res = await fetch(`${origin}/x`)
@@ -800,7 +808,7 @@ describe('Node middleware', () => {
     const entered = latch()
     const app = createWebApplication()
       .use((_req: IncomingMessage, _res: ServerResponse, _next: Next) => entered.release())
-      .mount(newRouter('/x').get('/', () => 'x'))
+      .mount(new Router('/x').get('/', () => 'x'))
     const origin = await run(app)
     const controller = new AbortController()
 
@@ -825,7 +833,7 @@ describe('Node middleware', () => {
           },
           { hook: 'onResponse' },
         )
-        .mount(newRouter('/x').get('/', () => Readable.toWeb(Readable.from(['a'])))),
+        .mount(new Router('/x').get('/', () => Readable.toWeb(Readable.from(['a'])))),
     )
 
     expect(await (await fetch(`${origin}/x`)).text()).toBe('a')
@@ -845,7 +853,7 @@ describe('Node middleware', () => {
           url = (ctx.platform as { incoming: IncomingMessage }).incoming.url
           seen.release()
         })
-        .mount(newRouter('/admin').get('/users', () => 'users')),
+        .mount(new Router('/admin').get('/users', () => 'users')),
     )
 
     expect((await fetch(`${origin}/admin/users`)).status).toBe(500)
@@ -870,7 +878,7 @@ describe('Node middleware', () => {
           ids.push(container.get(Session).id)
           ended.release()
         })
-        .mount(newRouter('/x').get('/', () => Readable.toWeb(Readable.from(['a', 'b'])))),
+        .mount(new Router('/x').get('/', () => Readable.toWeb(Readable.from(['a', 'b'])))),
     )
 
     expect(await (await fetch(`${origin}/x`)).text()).toBe('ab')
@@ -888,8 +896,8 @@ describe('the request body on Node', () => {
     return address.port
   }
 
-  function echo(): ReturnType<typeof newRouter> {
-    const routes = newRouter('/b')
+  function echo(): AnyRouter {
+    const routes = new Router('/b')
     routes.post('/echo').handler(ctx => ctx.req.body())
     return routes
   }
@@ -917,7 +925,7 @@ describe('the request body on Node', () => {
 
   // The refusal closes the connection, whatever answer an error handler makes of it.
   it('closes the connection after refusing a body declared over the limit, though a handler answers 400', async () => {
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/echo')
       .bodyLimit(6 * Byte)
@@ -970,7 +978,7 @@ describe('the request body on Node', () => {
   })
 
   it('keeps the connection after an early answer that left the body unread, and serves the next request on it', async () => {
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/echo')
       .hook('onRequest', ctx => void ctx.status(401).body('no'))
@@ -998,7 +1006,7 @@ describe('the request body on Node', () => {
   it.each([401, 413])(
     'answers keep-alive to a guard %i on a body declared over the limit, then cuts once it passes',
     async status => {
-      const routes = newRouter('/b')
+      const routes = new Router('/b')
       routes
         .post('/echo')
         .bodyLimit(6 * Byte)
@@ -1024,7 +1032,7 @@ describe('the request body on Node', () => {
   it('fails a read of ctx.req.raw that starts once the answer has gone', async () => {
     const answered = Promise.withResolvers<void>()
     let late: Promise<unknown> = Promise.resolve()
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/late')
       .hook('onRequest', ctx => {
@@ -1053,7 +1061,7 @@ describe('the request body on Node', () => {
 
   // No route matched: the body is dropped up to the server's limit.
   it('keeps the connection after a 404 on a request that carries a body', async () => {
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes.get('/next').handler(() => 'next')
     const { port } = await serve(routes)
     const socket = await connected(port)
@@ -1073,7 +1081,7 @@ describe('the request body on Node', () => {
   // The body dropped after the answer is held to the request's limit: a client cannot hold the connection by sending
   // on.
   it('closes the connection when a body nothing read goes over its limit after the answer', async () => {
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/echo')
       .bodyLimit(6 * Byte)
@@ -1098,8 +1106,8 @@ describe('the request body on Node', () => {
 
   // A route that answers before its body has arrived, and reads on, as a server refusing a token does: the client is
   // still sending, and closing under it would reset the connection before it read the answer.
-  function answeringEarly(limit = 1 * MiB): ReturnType<typeof newRouter> {
-    const routes = newRouter('/b')
+  function answeringEarly(limit = 1 * MiB): AnyRouter {
+    const routes = new Router('/b')
     routes
       .post('/early')
       .extend(bodyAsStream())
@@ -1150,7 +1158,7 @@ describe('the request body on Node', () => {
   // A route that takes the body and never reads it must not hold the connection until Node's `requestTimeout`: the
   // body is larger than every buffer between the socket and the route.
   it('serves the next request on the connection of a route that answered early and never read the body it took', async () => {
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/early')
       .extend(bodyAsStream())
@@ -1184,7 +1192,7 @@ describe('the request body on Node', () => {
     const head = Promise.withResolvers<void>()
     const answer = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>()
     let cancelled: Promise<void> = Promise.resolve()
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/early')
       .extend(bodyAsStream())
@@ -1215,7 +1223,7 @@ describe('the request body on Node', () => {
   // Once its answer has gone, the route cannot read what is left: the server discards it to keep the connection.
   it('fails the read of a route that answered early once the answer has gone', async () => {
     let failure: Promise<unknown> = Promise.resolve()
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/early')
       .extend(bodyAsStream())
@@ -1241,7 +1249,7 @@ describe('the request body on Node', () => {
   // A body something other than the route's stream started reading is left as it is: a kept connection would hold it
   // half-read, and the next request on it would never be served.
   it('closes the connection after a Node middleware read part of the body and stopped', async () => {
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes.post('/partial').handler(() => 'never')
     const port = await listen(
       createWebApplication()
@@ -1271,7 +1279,7 @@ describe('the request body on Node', () => {
   it('closes the connection when a read goes over its limit while the answer streams', async () => {
     const answer = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>()
     let failure: Promise<unknown> = Promise.resolve()
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/early')
       .extend(bodyAsStream())
@@ -1310,7 +1318,7 @@ describe('the request body on Node', () => {
   })
 
   it('closes the connection when a route cancels its read before answering', async () => {
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/early')
       .extend(bodyAsStream())
@@ -1371,7 +1379,7 @@ describe('the request body on Node', () => {
   it('answers a client that left before its body arrived as cut short', async () => {
     const entered = Promise.withResolvers<void>()
     const failed = Promise.withResolvers<unknown>()
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/slow')
       .hook('onRequest', async ctx => {
@@ -1392,7 +1400,7 @@ describe('the request body on Node', () => {
 
   // HTTP/2 sends a body without Content-Length: the bytes read are kept for ctx.req.raw all the same.
   it('serves the bytes read through ctx.req.raw for an HTTP/2 body without Content-Length', async () => {
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes.post('/raw').handler(async ctx => ({ body: ctx.req.body(), raw: await ctx.req.raw.text() }))
     const { origin } = await serve(routes, { settings: { http2: true } })
 
@@ -1414,7 +1422,7 @@ describe('the request body on Node', () => {
   // What the route failed to read whole is not served as if whole: ctx.req.raw refuses it.
   it('refuses ctx.req.raw a body the route failed to read past its limit', async () => {
     const outcome = Promise.withResolvers<string>()
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/echo')
       .hook('onError', async ctx => {
@@ -1437,7 +1445,7 @@ describe('the request body on Node', () => {
 
   it('refuses ctx.req.raw a body a Node middleware started reading', async () => {
     const outcome = Promise.withResolvers<string>()
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/echo')
       .hook('onError', async ctx => {
@@ -1466,7 +1474,7 @@ describe('the request body on Node', () => {
   })
 
   it('holds a body read through ctx.req.raw to the limit', async () => {
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/echo')
       .hook('onRequest', async ctx => void (await ctx.req.raw.text()))
@@ -1480,7 +1488,7 @@ describe('the request body on Node', () => {
 
   it('serves the bytes read through the ctx.req.raw a hook saw before the body was read', async () => {
     let seen: Request | undefined
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     routes
       .post('/echo')
       .hook('onRequest', ctx => void (seen = ctx.req.raw))
@@ -1493,10 +1501,10 @@ describe('the request body on Node', () => {
   })
 
   it.each([
-    ['a parsed body', (routes: ReturnType<typeof newRouter>) => void routes.post('/read').handler(() => 'never')],
+    ['a parsed body', (routes: AnyRouter) => void routes.post('/read').handler(() => 'never')],
     [
       'a @BodyAsStream body',
-      (routes: ReturnType<typeof newRouter>) =>
+      (routes: AnyRouter) =>
         void routes
           .post('/read')
           .extend(bodyAsStream())
@@ -1504,7 +1512,7 @@ describe('the request body on Node', () => {
     ],
   ])('answers 500 to %s a Node middleware started reading', async (_case, declare) => {
     const error = vi.fn()
-    const routes = newRouter('/b')
+    const routes = new Router('/b')
     declare(routes)
     const port = await listen(
       createWebApplication()

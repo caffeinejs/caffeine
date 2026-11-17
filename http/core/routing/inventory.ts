@@ -8,7 +8,7 @@ import { csrfMarkOf } from '../csrf/route.js'
 import { gatedRouteOf } from '../security/gate.js'
 import type { IRoute, IRouteGroup } from './route.js'
 
-/** Adds one server's routes. The adapter's, through `AdapterIn.recordRoutes`; nothing else writes the inventory. */
+/** Adds one server's routes, as its engine is built; nothing else writes the inventory. */
 export const kRecordServer: unique symbol = Symbol('@caffeinejs/http:inventory.record')
 /** Marks the inventory complete, once every server is built. */
 export const kCompleteInventory: unique symbol = Symbol('@caffeinejs/http:inventory.complete')
@@ -138,7 +138,7 @@ export interface RecordSecurity {
  * The record of a compiled route the engine registered. Its gate and its cross-origin cover are what each plugin's
  * `onRoute` recorded. A GET's automatic HEAD route is folded into `methods`.
  */
-// `any`, as every core helper taking groups of any adapter does: a route is invariant in the request it compiles for.
+// `any`, as every core helper taking groups does: a route is invariant in the request it compiles for.
 export function routeRecord(
   route: IRoute<any>,
   group: IRouteGroup<any>,

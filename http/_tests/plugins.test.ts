@@ -6,13 +6,13 @@ import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../adapter.js'
 import { ErrHTTPBadRequest } from '../core/error/http.js'
 import { healthProbes } from '../core/health/index.js'
 import { Router } from '../core/routing/programmatic/programmatic.js'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { HTTPPlugin, type WebApplication } from '../index.js'
-import { createWebApplication, newRouter } from '../platform/node/index.js'
+import { createWebApplication } from '../platform/node/index.js'
+import type { HTTPSetupContext } from '../plugin.js'
 
 /**
  * What an application installs on its server: the plugins its `.with(...)` factories produce.
@@ -226,7 +226,7 @@ describe('plugin registration', () => {
 
 describe('scoped plugin registration', () => {
   // Widened: `mount()` re-types the application with the routes it took, and the holder outlives the call.
-  let app: WebApplication<any, any, any, any> | undefined
+  let app: WebApplication<any, any, any> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -236,11 +236,9 @@ describe('scoped plugin registration', () => {
   // The capability the extension mechanism did not have. A route group has a plugin scope of its own, so
   // the same plugin covers that group's routes and no others when it is registered there.
   it('keeps a router-installed plugin inside that router', async () => {
-    const pets = newRouter('/scoped-pets')
-      .with(stamping('pets-stamp', 'x-pets'))
-      .get('/', () => ({ ok: true }))
+    const pets = new Router('/scoped-pets').with(stamping('pets-stamp', 'x-pets')).get('/', () => ({ ok: true }))
 
-    // Bound to no adapter, and mounted next to a plugin-scoped router all the same.
+    // Mounted next to a plugin-scoped router all the same.
     const orders = new Router('/scoped-orders').get('/', () => ({ ok: true }))
 
     app = createWebApplication().mount(pets, orders)
@@ -254,9 +252,7 @@ describe('scoped plugin registration', () => {
   // A nested group is flattened into its own context, so inheritance is carried rather than encapsulated —
   // `router.with(...)` reaches the groups below it the way `router.extend(...)` configuration does.
   it('reaches a nested group from the router that installed the plugin', async () => {
-    const shop = newRouter('/scoped-shop')
-      .with(stamping('shop-stamp', 'x-shop'))
-      .get('/', () => ({ ok: true }))
+    const shop = new Router('/scoped-shop').with(stamping('shop-stamp', 'x-shop')).get('/', () => ({ ok: true }))
 
     shop.group('/items', items => items.get('/', () => ({ ok: true })))
 
@@ -342,7 +338,7 @@ describe('scoped plugin registration', () => {
   })
 
   it('refuses a second plugin a router installs under the same name', async () => {
-    const twice = newRouter('/twice-group')
+    const twice = new Router('/twice-group')
       .with(stamping('twice-group', 'x-twice'))
       .with(stamping('twice-group', 'x-twice'))
       .get('/', () => ({ ok: true }))
@@ -353,10 +349,8 @@ describe('scoped plugin registration', () => {
   })
 
   it('keeps the plugins of two routers apart, one per group', async () => {
-    const pets = newRouter('/inst-pets')
-      .with(stamping('inst', 'x-inst'))
-      .get('/', () => ({ ok: true }))
-    const orders = newRouter('/inst-orders')
+    const pets = new Router('/inst-pets').with(stamping('inst', 'x-inst')).get('/', () => ({ ok: true }))
+    const orders = new Router('/inst-orders')
       .with(stamping('inst-orders', 'x-inst-orders'))
       .get('/', () => ({ ok: true }))
 
@@ -376,7 +370,7 @@ describe('scoped plugin registration', () => {
 
 describe('a plugin factory typed against the application configuration', () => {
   // Mounting a router gives the application its route types back, which a bare `WebApplication` cannot hold.
-  let app: WebApplication<any, any, any, any> | undefined
+  let app: WebApplication<any, any, any> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -395,7 +389,7 @@ describe('a plugin factory typed against the application configuration', () => {
       .source(new InlineConfigSource({ security: { header: 'x-from-config' } }))
       .build().config
 
-    const pets = newRouter('/typed').get('/', () => ({ ok: true }))
+    const pets = new Router('/typed').get('/', () => ({ ok: true }))
 
     app = createWebApplication({ config: conf })
       .with(healthProbes((h, { config }) => h.config(config.health)))

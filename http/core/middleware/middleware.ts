@@ -2,15 +2,16 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
 
-import type { HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
+import type { HTTPSetupContext } from '../../plugin.js'
+import type { RequestHookName } from '../lifecycle/lifecycle.js'
 
 /**
- * Optional preferred hook for a Caffeine middleware, when `use()` does not pass `{ hook }`: one of the names the
- * application's adapter accepts: a request hook point (`RequestHookName`) on the fetch and Node applications.
+ * Optional preferred hook for a Caffeine middleware, when `use()` does not pass `{ hook }`: a request hook point
+ * (`RequestHookName`).
  *
  * Omit it and the middleware runs at `onRequest`. On a class, declare it as a static getter. On a function, set it as a
- * property. The adapter refuses a name it does not know at start-up.
+ * property. A name that is not a request hook point is refused at start-up.
  */
 export const kMiddlewareHook = Symbol('@caffeinejs/http:middlewareHook')
 
@@ -32,7 +33,7 @@ export type Next = (err?: Error) => void
 export type NodeMiddleware = (req: IncomingMessage, res: ServerResponse, next: Next) => void
 
 /**
- * Builds a middleware once at start-up, from the same context an extension factory gets: the configuration, the
+ * Builds a middleware once at start-up, from the same context a plugin factory gets: the configuration, the
  * container and the logger.
  *
  * `config` is the live handle, so `config.someSetting` reads the current tree. A later refresh does not rebuild
@@ -44,9 +45,9 @@ export type MiddlewareFactory<C = unknown> = (
 
 export type MiddlewarePath = string | readonly string[]
 
-/** `H` is the hook names the application's adapter accepts. */
-export interface MiddlewareOptions<H extends string = string> {
-  hook?: H
+/** Where `use()` runs a middleware: a request hook point, `onRequest` when left out. */
+export interface MiddlewareOptions {
+  hook?: RequestHookName
 }
 
 /**
@@ -119,16 +120,12 @@ export function isMiddlewareOptions(value: unknown): value is MiddlewareOptions 
  * @param argCount - How many arguments the call was given: a string no middleware follows is a container key, not
  *   a path.
  */
-export function parseUse<C, H extends string>(
+export function parseUse<C>(
   pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
-  targetOrOptions:
-    | MiddlewareTarget<C>
-    | MiddlewareOptions<H>
-    | ((req: never, res: never, next: Next) => void)
-    | undefined,
-  options: MiddlewareOptions<H> | undefined,
+  targetOrOptions: MiddlewareTarget<C> | MiddlewareOptions | ((req: never, res: never, next: Next) => void) | undefined,
+  options: MiddlewareOptions | undefined,
   argCount: number,
-): { path: MiddlewarePath | undefined; target: unknown; hook?: H } {
+): { path: MiddlewarePath | undefined; target: unknown; hook?: RequestHookName } {
   const asPath =
     Array.isArray(pathOrTarget) ||
     (typeof pathOrTarget === 'string' && argCount >= 2 && !isMiddlewareOptions(targetOrOptions))
@@ -144,7 +141,7 @@ export function parseUse<C, H extends string>(
   return {
     path: undefined,
     target: pathOrTarget,
-    hook: isMiddlewareOptions(targetOrOptions) ? (targetOrOptions.hook as H | undefined) : undefined,
+    hook: isMiddlewareOptions(targetOrOptions) ? targetOrOptions.hook : undefined,
   }
 }
 

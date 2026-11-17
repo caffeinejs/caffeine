@@ -2,8 +2,7 @@ import { newConfiguration } from '@caffeinejs/application'
 import type { InferConfig } from '@caffeinejs/application/config'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
-import { type WebApplication } from '@caffeinejs/http'
-import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'
@@ -76,7 +75,7 @@ describe('openapi() configured from the tree', () => {
     ),
   })
 
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -96,7 +95,7 @@ describe('openapi() configured from the tree', () => {
       .install(OpenAPI())
       .with(
         openapi<InferConfig<typeof schema>>((o, { config }) => o.config(config.openapi).public()),
-      ) as WebApplication<NodeAdapterTypes>
+      ) as NodeWebApplication
     await app.bootstrap()
 
     const document = (await (await app.request('/spec.json')).json()) as OpenAPIDocument

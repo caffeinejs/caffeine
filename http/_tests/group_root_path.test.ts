@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, HTTPPlugin, type ActionResult, type HTTPSetupContext, type WebApplication } from '../index.js'
-import { createWebApplication, newRouter } from '../platform/node/index.js'
+import {
+  Controller,
+  Get,
+  HTTPPlugin,
+  type ActionResult,
+  type HTTPSetupContext,
+  type WebApplication,
+  Router,
+} from '../index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 /**
  * What a group's prefix and a route at `/` compose to.
  *
  * Load-bearing for every prefixed application, and it was asserted only in prose until this file: the
- * documentation claimed `newRouter('/app')` with a route at `/` produced `/app/` and therefore did not answer
+ * documentation claimed `new Router('/app')` with a route at `/` produced `/app/` and therefore did not answer
  * `GET /app`. It produces `/app` — `joinPaths` trims the trailing slash — and since the application leaves
  * `ignoreTrailingSlash` off, `/app/` is then a different URL that nothing registered.
  *
@@ -37,7 +45,7 @@ describe('a group prefix and a route at "/"', () => {
     const urls: string[] = []
     const app = createWebApplication({})
       .with(collectURLs(urls))
-      .mount(newRouter('/app').get('/', () => ({ ok: true }))) as WebApplication
+      .mount(new Router('/app').get('/', () => ({ ok: true }))) as WebApplication
     await app.bootstrap()
 
     try {
@@ -49,7 +57,7 @@ describe('a group prefix and a route at "/"', () => {
   })
 
   it('answers the bare path and not the trailing slash', async () => {
-    const app = createWebApplication({}).mount(newRouter('/app').get('/', () => ({ ok: true }))) as WebApplication
+    const app = createWebApplication({}).mount(new Router('/app').get('/', () => ({ ok: true }))) as WebApplication
     await app.bootstrap()
 
     try {
@@ -65,7 +73,7 @@ describe('a group prefix and a route at "/"', () => {
     const urls: string[] = []
     const app = createWebApplication({})
       .with(collectURLs(urls))
-      .mount(newRouter('/api').mount(newRouter('/v1').get('/', () => ({ ok: true })))) as WebApplication
+      .mount(new Router('/api').mount(new Router('/v1').get('/', () => ({ ok: true })))) as WebApplication
     await app.bootstrap()
 
     try {
@@ -98,7 +106,7 @@ describe('a group prefix and a route at "/"', () => {
 
   // The half of the documented papercut that is real: a wildcard covers the empty match but not the bare path.
   it('does not match a bare path against a sibling wildcard', async () => {
-    const app = createWebApplication({}).mount(newRouter().get('/dash/*', () => ({ ok: true }))) as WebApplication
+    const app = createWebApplication({}).mount(new Router().get('/dash/*', () => ({ ok: true }))) as WebApplication
     await app.bootstrap()
 
     try {

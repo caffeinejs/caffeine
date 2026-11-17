@@ -240,7 +240,7 @@ export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
         .internal(),
     )
 
-    // What the adapter installs the server's error handler with, ahead of everything `.with(...)` registers.
+    // What the engine installs the server's error handler with, ahead of everything `.with(...)` registers.
     kit.container.bind(kErrorHandlingOptions, t =>
       t
         .toValue({

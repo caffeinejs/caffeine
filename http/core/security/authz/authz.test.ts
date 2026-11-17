@@ -10,8 +10,9 @@ import {
   ErrAuthzPolicyEmpty,
   type AuthzRequirement,
   Authentication,
+  Router,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 /**
  * What the authorization builder refuses. No controller is declared here, routers only: a controller registers
@@ -83,11 +84,7 @@ describe('AuthorizationBuilder — two handlers for one requirement kind', () =>
     const app = createWebApplication({ container })
       .install(Authentication(auth => auth.addStrategy('Never', new NeverAuthenticates())))
       .with(authentication())
-      .mount(
-        newRouter('/admin')
-          .authorize({ roles: ['admin'] })
-          .get('/', () => ({ ok: true })),
-      )
+      .mount(new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })))
 
     await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHZ_REQUIREMENT_HANDLER_DUPLICATE' })
   })

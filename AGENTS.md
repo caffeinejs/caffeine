@@ -82,17 +82,16 @@ Before the first file of a kind below that you create or edit in a task, re-read
 
 [`.agents/skills/`](.agents/skills/README.md) holds skills for every agent (`.claude/skills` links to it). Load the one the table names before that work. Where a skill disagrees with these files, these files win: Vitest, not `node:test`; `.js` imports built with `tsc --build`, not type stripping; the package's check project, not `tsc --noEmit`; oxlint and oxfmt, not ESLint; checks run in the order of "Checks" in `CONVENTIONS.md`.
 
-| Before you…                                                                                   | Load                     |
-| --------------------------------------------------------------------------------------------- | ------------------------ |
-| plan a standard change                                                                        | `plan-change`            |
-| hand over a standard change, or a change to an agent doc or a skill; review a diff when asked | `review-change`          |
-| design or change a public API: an option, a default, a method, a callback, a type users write | `sharp-edges`            |
-| write a generic, conditional or mapped type, or fight a type error                            | `typescript-magician`    |
-| use a Node.js runtime API: streams, `process`, `node:*` modules, signals, workers             | `node`                   |
-| write a Fastify plugin, hook or route                                                         | `fastify-best-practices` |
-| touch authentication, cookies, CSRF, crypto or request parsing, or review for vulnerabilities | `security-audit`         |
-| write a docs page or a README                                                                 | `documentation`          |
-| change an agent doc, a skill or this table                                                    | `skill-optimizer`        |
+| Before you…                                                                                   | Load                  |
+| --------------------------------------------------------------------------------------------- | --------------------- |
+| plan a standard change                                                                        | `plan-change`         |
+| hand over a standard change, or a change to an agent doc or a skill; review a diff when asked | `review-change`       |
+| design or change a public API: an option, a default, a method, a callback, a type users write | `sharp-edges`         |
+| write a generic, conditional or mapped type, or fight a type error                            | `typescript-magician` |
+| use a Node.js runtime API: streams, `process`, `node:*` modules, signals, workers             | `node`                |
+| touch authentication, cookies, CSRF, crypto or request parsing, or review for vulnerabilities | `security-audit`      |
+| write a docs page or a README                                                                 | `documentation`       |
+| change an agent doc, a skill or this table                                                    | `skill-optimizer`     |
 
 `plan-change` and `review-change` are written here; the others are vendored. Do not edit a vendored skill. Record an unavoidable patch in [`.agents/skills/README.md`](.agents/skills/README.md). The skills shipped to applications live in [`ai/skills/`](ai/skills/), not here.
 

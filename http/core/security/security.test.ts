@@ -68,7 +68,7 @@ function gated() {
 }
 
 // Any router, as `mount` takes them: the route types each carries are not under test here.
-type AnyRouter = Router<any, any, any, any, any, any>
+type AnyRouter = Router<any, any, any, any, any>
 
 function guarded(path: string): AnyRouter {
   return new Router(path)

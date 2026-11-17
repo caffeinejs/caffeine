@@ -1,6 +1,6 @@
 import { expectTypeOf } from 'vitest'
 
-import { type AnyAdapterTypes, type AnyRouter, Router, type SendPayload } from '../../../index.js'
+import { type AnyRouter, type ContextPlatform, Router, type SendPayload } from '../../../index.js'
 
 /**
  * `AnyRouter` is what a plugin's `context.app.mount` and the test client take: a router stays one whatever its path,
@@ -24,8 +24,8 @@ expectTypeOf(new Router()).toExtend<AnyRouter>()
 // @ts-expect-error — a list of routers is not a router.
 const _list: AnyRouter = [typed]
 
-// A hook is typed by its point: onSend gets the payload, a router's variables reach its context, and a router bound to
-// no adapter still sees a usable platform.
+// A hook is typed by its point: onSend gets the payload, a router's variables reach its context, and its platform is
+// the engine's.
 new Router('/hooks')
   .vars<{ tenant: string }>()
   .hook('onSend', (ctx, payload) => {
@@ -33,7 +33,7 @@ new Router('/hooks')
     expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
   })
   .hook('onRequest', ctx => {
-    expectTypeOf(ctx.platform).toEqualTypeOf<AnyAdapterTypes['platform']>()
+    expectTypeOf(ctx.platform).toEqualTypeOf<ContextPlatform>()
   })
   .get('/')
   .hook('onError', (_ctx, err) => {
@@ -43,3 +43,6 @@ new Router('/hooks')
 
 // @ts-expect-error -- onRoute is a server hook: it is added on an application, a listener or a plugin
 new Router('/hooks').hook('onRoute', () => undefined)
+
+// @ts-expect-error A plugin factory returns an HTTPPlugin.
+new Router('/u').with(() => ({}))

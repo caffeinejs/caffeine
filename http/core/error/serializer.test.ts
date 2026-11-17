@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createWebApplication, newRouter } from '../../platform/node/index.js'
+import { Router } from '../../index.js'
+import { createWebApplication } from '../../platform/node/index.js'
 import { ErrHTTPConflict } from './http.js'
 
 function orders() {
-  return newRouter('/orders').post('/:id/pay', () => {
+  return new Router('/orders').post('/:id/pay', () => {
     throw new ErrHTTPConflict('Order 42 is already paid')
   })
 }

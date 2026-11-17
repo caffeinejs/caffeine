@@ -2,106 +2,35 @@ import type { ListenOptions, Server as NetServer } from 'node:net'
 
 import { ErrApplicationClosed } from '@caffeinejs/application'
 import type { Logger } from '@caffeinejs/application/logger'
-import type { Container, ContextKey } from '@caffeinejs/di'
 import inject from 'light-my-request'
 
-import type {
-  AdapterFactory,
-  AdapterFactoryIn,
-  AdapterIn,
-  IAdapter,
-  IAdapterServer,
-  ServerAddress,
-} from '../../adapter.js'
-import type { WebRunInfo } from '../../application.js'
-import type { RouterFlags } from '../../core/matcher/matcher.js'
-import { bindContext, buildEngine, findMyWayFlags } from '../../core/server/adapter.js'
-import type { Context, EngineContextTypes } from '../../core/server/context.js'
-import type { ServerPlatform } from '../../core/server/platform.js'
+import type { HostedServer } from '../../core/server/hosting.js'
 import type { HTTPServer } from '../../core/server/server.js'
+import type { ServerAddress } from '../../server.js'
 import {
   closeServer,
   destroyConnections,
   serverAddress,
-  trackConnections,
   type NodeHTTPServer,
   type OpenConnections,
 } from './connections.js'
 import { fetchInProcess } from './inject.js'
-import { createNodePlatform, serveNode, type NodeContextPlatform, type NodeResponse } from './platform.js'
-import { resolveNodeServerSettings, type NodeServerSettings } from './settings.js'
+import type { INodeServer } from './node.js'
+import { serveNode, type NodePlatform, type NodeResponse } from './platform.js'
 
-/**
- * The Node application's adapter types, an entry of `EngineAdapterRegistry`.
- */
-export interface NodeAdapterTypes extends EngineContextTypes {
-  instance: NodeHTTPServer
-  request: Context
-  platform: NodeContextPlatform
-  serverOptions: NodeServerSettings
-  runArgs: [options?: ListenOptions]
-  runInfo: WebRunInfo
-}
-
-type NodePlatform = ServerPlatform<NodeResponse, NodeContextPlatform, void>
-
-declare module '../../adapter.js' {
-  interface EngineAdapterRegistry {
-    node: NodeAdapterTypes
-  }
-}
-
-/** The adapter of the Node application, which serves the web-standards engine on a Node server. */
-export function nodeAdapterFactory(): AdapterFactory<NodeAdapterTypes> {
-  return kit => new NodeAdapter(kit)
-}
-
-class NodeAdapter implements IAdapter<NodeAdapterTypes> {
-  readonly #container: Container
-  readonly #contextKey: ContextKey<Context>
-
-  constructor(kit: AdapterFactoryIn) {
-    this.#container = kit.container
-    this.#contextKey = bindContext(kit.container)
-  }
-
-  routerFlags(server: NodeAdapterTypes['serverOptions']): RouterFlags | undefined {
-    return findMyWayFlags(resolveNodeServerSettings(server).engine)
-  }
-
-  async setup(input: AdapterIn<NodeAdapterTypes>): Promise<IAdapterServer<NodeAdapterTypes>> {
-    const { engine: settings, listen, createServer } = resolveNodeServerSettings(input.server)
-    const engine = buildEngine(this.#container, this.#contextKey, input.routeGroups, input, settings, true)
-    await engine.ready()
-    const platform = createNodePlatform(input.context.logger)
-    const server = createServer((_req, res) => serveNode(engine, platform, res, false))
-    // Tracked first: a callback may make the server listen, and every connection it then
-    // accepts must be one a close can end.
-    const open = trackConnections(server)
-
-    try {
-      await input.customize?.(input.context, server)
-    } catch (err) {
-      destroyConnections(open)
-      await stopListening(server)
-      throw err
-    }
-
-    return new NodeServer(server, engine, platform, listen, open, input.context.logger)
-  }
-}
-
-/** One server the Node adapter built. */
-class NodeServer implements IAdapterServer<NodeAdapterTypes> {
+/** One server the Node application built. */
+export class NodeServer implements HostedServer {
   readonly #server: NodeHTTPServer
   readonly #engine: HTTPServer
   readonly #platform: NodePlatform
   readonly #listen: ListenOptions | undefined
   readonly #open: OpenConnections
   readonly #logger: Logger
+  readonly #runOptions: (() => ListenOptions | undefined) | undefined
   // Set once the teardown is over: while it drains, a request is still answered, with the engine's 503.
   #closed = false
 
+  /** @param runOptions - What `run(options)` was given, read as the server starts; `undefined` for a listener. */
   constructor(
     server: NodeHTTPServer,
     engine: HTTPServer,
@@ -109,6 +38,7 @@ class NodeServer implements IAdapterServer<NodeAdapterTypes> {
     listen: ListenOptions | undefined,
     open: OpenConnections,
     logger: Logger,
+    runOptions: (() => ListenOptions | undefined) | undefined,
   ) {
     this.#server = server
     this.#engine = engine
@@ -116,6 +46,7 @@ class NodeServer implements IAdapterServer<NodeAdapterTypes> {
     this.#listen = listen
     this.#open = open
     this.#logger = logger
+    this.#runOptions = runOptions
   }
 
   get instance(): NodeHTTPServer {
@@ -149,9 +80,9 @@ class NodeServer implements IAdapterServer<NodeAdapterTypes> {
    * Listens on what `run(options)` was given merged over the `listen` settings, the former winning key by key. With
    * no `host` and no `path`, on `localhost`; with nothing at all, also on a port the OS assigns.
    */
-  async run(options?: ListenOptions): Promise<void> {
+  async run(): Promise<void> {
     // A fresh object every call: `listen()` writes into what it is handed.
-    const merged: ListenOptions = { ...this.#listen, ...options }
+    const merged: ListenOptions = { ...this.#listen, ...this.#runOptions?.() }
 
     if (Object.keys(merged).length === 0) {
       merged.port = 0
@@ -192,10 +123,24 @@ class NodeServer implements IAdapterServer<NodeAdapterTypes> {
     this.#engine.forceClose()
     return Promise.resolve()
   }
+
+  view(): INodeServer {
+    // Read on each access: where the server listens changes as it starts and closes.
+    const address = (): ServerAddress | undefined => this.address
+
+    return {
+      instance: this.#server,
+      get address() {
+        return address()
+      },
+      request: (request, options) => this.request(request, options),
+      fetch: request => this.fetch(request),
+    }
+  }
 }
 
 /** Stops `server` listening: resolves once it has, or at once when it was not, whatever error Node passes. */
-function stopListening(server: NetServer): Promise<void> {
+export function stopListening(server: NetServer): Promise<void> {
   return new Promise<void>(resolve => {
     server.close(() => resolve())
   })

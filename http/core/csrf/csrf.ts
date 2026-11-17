@@ -1,5 +1,4 @@
-import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
-import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
+import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import { ErrCSRFCrossOrigin } from './errors.js'
 import {
@@ -158,9 +157,7 @@ export class CSRFBuilder {
  * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path not starting
  * with `/` or that is `/` itself.
  */
-export function csrf<C = unknown>(
-  configure?: HTTPPluginConfigurer<CSRFBuilder, C>,
-): AdapterExtensionFactory<HTTPPlugin, C> {
+export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, C>): HTTPPluginFactory<C> {
   return context => {
     const builder = new CSRFBuilder()
     configure?.(builder, context)

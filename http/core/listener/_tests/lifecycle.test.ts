@@ -6,8 +6,8 @@ import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { bindTo, HTTPPlugin, type HTTPSetupContext, type WebApplication } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { bindTo, HTTPPlugin, type HTTPSetupContext, Router } from '../../../index.js'
+import { createWebApplication, type NodeWebApplication } from '../../../platform/node/index.js'
 import { healthProbes } from '../../health/index.js'
 
 /**
@@ -18,13 +18,10 @@ import { healthProbes } from '../../health/index.js'
 
 const listener = { host: '127.0.0.1', port: 0 }
 
-const jobs = () =>
-  newRouter('/jobs')
-    .extend(bindTo('admin'))
-    .get('/', () => ({ jobs: true }))
+const jobs = () => new Router('/jobs').extend(bindTo('admin')).get('/', () => ({ jobs: true }))
 
 describe('the lifecycle of a listener', () => {
-  let app: WebApplication | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     // A test that failed mid-drain left the drain timer fake and pending: run it, or the close below joins a
@@ -46,7 +43,7 @@ describe('the lifecycle of a listener', () => {
       )
       .server(() => ({ listen: listener }))
       .hook('onClose', () => void events.push('main closed'))
-      .mount(jobs()) as WebApplication
+      .mount(jobs()) as NodeWebApplication
 
     await app.bootstrap()
     app.instance.once('listening', () => events.push('main listening'))
@@ -62,7 +59,7 @@ describe('the lifecycle of a listener', () => {
   it("keeps a listener answering while the application's own server drains, its readiness turning 503", async () => {
     app = createWebApplication()
       .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
-      .shutdown(s => s.drainDelay(300)) as WebApplication
+      .shutdown(s => s.drainDelay(300)) as NodeWebApplication
 
     await app.run()
     const admin = app.listeners.get('admin')!
@@ -101,12 +98,12 @@ describe('the lifecycle of a listener', () => {
       .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
       .mount(
         jobs(),
-        newRouter('/slow').get('/', async () => {
+        new Router('/slow').get('/', async () => {
           started()
           await held
           return { ok: true }
         }),
-      ) as WebApplication
+      ) as NodeWebApplication
 
     await app.run()
     const session = connect(app.address!.origin)
@@ -141,14 +138,12 @@ describe('the lifecycle of a listener', () => {
       .listener('admin', l => l.server(() => ({ listen: listener })))
       .shutdown(s => s.drainDelay(0).shutdownTimeout(200))
       .mount(
-        newRouter('/slow')
-          .extend(bindTo('admin'))
-          .get('/', async () => {
-            started()
-            await held
-            return { ok: true }
-          }),
-      ) as WebApplication
+        new Router('/slow').extend(bindTo('admin')).get('/', async () => {
+          started()
+          await held
+          return { ok: true }
+        }),
+      ) as NodeWebApplication
 
     await app.run()
     const admin = app.listeners.get('admin')!
@@ -168,11 +163,7 @@ describe('the lifecycle of a listener', () => {
   it('refuses a router bound to a name no server has, naming the router and the servers there are', async () => {
     app = createWebApplication()
       .listener('admin', l => l.server(() => ({ listen: listener })))
-      .mount(
-        newRouter('/jobs')
-          .extend(bindTo('nowhere'))
-          .get('/', () => ({})),
-      ) as WebApplication
+      .mount(new Router('/jobs').extend(bindTo('nowhere')).get('/', () => ({}))) as NodeWebApplication
 
     const error = await app.bootstrap().catch((error: unknown) => error)
 
@@ -186,10 +177,8 @@ describe('the lifecycle of a listener', () => {
 
   it('refuses a router bound to a name when no listener is installed, offering only to install one', async () => {
     app = createWebApplication().mount(
-      newRouter('/jobs')
-        .extend(bindTo('nowhere'))
-        .get('/', () => ({})),
-    ) as WebApplication
+      new Router('/jobs').extend(bindTo('nowhere')).get('/', () => ({})),
+    ) as NodeWebApplication
 
     const error = await app.bootstrap().catch((error: unknown) => error)
 
@@ -215,7 +204,7 @@ describe('the lifecycle of a listener', () => {
       app = createWebApplication()
         .listener('admin', l => l.server(() => ({ listen: listener })).with(failingToClose(failure)))
         .server(() => ({ listen: listener }))
-        .mount(jobs()) as WebApplication
+        .mount(jobs()) as NodeWebApplication
 
       await app.run()
       const servers = [app.instance, app.listeners.get('admin')!.instance]
@@ -237,7 +226,7 @@ describe('the lifecycle of a listener', () => {
         .listener('admin', l => l.server(() => ({ listen: listener })).with(failingToClose(adminFailure)))
         .server(() => ({ listen: listener }))
         .with(failingToClose(ownFailure))
-        .mount(jobs()) as WebApplication
+        .mount(jobs()) as NodeWebApplication
 
       await app.run()
 
@@ -273,7 +262,7 @@ describe('the lifecycle of a listener', () => {
 
     app = createWebApplication()
       .listener('admin', l => l.server(() => ({ listen: listener })))
-      .mount(jobs()) as WebApplication
+      .mount(jobs()) as NodeWebApplication
 
     // Handed to the listener as well, the port would be taken twice and run() would reject.
     await app.run({ host: '127.0.0.1', port: free })
@@ -285,7 +274,7 @@ describe('the lifecycle of a listener', () => {
   it('answers an injected request on a listener, with nothing listening', async () => {
     app = createWebApplication()
       .listener('admin', l => l.server(() => ({ listen: listener })))
-      .mount(jobs()) as WebApplication
+      .mount(jobs()) as NodeWebApplication
 
     await app.bootstrap()
     const admin = app.listeners.get('admin')!

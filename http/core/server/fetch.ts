@@ -1,10 +1,9 @@
-import type { IContextPlatform } from '../../adapter.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
 import { readLimited } from './body.js'
 import type { ResponseHead, SendHooks, ServerPlatform } from './platform.js'
 
 /** What `ctx.platform` is on the fetch application. */
-export interface FetchContextPlatform extends IContextPlatform {
+export interface FetchContextPlatform {
   readonly name: 'fetch'
   /** What the runtime handed `fetch` after the request: Bun's server, a worker's `env` and execution context. */
   readonly runtime: readonly unknown[]

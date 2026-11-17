@@ -1,7 +1,7 @@
 # HTTP
 
 Package: `@caffeinejs/http`. Two applications serve on the web-standards engine. The Node application,
-`createWebApplication()` and `newRouter()` from `@caffeinejs/http/node`, listens on a node:http, node:https or
+`createWebApplication()` from `@caffeinejs/http/node`, listens on a node:http, node:https or
 node:http2 server. The fetch application, `createWebApplication()` from `@caffeinejs/http`, has no socket of its own:
 the runtime calls `app.fetch`, as Bun, Deno and workers do. `authentication()`, `csrf()`, `cors()`, `corsPolicy()`,
 `healthProbes()`, cookies and error handling are imported from `@caffeinejs/http` and run on both.
@@ -32,8 +32,8 @@ const { address } = await app.run() // or app.run({ port: 3000 }); address.origi
 `.server(configure)` configures the server it builds. `listen` takes node:net's listen options, `http`, `https` and
 `http2` the node server's own, and `bodyLimit`, `handlerTimeout`, `trustProxy`, `router`, `requestIDHeader` and
 `schemaCompiler` the engine's. `run(options)` takes node:net's `ListenOptions`, merged over `listen` key by key.
-`app.instance` is the node:http, node:https or node:http2 server. `.serverCallback(callback)` gets the setup context
-and that server before it serves. `factory` and `listener` are refused at start-up.
+Only the Node application has `app.instance`, the node:http, node:https or node:http2 server, and
+`.serverCallback(callback)`, which gets the setup context and that server before it serves. `factory` and `listener` are refused at start-up.
 
 The fetch application takes the same engine settings and none of the Node ones. Start it, then hand `app.fetch` to the
 runtime:
@@ -194,7 +194,7 @@ class WebhooksController {
 }
 
 // On a controller, @CSRFExempt() exempts every method, one added later included; @CSRFExempt(false) keeps one checked
-newRouter('/hooks').extend(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
+new Router('/hooks').extend(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
 ```
 
 - `GET`, `HEAD`, `OPTIONS`, `TRACE` and `QUERY` are never checked: a safe method changes nothing, so an application
@@ -354,9 +354,8 @@ app.mount(pets) // before app.bootstrap()
   `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
 - `.with(factory)` registers a plugin in front of that router's routes and the groups nested under it, taking what
   the application's `.with(...)` takes: a factory that returns an `HTTPPlugin` ([Plugins](#plugins)). A router from
-  `new Router(path)` is bound to no adapter and mounts on any application. One from `newRouter(path)`, imported from
-  `@caffeinejs/http/node`, is bound to the Node application: its handlers' `ctx.platform` is Node's request and
-  response. The same on a controller is `@Use(factory)` above `@Controller`. A router takes only plugins, never
+  `new Router(path)` mounts on either application; a handler narrows `ctx.platform` on `name === 'node'` to reach
+  Node's request and response. The same on a controller is `@Use(factory)` above `@Controller`. A router takes only plugins, never
   features, and nothing is deduplicated: two groups wanting different settings pass two factories. The factory's context carries
   `config` as `ConfigSnapshot<unknown>` — a router does not know which application it will be mounted into.
 - A router accumulates its routes in its type: `RoutesOf<typeof app>` is the whole surface, ready for a typed
@@ -472,7 +471,7 @@ context the factory got. `context.app` is what it may do to the application: `mo
 `useFn(...)` and `hook(name, fn)`, taking what `app.mount`, `app.use`, `app.useFn` and `app.hook` take.
 
 ```ts
-import { HTTPPlugin, Router, type AdapterExtensionFactory, type HTTPSetupContext } from '@caffeinejs/http'
+import { HTTPPlugin, Router, type HTTPPluginFactory, type HTTPSetupContext } from '@caffeinejs/http'
 
 class Metrics extends HTTPPlugin {
   register({ app, container }: HTTPSetupContext): void {
@@ -482,13 +481,13 @@ class Metrics extends HTTPPlugin {
   }
 }
 
-export function metrics(): AdapterExtensionFactory<HTTPPlugin> {
+export function metrics(): HTTPPluginFactory {
   return () => new Metrics()
 }
 
 app.with(metrics()) // the application's own server
 app.listener('admin', l => l.with(metrics())) // that listener alone
-newRouter('/api').with(metrics()) // that router alone: /api/metrics
+new Router('/api').with(metrics()) // that router alone: /api/metrics
 ```
 
 Where it is registered decides what `context.app` reaches:
@@ -509,9 +508,8 @@ Where it is registered decides what `context.app` reaches:
   `detail('http', { internal: true })` so the OpenAPI document leaves it out. The groups stay out of
   `app.routeGroups`, and a router mounted twice in one place, or one the application already serves on that server,
   is served once.
-- A plain `HTTPPlugin` is written for no adapter: it mounts only `new Router(...)` routers and runs on both
-  applications. `HTTPPlugin<NodeAdapterTypes>` may mount `newRouter()` routers from `@caffeinejs/http/node`; only the
-  Node application and its routers take it.
+- An `HTTPPlugin` mounts `new Router(...)` routers and runs on both applications; a handler it mounts narrows
+  `ctx.platform` on `name` to reach Node's request.
 - A plugin that depends on a feature asks `context.hasFeature(name)` and throws `ErrFeatureNotInstalled`.
 - `context.app` is open only while the plugin registers. A middleware factory, a server callback and a context kept
   past its slot are refused.
@@ -608,7 +606,7 @@ const app = createWebApplication({ config })
   )
   .with(authentication())
   .mount(
-    newRouter('/jobs')
+    new Router('/jobs')
       .extend(bindTo('admin'))
       .authorize({ schemes: ['ops'], roles: ['operator'] })
       .get('/', () => jobs.list()),
@@ -626,11 +624,15 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   runs at start-up with the builder and the context a plugin factory gets (`config`, `logger`, `container`), so the
   example above reads `config.app.admin` there.
 - **From a feature.** A feature adds a listener from its configure step with `listenersOf(kit).add(name, configure)`,
-  which takes the same arguments; `listenersOf` refuses an application that is not a web application.
+  which takes the same arguments; `listenersOf` refuses an application that is not a web application. A feature does
+  not know which application installs it, so it names the settings type it writes: `NodeServerSettings`, from
+  `@caffeinejs/http/node`, for a `listen` section, which the fetch application refuses at start-up.
 
   ```ts
   protected configure(kit: FeatureConfigureKit<C>): void {
-    listenersOf(kit).add('metrics', l => l.server(() => ({ listen: { port: this.#port } })).with(metrics()))
+    listenersOf<C, NodeServerSettings>(kit).add('metrics', l =>
+      l.server(() => ({ listen: { port: this.#port } })).with(metrics()),
+    )
   }
   ```
 
@@ -645,8 +647,8 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   head slots. Nothing registered on the application reaches a listener, an authentication gate included, and
   `.basePath(...)` and `.serverCallback(...)` never do. What a plugin registered with `l.with(...)` mounts or adds
   through `context.app` lands on that server alone.
-- **Settings.** `l.server(...)` takes what `.server(...)` takes, so TLS and HTTP/2 are switched by configuration there
-  too.
+- **Settings.** `l.server(...)` takes what the application's `.server(...)` takes: `NodeServerSettings` on the Node
+  application, `ServerSettings` on the fetch one. TLS and HTTP/2 are switched by configuration there too.
 - **Authorization.** There is nothing listener-specific: a route on a listener requires what its router or controller
   declares, `router.authorize(...)` or `@Authorize(...)`, and an undeclared one answers to the application's fallback policy, exactly as on the application's own server. Health
   probes stay exempt.

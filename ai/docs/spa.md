@@ -50,8 +50,7 @@ handler returns it: a handler that drops the value answers with nothing in it.
 ```ts
 import { resolve } from 'node:path'
 
-import { ErrHTTPNotFound, type IContext } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
+import { ErrHTTPNotFound, Router, type IContext } from '@caffeinejs/http'
 import { isDocumentRequest, sendFile, staticFiles } from '@caffeinejs/static'
 
 const DIST = resolve('site/dist')
@@ -62,7 +61,7 @@ const notFound = (ctx: IContext): never => {
 }
 const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
 
-const pages = newRouter()
+const pages = new Router()
   .detail('http', { internal: true }) // @caffeinejs/openapi does not describe client routes
   .authorize({ allowAnonymous: true })
   .get('/', shellDocument)
@@ -71,7 +70,7 @@ const pages = newRouter()
 
 // The API owns its own misses. **One line per API base, not per controller** — three controllers under
 // `/api/*` share this one. Without it a browser navigating to `/api/typo` sees the application.
-const apiMisses = newRouter('/api').get('/*', notFound)
+const apiMisses = new Router('/api').get('/*', notFound)
 
 app
   .with(staticFiles(s => s.serve(DIST, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
@@ -108,15 +107,15 @@ register both with `forward(...)` if you need each.
 One `authorize` per tier, on the application's own routers, over the same bundle:
 
 ```ts
-const publicPages = newRouter()
+const publicPages = new Router()
   .authorize({ allowAnonymous: true })
   .get('/', shellDocument)
   .get('/login', shellDocument)
   .get('/*', clientRoute)
 
-const memberPages = newRouter().authorize().get('/dashboard', shellDocument).get('/dashboard/*', clientRoute)
+const memberPages = new Router().authorize().get('/dashboard', shellDocument).get('/dashboard/*', clientRoute)
 
-const adminPages = newRouter()
+const adminPages = new Router()
   .authorize({ roles: ['admin'] })
   .get('/admin', shellDocument)
   .get('/admin/*', clientRoute)
@@ -132,11 +131,11 @@ it. The data is protected by the API.
 **Two routes per gated subtree** — `/dashboard` and `/dashboard/*`. find-my-way does not match `/dashboard`
 against `/dashboard/*`; the wildcard covers `/dashboard/` with an empty match, but not the bare path.
 
-A prefixed router needs no special handling for the bare path: `newRouter('/app')` with a route at `/`
+A prefixed router needs no special handling for the bare path: `new Router('/app')` with a route at `/`
 composes to `/app`, so the prefixed router declares the pair as follows.
 
 ```ts
-newRouter('/app').get('/', shellDocument).get('/*', clientRoute)
+new Router('/app').get('/', shellDocument).get('/*', clientRoute)
 ```
 
 ## A separate application whose bundle must be gated too
@@ -149,7 +148,7 @@ them from a compiled route puts every byte behind the same `authorize` as the pa
 const ADMIN = resolve('admin/dist')
 const adminDocument = (ctx: IContext) => sendFile(ctx, 'index.html', ADMIN)
 
-const admin = newRouter()
+const admin = new Router()
   .detail('http', { internal: true })
   .authorize({ roles: ['admin'] })
   .get('/admin', adminDocument)

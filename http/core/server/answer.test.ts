@@ -242,7 +242,7 @@ describe('compileSerializers', () => {
 
 describe("writing an answer with the route's response schema", () => {
   // A fetch application of its own per route, closed once the test has read its answer.
-  async function answerOf(router: Router<any, any, any, any, any, any>): Promise<Response> {
+  async function answerOf(router: Router<any, any, any, any, any>): Promise<Response> {
     const served = createWebApplication().mount(router)
     await served.bootstrap()
     try {

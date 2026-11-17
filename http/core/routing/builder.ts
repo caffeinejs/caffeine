@@ -3,7 +3,7 @@ import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
-import type { AdapterExtensionFactory } from '../../adapter.js'
+import type { HTTPPluginFactory } from '../../plugin.js'
 import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import { assertHookName, REQUEST_HOOK_NAMES, type RequestHookName, type RequestHooks } from '../lifecycle/lifecycle.js'
@@ -37,7 +37,7 @@ export class RouteGroupBuilder {
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
-  #plugins?: AdapterExtensionFactory<unknown>[]
+  #plugins?: HTTPPluginFactory[]
   #labels?: Map<symbol, unknown>
   #hooks?: Hooks
   #methodHooks?: Array<[RequestHookName, string | symbol]>
@@ -112,7 +112,7 @@ export class RouteGroupBuilder {
    * Puts a plugin factory ahead of those already added. Only a controller's group reads it; a router takes plugins
    * with `router.with(...)`.
    */
-  plugin(factory: AdapterExtensionFactory<unknown>): this {
+  plugin(factory: HTTPPluginFactory): this {
     // Decorators apply bottom-up, so the list comes out in the order a reader sees the decorators only if it
     // is reversed. Prepending keeps the written order.
     this.#plugins ??= []

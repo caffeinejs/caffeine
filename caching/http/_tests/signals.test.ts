@@ -1,8 +1,8 @@
 import { connect } from 'node:net'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Get } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/node'
+import { Controller, Get, Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { type Duration, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -71,7 +71,7 @@ describe('the signal a store call carries', () => {
     const errors: CacheErrorEvent[] = []
     const sends = { n: 0 }
     const handled = { n: 0 }
-    const router = newRouter()
+    const router = new Router()
     router
       .get('/data')
       .config('cache', { ttl: 60 * Second, tags: ['data'] })

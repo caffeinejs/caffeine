@@ -1,7 +1,8 @@
 import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { createWebApplication, newRouter } from '@caffeinejs/http/node'
+import { Router, type AnyRouter } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -50,8 +51,8 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
 
   const deps = () => ({ store: new MemoryHTTPCacheStore(), etagGenerator: undefined, statusHeader: 'X-Cache' })
 
-  async function serve(route: (router: ReturnType<typeof newRouter>) => void, observer?: CacheObserver) {
-    const router = newRouter()
+  async function serve(route: (router: AnyRouter) => void, observer?: CacheObserver) {
+    const router = new Router()
     route(router)
     const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .with(() => cachePlugin({ ...deps(), observer }))

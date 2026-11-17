@@ -10,7 +10,7 @@ import {
   HTTPPlugin,
   kRouteConstraints,
   Router,
-  type AdapterExtensionFactory,
+  type HTTPPluginFactory,
   type HTTPPluginConfigurer,
   type HTTPSetupContext,
   type IContext,
@@ -103,7 +103,7 @@ const COMPUTED = new Set([
  * of the URL. Install it once per server, on the application or a listener; a router, a controller and a server with a
  * matcher of its own are refused. One `staticFiles(...)` takes several `.serve(...)` calls.
  */
-export function staticFiles<C = unknown>(configure?: StaticConfigurer<C>): AdapterExtensionFactory<HTTPPlugin, C> {
+export function staticFiles<C = unknown>(configure?: StaticConfigurer<C>): HTTPPluginFactory<C> {
   return async context => {
     const builder = new StaticBuilder()
     configure?.(builder, context)

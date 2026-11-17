@@ -10,8 +10,9 @@ import {
   type IContext,
   Identity,
   Principal,
+  Router,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 import { HTTPPlugin } from '../../../plugin.js'
 import { authentication } from '../security.js'
 
@@ -93,9 +94,7 @@ describe('gate registration', () => {
   // its own label — explicitly, rather than silently authenticating every request twice.
   it('refuses a default-label scoped gate under a root gate', async () => {
     const { a } = schemes()
-    const guarded = newRouter('/dup-scoped')
-      .with(authentication())
-      .get('/', () => ({ ok: true }))
+    const guarded = new Router('/dup-scoped').with(authentication()).get('/', () => ({ ok: true }))
 
     const app = createWebApplication()
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
@@ -110,8 +109,8 @@ describe('gate registration', () => {
   // default scheme.
   it('lets a named scoped gate own its group, under a root gate with a different default', async () => {
     const { a, b } = schemes()
-    const open = newRouter('/multi-root').get('/', () => ({ ok: true }))
-    const admin = newRouter('/multi-admin')
+    const open = new Router('/multi-root').get('/', () => ({ ok: true }))
+    const admin = new Router('/multi-admin')
       .with(authentication(g => g.name('admin').defaultScheme('B')))
       .get('/', () => ({ ok: true }))
 
@@ -149,8 +148,8 @@ describe('gate registration', () => {
   // refuse it for having no gate over it.
   it('guards only the gated group when every gate is scoped', async () => {
     const { a } = schemes()
-    const open = newRouter('/scoped-only-open').get('/', () => ({ ok: true }))
-    const gated = newRouter('/scoped-only-gated')
+    const open = new Router('/scoped-only-open').get('/', () => ({ ok: true }))
+    const gated = new Router('/scoped-only-gated')
       .with(authentication())
       .authorize()
       .get('/', () => ({ ok: true }))
@@ -173,7 +172,7 @@ describe('gate registration', () => {
   // Installing the feature without any gate is a supported configuration: the services bind, nothing guards.
   it('serves ungated with the feature installed and no gate registered', async () => {
     const { a } = schemes()
-    const open = newRouter('/feature-no-gate').get('/', () => ({ ok: true }))
+    const open = new Router('/feature-no-gate').get('/', () => ({ ok: true }))
 
     let has: boolean | undefined
     const app = createWebApplication()

@@ -6,12 +6,11 @@ import { CaffeineIoC, Injectable, Lifetime, Scopes } from '@caffeinejs/di'
 import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
-import type { HTTPSetupContext } from '../../adapter.js'
 import { createWebApplication, type WebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { bindTo } from '../../decorators/bind_to.js'
 import { Catch, Controller, Get, Prefix } from '../../decorators/index.js'
-import { HTTPPlugin } from '../../plugin.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { kRouteConstraints } from '../constraints/keys.js'
 import { ErrConfiguration } from '../error/common.js'
 import type { ErrorHandler } from '../error/handler.js'
@@ -19,12 +18,11 @@ import { ErrHTTPServiceUnavailable } from '../error/http.js'
 import type { Guard } from '../guards/guard.js'
 import { ErrRouteConflict } from '../matcher/matcher.js'
 import { Router } from '../routing/programmatic/programmatic.js'
-import type { FetchAdapterTypes } from './adapter.js'
 import { Context } from './context.js'
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
-type AnyRouter = Router<any, any, any, any, any, any>
-type FetchApp = WebApplication<FetchAdapterTypes, any, any, any>
+type AnyRouter = Router<any, any, any, any, any>
+type FetchApp = WebApplication<any, any, any>
 
 // Served by every application of this file: each test reaches it at its own paths.
 class ErrBoom extends Error {}

@@ -12,11 +12,10 @@ import {
   Produces,
   Router,
   Schema,
-  WebApplication,
   type HTTPSetupContext,
   type AnyRouter,
 } from '@caffeinejs/http'
-import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from '../errors.js'
@@ -48,7 +47,7 @@ const HAND_WRITTEN: OpenAPIDocument = {
   },
 }
 
-function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication<NodeAdapterTypes> {
+function build(configure: (o: OpenAPIOptionsBuilder) => void): NodeWebApplication {
   return createWebApplication({})
     .install(OpenAPI())
     .with(
@@ -56,15 +55,15 @@ function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication<No
         o.docs(false).public()
         configure(o)
       }),
-    ) as WebApplication<NodeAdapterTypes>
+    ) as NodeWebApplication
 }
 
-async function documentOf(app: WebApplication<NodeAdapterTypes>): Promise<OpenAPIDocument> {
+async function documentOf(app: NodeWebApplication): Promise<OpenAPIDocument> {
   return (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 }
 
 describe('imported specifications', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -184,7 +183,7 @@ describe('imported specifications', () => {
 })
 
 describe('transformDocument', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -246,7 +245,7 @@ describe('transformDocument', () => {
 })
 
 describe('derived response detail', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -302,7 +301,7 @@ describe('derived response detail', () => {
 // Here rather than in `openapi.test.ts`: that file's controllers carry `@Roles`, and every application built in it
 // must install authentication to start, which is exactly what these tests leave out.
 describe('openapi without authentication', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -332,7 +331,7 @@ describe('openapi without authentication', () => {
     const warnings = await warningsDuring(async () => {
       app = createWebApplication({})
         .install(OpenAPI())
-        .with(openapi(o => o.docs(false))) as WebApplication<NodeAdapterTypes>
+        .with(openapi(o => o.docs(false))) as NodeWebApplication
       await app.bootstrap()
     })
 
@@ -344,7 +343,7 @@ describe('openapi without authentication', () => {
   it('refuses to secure the document, pointing at Authentication(...)', async () => {
     app = createWebApplication({})
       .install(OpenAPI())
-      .with(openapi(o => o.docs(false).secure('Basic'))) as WebApplication<NodeAdapterTypes>
+      .with(openapi(o => o.docs(false).secure('Basic'))) as NodeWebApplication
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined
@@ -369,7 +368,7 @@ describe('openapi without authentication', () => {
               .query('/')
               .handler(() => []),
           ),
-        ) as WebApplication<NodeAdapterTypes>
+        ) as NodeWebApplication
       await app.bootstrap()
     })
 

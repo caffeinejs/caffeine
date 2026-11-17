@@ -1,5 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { createWebApplication, newRouter } from '@caffeinejs/http/node'
+import { Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -23,7 +24,7 @@ describe('a route that declares hooks of its own', () => {
   it('runs the cache once per request, on the route and on its HEAD twin', async () => {
     const misses: CacheMissEvent[] = []
     const hits: CacheHitEvent[] = []
-    const router = newRouter('')
+    const router = new Router('')
     router
       .get('/data')
       .config('cache', { ttl: 60 * Second })

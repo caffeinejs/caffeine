@@ -1,7 +1,7 @@
 import type { Requestable } from '@caffeinejs/brewer'
 import { Injectable } from '@caffeinejs/di'
-import { WebApplication, Controller, Get, Post, Args, $p } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, Post, Args, $p } from '@caffeinejs/http'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 
 import { ErrFetchFailed, controllerTypedClient } from './index.js'
@@ -60,7 +60,7 @@ class PetsRouter {
 void [PetStore, PetsRouter]
 
 describe('controllerTypedClient()', () => {
-  let app: WebApplication<any, any, any>
+  let app: NodeWebApplication
   let baseURL: string
 
   beforeAll(async () => {

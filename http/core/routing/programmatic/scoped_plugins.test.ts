@@ -2,8 +2,7 @@ import { newNoopLogger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../../../adapter.js'
-import { HTTPPlugin } from '../../../plugin.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
 import { closedApplicationOps } from '../../../plugin_slot.js'
 import { HookBatch } from '../../lifecycle/batch.js'
 import { Router } from './programmatic.js'
@@ -38,7 +37,7 @@ describe('ScopedPlugins', () => {
 
     await plugins.resolveRouters([router], context)
 
-    const batches = plugins.extensions.of(stateOf(router)!) as HookBatch[]
+    const batches = plugins.batchesOf(stateOf(router)!)
     expect(batches.every(entry => entry instanceof HookBatch)).toBe(true)
     expect(batches.map(batch => batch.request.onRequest)).toEqual([[first], [second]])
   })

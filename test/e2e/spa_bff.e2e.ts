@@ -3,8 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { authentication, ErrHTTPNotFound, type IContext, Authentication, Authorization } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
+import { authentication, ErrHTTPNotFound, type IContext, Authentication, Authorization, Router } from '@caffeinejs/http'
 import { isDocumentRequest, sendFile, staticFiles } from '@caffeinejs/static'
 import { buildStatic } from '@caffeinejs/static/build'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -32,7 +31,7 @@ const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(c
 
 /** The client routes, public or behind the provider, which is one `authorize` and nothing else. */
 function pages(gated: boolean) {
-  return newRouter()
+  return new Router()
     .detail('http', { internal: true })
     .authorize(gated ? {} : { allowAnonymous: true })
     .get('/', shellDocument)
@@ -55,7 +54,7 @@ function site(gated: boolean) {
 }
 
 function assets() {
-  return newRouter()
+  return new Router()
     .detail('http', { internal: true })
     .authorize()
     .get('/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!, dist))
@@ -63,13 +62,9 @@ function assets() {
 
 function api() {
   return (
-    newRouter('/api')
+    new Router('/api')
       .get('/me', ctx => Object.fromEntries(ctx.user.claims().map(claim => [claim.type, claim.value])))
-      .mount(
-        newRouter('/admin')
-          .authorize({ roles: ['admin'] })
-          .get('/', () => ({ ok: true })),
-      )
+      .mount(new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })))
       // The API owns its own misses, so a browser navigating to `/api/typo` never reaches the client routes.
       .get('/*', notFound)
   )

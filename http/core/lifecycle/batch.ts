@@ -1,5 +1,4 @@
-import type { HTTPSetupContext } from '../../adapter.js'
-import { HTTPPlugin } from '../../plugin.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { type HookFn, type HookName, type RequestHookName, type RequestHooks, type ServerHooks } from './lifecycle.js'
 
 /**

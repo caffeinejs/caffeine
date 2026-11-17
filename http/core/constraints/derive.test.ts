@@ -1,12 +1,11 @@
 import { Injectable } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../../adapter.js'
 import { createWebApplication } from '../../application.js'
 import { constraint } from '../../decorators/constraint.js'
 import { version } from '../../decorators/version.js'
 import { createWebApplication as createNodeApplication } from '../../platform/node/node.js'
-import { HTTPPlugin } from '../../plugin.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrRouteConflict } from '../matcher/matcher.js'
 import { Router } from '../routing/programmatic/programmatic.js'

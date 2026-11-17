@@ -4,8 +4,8 @@ import {
   CredentialsService,
   ErrHTTPBadRequest,
   type Principal,
+  Router,
 } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
 
 /** The scheme's registered name. `addCookie(...)` with no name uses this one. */
 const SCHEME = 'Cookie'
@@ -32,7 +32,7 @@ function describe(principal: Principal): unknown {
  * framework's `csrf()` judges every unsafe request by its Fetch Metadata, which a same-origin `fetch` sends by
  * itself, so a login form posted from another site is refused before it reaches here.
  */
-export const authRouter = newRouter('/auth')
+export const authRouter = new Router('/auth')
   .post('/login')
   .authorize({ allowAnonymous: true })
   .inject({ auth: AuthenticationService, credentials: CredentialsService })

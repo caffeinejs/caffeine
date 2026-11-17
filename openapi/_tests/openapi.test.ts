@@ -17,11 +17,10 @@ import {
   Router,
   Schema,
   Status,
-  WebApplication,
   type HTTPSetupContext,
   type AnyRouter,
 } from '@caffeinejs/http'
-import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -73,8 +72,8 @@ class PetsController {
 }
 void [PetsController]
 
-function buildApp(configure: OpenAPIConfigurer = () => {}): WebApplication<NodeAdapterTypes> {
-  return newBuilder(configure) as WebApplication<NodeAdapterTypes>
+function buildApp(configure: OpenAPIConfigurer = () => {}): NodeWebApplication {
+  return newBuilder(configure) as NodeWebApplication
 }
 
 // Authentication is always configured: the fixture controller carries @Roles and @AllowAnonymous, and an
@@ -93,7 +92,7 @@ function operationAt(document: OpenAPIDocument, path: string, method = 'get'): O
 }
 
 describe('openapi endpoints', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -132,7 +131,7 @@ describe('openapi endpoints', () => {
   it('lists errors under every format error handling negotiates', async () => {
     app = newBuilder(o => o.docs(false).public()).errorHandling(e =>
       e.serializer('text/html', (_ctx, problem) => `<h1>${problem.title}</h1>`),
-    ) as WebApplication<NodeAdapterTypes>
+    ) as NodeWebApplication
     await app.bootstrap()
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
@@ -178,7 +177,7 @@ describe('openapi endpoints', () => {
           .get('/hello')
           .handler(() => ({ ok: true })),
       ),
-    ) as WebApplication<NodeAdapterTypes>
+    ) as NodeWebApplication
     await app.bootstrap()
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
@@ -197,7 +196,7 @@ describe('openapi endpoints', () => {
           .get('/*')
           .handler(() => 'shell'),
       ),
-    ) as WebApplication<NodeAdapterTypes>
+    ) as NodeWebApplication
     await app.bootstrap()
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
@@ -296,24 +295,21 @@ describe('openapi endpoints', () => {
  * the documentation page's links are followed by a browser, so they carry the base.
  */
 describe('openapi under a base path', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     await app?.close()
     app = undefined
   })
 
-  async function documentOf(
-    running: WebApplication<NodeAdapterTypes>,
-    url = '/api/openapi.json',
-  ): Promise<OpenAPIDocument> {
+  async function documentOf(running: NodeWebApplication, url = '/api/openapi.json'): Promise<OpenAPIDocument> {
     const res = await running.request(url)
     expect(res.status).toBe(200)
     return (await res.json()) as OpenAPIDocument
   }
 
   it('names the base path as the server, keeping the paths as the application declares them', async () => {
-    app = newBuilder(o => o.docs(false).public()).basePath('/api') as WebApplication<NodeAdapterTypes>
+    app = newBuilder(o => o.docs(false).public()).basePath('/api') as NodeWebApplication
     await app.bootstrap()
 
     const document = await documentOf(app)
@@ -326,7 +322,7 @@ describe('openapi under a base path', () => {
   it('keeps the servers the application declared, adding none of its own', async () => {
     app = newBuilder(o => o.server('https://api.example.com/v1').docs(false).public()).basePath(
       '/api',
-    ) as WebApplication<NodeAdapterTypes>
+    ) as NodeWebApplication
     await app.bootstrap()
 
     expect((await documentOf(app)).servers).toEqual([{ url: 'https://api.example.com/v1' }])
@@ -344,16 +340,14 @@ describe('openapi under a base path', () => {
     const path = join(dir, 'spec.yaml')
     writeFileSync(path, 'openapi: 3.1.1\ninfo:\n  title: Imported\n  version: 1.0.0\npaths: {}\n')
 
-    app = newBuilder(o => o.specification({ path }).docs(false).public()).basePath(
-      '/api',
-    ) as WebApplication<NodeAdapterTypes>
+    app = newBuilder(o => o.specification({ path }).docs(false).public()).basePath('/api') as NodeWebApplication
     await app.bootstrap()
 
     expect('servers' in (await documentOf(app))).toBe(false)
   })
 
   it('links the documentation page to its document and bundle under the base', async () => {
-    app = newBuilder(o => o.public()).basePath('/api') as WebApplication<NodeAdapterTypes>
+    app = newBuilder(o => o.public()).basePath('/api') as NodeWebApplication
     await app.bootstrap()
 
     const html = await (await app.request('/api/docs')).text()
@@ -367,7 +361,7 @@ describe('openapi under a base path', () => {
   })
 
   it('puts the base path in front of a configured endpoint base', async () => {
-    app = newBuilder(o => o.base('/internal').public()).basePath('/api') as WebApplication<NodeAdapterTypes>
+    app = newBuilder(o => o.base('/internal').public()).basePath('/api') as NodeWebApplication
     await app.bootstrap()
 
     const html = await (await app.request('/api/internal/docs')).text()
@@ -378,7 +372,7 @@ describe('openapi under a base path', () => {
 })
 
 describe('openapi endpoint protection', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     if (app !== undefined) {

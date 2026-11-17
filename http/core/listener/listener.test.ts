@@ -12,8 +12,8 @@ import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { bindTo, type WebApplication } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/node/index.js'
+import { bindTo, type WebApplication, Router } from '../../index.js'
+import { createWebApplication, type NodeServerSettings } from '../../platform/node/index.js'
 import { listenersOf, type ListenerConfigurer } from './listener.js'
 
 /**
@@ -29,16 +29,16 @@ class Probe<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'probe'
 
   readonly #name: string
-  readonly #listener: ListenerConfigurer<C> | undefined
+  readonly #listener: ListenerConfigurer<C, NodeServerSettings> | undefined
 
-  constructor(name: string, listener?: ListenerConfigurer<C>) {
+  constructor(name: string, listener?: ListenerConfigurer<C, NodeServerSettings>) {
     super()
     this.#name = name
     this.#listener = listener
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    listenersOf(kit).add(this.#name, this.#listener)
+    listenersOf<C, NodeServerSettings>(kit).add(this.#name, this.#listener)
   }
 }
 
@@ -64,11 +64,7 @@ describe('listeners', () => {
     app = createWebApplication()
       .server(() => ({ listen: listener }))
       .install(new Probe('probe', l => l.server(() => ({ listen: listener }))))
-      .mount(
-        newRouter('/probe')
-          .extend(bindTo('probe'))
-          .get('/', () => ({ up: true })),
-      ) as WebApplication
+      .mount(new Router('/probe').extend(bindTo('probe')).get('/', () => ({ up: true }))) as WebApplication
 
     await app.run()
 
@@ -145,12 +141,8 @@ describe('ListenerBuilder.hook', () => {
   it('runs a listener hook on that listener alone', async () => {
     const app = createWebApplication()
       .listener('admin', l => l.hook('onSend', ctx => void ctx.header('x-listener', 'admin')))
-      .mount(
-        newRouter('/jobs')
-          .extend(bindTo('admin'))
-          .get('/', () => 'jobs'),
-      )
-      .mount(newRouter('/own').get('/', () => 'own'))
+      .mount(new Router('/jobs').extend(bindTo('admin')).get('/', () => 'jobs'))
+      .mount(new Router('/own').get('/', () => 'own'))
 
     try {
       await app.bootstrap()

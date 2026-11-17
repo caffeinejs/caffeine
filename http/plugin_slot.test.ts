@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from './adapter.js'
 import { ErrConfiguration } from './core/error/common.js'
-import { HTTPPlugin } from './plugin.js'
+import { HookRegistration } from './core/lifecycle/batch.js'
+import { HTTPPlugin, type HTTPSetupContext } from './plugin.js'
 import { PluginSlot } from './plugin_slot.js'
 
 class Named extends HTTPPlugin {
@@ -25,9 +25,20 @@ describe('PluginSlot', () => {
     const slot = new PluginSlot()
     const hook = (): void => undefined
 
-    const { batch } = await slot.during(() => slot.run(() => void slot.hook('preHandler', hook), kit, 'here'))
+    const batch = await slot.during(() =>
+      slot.run(() => new HookRegistration('preHandler', hook), { ...kit, app: slot }, 'here'),
+    )
 
     expect(batch.request.preHandler).toEqual([hook])
+  })
+
+  // The engine installs plugins alone: anything else a factory hands back is refused while its slot runs, naming it.
+  it('refuses a factory that returns no HTTPPlugin, naming where', async () => {
+    const slot = new PluginSlot()
+
+    await expect(slot.during(() => slot.run(() => undefined, kit, 'on listener "admin"'))).rejects.toThrow(
+      'Cannot install a server plugin on listener "admin": only an HTTPPlugin can be installed',
+    )
   })
 
   // A caller the types did not stop, plain JavaScript or a cast, finds out at start-up rather than never.

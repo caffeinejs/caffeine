@@ -6,11 +6,9 @@ import { bindTo } from '../../decorators/bind_to.js'
 import { HTTPPlugin } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { Router } from '../routing/programmatic/programmatic.js'
-import type { FetchAdapterTypes } from './adapter.js'
 
-// Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
-type AnyRouter = Router<any, any, any, any, any, any>
-type FetchApp = WebApplication<FetchAdapterTypes, any, any, any>
+// Any fetch application: the route types each carries are not under test here.
+type FetchApp = WebApplication<any, any, any>
 
 let app: FetchApp | undefined
 
@@ -19,9 +17,8 @@ afterEach(async () => {
   app = undefined
 })
 
-describe('the fetch adapter', () => {
+describe('the fetch application', () => {
   it.each<[string, (app: FetchApp) => unknown, string]>([
-    ['.serverCallback(...)', a => a.serverCallback(() => undefined), 'Cannot run ".serverCallback(...)"'],
     [
       'a factory returning a function, at the root',
       a => a.with((() => async () => undefined) as never),
@@ -83,13 +80,6 @@ describe('the fetch adapter', () => {
     expect(res.headers.get('x-app')).toBe('1')
     expect(res.headers.get('x-plugin')).toBe('1')
     expect(await res.text()).toBe('x')
-  })
-
-  it('throws from app.instance', async () => {
-    app = createWebApplication()
-    await app.bootstrap()
-
-    expect(() => app!.instance).toThrow('Cannot read the server instance: the fetch application has none')
   })
 
   it('accepts an HTTPPlugin that mounts a router', async () => {

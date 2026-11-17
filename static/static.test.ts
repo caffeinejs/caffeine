@@ -14,12 +14,11 @@ import {
   Guards,
   HTTPPlugin,
   Router,
-  type AdapterExtensionFactory,
+  type HTTPPluginFactory,
   type Guard,
   type HTTPSetupContext,
-  type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, inject, it, vi } from 'vitest'
 
@@ -32,7 +31,7 @@ import { staticFiles, type StaticConfigurer } from './static.js'
 const { spa, fixtures } = inject('fixtures')
 
 describe('staticFiles', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
   let dir: string
 
   beforeEach(async () => {
@@ -63,7 +62,7 @@ describe('staticFiles', () => {
   }
 
   /** A plugin whose `register` runs `setup` on the application's own registrar. */
-  function plugin(setup: (app: HTTPSetupContext['app']) => void): AdapterExtensionFactory<HTTPPlugin> {
+  function plugin(setup: (app: HTTPSetupContext['app']) => void): HTTPPluginFactory {
     return () =>
       new (class extends HTTPPlugin {
         register({ app }: HTTPSetupContext) {
@@ -73,22 +72,19 @@ describe('staticFiles', () => {
   }
 
   /** An application that routes nothing but what it is given, so a `@Controller` elsewhere stays out. */
-  function start(configure: StaticConfigurer, before: Array<AdapterExtensionFactory<HTTPPlugin>> = []) {
+  function start(configure: StaticConfigurer, before: Array<HTTPPluginFactory> = []) {
     let builder = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
 
     for (const plugin of before) {
       builder = builder.with(plugin)
     }
 
-    app = builder.with(staticFiles(configure)) as WebApplication<NodeAdapterTypes>
+    app = builder.with(staticFiles(configure)) as NodeWebApplication
 
     return app
   }
 
-  async function refusal(
-    configure: StaticConfigurer,
-    before: Array<AdapterExtensionFactory<HTTPPlugin>> = [],
-  ): Promise<Error> {
+  async function refusal(configure: StaticConfigurer, before: Array<HTTPPluginFactory> = []): Promise<Error> {
     const err = await start(configure, before)
       .bootstrap()
       .catch((err: unknown) => err)
@@ -130,9 +126,7 @@ describe('staticFiles', () => {
 
   // A file a directory route does not list is a 404 there, not a page of the application's catch-all.
   it('answers 404 for a miss under a directory, and leaves a miss at the root to the application', async () => {
-    app = start(s => s.serve(spa)).mount(
-      newRouter().get('/*', () => 'client route'),
-    ) as WebApplication<NodeAdapterTypes>
+    app = start(s => s.serve(spa)).mount(new Router().get('/*', () => 'client route')) as NodeWebApplication
     await app.bootstrap()
 
     expect((await app.request('/assets/missing.js')).status).toBe(404)
@@ -154,7 +148,7 @@ describe('staticFiles', () => {
     const root = await tree('folded', ['assets/App.js'])
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ router: { caseSensitive: false } }))
-      .with(staticFiles(s => s.serve(root))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root))) as NodeWebApplication
     await app.bootstrap()
 
     expect(await (await app.request('/ASSETS/app.JS')).text()).toBe('assets/App.js')
@@ -169,7 +163,7 @@ describe('staticFiles', () => {
         router: { caseSensitive: false },
         listen: { host: '127.0.0.1', port: 0 },
       }))
-      .with(staticFiles(s => s.serve(root))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root))) as NodeWebApplication
     const { address } = await app.run()
 
     const res = await absoluteFormGet(address.origin, '/ASSETS/app.JS?v=1')
@@ -183,7 +177,7 @@ describe('staticFiles', () => {
       const root = await tree('folded', [`${directory}/report.txt`, `${directory}/xreport.txt`])
       app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
         .server(() => ({ router: { caseSensitive: false } }))
-        .with(staticFiles(s => s.serve(root))) as WebApplication<NodeAdapterTypes>
+        .with(staticFiles(s => s.serve(root))) as NodeWebApplication
       await app.bootstrap()
 
       const res = await app.request('/%C4%B0/xreport.txt')
@@ -197,7 +191,7 @@ describe('staticFiles', () => {
     const root = await tree('dirs', ['Assets/a.js', 'assets/b.js'])
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ router: { caseSensitive: false } }))
-      .with(staticFiles(s => s.serve(root))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root))) as NodeWebApplication
     await app.bootstrap()
 
     expect(await (await app.request('/assets/a.js')).text()).toBe('Assets/a.js')
@@ -211,7 +205,7 @@ describe('staticFiles', () => {
       .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
       .with(
         staticFiles(s => s.serve(one, { prefix: '/web//public' }).serve(two, { prefix: '/web/public' })),
-      ) as WebApplication<NodeAdapterTypes>
+      ) as NodeWebApplication
     await app.bootstrap()
 
     expect(await (await app.request('/web/public/assets/a.txt')).text()).toBe('assets/a.txt')
@@ -249,7 +243,7 @@ describe('staticFiles', () => {
     const root = await tree('slow', ['slow.txt'])
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ handlerTimeout: 30 * Millisecond }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as NodeWebApplication
     await app.bootstrap()
     const fifo = join(await realpath(root), 'slow.txt')
     await rm(fifo)
@@ -285,7 +279,7 @@ describe('staticFiles', () => {
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ handlerTimeout: 30 * Millisecond }))
       .with(holder)
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as NodeWebApplication
     await app.bootstrap()
     const fifo = join(await realpath(root), 'slow.txt')
     await rm(fifo)
@@ -312,7 +306,7 @@ describe('staticFiles', () => {
     const root = await tree('timed', ['report.txt'])
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ handlerTimeout: 30 * Second }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as NodeWebApplication
     await app.bootstrap()
 
     const res = await app.request('/report.txt')
@@ -326,7 +320,7 @@ describe('staticFiles', () => {
     const root = await tree('nested', ['assets/app.js'])
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ router: { useSemicolonDelimiter: true } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as NodeWebApplication
     await app.bootstrap()
 
     expect((await app.request('/assets/app.js;tag=a%2Bb')).status).toBe(200)
@@ -337,7 +331,7 @@ describe('staticFiles', () => {
     const root = await tree('nested', ['assets/app.js'])
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ router: { useSemicolonDelimiter: true, caseSensitive: false } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as NodeWebApplication
     await app.bootstrap()
 
     expect((await app.request('/assets/app.js;tag=a%2Bb')).status).toBe(200)
@@ -349,7 +343,7 @@ describe('staticFiles', () => {
 
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ router: { useSemicolonDelimiter: true } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as NodeWebApplication
     const err = await app.bootstrap().catch((err: unknown) => err)
 
     expect(err).toBeInstanceOf(ErrConfiguration)
@@ -364,9 +358,7 @@ describe('staticFiles', () => {
 
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ router: { useSemicolonDelimiter: true } }))
-      .with(
-        staticFiles(s => s.serve(root, { prefix: '/site;v1', anonymous: true })),
-      ) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(root, { prefix: '/site;v1', anonymous: true }))) as NodeWebApplication
     const err = await app.bootstrap().catch((err: unknown) => err)
 
     expect(err).toBeInstanceOf(ErrConfiguration)
@@ -410,7 +402,7 @@ describe('staticFiles', () => {
       app = start(s => s.serve(spa, options))
         .install(Authentication(a => a.addCookie(o => o.sessionSecret('s'.repeat(32)).secure(false))))
         .with(authentication())
-        .install(Authorization(z => z.requireAuthenticatedByDefault())) as WebApplication<NodeAdapterTypes>
+        .install(Authorization(z => z.requireAuthenticatedByDefault())) as NodeWebApplication
 
       return app
     }
@@ -434,7 +426,7 @@ describe('staticFiles', () => {
         .install(Authentication(a => a.addCookie(o => o.sessionSecret('s'.repeat(32)).secure(false))))
         .with(authentication())
         .install(Authorization(z => z.requireAuthenticatedByDefault()))
-        .install(Guards(g => g.global(DenyAll))) as WebApplication<NodeAdapterTypes>
+        .install(Guards(g => g.global(DenyAll))) as NodeWebApplication
       app.container.bind(DenyAll, t => t.toSelf())
       await app.bootstrap()
 
@@ -665,7 +657,7 @@ describe('staticFiles', () => {
         .server(() => ({ router: { caseSensitive: false } }))
         .with(
           staticFiles(s => s.serve(outer, { prefix }).serve(inner, { prefix: `${prefix}/assets` })),
-        ) as WebApplication<NodeAdapterTypes>
+        ) as NodeWebApplication
 
       await expect(app.bootstrap()).rejects.toThrow(ErrStaticRouteConflict)
     })
@@ -689,7 +681,7 @@ describe('staticFiles', () => {
       const lower = await tree('lower', ['a.txt'])
       app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
         .server(() => ({ router: { caseSensitive: false } }))
-        .with(staticFiles(s => s.serve(upper).serve(lower))) as WebApplication<NodeAdapterTypes>
+        .with(staticFiles(s => s.serve(upper).serve(lower))) as NodeWebApplication
 
       const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -716,7 +708,7 @@ describe('staticFiles', () => {
     it('from a route registered after the mount at the URL of a file under a directory', async () => {
       const root = await tree('nested', ['assets/private/report.txt', 'assets/app.js'])
       start(s => s.serve(root, { anonymous: true })).mount(
-        newRouter().get('/assets/private/report.txt', () => 'protected'),
+        new Router().get('/assets/private/report.txt', () => 'protected'),
       )
 
       const err = await app!.bootstrap().catch((err: unknown) => err)
@@ -731,7 +723,7 @@ describe('staticFiles', () => {
     it('but not from a POST registered after the mount at the URL of a file under a directory', async () => {
       const root = await tree('nested', ['assets/private/report.txt'])
       start(s => s.serve(root, { anonymous: true })).mount(
-        newRouter().post('/assets/private/report.txt', () => 'posted'),
+        new Router().post('/assets/private/report.txt', () => 'posted'),
       )
       await app!.bootstrap()
 
@@ -763,7 +755,7 @@ describe('staticFiles', () => {
       app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
         .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
         .with(staticFiles(s => s.serve(root, { anonymous: true })))
-        .with(later) as WebApplication<NodeAdapterTypes>
+        .with(later) as NodeWebApplication
 
       const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -785,7 +777,7 @@ describe('staticFiles', () => {
         app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
           .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
           .with(before ? other : mount)
-          .with(before ? mount : other) as WebApplication<NodeAdapterTypes>
+          .with(before ? mount : other) as NodeWebApplication
 
         const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -814,7 +806,7 @@ describe('staticFiles', () => {
     // A parameter ranks above a wildcard: the route would answer every file directly under the directory.
     it('from a parametric route registered after the mount over a directory of files', async () => {
       const root = await tree('nested', ['assets/report.txt'])
-      start(s => s.serve(root, { anonymous: true })).mount(newRouter().get('/assets/:name', () => 'protected'))
+      start(s => s.serve(root, { anonymous: true })).mount(new Router().get('/assets/:name', () => 'protected'))
 
       const err = await app!.bootstrap().catch((err: unknown) => err)
 
@@ -827,7 +819,7 @@ describe('staticFiles', () => {
     // find-my-way reports a parameter named "*" as the wildcard's value: the check could not tell the two apart.
     it('from a route with a parameter named * over a directory of files', async () => {
       const root = await tree('nested', ['assets/report.txt'])
-      start(s => s.serve(root, { anonymous: true })).mount(newRouter().get('/assets/:*', () => 'protected'))
+      start(s => s.serve(root, { anonymous: true })).mount(new Router().get('/assets/:*', () => 'protected'))
 
       const err = await app!.bootstrap().catch((err: unknown) => err)
 
@@ -845,7 +837,7 @@ describe('staticFiles', () => {
         .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
         .with(
           staticFiles(s => s.serve(outer, { prefix: '/web//public' }).serve(inner, { prefix: '/web/public/assets' })),
-        ) as WebApplication<NodeAdapterTypes>
+        ) as NodeWebApplication
 
       const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -904,9 +896,7 @@ describe('staticFiles', () => {
   })
 
   it('refuses a second staticFiles(...) on one server', async () => {
-    app = start(s => s.serve(fixtures)).with(
-      staticFiles(s => s.serve(spa, { prefix: '/app' })),
-    ) as WebApplication<NodeAdapterTypes>
+    app = start(s => s.serve(fixtures)).with(staticFiles(s => s.serve(spa, { prefix: '/app' }))) as NodeWebApplication
 
     const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -918,7 +908,7 @@ describe('staticFiles', () => {
   it('refuses staticFiles() on a router', async () => {
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) }).mount(
       new Router().with(staticFiles(s => s.serve(fixtures))),
-    ) as WebApplication<NodeAdapterTypes>
+    ) as NodeWebApplication
 
     const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -931,7 +921,7 @@ describe('staticFiles', () => {
   it('refuses staticFiles() on a server with a matcher of its own', async () => {
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
-      .with(staticFiles(s => s.serve(fixtures))) as WebApplication<NodeAdapterTypes>
+      .with(staticFiles(s => s.serve(fixtures))) as NodeWebApplication
 
     const err = await app.bootstrap().catch((err: unknown) => err)
 

@@ -1,5 +1,4 @@
-import { ErrHTTPNotFound, type IContext } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
+import { ErrHTTPNotFound, type IContext, Router } from '@caffeinejs/http'
 import { isDocumentRequest, sendFile } from '@caffeinejs/static'
 
 import { SITE } from './site.js'
@@ -25,7 +24,7 @@ const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(c
  * Public pages. `/login` and `/forbidden` must stay anonymous: gating the sign-in page loops it through
  * itself, and gating the access-denied page turns a 403 into a redirect to a page that redirects.
  */
-export const publicPages = newRouter()
+export const publicPages = new Router()
   // `@caffeinejs/openapi` does not describe client routes — they are documents, not operations.
   .detail('http', { internal: true })
   .authorize({ allowAnonymous: true })
@@ -43,7 +42,7 @@ export const publicPages = newRouter()
  *
  * Two routes per subtree: find-my-way does not match `/dashboard` against `/dashboard/*`.
  */
-export const memberPages = newRouter()
+export const memberPages = new Router()
   .detail('http', { internal: true })
   .authorize()
   .get('/dashboard', shellDocument)
@@ -52,7 +51,7 @@ export const memberPages = newRouter()
   .get('/projects/*', clientRoute)
 
 /** Pages that need a role. A signed-in member navigating here lands on `/forbidden`; a fetch gets 403. */
-export const adminPages = newRouter()
+export const adminPages = new Router()
   .detail('http', { internal: true })
   .authorize({ roles: ['admin'] })
   .get('/admin', shellDocument)
@@ -65,4 +64,4 @@ export const adminPages = newRouter()
  * still reaches the projects router and this only catches what nothing else did. Without it a browser typing
  * `/api/typo` would fall through to the client-route wildcard and be handed the application.
  */
-export const apiMisses = newRouter('/api').get('/*', notFound)
+export const apiMisses = new Router('/api').get('/*', notFound)

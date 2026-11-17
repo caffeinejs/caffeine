@@ -6,13 +6,14 @@ import {
   type FeatureConfigureKit,
   type FeatureConfigurer,
 } from '@caffeinejs/application'
-import type { InferConfig } from '@caffeinejs/application/config'
+import type { ConfigSnapshot, InferConfig } from '@caffeinejs/application/config'
 import { EnvConfigSource } from '@caffeinejs/application/config/env'
-import { $t } from '@caffeinejs/application/schema'
+import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, expectTypeOf } from 'vitest'
 
-import { ErrConfiguration, HTTPPlugin, Router } from './index.js'
+import { ErrConfiguration, HTTPPlugin, Router, type HTTPPluginConfigurer, type HTTPPluginFactory } from './index.js'
 import { createWebApplication } from './platform/node/index.js'
 
 // A sentinel the feature's configurer binds into the container so a test can prove the feature rode
@@ -82,8 +83,8 @@ describe('WebApplication.install()', () => {
 })
 
 describe('WebApplication.with()', () => {
-  // The compiler already refuses these; the runtime error is for a feature smuggled past it, where the silent
-  // alternative would be an extension the adapter cannot install.
+  // The compiler already refuses these; the runtime error is for a feature smuggled past it, refused at the call
+  // rather than when the factory runs.
   it('refuses a feature, naming it and pointing at .install()', () => {
     // @ts-expect-error a feature is not a plugin factory
     expect(() => createWebApplication().with(probe())).toThrow(ErrConfiguration)
@@ -143,5 +144,42 @@ describe('HTTPPlugin.name', () => {
       `Cannot register plugin "named" twice on the application's own server`,
     )
     await app.close().catch(() => undefined)
+  })
+})
+
+describe('configure callback typing', () => {
+  const schema = $t.Object({ name: $t.String({ default: 'app' }) })
+  type AppConfig = InferSchema<typeof schema>
+
+  class PlainBuilder<C = unknown> extends FeatureBuilder<C> {
+    readonly [kFeatureName] = 'plain-probe'
+  }
+
+  function plain<C = unknown>(configure?: FeatureConfigurer<PlainBuilder<C>, C>): Feature<C> {
+    return new PlainBuilder<C>(configure as never)
+  }
+
+  class PluginSideBuilder {}
+
+  class NoopPlugin extends HTTPPlugin {
+    register(): void {}
+  }
+
+  function pluginSide<C = unknown>(configure: HTTPPluginConfigurer<PluginSideBuilder, C>): HTTPPluginFactory<C> {
+    return context => {
+      configure(new PluginSideBuilder(), context)
+      return new NoopPlugin()
+    }
+  }
+
+  // Each call shape must reach the application's configuration type rather than fall back to `unknown` — a
+  // feature through its `FeatureConfigureKit` on `.install(...)`, a plugin factory's builder through its
+  // `HTTPSetupContext` on `.with(...)`.
+  it('types the callback against the application configuration, on either registration', () => {
+    const conf = newConfiguration(schema).source(new InlineConfigSource({})).build().config
+
+    createWebApplication({ config: conf })
+      .install(plain((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<ConfigSnapshot<AppConfig>>()))
+      .with(pluginSide((_b, context) => expectTypeOf(context.config).toEqualTypeOf<ConfigSnapshot<AppConfig>>()))
   })
 })

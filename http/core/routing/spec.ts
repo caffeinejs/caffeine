@@ -4,7 +4,7 @@ import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
-import type { AdapterExtensionFactory } from '../../adapter.js'
+import type { HTTPPluginFactory } from '../../plugin.js'
 import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import type { RequestHookName } from '../lifecycle/lifecycle.js'
@@ -31,7 +31,7 @@ export interface RouteGroupSpec<R> {
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
   /** A controller's `@Use(...)` factories, in the order written. */
-  plugins?: AdapterExtensionFactory<unknown>[]
+  plugins?: HTTPPluginFactory[]
   /** Hooks covering every route of the group, in the order written. */
   hooks?: AuthoredHooks
   /** A controller's methods that are hooks, `@OnRequest()` and its siblings, with the point each runs at. */

@@ -4,8 +4,8 @@ import { connect } from 'node:net'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { bindTo, csrfExempt, type OriginPredicate, type WebApplication } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { bindTo, csrfExempt, type OriginPredicate, type WebApplication, Router } from '../../../index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 import { corsPolicy } from '../../cors/cors.js'
 import { csrf } from '../csrf.js'
 
@@ -30,7 +30,7 @@ const cert = readFileSync(new URL('../../../_tests/_testdata/tls/localhost.crt',
 const ok = () => ({ ok: true })
 
 /** `POST /echo`. */
-const echo = () => newRouter('/echo').post('/', ok)
+const echo = () => new Router('/echo').post('/', ok)
 
 interface Requesting {
   request(url: string, init?: RequestInit): Promise<Response>
@@ -149,7 +149,7 @@ describe('csrf() at the edges', () => {
   describe('methods', () => {
     // `QUERY` is safe, like `GET`, even with a body: a cross-site one is a read.
     it('never refuses a QUERY', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(newRouter('/search').query('/', ok)))
+      const app = await ready(createWebApplication().with(csrf()).mount(new Router('/search').query('/', ok)))
       const res = await app.request('/search', {
         method: 'QUERY',
         headers: { ...CROSS_SITE, 'content-type': 'application/json' },
@@ -171,8 +171,8 @@ describe('csrf() at the edges', () => {
           }))
           .with(csrf(c => c.exclude('/webhooks')))
           .mount(
-            newRouter('/echo').post('/', () => (ran.push('echo'), ok())),
-            newRouter('/webhooks').post('/:id', () => (ran.push('webhook'), ok())),
+            new Router('/echo').post('/', () => (ran.push('echo'), ok())),
+            new Router('/webhooks').post('/:id', () => (ran.push('webhook'), ok())),
           ),
       )
 
@@ -188,7 +188,7 @@ describe('csrf() at the edges', () => {
       const app = await ready(
         createWebApplication()
           .with(csrf(c => c.exclude('/webhooks/')))
-          .mount(newRouter('/webhooks').post('/', ok).post('/:id', ok), newRouter('/webhooksx').post('/', ok)),
+          .mount(new Router('/webhooks').post('/', ok).post('/:id', ok), new Router('/webhooksx').post('/', ok)),
       )
 
       expect((await post(app, '/webhooks', CROSS_SITE)).status).toBe(200)
@@ -326,7 +326,7 @@ describe('csrf() at the edges', () => {
   describe('several plugins', () => {
     // An exclusion belongs to the plugin it was given to. A route's own mark speaks to every plugin.
     it("keeps the root plugin's check on a path a route group's own plugin excludes", async () => {
-      const admin = newRouter('/admin')
+      const admin = new Router('/admin')
         .with(csrf(c => c.name('admin').exclude('/admin/hooks')))
         .post('/hooks', ok)
         .post('/marked')
@@ -345,7 +345,7 @@ describe('csrf() at the edges', () => {
           .listener('admin', l => l.server(() => ({ listen: listener })).with(csrf(c => c.exclude('/hooks'))))
           .server(() => ({ listen: listener }))
           .with(csrf())
-          .mount(newRouter('/hooks').extend(bindTo('admin')).post('/', ok), newRouter('/hooks').post('/', ok)),
+          .mount(new Router('/hooks').extend(bindTo('admin')).post('/', ok), new Router('/hooks').post('/', ok)),
       )) as WebApplication
       const admin = app.listeners.get('admin')!.address!.origin
 

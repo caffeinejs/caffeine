@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../../adapter.js'
+import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import type { IRoute, IRouteGroup } from '../routing/route.js'
 import { HookBatch } from './batch.js'

@@ -16,14 +16,14 @@ import { stateOf, type RouterState } from './state.js'
 export class FluentRouteSource<R = unknown> implements RouteSource<R> {
   readonly name = 'programmatic'
 
-  readonly #routers: readonly Router<any, any, any, any, any, any>[]
+  readonly #routers: readonly Router<any, any, any, any, any>[]
   readonly #childrenOf: ((state: RouterState) => readonly RouterState[]) | undefined
 
   /**
    * @param childrenOf - A router's children as start-up sees them, when its plugins mounted more than it declared.
    */
   constructor(
-    routers: readonly Router<any, any, any, any, any, any>[],
+    routers: readonly Router<any, any, any, any, any>[],
     childrenOf?: (state: RouterState) => readonly RouterState[],
   ) {
     this.#routers = routers

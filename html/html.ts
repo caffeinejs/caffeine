@@ -69,7 +69,7 @@ function autoDoctypeOf(ctx: IContext): boolean {
 }
 
 /**
- * Markup returned from a handler, an error handler or a middleware. The adapter detects it and answers
+ * Markup returned from a handler, an error handler or a middleware. The engine detects it and answers
  * with the rendered document under `text/html`.
  *
  * Not constructed directly — use {@link HTML}.

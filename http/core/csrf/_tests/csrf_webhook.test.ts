@@ -15,8 +15,9 @@ import {
   bodyAsBuffer,
   csrfExempt,
   type IContext,
+  Router,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 import { authentication } from '../../security/security.js'
 import { csrf } from '../csrf.js'
 
@@ -80,7 +81,7 @@ function signedOver(body: Buffer, signature: string | undefined): boolean {
 }
 
 /** `POST /webhooks/github`, which takes a delivery only when its signature covers the bytes it was sent. */
-function github(accepted: unknown[], router = newRouter('/webhooks')) {
+function github(accepted: unknown[], router = new Router('/webhooks')) {
   return router
     .post('/github')
     .extend(bodyAsBuffer())
@@ -143,7 +144,7 @@ describe('csrf() in front of a webhook receiver', () => {
   // Content type does not decide: a form-encoded delivery is still a server's, carrying neither header.
   it('takes a form-encoded delivery from a server with no configuration', async () => {
     const received: unknown[] = []
-    const twilio = newRouter('/webhooks/twilio').post('/', ctx => {
+    const twilio = new Router('/webhooks/twilio').post('/', ctx => {
       received.push({ ...(ctx.req.body() as object) })
       return ok()
     })
@@ -159,7 +160,11 @@ describe('csrf() in front of a webhook receiver', () => {
   it("refuses a forged delivery from a victim's browser, whatever its method or content type", async () => {
     let handled = 0
     const count = () => (handled++, ok())
-    const receiver = newRouter('/webhooks/github').post('/', count).put('/', count).patch('/', count).delete('/', count)
+    const receiver = new Router('/webhooks/github')
+      .post('/', count)
+      .put('/', count)
+      .patch('/', count)
+      .delete('/', count)
 
     const app = await ready(createWebApplication().with(csrf()).mount(receiver))
 
@@ -180,7 +185,7 @@ describe('csrf() in front of a webhook receiver', () => {
       createWebApplication()
         .with(csrf())
         .mount(
-          newRouter('/webhooks/stripe')
+          new Router('/webhooks/stripe')
             .post('/')
             .bodyLimit(1 * KiB)
             .handler(ok),
@@ -193,7 +198,7 @@ describe('csrf() in front of a webhook receiver', () => {
   })
 
   it('refuses a sender that sets an Origin of its own', async () => {
-    const app = await ready(createWebApplication().with(csrf()).mount(newRouter('/webhooks/partner').post('/', ok)))
+    const app = await ready(createWebApplication().with(csrf()).mount(new Router('/webhooks/partner').post('/', ok)))
 
     expect((await deliver(app, '/webhooks/partner', '{}', SENDER_WITH_ORIGIN)).status).toBe(403)
   })
@@ -220,7 +225,7 @@ describe('csrf() in front of a webhook receiver', () => {
       'csrfExempt() on its router',
       '/webhooks/partner',
       () =>
-        createWebApplication().with(csrf()).mount(newRouter('/webhooks/partner').extend(csrfExempt()).post('/', ok)),
+        createWebApplication().with(csrf()).mount(new Router('/webhooks/partner').extend(csrfExempt()).post('/', ok)),
     ],
     [
       'exclude() of its path',
@@ -228,7 +233,7 @@ describe('csrf() in front of a webhook receiver', () => {
       () =>
         createWebApplication()
           .with(csrf(c => c.exclude('/webhooks')))
-          .mount(newRouter('/webhooks/partner').post('/', ok)),
+          .mount(new Router('/webhooks/partner').post('/', ok)),
     ],
   ])('takes that sender once its receiver is exempt, by %s', async (_how, path, build) => {
     const app = await ready(build())
@@ -258,7 +263,7 @@ describe('csrf() in front of a webhook receiver', () => {
     const trusting = await ready(
       createWebApplication()
         .with(csrf(c => c.trustedOrigins('https://acs.bank.example').trustOrigin(() => true)))
-        .mount(newRouter('/payments').post('/return', ok)),
+        .mount(new Router('/payments').post('/return', ok)),
     )
 
     expect((await deliver(trusting, '/payments/return', payment, THREE_DS_RETURN)).status).toBe(403)
@@ -267,7 +272,7 @@ describe('csrf() in front of a webhook receiver', () => {
     const exempt = await ready(
       createWebApplication()
         .with(csrf())
-        .mount(newRouter('/payments').post('/return').extend(csrfExempt()).handler(ok)),
+        .mount(new Router('/payments').post('/return').extend(csrfExempt()).handler(ok)),
     )
 
     expect((await deliver(exempt, '/payments/return', payment, THREE_DS_RETURN)).status).toBe(200)
@@ -277,7 +282,7 @@ describe('csrf() in front of a webhook receiver', () => {
   it('keeps the routes beside an exempt receiver protected', async () => {
     const body = '{"zen":"Approachable is better than simple."}'
     const delivery = { ...GITHUB, origin: 'https://hooks.partner.example', 'x-hub-signature-256': sign(body) }
-    const settings = (router = newRouter('/webhooks/settings')) => router.post('/', ok)
+    const settings = (router = new Router('/webhooks/settings')) => router.post('/', ok)
 
     const narrow = await ready(
       createWebApplication()
@@ -292,7 +297,7 @@ describe('csrf() in front of a webhook receiver', () => {
     const wide = await ready(
       createWebApplication()
         .with(csrf(c => c.exclude('/webhooks')))
-        .mount(github([]), settings(newRouter('/webhooks/settings').extend(csrfExempt(false)))),
+        .mount(github([]), settings(new Router('/webhooks/settings').extend(csrfExempt(false)))),
     )
 
     expect((await deliver(wide, '/webhooks/github', body, delivery)).status).toBe(200)
@@ -304,7 +309,7 @@ describe('csrf() in front of a webhook receiver', () => {
       createWebApplication()
         .basePath('/api')
         .with(csrf(c => c.exclude('/webhooks')))
-        .mount(newRouter('/webhooks/stripe').post('/', ok), newRouter('/webhooksx').post('/', ok)),
+        .mount(new Router('/webhooks/stripe').post('/', ok), new Router('/webhooksx').post('/', ok)),
     )
 
     expect((await deliver(app, '/api/webhooks/stripe', '{}', SENDER_WITH_ORIGIN)).status).toBe(200)
@@ -346,7 +351,7 @@ describe('csrf() in front of a webhook receiver', () => {
 
     const accepted: unknown[] = []
     const publicReceiver = await ready(
-      gated().mount(github(accepted, newRouter('/webhooks').authorize({ allowAnonymous: true }))),
+      gated().mount(github(accepted, new Router('/webhooks').authorize({ allowAnonymous: true }))),
     )
 
     expect((await deliver(publicReceiver, '/webhooks/github', body, delivery)).status).toBe(200)

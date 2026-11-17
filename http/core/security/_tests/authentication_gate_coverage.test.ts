@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../../../adapter.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -12,8 +11,8 @@ import {
   Identity,
   Principal,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
-import { HTTPPlugin } from '../../../plugin.js'
+import { createWebApplication } from '../../../platform/node/index.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
 import { healthProbes } from '../../health/index.js'
 import { Router } from '../../routing/programmatic/programmatic.js'
 import { accessControlExempt } from '../exempt.js'
@@ -72,7 +71,7 @@ async function refusal(app: { bootstrap(): Promise<unknown> }): Promise<Error & 
 
 describe('routes no authentication gate covers', () => {
   it('refuses a protected route when the feature is installed and no gate is registered', async () => {
-    const app = createWebApplication().install(header()).mount(newRouter('/no-gate').authorize().get('/', ok))
+    const app = createWebApplication().install(header()).mount(new Router('/no-gate').authorize().get('/', ok))
 
     const err = await refusal(app)
 
@@ -84,8 +83,8 @@ describe('routes no authentication gate covers', () => {
 
   // A scoped gate reaches its own router and nothing beside it.
   it('refuses a protected route outside the only gated router, naming that route alone', async () => {
-    const gated = newRouter('/sibling-gated').with(authentication()).authorize().get('/', ok)
-    const bare = newRouter('/sibling-bare').authorize().get('/', ok)
+    const gated = new Router('/sibling-gated').with(authentication()).authorize().get('/', ok)
+    const bare = new Router('/sibling-bare').authorize().get('/', ok)
 
     const err = await refusal(createWebApplication().install(header()).mount(gated, bare))
 
@@ -97,8 +96,8 @@ describe('routes no authentication gate covers', () => {
   // The fallback policy protects every route that declares nothing, so with every gate scoped, what lies outside
   // them would be served to anyone.
   it('refuses what the fallback policy protects outside every scoped gate', async () => {
-    const gated = newRouter('/fallback-gated').with(authentication()).get('/', ok)
-    const open = newRouter('/fallback-open').get('/', ok)
+    const gated = new Router('/fallback-gated').with(authentication()).get('/', ok)
+    const open = new Router('/fallback-open').get('/', ok)
 
     const app = createWebApplication().install(header()).install(byDefault()).mount(gated, open)
 
@@ -133,8 +132,8 @@ describe('routes no authentication gate covers', () => {
       .install(header())
       .install(byDefault())
       .with(healthProbes())
-      .mount(newRouter('/exempt').extend(accessControlExempt()).get('/', ok))
-      .mount(newRouter('/anonymous').authorize({ allowAnonymous: true }).get('/', ok))
+      .mount(new Router('/exempt').extend(accessControlExempt()).get('/', ok))
+      .mount(new Router('/anonymous').authorize({ allowAnonymous: true }).get('/', ok))
 
     try {
       await app.bootstrap()
@@ -148,13 +147,13 @@ describe('routes no authentication gate covers', () => {
 
   // No gate can be registered without the feature, so the missing feature is the fix to name.
   it('names the missing feature when a fallback policy protects a route and authentication was never installed', async () => {
-    const app = createWebApplication().install(byDefault()).mount(newRouter('/unauthenticated').get('/', ok))
+    const app = createWebApplication().install(byDefault()).mount(new Router('/unauthenticated').get('/', ok))
 
     expect((await refusal(app)).code).toBe('ERR_AUTHENTICATION_REQUIRED')
   })
 
   it('names the first five uncovered routes and counts the rest', async () => {
-    const bare = newRouter('/many')
+    const bare = new Router('/many')
       .authorize()
       .get('/r0', ok)
       .get('/r1', ok)

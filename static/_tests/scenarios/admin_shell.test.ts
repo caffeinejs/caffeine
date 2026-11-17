@@ -1,5 +1,5 @@
-import { type WebApplication, Authentication, Authorization, authentication } from '@caffeinejs/http'
-import { newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { Authentication, Authorization, authentication, Router } from '@caffeinejs/http'
+import { type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { sendFile, staticFiles } from '../../index.js'
@@ -27,23 +27,21 @@ import {
  * `unrouted: ['**']` is what makes that possible: the mount registers no routes at all, and exists only to
  * name the files and the root `sendFile` resolves against.
  */
-function adminSite(authenticateByDefault: boolean): WebApplication<NodeAdapterTypes> {
+function adminSite(authenticateByDefault: boolean): NodeWebApplication {
   const app = isolated()
     .install(Authentication(a => a.addStrategy('header', new HeaderAuthenticationHandler())))
     .with(authentication())
     .with(staticFiles(s => s.serve(dist, { unrouted: ['**'] })))
     .mount(
-      newRouter('/api')
-        .authorize({ roles: ['admin'] })
-        .get('/report', () => ({ rows: [] })),
-      newRouter()
+      new Router('/api').authorize({ roles: ['admin'] }).get('/report', () => ({ rows: [] })),
+      new Router()
         .detail('http', { internal: true })
         .authorize({ roles: ['admin'] })
         .get('/', shellOf(dist))
         .get('/index.html', shellOf(dist))
         .get('/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!, dist))
         .get('/*', clientRouteOf(dist)),
-    ) as WebApplication<NodeAdapterTypes>
+    ) as NodeWebApplication
 
   if (authenticateByDefault) {
     app.install(Authorization(z => z.requireAuthenticatedByDefault()))
@@ -57,7 +55,7 @@ const bob = { 'x-user': 'bob' }
 const ann = { 'x-user': 'ann', 'x-roles': 'admin' }
 
 describe('role-gated administration site', () => {
-  let app: WebApplication<NodeAdapterTypes>
+  let app: NodeWebApplication
 
   afterEach(async () => {
     await app?.close()

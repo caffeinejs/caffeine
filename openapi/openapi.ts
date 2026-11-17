@@ -9,7 +9,7 @@ import {
   kAuthSchemeDescriptors,
   kErrorHandlingOptions,
   Router,
-  type AdapterExtensionFactory,
+  type HTTPPluginFactory,
   type AuthSchemeDescriptor,
   type HTTPPluginConfigurer,
   type HTTPSetupContext,
@@ -69,15 +69,12 @@ interface EndpointPaths {
  * @throws ErrOpenAPIConfiguration when the name is not letters, digits, `-` and `_`, starting with a letter or digit,
  *   and at start-up when it is installed on a router or a controller.
  */
-export function openapi<C = unknown>(configure?: OpenAPIConfigurer<C>): AdapterExtensionFactory<HTTPPlugin, C>
-export function openapi<C = unknown>(
-  name: string,
-  configure?: OpenAPIConfigurer<C>,
-): AdapterExtensionFactory<HTTPPlugin, C>
+export function openapi<C = unknown>(configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C>
+export function openapi<C = unknown>(name: string, configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C>
 export function openapi<C = unknown>(
   nameOrConfigure?: string | OpenAPIConfigurer<C>,
   maybeConfigure?: OpenAPIConfigurer<C>,
-): AdapterExtensionFactory<HTTPPlugin, C> {
+): HTTPPluginFactory<C> {
   const named = typeof nameOrConfigure === 'string'
   const name = named ? nameOrConfigure : DEFAULT_DOCUMENT_NAME
   const configure = named ? maybeConfigure : nameOrConfigure

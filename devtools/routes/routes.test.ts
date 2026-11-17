@@ -11,9 +11,9 @@ import {
   type IContext,
   Identity,
   Principal,
-  type WebApplication,
+  Router,
 } from '@caffeinejs/http'
-import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { DevTools, type DevToolsRoutes } from '../devtools.js'
@@ -38,7 +38,7 @@ class HeaderScheme extends BaseAuthenticationHandler<object> {
  * devtools' own included, served from a server of its own: a route missing from it is one nobody reviews.
  */
 describe('routesRouter', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -53,19 +53,14 @@ describe('routesRouter', () => {
       .server(() => ({ listen: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
-      // A listener's settings are typed by the application's adapter: Node reads `listen`.
-      .listener('admin', l => l.server(() => ({ listen: loopback }) as never).with(authentication()))
+      .listener('admin', l => l.server(() => ({ listen: loopback })).with(authentication()))
       .install(DevTools(d => d.port(0)))
       .with(authentication())
       .with(healthProbes(h => h.enabled(true)))
       .mount(
-        newRouter('/pets')
-          .authorize({ roles: ['keeper'] })
-          .get('/', () => []),
-        newRouter('/jobs')
-          .extend(bindTo('admin'))
-          .get('/', () => []),
-      ) as WebApplication<NodeAdapterTypes>
+        new Router('/pets').authorize({ roles: ['keeper'] }).get('/', () => []),
+        new Router('/jobs').extend(bindTo('admin')).get('/', () => []),
+      ) as NodeWebApplication
     await app.run()
 
     // The fallback policy reaches the devtools too: their own server runs the gate.

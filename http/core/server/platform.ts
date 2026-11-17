@@ -1,8 +1,21 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Http2ServerRequest, Http2ServerResponse } from 'node:http2'
+
 import type { ByteSize } from '@caffeinejs/std/bytes'
 
-import type { IContextPlatform } from '../../adapter.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
 import type { Next, NodeMiddleware } from '../middleware/middleware.js'
+import type { FetchContextPlatform } from './fetch.js'
+
+/** What `ctx.platform` is on the Node application: Node's request and response. */
+export interface NodeContextPlatform {
+  readonly name: 'node'
+  readonly incoming: IncomingMessage | Http2ServerRequest
+  readonly outgoing: ServerResponse | Http2ServerResponse
+}
+
+/** What `ctx.platform` is: narrow on `name` to reach a runtime's own members. */
+export type ContextPlatform = FetchContextPlatform | NodeContextPlatform
 
 /** The status and headers of an answer, lower-case names. */
 export interface ResponseHead {
@@ -34,7 +47,7 @@ export interface SendHooks {
  * How the engine reads one request of a runtime and answers it. `N` is what the runtime hands per request, `P` is
  * `ctx.platform`, `R` is what its entry returns.
  */
-export interface ServerPlatform<N, P extends IContextPlatform, R> {
+export interface ServerPlatform<N, P extends ContextPlatform, R> {
   readonly name: P['name']
   method(native: N): string
   /** Path and query as sent, before the base path is taken off. */

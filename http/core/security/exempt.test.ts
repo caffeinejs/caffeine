@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../../adapter.js'
 import { createWebApplication } from '../../application.js'
-import { HTTPPlugin } from '../../plugin.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { ACCESS_CONTROL_EXEMPT, accessControlExempt, isAccessControlExempt, kAccessControlExempt } from './exempt.js'
 

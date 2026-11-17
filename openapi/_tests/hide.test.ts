@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
-import { $p, Args, Controller, Post, Schema, WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { $p, Args, Controller, Post, Schema, Router } from '@caffeinejs/http'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'
@@ -21,7 +21,7 @@ class NotesController {
 void [NotesController]
 
 function drafts() {
-  const router = newRouter('/drafts').name('Drafts')
+  const router = new Router('/drafts').name('Drafts')
   router
     .post('/')
     .schema({ hide: true, body: Note })
@@ -32,19 +32,19 @@ function drafts() {
 
 // `hide: true` on a route schema leaves the route out of the document, as `@Operation({ hidden: true })` does.
 describe('a route schema with hide: true', () => {
-  let app: WebApplication<NodeAdapterTypes> | undefined
+  let app: NodeWebApplication | undefined
 
   afterEach(async () => {
     await app?.close()
     app = undefined
   })
 
-  async function boot(): Promise<WebApplication<NodeAdapterTypes>> {
+  async function boot(): Promise<NodeWebApplication> {
     app = createWebApplication({})
       .install(OpenAPI())
       .with(openapi(o => o.docs(false)))
       .with(openapi('internal', o => o.docs(false)))
-      .mount(drafts()) as WebApplication<NodeAdapterTypes>
+      .mount(drafts()) as NodeWebApplication
     await app.bootstrap()
     return app
   }

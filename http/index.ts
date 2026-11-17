@@ -1,4 +1,3 @@
-export * from './adapter.js'
 export * from './application.js'
 export * from './context.js'
 export * from './core/attachment/index.js'

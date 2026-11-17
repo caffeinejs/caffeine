@@ -1,8 +1,7 @@
 import { formatDuration, Second, type Duration } from '@caffeinejs/std/duration'
 
-import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
-import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
+import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import { appendVary } from '../../vary.js'
 import { originProblem } from '../csrf/origin.js'
 import type { ErrConfiguration } from '../error/common.js'
@@ -111,9 +110,7 @@ export class CORSBuilder {
  * @throws ErrConfiguration at start-up for settings that name no origin or one that is not, `'*'` beside other origins
  * or with credentials, a header that is not a header name, a `maxAge` under a second, and on a router or a controller.
  */
-export function corsPolicy<C = unknown>(
-  configure?: HTTPPluginConfigurer<CORSBuilder, C>,
-): AdapterExtensionFactory<HTTPPlugin, C> {
+export function corsPolicy<C = unknown>(configure?: HTTPPluginConfigurer<CORSBuilder, C>): HTTPPluginFactory<C> {
   return context => {
     const builder = new CORSBuilder()
     configure?.(builder, context)

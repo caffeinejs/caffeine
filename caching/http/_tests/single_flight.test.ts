@@ -1,8 +1,8 @@
 import { connect } from 'node:net'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Get, Head, Header, type NodeMiddleware } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/node'
+import { Controller, Get, Head, Header, type NodeMiddleware, Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { type Duration, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -620,7 +620,7 @@ describe('a handler run its leader does not report back on in time', () => {
   }) {
     const store = new WatchedStore()
     const recording = new Recording()
-    const router = newRouter('')
+    const router = new Router('')
     router
       .get('/data')
       .config('cache', { ttl: 60 * Second })
@@ -792,7 +792,7 @@ describe('a follower whose request is over', () => {
   }) {
     const store = new WatchedStore()
     const recording = new Recording()
-    const router = newRouter('')
+    const router = new Router('')
     router
       .get('/data')
       .config('cache', { ttl: 60 * Second })
@@ -880,7 +880,7 @@ describe('a follower whose request is over', () => {
     }
     const recording = new Recording()
     const errors: unknown[] = []
-    const router = newRouter('')
+    const router = new Router('')
     router
       .get('/data')
       .config('cache', { ttl: 60 * Second })
@@ -984,7 +984,7 @@ describe('a request whose store read outlives it', () => {
 
   async function start(store: HTTPCacheStore, handler: () => unknown) {
     const recording = new Recording()
-    const router = newRouter('')
+    const router = new Router('')
     router
       .get('/data')
       .config('cache', { ttl: 60 * Second })

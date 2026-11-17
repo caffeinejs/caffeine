@@ -12,8 +12,9 @@ import {
   Principal,
   bindTo,
   type WebApplication,
+  Router,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 import { healthProbes } from '../../health/index.js'
 import { authentication } from '../../security/security.js'
 
@@ -70,19 +71,16 @@ const schemes = () =>
       .default('App'),
   )
 
-const metrics = () =>
-  newRouter('/metrics')
-    .extend(bindTo('admin'))
-    .get('/', () => ({ metrics: true }))
+const metrics = () => new Router('/metrics').extend(bindTo('admin')).get('/', () => ({ metrics: true }))
 
 /** `/metrics`, bound to `admin`, for an `Ops` operator alone. */
 const protectedMetrics = () =>
-  newRouter('/metrics')
+  new Router('/metrics')
     .extend(bindTo('admin'))
     .authorize({ schemes: ['Ops'], roles: ['operator'] })
     .get('/', () => ({ metrics: true }))
 
-const api = () => newRouter('/api').get('/', () => ({ api: true }))
+const api = () => new Router('/api').get('/', () => ({ api: true }))
 
 describe('a listener with authentication and authorization', () => {
   let app: WebApplication | undefined
@@ -255,7 +253,7 @@ describe('a listener with authentication and authorization', () => {
         .install(schemes())
         .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
         .mount(
-          newRouter('/metrics')
+          new Router('/metrics')
             .extend(bindTo('admin'))
             .authorize({ schemes: ['Missing'] })
             .get('/', () => ({ metrics: true })),

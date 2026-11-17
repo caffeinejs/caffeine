@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { ErrConfiguration } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/node'
+import { ErrConfiguration, Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -30,7 +30,7 @@ describe('cache plugin wiring', () => {
   // same double registration — refused by the server before any route could run two caches and report every
   // outcome twice.
   it('refuses a group install under a root install', async () => {
-    const router = newRouter('/nested-install').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const router = new Router('/nested-install').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     router.get('/data').handler(() => ({ ok: true }))
 
     const app = createWebApplication()
@@ -46,7 +46,7 @@ describe('cache plugin wiring', () => {
   // Programmatic routes only (`decorators: false`): the controller registry is global, and a decorated
   // controller from another test would be one more group nothing serves.
   it('serves the routes of a group that installed it for itself', async () => {
-    const router = newRouter('/group-install').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const router = new Router('/group-install').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     router
       .get('/data')
       .extend(cacheControl({ ttl: 60 * Second }))
@@ -65,7 +65,7 @@ describe('cache plugin wiring', () => {
   it('gives each group that installed it a store of its own', async () => {
     const stores = { pets: new MemoryHTTPCacheStore(), owners: new MemoryHTTPCacheStore() }
     const group = (name: keyof typeof stores) => {
-      const router = newRouter(`/group-own-${name}`).with(HTTPCaching(b => b.store(stores[name])))
+      const router = new Router(`/group-own-${name}`).with(HTTPCaching(b => b.store(stores[name])))
       router
         .get('/data')
         .extend(cacheControl({ ttl: 60 * Second, key: () => 'data' }))
@@ -91,13 +91,13 @@ describe('cache plugin wiring', () => {
   })
 
   it('still refuses a sibling group that declares caching and installed nothing', async () => {
-    const served = newRouter('/group-served').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const served = new Router('/group-served').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     served
       .get('/data')
       .extend(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
-    const unserved = newRouter('/group-unserved')
+    const unserved = new Router('/group-unserved')
     unserved
       .get('/data')
       .extend(cacheControl({ ttl: 60 * Second }))

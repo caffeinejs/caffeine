@@ -25,8 +25,9 @@ import {
   UserProvider,
   $p,
   Authentication,
+  Router,
 } from '../../../../index.js'
-import { createWebApplication, newRouter } from '../../../../platform/node/index.js'
+import { createWebApplication } from '../../../../platform/node/index.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
 let ALICE_HASH = ''
@@ -517,13 +518,9 @@ describe('cookie sign-in under a base path', () => {
       )
       .with(authentication())
       .mount(
-        newRouter('/audit')
-          .authorize({ roles: ['auditor'] })
-          .get('/', () => ({ audited: true })),
+        new Router('/audit').authorize({ roles: ['auditor'] }).get('/', () => ({ audited: true })),
         // A catch-all, as a single-page application's shell is: it is what `/api//evil.example` reaches.
-        newRouter()
-          .authorize()
-          .get('/*', () => ({ shell: true })),
+        new Router().authorize().get('/*', () => ({ shell: true })),
       )
     await app.bootstrap()
     return app

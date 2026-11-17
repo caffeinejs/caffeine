@@ -13,8 +13,8 @@ import { newNoopLogger } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { bindTo } from '../../index.js'
-import { createWebApplication, newRouter } from './node.js'
+import { bindTo, Router, type AnyRouter } from '../../index.js'
+import { createWebApplication } from './node.js'
 
 const key = readFileSync(new URL('../../_tests/_testdata/tls/localhost.key', import.meta.url))
 const cert = readFileSync(new URL('../../_tests/_testdata/tls/localhost.crt', import.meta.url))
@@ -27,8 +27,8 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map(app => app.close()))
 })
 
-function hello(): ReturnType<typeof newRouter> {
-  const routes = newRouter('/hi')
+function hello(): AnyRouter {
+  const routes = new Router('/hi')
   routes.get('/').handler(ctx => ({
     host: ctx.req.host,
     protocol: ctx.req.protocol,
@@ -201,6 +201,18 @@ describe('the Node application', () => {
     expect(listening).toBe(false)
   })
 
+  // A listener's server is its own: what the application set up for its own server never reaches it.
+  it("hands .serverCallback(...) the application's own server alone, never a listener's", async () => {
+    const seen: unknown[] = []
+    const built = app()
+      .listener('admin', l => l.server(() => ({ listen: { host: '127.0.0.1', port: 0 } })))
+      .serverCallback((_, server) => void seen.push(server))
+    await built.bootstrap()
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toBe(built.instance)
+  })
+
   it('answers fetch(request) as request() does, before it listens', async () => {
     const built = app()
     await built.bootstrap()
@@ -213,12 +225,8 @@ describe('the Node application', () => {
   it('serves a listener on its own listen settings', async () => {
     const built = createWebApplication()
       .logger(b => b.use(newNoopLogger()))
-      .listener('admin', l => l.server(() => ({ listen: { host: '127.0.0.1', port: 0 } }) as never))
-      .mount(
-        newRouter('/admin')
-          .extend(bindTo('admin'))
-          .get('/', () => ({ up: true })),
-      )
+      .listener('admin', l => l.server(() => ({ listen: { host: '127.0.0.1', port: 0 } })))
+      .mount(new Router('/admin').extend(bindTo('admin')).get('/', () => ({ up: true })))
     apps.push(built)
 
     await built.run({ host: '127.0.0.1', port: 0 })

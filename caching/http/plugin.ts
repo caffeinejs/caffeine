@@ -3,7 +3,7 @@ import { isValidKey, type Container, type InjectionToken } from '@caffeinejs/di'
 import {
   ErrConfiguration,
   HTTPPlugin,
-  type AdapterExtensionFactory,
+  type HTTPPluginFactory,
   type HTTPPluginConfigurer,
   type HTTPSetupContext,
 } from '@caffeinejs/http'
@@ -50,7 +50,7 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  */
 export function HTTPCaching<C = unknown>(
   options?: HTTPCachingOptions | HTTPCachingConfigurer<C>,
-): AdapterExtensionFactory<HTTPPlugin, C> {
+): HTTPPluginFactory<C> {
   return context => {
     const { container, logger } = context
     const resolved = typeof options === 'function' ? build(options, context) : (options ?? {})

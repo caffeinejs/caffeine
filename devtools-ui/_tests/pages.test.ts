@@ -20,9 +20,9 @@ import {
   type IContext,
   Identity,
   Principal,
-  type WebApplication,
+  Router,
 } from '@caffeinejs/http'
-import { createWebApplication, newRouter, type NodeAdapterTypes } from '@caffeinejs/http/node'
+import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
 import { testClient, type TestClient } from '@caffeinejs/testing/http'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -121,7 +121,7 @@ function expectView(actual: number[], expected: number[]): void {
 }
 
 describe('devtools UI', () => {
-  let target: WebApplication<NodeAdapterTypes>
+  let target: NodeWebApplication
   let ui: ReturnType<typeof buildApp>
   // Typed by the UI's own routes: a page renamed or removed breaks this file.
   let client: TestClient<ReturnType<typeof buildApp>>
@@ -133,7 +133,7 @@ describe('devtools UI', () => {
 
     target = createWebApplication({ container: new CaffeineIoC({ decorators: false }), config: conf, logger: false })
       .server(() => ({ listen: listener }))
-      .install(DevTools(d => d.port(0).showConfigValues())) as WebApplication<NodeAdapterTypes>
+      .install(DevTools(d => d.port(0).showConfigValues())) as NodeWebApplication
     target.container.bind(Repository, t => t.toSelf())
     target.container.bind(PetService, t => t.toSelf([Repository]))
     target.container.bind(Rates, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('rates')))
@@ -522,7 +522,7 @@ class BearerScheme extends BaseAuthenticationHandler<object> {
 }
 
 describe('devtools UI over devtools that require credentials', () => {
-  let target: WebApplication<NodeAdapterTypes>
+  let target: NodeWebApplication
 
   beforeAll(async () => {
     target = createWebApplication({ logger: false })
@@ -534,11 +534,11 @@ describe('devtools UI over devtools that require credentials', () => {
       // Exempt from authentication.
       .with(healthProbes(h => h.enabled(true)))
       .mount(
-        newRouter('/pets')
+        new Router('/pets')
           .authorize({ roles: ['keeper'] })
           .get('/', () => [])
           .post('/', () => ({})),
-      ) as WebApplication<NodeAdapterTypes>
+      ) as NodeWebApplication
     await target.run()
   })
 

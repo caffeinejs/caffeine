@@ -1,5 +1,6 @@
 import { newNoopLogger } from '@caffeinejs/application/logger'
-import { createWebApplication, newRouter } from '@caffeinejs/http/node'
+import { Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { configuration } from '../../app.config.js'
@@ -19,7 +20,7 @@ describe('TargetErrorHandler', () => {
       .logger(b => b.use({ ...newNoopLogger(), error }))
       .errorHandling(e => e.globalHandlers(TargetErrorHandler))
       .mount(
-        newRouter().get('/boom', () => {
+        new Router().get('/boom', () => {
           throw new Error('boom')
         }),
       )

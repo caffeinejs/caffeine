@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { Catch } from '../../decorators/index.js'
-import { createWebApplication as createNodeApplication, newRouter } from '../../platform/node/index.js'
+import { createWebApplication as createNodeApplication } from '../../platform/node/index.js'
 import type { ActionResult } from '../../response.js'
 import type { ErrorHandler } from '../error/handler.js'
 import { ErrHTTP, ErrHTTPConflict, ErrHTTPForbidden } from '../error/http.js'
@@ -222,7 +222,7 @@ describe('a request that fails its schema, on the Node application', () => {
 
   beforeAll(async () => {
     served = createNodeApplication().mount(
-      newRouter('/slots')
+      new Router('/slots')
         .post('/body', { body: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true }))
         .get('/query', { querystring: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true }))
         .get('/path/:a', { params: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true }))
@@ -380,7 +380,7 @@ describe('a request that fails its schema, on the Node application', () => {
         e.validation({ type: configured.type, title: configured.title }).validation({ code: configured.code }),
       )
       .mount(
-        newRouter('/typed')
+        new Router('/typed')
           .post('/', { body: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true }))
           .get('/q', { querystring: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true }))
           .get('/p/:a', { params: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true }))

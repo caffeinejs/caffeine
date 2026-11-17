@@ -1,8 +1,7 @@
 import { createHmac, createPublicKey, type JsonWebKeyInput } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { authentication, type JWTAuthenticationOptionsBuilder, Authentication } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
+import { authentication, type JWTAuthenticationOptionsBuilder, Authentication, Router } from '@caffeinejs/http'
 import { createRemoteJWKSet } from 'jose'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -34,16 +33,12 @@ function resourceServer(j: JWTAuthenticationOptionsBuilder, issuer = OAUTH_SERVE
 }
 
 function routes() {
-  return newRouter().mount(
-    newRouter('/whoami')
+  return new Router().mount(
+    new Router('/whoami')
       .authorize()
       .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value, scope: ctx.user.findFirst('scope')?.value })),
-    newRouter('/service')
-      .authorize({ roles: ['service'] })
-      .get('/', () => ({ ok: true })),
-    newRouter('/admin')
-      .authorize({ roles: ['admin'] })
-      .get('/', () => ({ ok: true })),
+    new Router('/service').authorize({ roles: ['service'] }).get('/', () => ({ ok: true })),
+    new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })),
   )
 }
 
@@ -210,16 +205,8 @@ describe('JWT bearer, whoever issued the token', () => {
       app
         .install(Authentication(auth => auth.addJWTBearer(localJWT)))
         .with(authentication())
-        .mount(
-          newRouter('/whoami')
-            .authorize()
-            .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
-        )
-        .mount(
-          newRouter('/admin')
-            .authorize({ roles: ['admin'] })
-            .get('/', () => ({ ok: true })),
-        ),
+        .mount(new Router('/whoami').authorize().get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })))
+        .mount(new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true }))),
     )
   })
 
@@ -255,11 +242,7 @@ describe('JWT bearer, whoever issued the token', () => {
           ),
         )
         .with(authentication())
-        .mount(
-          newRouter('/whoami')
-            .authorize()
-            .get('/', () => ({ ok: true })),
-        ),
+        .mount(new Router('/whoami').authorize().get('/', () => ({ ok: true }))),
     )
 
     try {

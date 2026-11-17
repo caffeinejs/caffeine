@@ -1,9 +1,8 @@
 import { ApplicationHealth, type ProbeOptions, type ProbeResult } from '@caffeinejs/application/health'
 import { errMessage } from '@caffeinejs/std/err'
 
-import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
-import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
+import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../security/exempt.js'
 import { ErrHealthConfiguration } from './errors.js'
@@ -36,7 +35,7 @@ interface ProbeRequestQuery {
  */
 export function healthProbes<C = unknown>(
   configure?: HTTPPluginConfigurer<HealthProbesBuilder, C>,
-): AdapterExtensionFactory<HTTPPlugin, C> {
+): HTTPPluginFactory<C> {
   return context => {
     const builder = new HealthProbesBuilder()
     configure?.(builder, context)

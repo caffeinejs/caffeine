@@ -105,7 +105,7 @@ export class CookieBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    // What the adapter builds each server's cookie support from, ahead of everything `.with(...)` registers.
+    // What the engine builds each server's cookie support from, ahead of everything `.with(...)` registers.
     kit.container.bind(kCookieSettings, t => t.toValue(this.#settings()).lifetime(Scopes.SINGLETON).internal())
   }
 

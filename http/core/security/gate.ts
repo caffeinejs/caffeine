@@ -2,8 +2,8 @@ import { ErrFeatureNotInstalled } from '@caffeinejs/application'
 import type { Container } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import type { HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
+import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import type { IRoute } from '../routing/route.js'
@@ -42,7 +42,7 @@ export interface ResolvedGate {
  * @throws ErrAuthSchemeNotFound when the gate's `defaultScheme(...)` names an unregistered scheme.
  */
 export function resolveGate(
-  context: HTTPSetupContext<any, any>,
+  context: HTTPSetupContext<any>,
   options: { label: string; defaultScheme: string | undefined; oidcRoutes: boolean },
 ): ResolvedGate {
   const { label, defaultScheme: override, oidcRoutes } = options

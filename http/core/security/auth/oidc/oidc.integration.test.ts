@@ -13,8 +13,9 @@ import {
   $p,
   Authentication,
   type AuthenticationGateBuilder,
+  Router,
 } from '../../../../index.js'
-import { createWebApplication, newRouter } from '../../../../platform/node/index.js'
+import { createWebApplication } from '../../../../platform/node/index.js'
 import type { HTTPPluginConfigurer } from '../../../../plugin.js'
 import { authentication } from '../../security.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
@@ -247,11 +248,7 @@ describe('OIDC integration', () => {
       })
 
       it('challenges with the base callback URL, and a sign-in URL coming back under the base', async () => {
-        const app = basedApp().mount(
-          newRouter('/based-private')
-            .authorize()
-            .get('/', () => ({ ok: true })),
-        )
+        const app = basedApp().mount(new Router('/based-private').authorize().get('/', () => ({ ok: true })))
         await app.bootstrap()
 
         const navigation = await app.request('/api/based-private', { headers: { 'sec-fetch-mode': 'navigate' } })
@@ -288,7 +285,7 @@ describe('OIDC integration', () => {
       })
 
       it('refuses a route of the application at the callback path, both being relative to it', async () => {
-        const app = basedApp().mount(newRouter('/oidc').get('/callback', () => ({ ok: true })))
+        const app = basedApp().mount(new Router('/oidc').get('/callback', () => ({ ok: true })))
 
         await expect(app.bootstrap()).rejects.toThrow(/"\/oidc\/callback" conflicts with a registered controller route/)
       })

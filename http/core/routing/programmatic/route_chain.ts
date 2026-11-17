@@ -8,7 +8,6 @@ import {
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
-import type { ContextTypesOf, IAdapterTypes } from '../../../adapter.js'
 import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
 import type { RequestHookName, RequestHooks } from '../../lifecycle/lifecycle.js'
@@ -35,12 +34,11 @@ export class RouteChain<
   GP extends string,
   M extends string,
   R,
-  T extends IAdapterTypes = never,
 > {
-  readonly #owner: Router<V, C, GD, GP, R, T>
+  readonly #owner: Router<V, C, GD, GP, R>
   readonly #state: RouteState
 
-  constructor(owner: Router<V, C, GD, GP, R, T>, state: RouteState) {
+  constructor(owner: Router<V, C, GD, GP, R>, state: RouteState) {
     this.#owner = owner
     this.#state = state
   }
@@ -48,12 +46,12 @@ export class RouteChain<
   /**
    * Declares what the route validates, and with it what the handler's context is typed as.
    *
-   * Same contract as `@Schema`: each slot is compiled to JSON Schema once, at registration, and the adapter's
-   * validator does the request-time work.
+   * Same contract as `@Schema`: each slot is compiled once, at registration, and the server's schema
+   * compiler does the request-time work.
    */
-  schema<S2 extends RouteValidationSchema>(schema: S2): RouteChain<S2, P, D, V, C, GD, GP, M, R, T> {
+  schema<S2 extends RouteValidationSchema>(schema: S2): RouteChain<S2, P, D, V, C, GD, GP, M, R> {
     this.#state.builder.schema(schema)
-    return this as unknown as RouteChain<S2, P, D, V, C, GD, GP, M, R, T>
+    return this as unknown as RouteChain<S2, P, D, V, C, GD, GP, M, R>
   }
 
   /**
@@ -74,10 +72,10 @@ export class RouteChain<
    */
   inject<const SPEC extends ObjectInjectionSpec>(
     spec: SPEC,
-  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, C, GD, GP, M, R, T>
+  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, C, GD, GP, M, R>
   inject<const SPEC extends ObjectInjectionSpec>(
     build: (i: InjectionHelpers<C>) => SPEC,
-  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, C, GD, GP, M, R, T>
+  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, C, GD, GP, M, R>
   inject(specOrBuild: ObjectInjectionSpec | ((i: InjectionHelpers) => ObjectInjectionSpec)): any {
     const spec = typeof specOrBuild === 'function' ? specOrBuild($i) : specOrBuild
 
@@ -160,7 +158,7 @@ export class RouteChain<
    *
    * @throws ErrConfiguration for a point that is not a request hook.
    */
-  hook<K extends RequestHookName>(name: K, fn: RequestHooks<V, C, ContextTypesOf<T>>[K]): this {
+  hook<K extends RequestHookName>(name: K, fn: RequestHooks<V, C>[K]): this {
     this.#state.builder.hook(name, fn as RequestHooks[K])
     return this
   }
@@ -197,9 +195,9 @@ export class RouteChain<
    * combining them with `blend` arrives at the same type.
    */
   handler<O>(
-    fn: RouteHandler<S, JoinPath<GP, P>, V, C, D, O, T>,
-  ): Router<V, C, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>, T> {
+    fn: RouteHandler<S, JoinPath<GP, P>, V, C, D, O>,
+  ): Router<V, C, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>> {
     this.#state.handle = fn as (...args: unknown[]) => unknown
-    return this.#owner as Router<V, C, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>, T>
+    return this.#owner as Router<V, C, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>>
   }
 }

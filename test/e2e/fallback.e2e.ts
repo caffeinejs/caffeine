@@ -8,7 +8,6 @@ import {
   Router,
   type HTTPSetupContext,
 } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -52,7 +51,7 @@ describe('a fallback policy in front of routes a plugin registered on the server
         .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
         .with(healthProbes())
         .with(() => new PlainRoutes())
-        .mount(newRouter('/compiled').get('/', ok)),
+        .mount(new Router('/compiled').get('/', ok)),
     )
   })
 

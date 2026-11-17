@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-import { HTTPPlugin, type HTTPSetupContext } from '@caffeinejs/http'
-import type { NodeContextPlatform } from '@caffeinejs/http/node'
+import { HTTPPlugin, type HTTPSetupContext, type NodeContextPlatform } from '@caffeinejs/http'
 import helmet from 'helmet'
 
 /**

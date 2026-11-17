@@ -16,7 +16,7 @@ import {
   type NodeMiddleware,
   type WebApplication,
 } from '../index.js'
-import { createWebApplication, newRouter } from '../platform/node/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 /** A plugin that does nothing, where a factory must return one. */
 class NoopPlugin extends HTTPPlugin {
@@ -50,7 +50,7 @@ void [BasePathController]
 
 /** A route answering with what its handler saw of the request, so a test can tell where the base went. */
 function echo(path = '/pets') {
-  return newRouter().get(path, ctx => ({
+  return new Router().get(path, ctx => ({
     url: ctx.req.url,
     basePath: ctx.req.basePath,
     originalUrl: (u => u.pathname + u.search)(new URL(ctx.req.raw.url)),
@@ -323,7 +323,7 @@ describe('an application under a base path', () => {
         .basePath('/api')
         .with(() => new LateRoute())
         .with(healthProbes())
-        .mount(newRouter('/router').get('/hello', () => ({ source: 'router' }))) as WebApplication
+        .mount(new Router('/router').get('/hello', () => ({ source: 'router' }))) as WebApplication
     }
 
     it.each(sources)('serves %s under the base, and without it', async (_label, path) => {
@@ -342,7 +342,7 @@ describe('an application under a base path', () => {
       return createWebApplication()
         .basePath('/api')
         .mount(
-          newRouter()
+          new Router()
             .get('/go', ctx => {
               ctx.redirect('~/done', 303)
             })
