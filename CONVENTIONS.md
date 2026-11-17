@@ -94,7 +94,7 @@ A module is a directory of source files in a library package (not `benchmarks/`,
 - It has a main file named after it (`logger/logger.ts`, `circuitbreaker/circuitbreaker.ts`) and an `index.ts` barrel that only re-exports.
 - A directory of independent files with no main one (`decorators/`, `internal/`, `provider/`) has the barrel alone.
 - A barrel publishes what the package offers. A helper only the package's own code uses stays out of it and is imported by its path.
-- One capability's code and public types live in one module, and other modules call into it rather than hold parts of it, so the capability is found and changed in one place. A package that splits a capability across layers keeps each layer's half whole, as `http/` does between `core/` and `platform/fastify/`.
+- One capability's code and public types live in one module, and other modules call into it rather than hold parts of it, so the capability is found and changed in one place. A package that splits a capability across layers keeps each layer's half whole, as `http/` does between `core/` and `platform/node/`.
 - Exempt: a package root, whose `index.ts` is the entry (`std/` has none); a directory holding only subdirectories; `_`-prefixed directories (`_tests/`, `_testdata/`, `_spectypes/`, `_spec/`).
 - A new or moved module follows these rules. An existing one keeps its layout until a change asks to move it.
 
@@ -118,7 +118,7 @@ A span of time in a public API (an option, a builder method, an SPI parameter, a
 - The grammar is Go's plus `d` for a day (`'90s'`, `'1h30m'`, `'7d'`); configuration refuses a sign and a bare number.
 - **Seconds exist only on the wire**, converted where they are written: `Math.floor(d / Second)` for `Max-Age`, `Cache-Control`, a token's `exp` and OIDC `max_age`, and `d / Second` for an OpenTelemetry histogram in seconds. A value read off the wire in seconds, such as `expires_in`, becomes a `Duration` at once.
 - **A lifetime written in whole seconds is at least one**: a scheme truncates its own (`truncate(ttl, Second)`), and refuses one under a second when it is built, where it would go out as `Max-Age=0` or an `exp` already past. `ctx.cookie(...)` refuses a `maxAge` that is not whole seconds. A tolerance on time claims is floored, `Math.floor(d / Second)`, everywhere it is checked.
-- **A sink that takes whole milliseconds gets `Math.ceil(d)`**: `AbortSignal.timeout`, Fastify's `handlerTimeout`, Redis `PX`, undici's headers and body timeouts.
+- **A sink that takes whole milliseconds gets `Math.ceil(d)`**: `AbortSignal.timeout`, Redis `PX`, undici's headers and body timeouts.
 
 ### Byte sizes
 

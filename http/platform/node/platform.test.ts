@@ -9,10 +9,14 @@ import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { Byte, MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { IContext } from '../../context.js'
+import type { ErrorHandler } from '../../core/error/handler.js'
+import { ErrHTTPContentTooLarge } from '../../core/error/http.js'
 import type { Next } from '../../core/middleware/middleware.js'
 import { $p } from '../../core/routing/picker.js'
 import { bodyAsStream } from '../../decorators/body_as_stream.js'
-import { Args, Controller, Get } from '../../decorators/index.js'
+import { Args, Catch, Controller, Get } from '../../decorators/index.js'
+import type { ActionResult } from '../../response.js'
 import { createWebApplication, newRouter } from './node.js'
 
 @Controller('/peer')
@@ -86,6 +90,14 @@ function receive(socket: Socket, until: RegExp): Promise<string> {
     }
     socket.on('data', onData)
   })
+}
+
+@Catch(ErrHTTPContentTooLarge)
+class TooLargeAsBadRequest implements ErrorHandler<ErrHTTPContentTooLarge> {
+  handle(ctx: IContext): ActionResult {
+    ctx.status(400)
+    return 'too large'
+  }
 }
 
 async function readAll(stream: ReadableStream<Uint8Array>): Promise<void> {
@@ -903,6 +915,28 @@ describe('the request body on Node', () => {
     expect(answer).toMatch(/\r\nConnection: close\r\n/i)
   })
 
+  // The refusal closes the connection, whatever answer an error handler makes of it.
+  it('closes the connection after refusing a body declared over the limit, though a handler answers 400', async () => {
+    const routes = newRouter('/b')
+    routes
+      .post('/echo')
+      .bodyLimit(6 * Byte)
+      .catchBy([TooLargeAsBadRequest])
+      .handler(ctx => ctx.req.body())
+    const { port } = await serve(routes)
+    const socket = await connected(port)
+    socket.setEncoding('utf8')
+    const closed = once(socket, 'close')
+
+    const answered = receive(socket, /too large$/)
+    socket.write('POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nping')
+    const received = await answered
+
+    expect(received.startsWith('HTTP/1.1 400')).toBe(true)
+    expect(received).toMatch(/\r\nConnection: close\r\n/i)
+    await closed
+  })
+
   it('answers 413 to a chunked body over the limit and closes the connection', async () => {
     const { port } = await serve(echo(), { settings: { bodyLimit: 10 * Byte } })
 
@@ -958,6 +992,33 @@ describe('the request body on Node', () => {
     expect((await served).startsWith('HTTP/1.1 200')).toBe(true)
     socket.destroy()
   })
+
+  // Only the server refusing the body as too large closes at once: any answer a guard sends to a body declared over the
+  // limit, a 413 among them, keeps the connection while the body is dropped, up to the limit.
+  it.each([401, 413])(
+    'answers keep-alive to a guard %i on a body declared over the limit, then cuts once it passes',
+    async status => {
+      const routes = newRouter('/b')
+      routes
+        .post('/echo')
+        .bodyLimit(6 * Byte)
+        .hook('onRequest', ctx => void ctx.status(status).body('no'))
+        .handler(() => 'never')
+      const { port } = await serve(routes)
+      const socket = await connected(port)
+      socket.setEncoding('utf8')
+      const closed = once(socket, 'close')
+
+      const refused = receive(socket, /no$/)
+      socket.write('POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nping')
+      const first = await refused
+      expect(first.startsWith(`HTTP/1.1 ${status}`)).toBe(true)
+      expect(first).toMatch(/\r\nConnection: keep-alive\r\n/i)
+      socket.write('pongping')
+
+      await closed
+    },
+  )
 
   // A body read through `ctx.req.raw` once the answer has gone was dropped, not read by something else.
   it('fails a read of ctx.req.raw that starts once the answer has gone', async () => {

@@ -960,6 +960,7 @@ export class ContextRequest implements IRequest<
     }
 
     if (declaredOver(this.#platform.header(this.#native, 'content-length'), this.#limit)) {
+      this.#platform.refuseBody?.(this.#native)
       throw contentTooLarge(this.#limit)
     }
   }

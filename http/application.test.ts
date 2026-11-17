@@ -24,6 +24,28 @@ describe('WebApplication', () => {
 
     expect(await (await request(new Request('http://localhost/detached'))).json()).toEqual({ ok: true })
   })
+
+  it('has no server to reach before bootstrap()', async () => {
+    const built = createWebApplication().mount(new Router('/hi').get('/').handler(() => 'hi'))
+
+    expect(() => built.instance).toThrow(ErrApplicationNotReady)
+    await expect(built.request('/hi')).rejects.toThrow(ErrApplicationNotReady)
+    expect(built.address).toBeUndefined()
+
+    // Closing what never readied is fine: there is nothing to tear down.
+    await built.close()
+  })
+
+  // Like the server, the route table exists only once start-up has built it.
+  it('has no route table to read before bootstrap()', async () => {
+    const built = createWebApplication().mount(new Router('/hi').get('/').handler(() => 'hi'))
+    app = built as WebApplication
+
+    expect(() => built.routeGroups).toThrow(ErrApplicationNotReady)
+
+    await built.bootstrap()
+    expect(built.routeGroups.some(group => group.path === '/hi')).toBe(true)
+  })
 })
 
 describe('the fetch application', () => {

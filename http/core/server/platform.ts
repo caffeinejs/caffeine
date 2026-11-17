@@ -68,6 +68,11 @@ export interface ServerPlatform<N, P extends IContextPlatform, R> {
    * on a platform that reads and drops that rest so its connection can serve the next request.
    */
   holdBodyTo?(native: N, limit: ByteSize): void
+  /**
+   * Closes the connection once the answer has gone, whatever its status: called when the engine refuses the body as
+   * larger than its limit before reading a byte of it. A platform that keeps no connections leaves it out.
+   */
+  refuseBody?(native: N): void
   /** Aborts when the client leaves. */
   signal(native: N): AbortSignal
   remoteAddress(native: N): string | undefined

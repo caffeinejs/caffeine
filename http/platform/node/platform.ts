@@ -73,6 +73,7 @@ export function createNodePlatform(logger: Logger): NodePlatform {
     hasBody: res => declaresBody(res.req),
     bodyConsumed: res => consumed(res.req),
     readBody,
+    refuseBody: stop,
     holdBodyTo: (res, limit) => {
       const state = bodies.get(res)
       if (state !== undefined) {
@@ -572,8 +573,8 @@ function consumed(incoming: IncomingMessage | Http2ServerRequest): boolean {
  * answer. Once the answer has gone, the route's read fails with {@link ErrRequestBodyDiscarded} and what is left of the
  * body is read and dropped, held to the route's limit, as Node drops a body nobody read; {@link stop} cuts the
  * connection if the body goes over that limit or the route cancels its read. A body nothing touched is dropped the
- * same way, held to the request's limit, unless it declares more. A body anything else started reading closes the
- * connection after the answer.
+ * same way, held to the request's limit. A body the server refused as declaring more than its limit, and one anything
+ * else started reading, close the connection after the answer.
  */
 function keepWhileRead(res: NodeResponse): void {
   const state = bodies.get(res)
@@ -595,19 +596,21 @@ function keepWhileRead(res: NodeResponse): void {
 
   // A body nothing touched is dropped once the answer has gone, as Node drops it, held to the request's limit.
   const limit = state.limit
-  if (limit !== undefined && !consumed(res.req) && !declaredOver(headerOf(res, 'content-length'), limit)) {
-    // Seen being read, Node leaves the body to the platform: one Node drops itself is dropped whole, past any limit.
-    ;(res.req as Readable).read(0)
-    restoreKeepAlive(res)
-    res.once('finish', () => {
-      // A read the route started while the answer streamed is failed as one that took the body is; a read of
-      // `ctx.req.raw` that starts later fails the same way.
-      if (state.discard?.() !== true) {
-        state.failure ??= new ErrRequestBodyDiscarded(requestName(res.req))
-        dropUnread(res, limit)
-      }
-    })
+  if (limit === undefined || consumed(res.req)) {
+    return
   }
+
+  // Seen being read, Node leaves the body to the platform: one Node drops itself is dropped whole, past any limit.
+  ;(res.req as Readable).read(0)
+  restoreKeepAlive(res)
+  res.once('finish', () => {
+    // A read the route started while the answer streamed is failed as one that took the body is; a read of
+    // `ctx.req.raw` that starts later fails the same way.
+    if (state.discard?.() !== true) {
+      state.failure ??= new ErrRequestBodyDiscarded(requestName(res.req))
+      dropUnread(res, limit)
+    }
+  })
 }
 
 /** Reads what is left of a body nothing read and drops it: past `limit`, the connection is cut ({@link stop}). */

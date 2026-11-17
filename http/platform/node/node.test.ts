@@ -6,7 +6,7 @@ import type { Server as NetServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { ErrApplicationNotReady, newConfiguration } from '@caffeinejs/application'
+import { newConfiguration } from '@caffeinejs/application'
 import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { newNoopLogger } from '@caffeinejs/application/logger'
@@ -273,26 +273,5 @@ describe('the Node application from its configuration', () => {
     await built.run()
 
     expect(built.address?.host).toBe('0.0.0.0')
-  })
-
-  it('has no server to reach before bootstrap()', async () => {
-    const built = createWebApplication().mount(hello())
-
-    expect(() => built.instance).toThrow(ErrApplicationNotReady)
-    await expect(built.request('/hi')).rejects.toThrow(ErrApplicationNotReady)
-    expect(built.address).toBeUndefined()
-
-    // Closing what never readied is fine: there is nothing to tear down.
-    await built.close()
-  })
-
-  // Like the server, the route table exists only once start-up has built it.
-  it('has no route table to read before bootstrap()', async () => {
-    const built = app()
-
-    expect(() => built.routeGroups).toThrow(ErrApplicationNotReady)
-
-    await built.bootstrap()
-    expect(built.routeGroups.some(group => group.path === '/hi')).toBe(true)
   })
 })
