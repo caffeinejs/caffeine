@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CompressionConfigSchema",
+  "type": "object",
+  "properties": {
+    "encodings": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "const": "zstd",
+                "type": "string"
+              },
+              {
+                "const": "br",
+                "type": "string"
+              },
+              {
+                "const": "gzip",
+                "type": "string"
+              },
+              {
+                "const": "deflate",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "threshold": {
+      "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+      "type": "string"
+    },
+    "gzip": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "minimum": 1,
+          "maximum": 9,
+          "type": "integer"
+        }
+      }
+    },
+    "deflate": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "minimum": 1,
+          "maximum": 9,
+          "type": "integer"
+        }
+      }
+    },
+    "br": {
+      "type": "object",
+      "properties": {
+        "quality": {
+          "minimum": 0,
+          "maximum": 11,
+          "type": "integer"
+        }
+      }
+    },
+    "zstd": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "minimum": 1,
+          "maximum": 19,
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

@@ -325,13 +325,15 @@ It installs on the whole application, or on one route group with `router.with(HT
 `@Use(HTTPCaching(...))`, each install with its own store and settings. A group that declares caching and
 installs nothing, under an application that installs nothing, fails at `app.bootstrap()`.
 
-Order matters in one place:
+Order matters in two places:
 
 - Install it after the authentication gate, `.with(authentication())`. Guards run before the cache, on a hit as
   well as on a miss, so a cached response never skips authorization.
+- Install it before `compression()`, in the same slot or an outer one, so the store holds identity bytes and each
+  answer is compressed for the client asking, hit or miss.
 
-The default `ETag` is a strong tag hashed from the payload before any content-coding. Behind a compressor, the
-one tag goes out with every coding; if that matters, pass an `etagGenerator` that returns weak tags (`W/"..."`).
+The default `ETag` is a strong tag hashed from the payload before any content-coding. Behind `compression()`, a
+compressed answer carries it weak and an identity answer keeps it strong.
 
 ## Stores
 

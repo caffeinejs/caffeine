@@ -1,8 +1,9 @@
 import { fc, it } from '@fast-check/vitest'
 import { describe, expect } from 'vitest'
 
-import type { Encoding } from './manifest/manifest.js'
 import { selectEncoding } from './negotiate.js'
+
+type Encoding = 'br' | 'gzip'
 
 const TOKENS = ['br', 'gzip', 'x-gzip', 'identity', '*', 'deflate', 'BR', 'Gzip'] as const
 
@@ -27,11 +28,12 @@ function ratingOf(entries: readonly { token: string; q: string | undefined }[], 
   return rated.get(coding) ?? rated.get('*')
 }
 
-const SIZES: Record<Encoding | 'identity', number> = { br: 1, gzip: 2, identity: 3 }
+// The order the codings are offered in, identity last: what breaks a tie.
+const ORDER: Record<Encoding | 'identity', number> = { br: 1, gzip: 2, identity: 3 }
 
 describe('selectEncoding (property)', () => {
   it.prop([fc.array(entry, { minLength: 1, maxLength: 8 }), fc.subarray<Encoding>(['br', 'gzip'])], { numRuns: 1000 })(
-    'selects only what the client accepts, and among equal ratings the smallest',
+    'selects only what the client accepts, and among equal ratings the earliest offered',
     (entries, available) => {
       const header = entries.map(({ token, q }) => (q === undefined ? token : `${token};q=${q}`)).join(', ')
       const selected = selectEncoding(header, available)
@@ -48,11 +50,11 @@ describe('selectEncoding (property)', () => {
         return
       }
 
-      const smallest = candidates
+      const earliest = candidates
         .filter(({ q }) => q === best)
-        .toSorted((a, b) => SIZES[a.coding] - SIZES[b.coding])[0]!.coding
+        .toSorted((a, b) => ORDER[a.coding] - ORDER[b.coding])[0]!.coding
 
-      expect(selected).toBe(smallest)
+      expect(selected).toBe(earliest)
     },
   )
 })

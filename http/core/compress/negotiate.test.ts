@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { selectEncoding } from './negotiate.js'
+import { isCompressible, selectEncoding } from './negotiate.js'
 
-// RFC 9110 §12.5.3 over a file with both variants, `br` the smaller.
+// RFC 9110 §12.5.3 over two codings offered, `br` preferred.
 describe('selectEncoding', () => {
   it.each([
     [undefined, 'identity'],
@@ -30,13 +30,13 @@ describe('selectEncoding', () => {
     expect(selectEncoding(header, ['br', 'gzip'])).toBe(selected)
   })
 
-  // A file with no variant still answers identity, and still refuses a client that excludes it.
+  // With no coding offered it still answers identity, and still refuses a client that excludes it.
   it.each([
     ['gzip, deflate, br', 'identity'],
     ['*', 'identity'],
     ['*;q=0', undefined],
     ['identity;q=0', undefined],
-  ])('answers %j for a file with no variant with %s', (header, selected) => {
+  ])('answers %j with no coding offered with %s', (header, selected) => {
     expect(selectEncoding(header, [])).toBe(selected)
   })
 
@@ -50,5 +50,37 @@ describe('selectEncoding', () => {
     expect(selectEncoding(['identity;q=0', ...filler, 'br'].join(', '), ['br', 'gzip'])).toBe(undefined)
     expect(selectEncoding(['*;q=0', ...filler, 'br'].join(', '), [])).toBe(undefined)
     expect(selectEncoding([...filler, 'deflate', 'br'].join(', '), ['br', 'gzip'])).toBe(undefined)
+  })
+})
+
+describe('selectEncoding over codings in the order the server prefers them', () => {
+  it('keeps the coding offered first among equal ratings', () => {
+    expect(selectEncoding('gzip;q=1, br;q=1', ['zstd', 'br', 'gzip'])).toBe('br')
+    expect(selectEncoding('*', ['zstd', 'br', 'gzip', 'deflate'])).toBe('zstd')
+  })
+})
+
+describe('isCompressible', () => {
+  it.each([
+    'text/html; charset=utf-8',
+    'text/plain',
+    'application/json',
+    'application/json; charset=utf-8',
+    'application/problem+json',
+    'image/svg+xml',
+    'application/javascript',
+    'application/xml',
+  ])('compresses %s', type => {
+    expect(isCompressible(type)).toBe(true)
+  })
+
+  it.each([
+    'text/event-stream',
+    'TEXT/EVENT-STREAM; charset=utf-8',
+    'application/octet-stream',
+    'image/png',
+    'video/mp4',
+  ])('leaves %s alone', type => {
+    expect(isCompressible(type)).toBe(false)
   })
 })

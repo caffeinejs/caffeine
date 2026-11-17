@@ -1,5 +1,3 @@
-import type { Encoding } from './manifest/manifest.js'
-
 /**
  * The most `Accept-Encoding` entries read. A longer header is not read at all, and refused: an entry past the limit
  * could refuse the coding the others pick, identity included.
@@ -10,20 +8,20 @@ const MOST_ENTRIES = 32
 const QVALUE = /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/
 
 /**
- * The representation of a file to send for an `Accept-Encoding` header, by RFC 9110 §12.5.3, or `undefined` when the
- * client accepts none of them and the answer is `406`.
+ * The content coding to send for an `Accept-Encoding` header, by RFC 9110 §12.5.3, or `undefined` when the client
+ * accepts none of them, identity included.
  *
- * `available` holds the codings the file has a variant in, smallest first; identity is always there and always the
- * largest. Tokens compare without regard to case and `x-gzip` is `gzip`. An entry whose `q` is no qvalue is ignored,
- * the first entry for a token wins, and `q=0` excludes. `*` rates every coding the header does not list, identity
- * included. Identity, unless the header rates it, is acceptable and preferred least. No header, or an empty one, gets
- * identity: a client that sends nothing may not decode. A header of more than 32 entries is not read, and gets
- * `undefined`. Among the codings rated highest the smallest wins.
+ * `available` holds the codings offered, in the order the server prefers them. Tokens compare without regard to case
+ * and `x-gzip` is `gzip`. An entry whose `q` is no qvalue is ignored, the first entry for a token wins, and `q=0`
+ * excludes. `*` rates every coding the header does not list, identity included. Identity, unless the header rates it,
+ * is acceptable and preferred least. No header, or an empty one, gets identity: a client that sends nothing may not
+ * decode. A header of more than 32 entries is not read, and gets `undefined`. Among the codings rated highest the one
+ * offered first wins.
  */
-export function selectEncoding(
+export function selectEncoding<E extends string>(
   header: string | undefined,
-  available: readonly Encoding[],
-): Encoding | 'identity' | undefined {
+  available: readonly E[],
+): E | 'identity' | undefined {
   if (header === undefined || header.trim() === '') {
     return 'identity'
   }
@@ -37,10 +35,10 @@ export function selectEncoding(
 
   const rated = ratings(entries)
   const star = rated.get('*')
-  let best: Encoding | undefined
+  let best: E | undefined
   let bestQ = 0
 
-  // Smallest first, and only a higher rating replaces it, so a tie keeps the smaller.
+  // In preference order, and only a higher rating replaces it, so a tie keeps the one offered first.
   for (const encoding of available) {
     const q = rated.get(encoding) ?? star ?? 0
 
@@ -56,7 +54,7 @@ export function selectEncoding(
     return best ?? 'identity'
   }
 
-  // Identity is the largest, so it wins only by a higher rating.
+  // Identity is preferred least, so it wins only by a higher rating.
   if (identity > bestQ) {
     return 'identity'
   }
@@ -86,8 +84,8 @@ function ratings(entries: readonly string[]): Map<string, number> {
   return rated
 }
 
-// RFC 9110 §8.4.1.3: a recipient treats `x-gzip` as `gzip`.
-function normalize(token: string): string {
+/** A coding token, lower-case, as RFC 9110 §8.4.1.3 has a recipient read it: `x-gzip` is `gzip`. */
+export function normalize(token: string): string {
   return token === 'x-gzip' ? 'gzip' : token
 }
 
@@ -104,4 +102,19 @@ function qOf(params: readonly string[]): number | undefined {
   }
 
   return 1
+}
+
+// Text the coders shrink: `text/*`, and the JSON, XML and JavaScript families. Kept apart from
+// `@caffeinejs/static`'s copy, which its build reads without loading the server.
+const COMPRESSIBLE = /^(?:text\/|application\/(?:json|xml|javascript)\b|[^;]*\+(?:json|xml)\b)/i
+const EVENT_STREAM = /^text\/event-stream\b/i
+
+/**
+ * Whether a body of `type`, a `Content-Type` value, is worth compressing: text, JSON, XML and JavaScript.
+ *
+ * Never `text/event-stream`, whose events a client must get as they are sent, nor `application/octet-stream`, which is
+ * as often bytes already compressed.
+ */
+export function isCompressible(type: string): boolean {
+  return COMPRESSIBLE.test(type) && !EVENT_STREAM.test(type)
 }

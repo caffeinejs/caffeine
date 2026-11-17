@@ -32,6 +32,10 @@
       "types": "./dist/platform/bun/index.d.ts",
       "default": "./dist/platform/bun/index.js"
     },
+    "./compress": {
+      "types": "./dist/core/compress/index.d.ts",
+      "default": "./dist/core/compress/index.js"
+    },
     "./conditional": {
       "types": "./dist/core/conditional/index.d.ts",
       "default": "./dist/core/conditional/index.js"

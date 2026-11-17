@@ -17,6 +17,7 @@ import {
   type Validators,
   type VaryReply,
 } from '@caffeinejs/http'
+import { selectEncoding } from '@caffeinejs/http/compress'
 import { KiB } from '@caffeinejs/std/bytes'
 
 import {
@@ -26,7 +27,6 @@ import {
   type ManifestFile,
   type ManifestVariant,
 } from './manifest/manifest.js'
-import { selectEncoding } from './negotiate.js'
 import { hashFile } from './scan/scan.js'
 
 /** What a mount decides about every file it serves, computed once when the mount is built. */
