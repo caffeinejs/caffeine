@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
-import { $p, Args, Controller, Post, Schema, Router } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { $p, Args, Controller, Post, Schema, Router, createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'
@@ -32,19 +32,19 @@ function drafts() {
 
 // `hide: true` on a route schema leaves the route out of the document, as `@Operation({ hidden: true })` does.
 describe('a route schema with hide: true', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
     app = undefined
   })
 
-  async function boot(): Promise<NodeWebApplication> {
-    app = createWebApplication({})
+  async function boot(): Promise<WebApplication<never, never, unknown, NodeAdapter>> {
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi(o => o.docs(false)))
       .with(openapi('internal', o => o.docs(false)))
-      .mount(drafts()) as NodeWebApplication
+      .mount(drafts()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
     return app
   }

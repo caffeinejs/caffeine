@@ -1,14 +1,15 @@
 # HTTP
 
-Package: `@caffeinejs/http`. Two applications serve on the web-standards engine. The Node application,
-`createWebApplication()` from `@caffeinejs/http/node`, listens on a node:http, node:https or
-node:http2 server. The fetch application, `createWebApplication()` from `@caffeinejs/http`, has no socket of its own:
-the runtime calls `app.fetch`, as Bun, Deno and workers do. `authentication()`, `csrf()`, `cors()`, `corsPolicy()`,
-`healthProbes()`, cookies and error handling are imported from `@caffeinejs/http` and run on both.
+Package: `@caffeinejs/http`. One application, `createWebApplication()` from `@caffeinejs/http`, serves on the
+web-standards engine, and a server adapter runs it on a runtime. `adapter: node()`, from `@caffeinejs/http/node`,
+listens on a node:http, node:https or node:http2 server. `adapter: bun()`, from `@caffeinejs/http/bun`, listens with
+`Bun.serve`. With no adapter the application has no socket of its own: the runtime calls `app.fetch`, as Deno and
+workers do. `authentication()`, `csrf()`, `cors()`, `corsPolicy()`, `healthProbes()`, cookies and error handling are
+imported from `@caffeinejs/http` and run under every adapter.
 
 ```ts
-import { Controller, Get, Post, Args, $p } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, Post, Args, $p, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 
 @Controller('/examples')
 export class ExampleController {
@@ -24,19 +25,43 @@ export class ExampleController {
   }
 }
 
-const app = createWebApplication().server(({ config }) => ({ listen: config.server }))
+const app = createWebApplication({ adapter: node() }).server(({ config }) => ({ listen: config.server }))
 
 const { address } = await app.run() // or app.run({ port: 3000 }); address.origin is the URL it serves
 ```
 
-`.server(configure)` configures the server it builds. `listen` takes node:net's listen options, `http`, `https` and
-`http2` the node server's own, and `bodyLimit`, `handlerTimeout`, `trustProxy`, `router`, `requestIDHeader` and
-`schemaCompiler` the engine's. `run(options)` takes node:net's `ListenOptions`, merged over `listen` key by key.
-Only the Node application has `app.instance`, the node:http, node:https or node:http2 server, and
-`.serverCallback(callback)`, which gets the setup context and that server before it serves. `factory` and `listener` are refused at start-up.
+`.server(configure)` configures the server it builds. `bodyLimit`, `handlerTimeout`, `trustProxy`, `router`,
+`requestIDHeader` and `schemaCompiler` are the engine's, under every adapter; the adapter adds its own. Under `node()`,
+`listen` takes node:net's listen options and `http`, `https` and `http2` the node server's own; `run(options)` takes
+node:net's `ListenOptions`, merged over `listen` key by key. `app.instance` is the node:http, node:https or node:http2
+server, and `.serverCallback(callback)` gets the setup context, with the configuration, and that server before it
+listens. `factory` and `listener` are refused at start-up.
 
-The fetch application takes the same engine settings and none of the Node ones. Start it, then hand `app.fetch` to the
-runtime:
+Under `bun()`, `listen` takes node:net's names too (`host`, `port`, `path`, `reusePort`, `ipv6Only`), and `https` the
+`key`, `cert`, `ca` and `passphrase`, so a configuration limited to those serves on both runtimes. What Bun cannot honor
+is refused at start-up: the `http` and `http2` sections and any other `listen` or `https` option, each pointing at
+`node()`, and an `https` section that lacks the key or the certificate. `app.instance` is Bun's server once `run()` has
+started it, and `.serverCallback(...)` gets it right after `Bun.serve` started it:
+
+```ts
+import { createWebApplication } from '@caffeinejs/http'
+import { bun } from '@caffeinejs/http/bun'
+
+const app = createWebApplication({ config, adapter: bun() }).mount(pets)
+const { address } = await app.run({ port: 3000 })
+```
+
+The adapter's types are inferred from `adapter`. Naming the configuration's type turns that inference off, as naming
+any type argument does, so name the adapter's type too. With the configuration's alone, the application takes any
+adapter's settings and types `app.instance` as `unknown`:
+
+```ts
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
+
+const app = createWebApplication<AppConfig, NodeAdapter>({ config, adapter: node() })
+```
+
+With no adapter, the application takes the engine settings alone. Start it, then hand `app.fetch` to the runtime:
 
 ```ts
 import { createWebApplication } from '@caffeinejs/http'
@@ -44,7 +69,7 @@ import { createWebApplication } from '@caffeinejs/http'
 const app = createWebApplication({ config }).mount(pets)
 await app.run()
 
-export default { fetch: app.fetch } // Bun, Deno, workers
+export default { fetch: app.fetch } // Deno, workers
 ```
 
 Side-effect-import the controller file from `main.ts` so `@Controller` registers.
@@ -56,10 +81,10 @@ Side-effect-import the controller file from `main.ts` so `@Controller` registers
 
 ## HTTPS and HTTP/2
 
-TLS and HTTP/2 are `.server(...)` sections of the Node application, so configuration can switch them at `bootstrap()`:
+TLS and HTTP/2 are `.server(...)` sections under `node()`, so configuration can switch them at `bootstrap()`:
 
 ```ts
-createWebApplication({ config }).server(({ config }) => ({
+createWebApplication({ config, adapter: node() }).server(({ config }) => ({
   https: { key: config.tls.key, cert: config.tls.cert },
   listen: config.server,
 }))
@@ -213,9 +238,9 @@ new Router('/hooks').extend(csrfExempt()) // the programmatic form; csrfExempt(f
   `ErrCSRFConfiguration`.
 - The host and scheme an `Origin` is compared with are `ctx.req.host` and `ctx.req.protocol`, the scheme
   lower-cased: they follow `X-Forwarded-Host` and `X-Forwarded-Proto` only under `trustProxy`,
-  `.server(() => ({ trustProxy: true }))`. On the Node application `trustProxy` names the proxy, as `true`, a list of
-  addresses, CIDR ranges or `loopback`, `linklocal` and `uniquelocal`: a hop count is refused. The fetch application
-  knows no peer address and takes `true` alone.
+  `.server(() => ({ trustProxy: true }))`. Under `node()` and `bun()` `trustProxy` names the proxy, as `true`, a list
+  of addresses, CIDR ranges or `loopback`, `linklocal` and `uniquelocal`: a hop count is refused. With no adapter the
+  application knows no peer address and takes `true` alone.
 - `c.exclude('/webhooks')` leaves the routes registered under that prefix alone, whole segments only: `/webhooks`
   and `/webhooks/stripe`, not `/webhooks-old`, judged by the path a route was registered under, never the URL
   requested. For a route the application cannot mark; its own take `@CSRFExempt()` or `csrfExempt()`. A URL no route
@@ -519,8 +544,8 @@ Hooks:
 - `app.hook(name, fn)` adds one to the application's own server, `l.hook(...)` to a listener's, and `context.app.hook(...)`
   to a plugin's slot. The names are `onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`, `onRoute`, `onReady`
   and `onClose`. A request hook has no path and no `next`: it answers with `ctx.body(...)` and fails by throwing.
-- `app.use(fn)` also takes a Node `(req, res, next)` middleware, on the Node application only: the fetch application
-  refuses one at start-up.
+- `app.use(fn)` also takes a Node `(req, res, next)` middleware, under `node()` only: any other adapter refuses one at
+  start-up.
 - Plugin hooks run in the order the plugins are installed, and all of them run before the middleware chain. Headers
   that must reach a 401 the gate answers go in an `onRequest` hook of a plugin installed before `authentication()`:
   `examples/04-spa-dashboard/api/spa/security.ts` writes `helmet`'s headers that way: it checks that
@@ -560,7 +585,7 @@ shares one evaluation with the routes. The evaluation budgets are the `Health()`
 `.install(Health(h => h.cacheTTL(2 * Second)))` tunes them with or without the probes mounted.
 
 ```ts
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   .install(Health(h => h.cacheTTL(2 * Second)))
   .with(healthProbes())
 await app.run()
@@ -588,7 +613,7 @@ A listener is one more port, serving only the routers bound to it: metrics, prob
 public one. Each is named, and an application may add several.
 
 ```ts
-const app = createWebApplication({ config })
+const app = createWebApplication({ config, adapter: node() })
   .install(
     Authentication(a =>
       a
@@ -626,7 +651,7 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
 - **From a feature.** A feature adds a listener from its configure step with `listenersOf(kit).add(name, configure)`,
   which takes the same arguments; `listenersOf` refuses an application that is not a web application. A feature does
   not know which application installs it, so it names the settings type it writes: `NodeServerSettings`, from
-  `@caffeinejs/http/node`, for a `listen` section, which the fetch application refuses at start-up.
+  `@caffeinejs/http/node`, for a `listen` section, which an application under no adapter refuses at start-up.
 
   ```ts
   protected configure(kit: FeatureConfigureKit<C>): void {
@@ -647,8 +672,8 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   head slots. Nothing registered on the application reaches a listener, an authentication gate included, and
   `.basePath(...)` and `.serverCallback(...)` never do. What a plugin registered with `l.with(...)` mounts or adds
   through `context.app` lands on that server alone.
-- **Settings.** `l.server(...)` takes what the application's `.server(...)` takes: `NodeServerSettings` on the Node
-  application, `ServerSettings` on the fetch one. TLS and HTTP/2 are switched by configuration there too.
+- **Settings.** `l.server(...)` takes what the application's `.server(...)` takes: `NodeServerSettings` under
+  `node()`, `BunServerSettings` under `bun()`, `ServerSettings` under none. TLS and HTTP/2 are switched by configuration there too.
 - **Authorization.** There is nothing listener-specific: a route on a listener requires what its router or controller
   declares, `router.authorize(...)` or `@Authorize(...)`, and an undeclared one answers to the application's fallback policy, exactly as on the application's own server. Health
   probes stay exempt.

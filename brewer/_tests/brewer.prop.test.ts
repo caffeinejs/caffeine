@@ -1,5 +1,5 @@
-import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { fc, it } from '@fast-check/vitest'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
 
@@ -53,7 +53,7 @@ const echo = new Router('/echo')
   .get('/dots/:a.:b')
   .handler(ctx => ({ url: ctx.req.url }))
 
-const app = createWebApplication().mount(echo)
+const app = createWebApplication({ adapter: node() }).mount(echo)
 
 beforeAll(async () => {
   await app.bootstrap()

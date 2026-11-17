@@ -1,6 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
 import { authentication } from '../../../../core/security/security.js'
 import {
   Authorize,
@@ -16,7 +17,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../../index.js'
-import { createWebApplication } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node/index.js'
 
 class FakeOpaqueStore extends OpaqueTokenStore {
   validate(token: string): Principal | null {
@@ -39,7 +40,7 @@ class FakeOpaqueStore extends OpaqueTokenStore {
 function opaqueBuilder() {
   const container = new CaffeineIoC()
   container.bind(OpaqueTokenStore, t => t.toClass(FakeOpaqueStore))
-  const builder = createWebApplication({ container })
+  const builder = createWebApplication({ adapter: node(), container })
   // Only the policy this file's own controller references — no cross-section superset needed, since
   // each test file has an isolated decorator registrar.
   builder.install(

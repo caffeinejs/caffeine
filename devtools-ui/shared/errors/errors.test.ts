@@ -1,6 +1,6 @@
 import { newNoopLogger } from '@caffeinejs/application/logger'
-import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { configuration } from '../../app.config.js'
@@ -16,7 +16,7 @@ describe('TargetErrorHandler', () => {
   // A page the UI failed to render is its own fault: the operator reads why in the log, beside the request it was.
   it('logs a failure that is not the devtools answering, with the request it was for, and renders a 500 page', async () => {
     const error = vi.fn()
-    const app = createWebApplication({ config: configuration })
+    const app = createWebApplication({ adapter: node(), config: configuration })
       .logger(b => b.use({ ...newNoopLogger(), error }))
       .errorHandling(e => e.globalHandlers(TargetErrorHandler))
       .mount(

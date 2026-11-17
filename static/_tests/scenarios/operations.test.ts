@@ -11,8 +11,10 @@ import {
   type HTTPSetupContext,
   type IContext,
   type AnyRouter,
+  createWebApplication,
+  type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
@@ -47,14 +49,19 @@ class MissHandler implements ErrorHandler<ErrHTTPNotFound> {
 const files = () => staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true }))
 
 describe('a single-page application next to the plugins an application runs in production', () => {
-  let app: NodeWebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
 
   afterEach(async () => {
     await app?.close()
   })
 
   it('leaves the health probes to the health plugin', async () => {
-    app = isolated().with(healthProbes()).with(files()).mount(api(), pages()) as NodeWebApplication
+    app = isolated().with(healthProbes()).with(files()).mount(api(), pages()) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.bootstrap()
 
     const live = await app.request('/livez', { headers: PROBE })
@@ -71,7 +78,7 @@ describe('a single-page application next to the plugins an application runs in p
     app = isolated()
       .with(healthProbes(h => h.enabled(false)))
       .with(files())
-      .mount(api(), pages()) as NodeWebApplication
+      .mount(api(), pages()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     await expectNotFoundJSON(await app.request('/livez', { headers: PROBE }))
@@ -81,7 +88,7 @@ describe('a single-page application next to the plugins an application runs in p
     app = isolated()
       .with(corsPolicy(c => c.origins('https://app.example')))
       .with(files())
-      .mount(api(), pages()) as NodeWebApplication
+      .mount(api(), pages()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const preflight = await app.request('/api/pets', {
@@ -99,10 +106,10 @@ describe('a single-page application next to the plugins an application runs in p
   // The client routes are ordinary routes, so a miss still reaches the application's own not-found handler.
   it("leaves a miss to the application's not-found handler", async () => {
     // Decorators on, so `@Catch` registers the handler; this module declares no controller to route.
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.globalHandlers(MissHandler))
       .with(files())
-      .mount(api(), pages()) as NodeWebApplication
+      .mount(api(), pages()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await app.request('/nope', { method: 'POST' })).status).toBe(418)
@@ -117,7 +124,7 @@ describe('a single-page application next to the plugins an application runs in p
     app = isolated()
       .with(mounting(new Router().get('/metrics').handler(() => 'up 1')))
       .with(files())
-      .mount(api(), pages()) as NodeWebApplication
+      .mount(api(), pages()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const metrics = await app.request('/metrics', { headers: PROBE })

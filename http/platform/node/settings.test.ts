@@ -17,10 +17,10 @@ const noop = (): void => undefined
 
 describe('resolveNodeServerSettings', () => {
   it.each([
-    [{ listen: 3000 }, 'Cannot set listen to "3000": it must be an object of node:net options'],
-    [{ http: [] }, 'Cannot set http to "": it must be an object of node:http options'],
-    [{ https: 'tls' }, 'Cannot set https to "tls": it must be an object of node:https options'],
-    [{ http2: 'yes' }, 'Cannot set http2 to "yes": it must be true, false or an object of node:http2 options'],
+    [{ listen: 3000 }, 'Cannot set listen: it must be an object of node:net options, not a number'],
+    [{ http: [] }, 'Cannot set http: it must be an object of node:http options, not an array'],
+    [{ https: 'tls' }, 'Cannot set https: it must be an object of node:https options, not a string'],
+    [{ http2: 'yes' }, 'Cannot set http2: it must be true, false or an object of node:http2 options, not a string'],
     [{ http: {}, http2: true }, 'Cannot use the http section with http2: an HTTP/2 server takes no node:http options'],
     [
       { http2: { allowHTTP1: true } },
@@ -29,6 +29,14 @@ describe('resolveNodeServerSettings', () => {
   ])('refuses %j', (settings, message) => {
     expect(() => resolveNodeServerSettings(settings)).toThrow(ErrConfiguration)
     expect(() => resolveNodeServerSettings(settings)).toThrow(message)
+  })
+
+  // A key handed over as PEM text in place of the section must never reach a message, and so a log.
+  it('refuses an https section that is not an object without printing it', () => {
+    const pem = '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----'
+
+    expect(() => resolveNodeServerSettings({ https: pem })).toThrow(ErrConfiguration)
+    expect(() => resolveNodeServerSettings({ https: pem })).not.toThrow(/secret/)
   })
 
   it('refuses a section it does not know', () => {

@@ -1,9 +1,10 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { healthProbes } from '../core/health/index.js'
 import { Router, version } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * Version is a routing key: the request must select one of two same-URL handlers *before* a handler runs.
@@ -18,7 +19,7 @@ describe('API versioning', () => {
     v1.get('/').handler(() => ({ v: 1 }))
     const v2 = new Router('/pets').name('PetsV2').extend(version('2.0.0'))
     v2.get('/').handler(() => ({ v: 2 }))
-    return createWebApplication({ container: new CaffeineIoC() }).mount(v1, v2)
+    return createWebApplication({ adapter: node(), container: new CaffeineIoC() }).mount(v1, v2)
   }
 
   it('routes Accept-Version 1.x to v1 and 2.x to v2, not by registration order', async () => {
@@ -49,7 +50,7 @@ describe('API versioning', () => {
 
     const plain = new Router('/plain').name('Plain')
     plain.get('/').handler(() => ({ ok: true }))
-    const plainApp = createWebApplication({ container: new CaffeineIoC() }).mount(plain)
+    const plainApp = createWebApplication({ adapter: node(), container: new CaffeineIoC() }).mount(plain)
     await plainApp.bootstrap()
     const res = await plainApp.request('/plain')
     expect(res.headers.get('vary')?.toLowerCase() ?? '').not.toContain('accept-version')
@@ -62,7 +63,7 @@ describe('API versioning', () => {
     const versioned = new Router('/shop').name('ShopVersioned').extend(version('1.0.0'))
     versioned.get('/').handler(() => ({ kind: 'versioned' }))
 
-    const app = createWebApplication({ container: new CaffeineIoC() }).mount(plain, versioned)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC() }).mount(plain, versioned)
     await app.bootstrap()
 
     expect(await (await app.request('/shop', { headers: { 'accept-version': '1.x' } })).json()).toEqual({
@@ -79,7 +80,7 @@ describe('API versioning', () => {
     const b = new Router('/dup').name('DupB').extend(version('1.0.0'))
     b.get('/').handler(() => ({}))
 
-    const app = createWebApplication({ container: new CaffeineIoC() }).mount(a, b)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC() }).mount(a, b)
     await expect(app.bootstrap()).rejects.toThrow()
 
     await app.close()
@@ -89,7 +90,7 @@ describe('API versioning', () => {
     const v1 = new Router('/inventory').name('InventoryV1').extend(version('1.0.0'))
     v1.get('/').handler(() => ({ v: 1 }))
 
-    const app = createWebApplication({ container: new CaffeineIoC() }).with(healthProbes()).mount(v1)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC() }).with(healthProbes()).mount(v1)
     await app.bootstrap()
 
     expect((await app.request('/livez')).status).toBe(200)

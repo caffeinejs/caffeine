@@ -2,10 +2,10 @@ import { newNoopLogger } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { createWebApplication } from '../../application.js'
+import { createWebApplication, type WebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { Catch } from '../../decorators/index.js'
-import { createWebApplication as createNodeApplication } from '../../platform/node/index.js'
+import { node, type NodeAdapter } from '../../platform/node/index.js'
 import type { ActionResult } from '../../response.js'
 import type { ErrorHandler } from '../error/handler.js'
 import { ErrHTTP, ErrHTTPConflict, ErrHTTPForbidden } from '../error/http.js'
@@ -213,7 +213,7 @@ describe('a request that fails its schema, on the Node application', () => {
   const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
   const IMG = '<img src=x onerror=alert(1)>'
 
-  type NodeApp = ReturnType<typeof createNodeApplication>
+  type NodeApp = WebApplication<never, never, unknown, NodeAdapter>
   let served: NodeApp
 
   function post(path: string, body: string, headers: Record<string, string> = {}): Promise<Response> {
@@ -221,7 +221,7 @@ describe('a request that fails its schema, on the Node application', () => {
   }
 
   beforeAll(async () => {
-    served = createNodeApplication().mount(
+    served = createWebApplication({ adapter: node() }).mount(
       new Router('/slots')
         .post('/body', { body: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true }))
         .get('/query', { querystring: $t.Object({ a: $t.Integer() }) }, () => ({ ok: true }))
@@ -375,7 +375,7 @@ describe('a request that fails its schema, on the Node application', () => {
       title: 'Request validation failed',
       code: 'ERR_REQUEST_INVALID',
     }
-    const typed = createNodeApplication()
+    const typed = createWebApplication({ adapter: node() })
       .errorHandling(e =>
         e.validation({ type: configured.type, title: configured.title }).validation({ code: configured.code }),
       )

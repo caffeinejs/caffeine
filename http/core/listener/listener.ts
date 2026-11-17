@@ -45,11 +45,10 @@ export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
   }
 
   /**
-   * Configures the server, the way `.server(...)` configures the application's own. The settings are the
-   * application's: `ServerSettings` on the fetch application, `NodeServerSettings`, with `listen` for where it listens
-   * and `http`, `https` or `http2` for Node's own options, on the Node one. Resolved once, at start-up, against the
-   * same context a plugin factory gets; several calls shallow-merge section by section, in call order. On the Node
-   * application:
+   * Configures the server, the way `.server(...)` configures the application's own. The settings are what the
+   * application's adapter takes: `ServerSettings` under none, `NodeServerSettings` under `node()`, with `listen` for
+   * where it listens and `http`, `https` or `http2` for Node's own options. Resolved once, at start-up, against the
+   * same context a plugin factory gets; several calls shallow-merge section by section, in call order. Under `node()`:
    *
    * ```ts
    * .listener('admin', (l, { config }) => l.server(() => ({ listen: config.app.admin })))
@@ -207,8 +206,8 @@ export interface HTTPFeatureConfigureKit<C = unknown> extends FeatureConfigureKi
 /**
  * Lets a feature add a listener from its configure step, when the application installing it is a web application.
  *
- * `S` is the settings type the feature writes: `NodeServerSettings` for a `listen` section, which only the Node
- * application takes; the fetch application refuses it at start-up.
+ * `S` is the settings type the feature writes: `NodeServerSettings` for a `listen` section, which an adapter that
+ * listens takes; an application under no adapter refuses it at start-up.
  *
  * ```ts
  * protected configure(kit: FeatureConfigureKit<C>): void {

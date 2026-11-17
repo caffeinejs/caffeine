@@ -1,5 +1,5 @@
-import { Attachment, Controller, Get } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Attachment, Controller, Get, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -53,7 +53,7 @@ describe('a cached route that serves ranges', () => {
   })
 
   async function start(observer?: CacheObserver) {
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => {
         b.store(new MemoryHTTPCacheStore())
         if (observer !== undefined) {

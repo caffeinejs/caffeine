@@ -4,8 +4,8 @@ import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -80,7 +80,7 @@ async function start(
     .extend(cacheControl({ ttl: 60 * Second }))
     .handler(options?.handler ?? (() => options?.body ?? 'payload'))
 
-  const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
+  const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }), config: conf })
     .with(
       HTTPCaching((b, { config }) => {
         b.store(options?.store ?? new MemoryHTTPCacheStore())

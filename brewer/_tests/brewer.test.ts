@@ -1,7 +1,7 @@
 import { ErrApplicationNotReady } from '@caffeinejs/application'
 import { $t } from '@caffeinejs/application/schema'
-import { Router, bodyAsBuffer } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Router, bodyAsBuffer, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
@@ -130,7 +130,7 @@ const shapes = new Router('/shapes')
   .get('/pre/100%-:id')
   .handler(ctx => ctx.req.param())
 
-const app = createWebApplication().mount(pets, files, tags, catalog, legacy, hatch, shapes)
+const app = createWebApplication({ adapter: node() }).mount(pets, files, tags, catalog, legacy, hatch, shapes)
 
 let origin: string
 
@@ -763,7 +763,7 @@ describe('brewer against an application in process', () => {
     it.each(['http://localhost/api', 'http://localhost/api/'])(
       'should keep it in every request, from %s',
       async baseURL => {
-        const based = createWebApplication().basePath('/api').mount(pets)
+        const based = createWebApplication({ adapter: node() }).basePath('/api').mount(pets)
         await based.bootstrap()
 
         try {
@@ -806,7 +806,7 @@ describe('brewer against an application in process', () => {
 
   describe('given an application that was never set up', () => {
     it('should reject every call, since there is no server to answer it', async () => {
-      const idle = createWebApplication().mount(pets)
+      const idle = createWebApplication({ adapter: node() }).mount(pets)
 
       await expect(brewer(idle).pets.get()).rejects.toBeInstanceOf(ErrApplicationNotReady)
     })

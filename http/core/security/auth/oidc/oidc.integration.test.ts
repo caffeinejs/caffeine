@@ -2,6 +2,7 @@ import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWK, JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
 import {
   AllowAnonymous,
   Authorize,
@@ -15,7 +16,7 @@ import {
   type AuthenticationGateBuilder,
   Router,
 } from '../../../../index.js'
-import { createWebApplication } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node/index.js'
 import type { HTTPPluginConfigurer } from '../../../../plugin.js'
 import { authentication } from '../../security.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
@@ -41,7 +42,7 @@ function makeOIDCApp(
     gate?: HTTPPluginConfigurer<AuthenticationGateBuilder>
   } = {},
 ) {
-  const builder = createWebApplication()
+  const builder = createWebApplication({ adapter: node() })
   if (basePath !== undefined) {
     builder.basePath(basePath)
   }

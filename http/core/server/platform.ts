@@ -7,7 +7,7 @@ import type { SendPayload } from '../lifecycle/lifecycle.js'
 import type { Next, NodeMiddleware } from '../middleware/middleware.js'
 import type { FetchContextPlatform } from './fetch.js'
 
-/** What `ctx.platform` is on the Node application: Node's request and response. */
+/** What `ctx.platform` is under `node()`: Node's request and response. */
 export interface NodeContextPlatform {
   readonly name: 'node'
   readonly incoming: IncomingMessage | Http2ServerRequest

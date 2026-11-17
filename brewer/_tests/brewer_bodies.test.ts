@@ -1,8 +1,8 @@
 import { runInNewContext } from 'node:vm'
 
 import { $t } from '@caffeinejs/application/schema'
-import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Router, bodyAsBuffer, bodyAsStream, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { KiB } from '@caffeinejs/std/bytes'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -109,7 +109,7 @@ const downloads = new Router('/downloads')
     return 'Read me first.'
   })
 
-const app = createWebApplication().mount(echo, uploads, adoptions, downloads)
+const app = createWebApplication({ adapter: node() }).mount(echo, uploads, adoptions, downloads)
 
 let origin: string
 

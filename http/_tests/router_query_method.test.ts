@@ -2,8 +2,9 @@ import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Router } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 // QUERY is in the default matcher's method set, so a route declaring it needs nothing opted into.
 describe('Router.query()', () => {
@@ -12,7 +13,7 @@ describe('Router.query()', () => {
       term: ctx.req.body().term,
     }))
 
-    const app = createWebApplication({ container: new CaffeineIoC() }).mount(routes)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC() }).mount(routes)
     await app.bootstrap()
 
     const res = await app.request('/query-test', {

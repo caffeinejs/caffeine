@@ -1,15 +1,16 @@
 import { CaffeineIoC, type Ctor } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication, type WebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { Controller } from '../../decorators/controller.js'
 import { OnRequest, OnSend } from '../../decorators/hooks.js'
 import { Get } from '../../decorators/verbs.js'
-import { createWebApplication } from '../../platform/node/index.js'
+import { node, type NodeAdapter } from '../../platform/node/index.js'
 import { Keys } from '../../symbols.js'
 import { ErrConfiguration } from '../error/common.js'
 
-type App = ReturnType<typeof createWebApplication>
+type App = WebApplication<never, never, unknown, NodeAdapter>
 let app: App | undefined
 
 afterEach(async () => {
@@ -21,7 +22,7 @@ afterEach(async () => {
 function application(controller: Ctor): App {
   const container = new CaffeineIoC({ decorators: false })
   container.bind(controller, t => t.toSelf().labels(Keys.CONTROLLER))
-  app = createWebApplication({ container })
+  app = createWebApplication({ adapter: node(), container })
   return app
 }
 

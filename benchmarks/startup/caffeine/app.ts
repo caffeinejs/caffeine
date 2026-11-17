@@ -1,4 +1,5 @@
-import { createWebApplication } from '@caffeinejs/http/node'
+import { createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 
 // Side-effect imports register the controllers (and, transitively, their services and repositories)
 // in the global component registry that the container snapshots when the app is built.
@@ -9,7 +10,7 @@ import './order/order.controller.js'
 import './payment/payment.controller.js'
 
 const started = performance.now()
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
 await app.run({ port: 3013, host: '127.0.0.1' })
 // performance.now() counts from process start, so `start` covers module loading; `bootstrap` does not.
 const listening = performance.now()

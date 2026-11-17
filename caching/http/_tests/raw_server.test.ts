@@ -1,8 +1,8 @@
 import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Router, type AnyRouter } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Router, type AnyRouter, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -54,7 +54,7 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
   async function serve(route: (router: AnyRouter) => void, observer?: CacheObserver) {
     const router = new Router()
     route(router)
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .with(() => cachePlugin({ ...deps(), observer }))
       .mount(router)
     close = () => app.close()
@@ -208,7 +208,7 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
   // A second install on one context would give every cached route two read hooks and two store hooks, each
   // install overwriting the other's per-request state.
   it('refuses a second registration on the same server', async () => {
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .with(() => cachePlugin(deps()))
       .with(() => cachePlugin(deps()))
     close = () => app.close()

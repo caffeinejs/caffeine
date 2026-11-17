@@ -1,6 +1,7 @@
 import { brewer } from '@caffeinejs/brewer'
 import { CaffeineIoC, mod, token } from '@caffeinejs/di'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { testClient } from '@caffeinejs/testing/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -155,7 +156,7 @@ describe('eventsRouter', () => {
   })
 
   describe('under DevTools()', () => {
-    let app: NodeWebApplication | undefined
+    let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
     afterEach(async () => {
       await app?.close()
@@ -163,9 +164,9 @@ describe('eventsRouter', () => {
     })
 
     it("serves the application's start-up, since it attaches before the container initializes", async () => {
-      app = createWebApplication({ logger: false })
+      app = createWebApplication({ adapter: node(), logger: false })
         .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
-        .install(DevTools(d => d.port(0))) as NodeWebApplication
+        .install(DevTools(d => d.port(0))) as WebApplication<never, never, unknown, NodeAdapter>
       app.container.bind(Pool, t => t.toSelf())
       await app.run()
       const devtools = brewer<DevToolsRoutes>(`${app.listeners.get('devtools')!.address!.origin}/devtools`)

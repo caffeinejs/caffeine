@@ -14,8 +14,9 @@ import {
   Router,
   type ActionResult,
   type IContext,
+  createWebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http/node'
 import { describe, it, expect } from 'vitest'
 
 import { HTML, html, type HTMLDefaults } from './index.js'
@@ -125,7 +126,7 @@ class HTMLErrorController {
 void [HTMLController, HTMLErrorController]
 
 function htmlApp(defaults?: Partial<HTMLDefaults>) {
-  return createWebApplication({})
+  return createWebApplication({ adapter: node() })
     .errorHandling(e => e.globalHandlers(RenderHTMLHandler))
     .with(defaults === undefined ? html() : html(() => defaults))
 }
@@ -146,7 +147,7 @@ describe('HTML', () => {
   // Rendering must not require any application wiring: with no plugin registered no route carries settings
   // and HTML_DEFAULTS applies. An application that only ever renders registers nothing.
   it('renders in an application that never registered the HTML plugin', async () => {
-    const app = createWebApplication({})
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/html/document')
@@ -213,7 +214,7 @@ describe('HTML', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ html: { autoDoctype: false } }))
       .build().config
-    const app = createWebApplication({ config: conf }).with(html(({ config }) => config.html))
+    const app = createWebApplication({ adapter: node(), config: conf }).with(html(({ config }) => config.html))
 
     await app.bootstrap()
 
@@ -290,7 +291,7 @@ describe('HTML', () => {
   // A router's plugin parameterizes its own routes, as it did a route group's Fastify context.
   it("applies a router's html() settings to its routes alone", async () => {
     const page = () => HTML('<html><body>x</body></html>')
-    const app = createWebApplication({})
+    const app = createWebApplication({ adapter: node() })
       .with(html(() => ({ autoDoctype: true })))
       .mount(
         new Router('/top').get('/').handler(page),
@@ -309,7 +310,7 @@ describe('HTML', () => {
 
   // Settings belong to routes: a request none matched has none, whatever the application registered.
   it('renders a request no route matched on the library defaults', async () => {
-    const app = createWebApplication({})
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.globalHandlers(NotFoundPage))
       .with(html(() => ({ autoDoctype: false })))
     await app.bootstrap()

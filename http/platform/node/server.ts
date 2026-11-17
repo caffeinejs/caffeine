@@ -4,7 +4,7 @@ import { ErrApplicationClosed } from '@caffeinejs/application'
 import type { Logger } from '@caffeinejs/application/logger'
 import inject from 'light-my-request'
 
-import type { HostedServer } from '../../core/server/hosting.js'
+import { logListening, type HostedServer } from '../../core/server/hosting.js'
 import type { HTTPServer } from '../../core/server/server.js'
 import type { ServerAddress } from '../../server.js'
 import {
@@ -15,22 +15,19 @@ import {
   type OpenConnections,
 } from './connections.js'
 import { fetchInProcess } from './inject.js'
-import type { INodeServer } from './node.js'
 import { serveNode, type NodePlatform, type NodeResponse } from './platform.js'
 
-/** One server the Node application built. */
-export class NodeServer implements HostedServer {
+/** One server the Node adapter built. */
+export class NodeServer implements HostedServer<NodeHTTPServer, ListenOptions> {
   readonly #server: NodeHTTPServer
   readonly #engine: HTTPServer
   readonly #platform: NodePlatform
   readonly #listen: ListenOptions | undefined
   readonly #open: OpenConnections
   readonly #logger: Logger
-  readonly #runOptions: (() => ListenOptions | undefined) | undefined
   // Set once the teardown is over: while it drains, a request is still answered, with the engine's 503.
   #closed = false
 
-  /** @param runOptions - What `run(options)` was given, read as the server starts; `undefined` for a listener. */
   constructor(
     server: NodeHTTPServer,
     engine: HTTPServer,
@@ -38,7 +35,6 @@ export class NodeServer implements HostedServer {
     listen: ListenOptions | undefined,
     open: OpenConnections,
     logger: Logger,
-    runOptions: (() => ListenOptions | undefined) | undefined,
   ) {
     this.#server = server
     this.#engine = engine
@@ -46,7 +42,6 @@ export class NodeServer implements HostedServer {
     this.#listen = listen
     this.#open = open
     this.#logger = logger
-    this.#runOptions = runOptions
   }
 
   get instance(): NodeHTTPServer {
@@ -80,9 +75,9 @@ export class NodeServer implements HostedServer {
    * Listens on what `run(options)` was given merged over the `listen` settings, the former winning key by key. With
    * no `host` and no `path`, on `localhost`; with nothing at all, also on a port the OS assigns.
    */
-  async run(): Promise<void> {
+  async run(options: ListenOptions | undefined): Promise<void> {
     // A fresh object every call: `listen()` writes into what it is handed.
-    const merged: ListenOptions = { ...this.#listen, ...this.#runOptions?.() }
+    const merged: ListenOptions = { ...this.#listen, ...options }
 
     if (Object.keys(merged).length === 0) {
       merged.port = 0
@@ -102,9 +97,7 @@ export class NodeServer implements HostedServer {
       })
     })
 
-    const address = this.address
-    const where = address === undefined ? '' : address.origin || address.path
-    this.#logger.info({ address: where }, `Server listening at ${where}`)
+    logListening(this.#logger, this.address)
   }
 
   teardown(): Promise<void> {
@@ -122,20 +115,6 @@ export class NodeServer implements HostedServer {
     destroyConnections(this.#open)
     this.#engine.forceClose()
     return Promise.resolve()
-  }
-
-  view(): INodeServer {
-    // Read on each access: where the server listens changes as it starts and closes.
-    const address = (): ServerAddress | undefined => this.address
-
-    return {
-      instance: this.#server,
-      get address() {
-        return address()
-      },
-      request: (request, options) => this.request(request, options),
-      fetch: request => this.fetch(request),
-    }
   }
 }
 

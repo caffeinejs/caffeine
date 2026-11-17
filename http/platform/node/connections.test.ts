@@ -8,13 +8,14 @@ import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication, type WebApplication } from '../../application.js'
 import { Router, type AnyRouter } from '../../index.js'
-import { createWebApplication } from './node.js'
+import { node, type NodeAdapter } from './node.js'
 
 const key = readFileSync(new URL('../../_tests/_testdata/tls/localhost.key', import.meta.url))
 const cert = readFileSync(new URL('../../_tests/_testdata/tls/localhost.crt', import.meta.url))
 
-type App = ReturnType<typeof createWebApplication>
+type App = WebApplication<never, never, unknown, NodeAdapter>
 
 let open: App | undefined
 
@@ -44,7 +45,7 @@ function routes() {
 }
 
 async function start(router: AnyRouter, settings: object = {}, budget = 5 * Second) {
-  const app = createWebApplication()
+  const app = createWebApplication({ adapter: node() })
     .logger(b => b.use(newNoopLogger()))
     .server(() => settings as never)
     .shutdown(s => s.drainDelay(0).shutdownTimeout(budget))

@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -34,7 +34,7 @@ describe('a route that declares hooks of its own', () => {
       .hook('onSend', async () => {})
       .handler(() => ({ ok: true }))
 
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .with(() =>
         cachePlugin({
           store: new MemoryHTTPCacheStore(),

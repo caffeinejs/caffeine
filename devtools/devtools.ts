@@ -278,8 +278,10 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
  * Serves the devtools on a server of their own, listening on `127.0.0.1:9090` unless told otherwise:
  *
  * ```ts
- * createWebApplication().install(DevTools())
- * createWebApplication().install(DevTools((d, { config }) => d.config(config.app.devtools).authorize({ roles: ['ops'] })))
+ * createWebApplication({ adapter: node() }).install(DevTools())
+ * createWebApplication({ adapter: node() }).install(
+ *   DevTools((d, { config }) => d.config(config.app.devtools).authorize({ roles: ['ops'] })),
+ * )
  * ```
  *
  * Every tool is a set of REST resources under `/devtools/<id>`, and `GET /devtools` lists them: the bindings and the
@@ -519,14 +521,16 @@ function isLoopback(host: string): boolean {
  *
  * A page on another site can resolve its own name to `127.0.0.1` (DNS rebinding) and become same-origin with a
  * server listening there, which takes it past every check a browser makes. Its requests still carry its own name as
- * the `Host`, so a server only this machine should reach answers loopback names alone. A request that came in on
- * another address, or with no local address — the fetch application's, or `app.request(...)`'s — is left alone.
+ * the `Host`, so a server only this machine should reach answers loopback names alone. Under `bun()`, whose request
+ * carries no socket, a request from a loopback peer is one that came in on loopback. A request that came in on another
+ * address, or with no address to tell — one an application under no adapter answers, or `app.request(...)`'s — is left
+ * alone.
  *
  * @throws ErrHTTPMisdirectedRequest for a loopback request whose `Host` is not `localhost`, `*.localhost`,
  * `127.x.x.x` or `[::1]`.
  */
 export function assertLoopbackHost(ctx: IContext): void {
-  const local = localAddressOf(ctx)
+  const local = localAddressOf(ctx) ?? loopbackPeerOf(ctx)
 
   if (local === undefined || !isLoopback(local)) {
     return
@@ -543,6 +547,23 @@ export function assertLoopbackHost(ctx: IContext): void {
   if (name !== '[::1]' && name !== 'localhost' && !name.endsWith('.localhost') && !/^127\.\d+\.\d+\.\d+$/.test(name)) {
     throw new ErrHTTPMisdirectedRequest(`Cannot answer for host "${host}": this server answers loopback names alone`)
   }
+}
+
+/**
+ * Under `bun()`, the peer of a request, when it is a loopback address: Bun hands its server first in
+ * `ctx.platform.runtime`, and a request from a loopback peer can only have come in on a loopback address.
+ */
+function loopbackPeerOf(ctx: IContext): string | undefined {
+  const platform = ctx.platform as { name: string; runtime?: readonly unknown[] }
+  const server = platform.name === 'fetch' ? platform.runtime?.[0] : undefined
+  const requestIP = (server as { requestIP?: (request: Request) => { address: string } | null } | undefined)?.requestIP
+
+  if (typeof requestIP !== 'function') {
+    return undefined
+  }
+
+  const peer = requestIP.call(server, ctx.req.raw)?.address
+  return peer !== undefined && isLoopback(peer) ? peer : undefined
 }
 
 // Node hands its request on the platform; a raw request with a socket carries it elsewhere. An HTTP/2 socket proxy

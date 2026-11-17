@@ -2,11 +2,11 @@ import { kFeatureConfigure, kFeatureName, type Feature } from '@caffeinejs/appli
 import { Byte } from '@caffeinejs/std/bytes'
 import { describe, expect, it } from 'vitest'
 
-import { createWebApplication as createFetchApplication, type WebApplication } from './application.js'
+import { createWebApplication, type WebApplication } from './application.js'
 import { findMyWayMatcher } from './core/matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS } from './core/matcher/matcher.js'
 import { Router } from './core/routing/programmatic/programmatic.js'
-import { createWebApplication as createNodeApplication } from './platform/node/node.js'
+import { node } from './platform/node/node.js'
 import { HTTPPlugin, type HTTPSetupContext } from './plugin.js'
 import { ServerDefinition } from './server_definition.js'
 import { ServerSet } from './servers.js'
@@ -23,7 +23,7 @@ describe('ServerSet', () => {
 
   // A configurer that leaves a section out, as `undefined`, does not erase what an earlier one set for it.
   it('keeps a section an earlier .server(...) set when a later one leaves it undefined', async () => {
-    const app = createNodeApplication()
+    const app = createWebApplication({ adapter: node() })
       .server(() => ({ bodyLimit: 8 * Byte }))
       .server(() => ({ bodyLimit: undefined }))
       .mount(new Router('/limited').post('/', () => ({ ok: true })))
@@ -46,7 +46,7 @@ describe('ServerSet', () => {
   // `.hook(...)` and `.with(...)` share one list: a hook runs where it was written among the plugins.
   it('runs hooks and plugin hooks in the order written', async () => {
     const order: string[] = []
-    const fetchApp = createFetchApplication()
+    const fetchApp = createWebApplication()
       .hook('onRequest', () => void order.push('first'))
       .with(
         () =>
@@ -74,7 +74,7 @@ describe('ServerSet', () => {
   // Only an object section merges over the one before it: a list merged by index would keep stale entries. An
   // in-process request comes from 127.0.0.1, which only the first list trusts.
   it('replaces an array section, never merging it', async () => {
-    const app = createNodeApplication()
+    const app = createWebApplication({ adapter: node() })
       .server(() => ({ trustProxy: ['10.0.0.1', '127.0.0.1'] }))
       .server(() => ({ trustProxy: ['10.0.0.2'] }))
       .mount(new Router('/h').get('/', ctx => ctx.req.host))
@@ -92,7 +92,7 @@ describe('ServerSet', () => {
 
   // Only `undefined` leaves an earlier section in place: `null` is a value like any other, and the router refuses it.
   it('takes null as a section that replaces the one before it', async () => {
-    const app = createNodeApplication()
+    const app = createWebApplication({ adapter: node() })
       .server(() => ({ router: { caseSensitive: false } }))
       .server(() => ({ router: null }) as never)
 
@@ -108,7 +108,7 @@ describe('ServerSet', () => {
     [
       'its Node server failed to build',
       (closed, boom) =>
-        createNodeApplication()
+        createWebApplication({ adapter: node() })
           .hook('onClose', () => void closed.push('closed'))
           .serverCallback(() => {
             throw boom
@@ -117,7 +117,7 @@ describe('ServerSet', () => {
     [
       'its onReady failed',
       (closed, boom) =>
-        createFetchApplication()
+        createWebApplication()
           .hook('onReady', () => {
             throw boom
           })
@@ -171,7 +171,7 @@ describe('context.app.server', () => {
   }
 
   it("reports the base path on the application's own slot", async () => {
-    expect(await serverSeen(seen => createFetchApplication().basePath('/api').with(recorder(seen)))).toEqual([
+    expect(await serverSeen(seen => createWebApplication().basePath('/api').with(recorder(seen)))).toEqual([
       { basePath: '/api', router: DEFAULT_ROUTER_FLAGS },
     ])
   })
@@ -180,7 +180,7 @@ describe('context.app.server', () => {
     ['/api/', '/api'],
     ['/', ''],
   ])('normalizes the base path %s to %s', async (given, expected) => {
-    expect(await serverSeen(seen => createFetchApplication().basePath(given).with(recorder(seen)))).toEqual([
+    expect(await serverSeen(seen => createWebApplication().basePath(given).with(recorder(seen)))).toEqual([
       { basePath: expected, router: DEFAULT_ROUTER_FLAGS },
     ])
   })
@@ -188,7 +188,7 @@ describe('context.app.server', () => {
   it('merges an object section over the one before it', async () => {
     expect(
       await serverSeen(seen =>
-        createNodeApplication()
+        createWebApplication({ adapter: node() })
           .server(() => ({ router: { caseSensitive: false } }))
           .server(() => ({ router: { ignoreTrailingSlash: true } }))
           .with(recorder(seen)),
@@ -197,7 +197,7 @@ describe('context.app.server', () => {
   })
 
   it('reports an empty base path when the application set none', async () => {
-    expect(await serverSeen(seen => createFetchApplication().with(recorder(seen)))).toEqual([
+    expect(await serverSeen(seen => createWebApplication().with(recorder(seen)))).toEqual([
       { basePath: '', router: DEFAULT_ROUTER_FLAGS },
     ])
   })
@@ -206,7 +206,7 @@ describe('context.app.server', () => {
   it("reports no server on a router's slot", async () => {
     expect(
       await serverSeen(seen =>
-        createFetchApplication().mount(
+        createWebApplication().mount(
           new Router('/r')
             .with(recorder(seen))
             .get('/')
@@ -219,7 +219,7 @@ describe('context.app.server', () => {
   it("reports the listener's server on a listener's slot", async () => {
     expect(
       await serverSeen(seen =>
-        createNodeApplication()
+        createWebApplication({ adapter: node() })
           .basePath('/api')
           .listener('admin', l => l.with(recorder(seen))),
       ),
@@ -229,7 +229,7 @@ describe('context.app.server', () => {
   it('reports the router flags .server(...) set', async () => {
     expect(
       await serverSeen(seen =>
-        createFetchApplication()
+        createWebApplication()
           .server(() => ({ router: { caseSensitive: false } }))
           .with(recorder(seen)),
       ),
@@ -240,7 +240,7 @@ describe('context.app.server', () => {
   it("reports no router flags under a matcher of the server's own", async () => {
     expect(
       await serverSeen(seen =>
-        createFetchApplication()
+        createWebApplication()
           .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
           .with(recorder(seen)),
       ),
@@ -250,7 +250,7 @@ describe('context.app.server', () => {
   it("reports the Node application's router flags", async () => {
     expect(
       await serverSeen(seen =>
-        createNodeApplication()
+        createWebApplication({ adapter: node() })
           .server(() => ({ router: { caseSensitive: false } }))
           .with(recorder(seen)),
       ),

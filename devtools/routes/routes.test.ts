@@ -12,8 +12,10 @@ import {
   Identity,
   Principal,
   Router,
+  createWebApplication,
+  type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { DevTools, type DevToolsRoutes } from '../devtools.js'
@@ -38,7 +40,7 @@ class HeaderScheme extends BaseAuthenticationHandler<object> {
  * devtools' own included, served from a server of its own: a route missing from it is one nobody reviews.
  */
 describe('routesRouter', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -49,7 +51,7 @@ describe('routesRouter', () => {
 
   /** The devtools of an application with two servers besides theirs, read as `user` when one is named. */
   async function boot(user?: string) {
-    app = createWebApplication({ logger: false })
+    app = createWebApplication({ adapter: node(), logger: false })
       .server(() => ({ listen: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
@@ -60,7 +62,7 @@ describe('routesRouter', () => {
       .mount(
         new Router('/pets').authorize({ roles: ['keeper'] }).get('/', () => []),
         new Router('/jobs').extend(bindTo('admin')).get('/', () => []),
-      ) as NodeWebApplication
+      ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.run()
 
     // The fallback policy reaches the devtools too: their own server runs the gate.

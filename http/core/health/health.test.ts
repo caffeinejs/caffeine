@@ -12,8 +12,9 @@ import { $t } from '@caffeinejs/application/schema'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../application.js'
 import { Health, WebApplication } from '../../index.js'
-import { createWebApplication } from '../../platform/node/index.js'
+import { node } from '../../platform/node/index.js'
 import { ErrHealthConfiguration } from './errors.js'
 import type { HealthConfig } from './options.js'
 import { healthProbes } from './plugin.js'
@@ -104,7 +105,7 @@ describe('healthProbes() and Health()', () => {
   })
 
   it('mounts the probes just by being installed', async () => {
-    app = createWebApplication().with(healthProbes())
+    app = createWebApplication({ adapter: node() }).with(healthProbes())
 
     await app.run()
 
@@ -112,7 +113,7 @@ describe('healthProbes() and Health()', () => {
   })
 
   it('mounts nothing when never installed', async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
 
     await app.bootstrap()
 
@@ -124,7 +125,9 @@ describe('healthProbes() and Health()', () => {
       .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
       .build().config
 
-    app = createWebApplication({ config: conf }).with(healthProbes((h, { config }) => h.config(config.health)))
+    app = createWebApplication({ adapter: node(), config: conf }).with(
+      healthProbes((h, { config }) => h.config(config.health)),
+    )
 
     await app.bootstrap()
 
@@ -138,7 +141,9 @@ describe('healthProbes() and Health()', () => {
       .source(new EnvConfigSource({ env: { HEALTH__CACHE_TTL: '5s' } }))
       .build().config
 
-    app = createWebApplication({ config: conf }).install(Health((h, { config }) => h.config(config.health)))
+    app = createWebApplication({ adapter: node(), config: conf }).install(
+      Health((h, { config }) => h.config(config.health)),
+    )
 
     await app.bootstrap()
 
@@ -146,7 +151,7 @@ describe('healthProbes() and Health()', () => {
   })
 
   it('binds every budget for the whole application', async () => {
-    app = createWebApplication().install(
+    app = createWebApplication({ adapter: node() }).install(
       Health(h =>
         h
           .indicatorTimeout(500 * Millisecond)
@@ -167,7 +172,7 @@ describe('healthProbes() and Health()', () => {
   // Per key: `cacheTTL` was named in code and stands, while everything the code left alone comes from the
   // block the callback wired.
   it('keeps a code-set budget and takes the rest from the configured block', async () => {
-    app = createWebApplication().install(
+    app = createWebApplication({ adapter: node() }).install(
       Health(h => h.cacheTTL(10 * Millisecond).config({ indicatorTimeout: 30 * Millisecond, cacheTtl: 9 * Second })),
     )
 
@@ -185,7 +190,7 @@ describe('healthProbes() and Health()', () => {
     const conf = newConfiguration(rootSchema)
       .source(new EnvConfigSource({ env: { HEALTH__INDICATOR_TIMEOUT: '5000' } }))
       .build().config
-    const booting = createWebApplication({ config: conf })
+    const booting = createWebApplication({ adapter: node(), config: conf })
       .with(healthProbes((h, { config }) => h.config(config.health)))
       .bootstrap()
 
@@ -198,10 +203,10 @@ describe('healthProbes() and Health()', () => {
     const conf = newConfiguration(rootSchema)
       .source(new EnvConfigSource({ env: { HEALTH__PROBE_DEADLINE: '0s' } }))
       .build().config
-    const fromCode = createWebApplication()
+    const fromCode = createWebApplication({ adapter: node() })
       .install(Health(h => h.indicatorTimeout(0)))
       .bootstrap()
-    const fromConfig = createWebApplication({ config: conf })
+    const fromConfig = createWebApplication({ adapter: node(), config: conf })
       .install(Health((h, { config }) => h.config(config.health)))
       .bootstrap()
 
@@ -216,7 +221,7 @@ describe('healthProbes() and Health()', () => {
     const conf = newConfiguration(rootSchema)
       .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
       .build().config
-    app = createWebApplication({ config: conf }).with(healthProbes())
+    app = createWebApplication({ adapter: node(), config: conf }).with(healthProbes())
 
     await app.run()
 
@@ -228,7 +233,9 @@ describe('healthProbes() and Health()', () => {
     const mutable: ConfigSource = { name: 'mutable', live: true, load: () => source(data).load() }
 
     const conf = newConfiguration(schema).source(mutable).build().config
-    app = createWebApplication({ config: conf }).with(healthProbes((h, { config }) => h.config(config.health)))
+    app = createWebApplication({ adapter: node(), config: conf }).with(
+      healthProbes((h, { config }) => h.config(config.health)),
+    )
 
     await app.run()
 
@@ -245,7 +252,7 @@ describe('healthProbes() and Health()', () => {
   // health() reads the application's own ApplicationAvailability off the container rather than a fresh one —
   // otherwise liveness would never reflect what the application lifecycle actually does to it.
   it("reflects the application's own availability, not a container-constructed one", async () => {
-    app = createWebApplication().with(healthProbes())
+    app = createWebApplication({ adapter: node() }).with(healthProbes())
 
     await app.run()
 

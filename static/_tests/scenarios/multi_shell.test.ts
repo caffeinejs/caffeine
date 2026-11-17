@@ -1,5 +1,5 @@
-import { Authentication, Authorization, authentication, Router } from '@caffeinejs/http'
-import { type NodeWebApplication } from '@caffeinejs/http/node'
+import { Authentication, Authorization, authentication, Router, type WebApplication } from '@caffeinejs/http'
+import { type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { sendFile, staticFiles } from '../../index.js'
@@ -24,7 +24,7 @@ import {
  * that happen to be neighbours. The public bundle is anonymous because the sign-in page needs it; the
  * administration bundle is served from a compiled route, so it carries the same role as its page.
  */
-function origin(authenticateByDefault: boolean): NodeWebApplication {
+function origin(authenticateByDefault: boolean): WebApplication<never, never, unknown, NodeAdapter> {
   const app = isolated()
     .install(Authentication(a => a.addStrategy('header', new HeaderAuthenticationHandler())))
     .with(authentication())
@@ -47,7 +47,7 @@ function origin(authenticateByDefault: boolean): NodeWebApplication {
         .get('/admin', shellOf(adminDist))
         .get('/admin/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!.slice('/admin'.length), adminDist))
         .get('/admin/*', clientRouteOf(adminDist)),
-    ) as NodeWebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 
   if (authenticateByDefault) {
     app.install(Authorization(z => z.requireAuthenticatedByDefault()))
@@ -60,7 +60,7 @@ const bob = { 'x-user': 'bob' }
 const ann = { 'x-user': 'ann', 'x-roles': 'admin' }
 
 describe('two applications on one origin', () => {
-  let app: NodeWebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
 
   afterEach(async () => {
     await app?.close()

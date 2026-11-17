@@ -31,7 +31,7 @@ import type { Principal } from '../security/identity.js'
 import type { CompiledSerializer } from '../validation/validation.js'
 import { HeldStream, isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
 import { contentTooLarge, declaredOver, ErrRequestBodyConsumed, limitStream } from './body.js'
-import { configurationError, sendProblem, USE_NODE } from './error.js'
+import { configurationError, sendProblem } from './error.js'
 import type { ContextPlatform, ServerPlatform } from './platform.js'
 import { parseQuery } from './query.js'
 import type { RouteStore } from './server.js'
@@ -652,7 +652,7 @@ export function withholdValidators(ctx: IContext): () => void {
   if (!(ctx instanceof Context)) {
     throw configurationError(
       'Cannot withhold the request validators: the context is not one the engine built',
-      USE_NODE,
+      'Build the application with createWebApplication() from "@caffeinejs/http"',
     )
   }
 
@@ -720,8 +720,8 @@ export class ContextRequest implements IRequest<
   }
 
   /**
-   * The request as a web `Request`, one per request. Once the route has read the body, the Node application's serves
-   * the bytes read, and the fetch application's is the runtime's own `Request`, its body used.
+   * The request as a web `Request`, one per request. Once the route has read the body, the one under `node()` serves
+   * the bytes read, and under any other adapter it is the runtime's own `Request`, its body used.
    */
   get raw(): Request {
     return (this.#raw ??= this.#platform.request(this.#native, this.#limit))

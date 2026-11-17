@@ -1,8 +1,8 @@
 import { connect } from 'node:net'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Get, Head, Header, type NodeMiddleware, Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, Head, Header, type NodeMiddleware, Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { type Duration, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -69,7 +69,9 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -142,7 +144,7 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore(new FailingWrites())
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(store)
@@ -202,7 +204,7 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore(new HungWrites())
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(store)
@@ -249,7 +251,7 @@ describe('concurrent misses for one key', () => {
     }
     void [OICController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -287,7 +289,7 @@ describe('concurrent misses for one key', () => {
     void [OffController]
 
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
@@ -331,7 +333,7 @@ describe('concurrent misses for one key', () => {
     }
     void [DownController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new Down())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new Down())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -372,7 +374,9 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore(new Forgetful())
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -410,7 +414,9 @@ describe('concurrent misses for one key', () => {
 
     const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -468,7 +474,7 @@ describe('concurrent misses for one key', () => {
     const store = new WatchedStore(new FailsOnReread())
     const recording = new Recording()
     const errors: { operation: string; error: unknown }[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(store).observer({ ...recording.observer, onError: event => errors.push(event) })),
     )
     close = () => app.close()
@@ -518,7 +524,7 @@ describe('a HEAD and the flight', () => {
     void [HeadLeadsController]
 
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
@@ -552,7 +558,9 @@ describe('a HEAD and the flight', () => {
 
     const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -589,7 +597,7 @@ describe('a HEAD and the flight', () => {
     }
     void [OwnHeadController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -626,7 +634,7 @@ describe('a handler run its leader does not report back on in time', () => {
       .config('cache', { ttl: 60 * Second })
       .handler(ctx => (options.handler === undefined ? Promise.resolve({ ok: true }) : options.handler(ctx)))
 
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .with(() =>
         cachePlugin({
           store,
@@ -798,7 +806,7 @@ describe('a follower whose request is over', () => {
       .config('cache', { ttl: 60 * Second })
       .handler(() => (options.handler === undefined ? { ok: true } : options.handler()))
 
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .server(() => (options.handlerTimeout === undefined ? {} : { handlerTimeout: options.handlerTimeout }))
       .with(() =>
         cachePlugin({
@@ -889,7 +897,7 @@ describe('a follower whose request is over', () => {
         await g.hold()
         return { ok: true }
       })
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ handlerTimeout: 1 * Second }))
       .with(() =>
         cachePlugin({
@@ -989,7 +997,7 @@ describe('a request whose store read outlives it', () => {
       .get('/data')
       .config('cache', { ttl: 60 * Second })
       .handler(handler)
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ handlerTimeout: 50 * Millisecond }))
       .with(() =>
         cachePlugin({
@@ -1070,7 +1078,7 @@ describe('lockTimeout', () => {
   })
 
   it.each([0, 'never'])('is refused when it is not a positive duration: %s', async value => {
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).lockTimeout(value as number)),
     )
     close = () => app.close()

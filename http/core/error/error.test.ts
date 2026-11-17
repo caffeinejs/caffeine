@@ -4,6 +4,7 @@ import type { Ctor, Provider } from '@caffeinejs/di'
 import { Injectable, Lifetime, Named, Primary, Scopes, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../application.js'
 import {
   Catch,
   CatchWith,
@@ -21,7 +22,7 @@ import {
   type ActionResult,
   Router,
 } from '../../index.js'
-import { createWebApplication } from '../../platform/node/index.js'
+import { node } from '../../platform/node/index.js'
 import { ErrConfiguration } from './common.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
@@ -93,7 +94,7 @@ describe('ErrorHandlerProvider', () => {
 // The three handlers every application below enrols. Declaring the others in this module no longer reaches
 // any of them, which is what lets one file hold handlers that would otherwise collide on the same error type.
 function buildApp() {
-  return createWebApplication().errorHandling(e =>
+  return createWebApplication({ adapter: node() }).errorHandling(e =>
     e.globalHandlers(NotFoundHandler, CatchAllHandler, AlphaGammaHandler),
   )
 }
@@ -630,7 +631,7 @@ describe('serializer', () => {
 
   // A browser names text/html, so a page the application renders reaches it, and every other client keeps JSON.
   it('answers a client that asks for its media type with the page the application renders', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e =>
         e.serializer('text/html', (ctx, problem) => `<h1>${problem.status} ${problem.title}</h1><p>${ctx.req.url}</p>`),
       )
@@ -657,7 +658,7 @@ describe('serializer', () => {
   it.each(['text/html; charset=iso-8859-1', 'text/plain; charset="us-ascii"'])(
     'refuses "%s" at start-up',
     async mediaType => {
-      const app = createWebApplication().errorHandling(e => e.serializer(mediaType, () => ''))
+      const app = createWebApplication({ adapter: node() }).errorHandling(e => e.serializer(mediaType, () => ''))
 
       const failure = await app.bootstrap().then(
         () => undefined,
@@ -673,7 +674,7 @@ describe('serializer', () => {
 
   // UTF-8 is what goes out, so declaring it is allowed, in any case and quoted, and the bytes match it.
   it('sends non-ASCII text from a serializer as the UTF-8 it declares', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.serializer('text/html; charset="UTF-8"', () => '<p>café</p>'))
       .mount(orders())
     await app.bootstrap()
@@ -688,7 +689,7 @@ describe('serializer', () => {
 
   // The built-ins are defaults, not a contract: a house Markdown layout replaces Caffeine's under the same type.
   it('replaces a built-in serializer registered under the same media type', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.serializer('Text/Markdown', (_ctx, problem) => `# ${problem.code}`))
       .mount(orders())
     await app.bootstrap()
@@ -704,7 +705,7 @@ describe('serializer', () => {
   // An error page that fails must not turn one error into a hung request or a second, opaque one.
   it('falls back to JSON and logs the failure when a serializer throws', async () => {
     const logged: LogEntry[] = []
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .logger(b => b.use(recordTo(logged)))
       .errorHandling(e =>
         e.serializer('text/html', () => {
@@ -727,7 +728,7 @@ describe('serializer', () => {
 
   // A wildcard or a bare word would be offered to every client, or to none.
   it.each(['text/*', '*/*', 'html', ''])('refuses "%s" at start-up', async mediaType => {
-    const app = createWebApplication().errorHandling(e => e.serializer(mediaType, () => ''))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.serializer(mediaType, () => ''))
 
     const failure = await app.bootstrap().then(
       () => undefined,
@@ -782,7 +783,7 @@ describe('correlationID', () => {
 
   // The ID a support request quotes is the one the server's log lines carry for that request.
   it('is the request ID by default', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .server(() => ({ requestIDHeader: 'x-request-id' }))
       .mount(payments())
     await app.bootstrap()
@@ -798,7 +799,7 @@ describe('correlationID', () => {
 
   // A trace ID ties the error to every span of the request, across services.
   it('comes from the provider the application sets, such as the trace in traceparent', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.correlationID(ctx => ctx.req.header('traceparent')?.split('-')[1]))
       .mount(payments())
     await app.bootstrap()
@@ -818,7 +819,7 @@ describe('correlationID', () => {
     ['no value', () => undefined],
     ['an empty one', () => ''],
   ])('is absent when the provider returns %s', async (_label, provider) => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.correlationID(provider))
       .mount(payments())
     await app.bootstrap()
@@ -834,7 +835,7 @@ describe('correlationID', () => {
   // The error is what the client needs; a provider failing on top of it must not cost them the answer.
   it('is absent, and the failure logged, when the provider throws', async () => {
     const logged: LogEntry[] = []
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .logger(b => b.use(recordTo(logged)))
       .errorHandling(e =>
         e.correlationID(() => {
@@ -864,7 +865,7 @@ describe('validation', () => {
 
   // A cap of 0 would send a problem that lists nothing and says so; a fraction or Infinity is a typo for a number.
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('refuses a maxErrors of %s at start-up', async n => {
-    const app = createWebApplication().errorHandling(e => e.validation({ maxErrors: n }))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.validation({ maxErrors: n }))
 
     const failure = await app.bootstrap().then(
       () => undefined,
@@ -879,7 +880,7 @@ describe('validation', () => {
 
   // A shared block sets the type, the place that knows the audience sets the title; neither undoes the other.
   it('merges calls key by key, over the defaults', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e =>
         e
           .validation({ type: 'https://api.example.com/problems/validation-error', title: 'Draft' })

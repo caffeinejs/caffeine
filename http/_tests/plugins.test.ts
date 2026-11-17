@@ -6,12 +6,13 @@ import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { ErrHTTPBadRequest } from '../core/error/http.js'
 import { healthProbes } from '../core/health/index.js'
 import { Router } from '../core/routing/programmatic/programmatic.js'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { HTTPPlugin, type WebApplication } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 import type { HTTPSetupContext } from '../plugin.js'
 
 /**
@@ -70,7 +71,7 @@ describe('plugin registration', () => {
   it('registers plugins in the order .with() was written', async () => {
     const log: string[] = []
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .with(stamping('third', 'x-third', log))
       .with(stamping('first', 'x-first', log))
       .with(stamping('second', 'x-second', log))
@@ -94,8 +95,8 @@ describe('plugin registration', () => {
     })
     const reading = ({ container }: HTTPSetupContext) => new Marking('x-greeting', container.get(kGreeting))
 
-    const before = createWebApplication().install(greeting()).with(reading)
-    const after = createWebApplication().with(reading).install(greeting())
+    const before = createWebApplication({ adapter: node() }).install(greeting()).with(reading)
+    const after = createWebApplication({ adapter: node() }).with(reading).install(greeting())
 
     try {
       await before.bootstrap()
@@ -113,7 +114,7 @@ describe('plugin registration', () => {
   it('answers hasFeature on the setup context handed to factories', async () => {
     let seen: boolean[] = []
 
-    app = createWebApplication().with(context => {
+    app = createWebApplication({ adapter: node() }).with(context => {
       seen = [context.hasFeature('cookie'), context.hasFeature('nope')]
       return new Marking('x-has-feature-probe')
     })
@@ -130,7 +131,7 @@ describe('plugin registration', () => {
     const custom: Logger = { ...newNoopLogger() }
     const seen: { first?: HTTPSetupContext; second?: HTTPSetupContext } = {}
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .logger(b => b.use(custom))
       .with(context => {
         seen.first = context
@@ -158,7 +159,7 @@ describe('plugin registration', () => {
 
     const factory = ({ container }: HTTPSetupContext) => new Marking('x-greeting', container.get(kGreeting))
 
-    app = createWebApplication({ container }).with(factory)
+    app = createWebApplication({ adapter: node(), container }).with(factory)
 
     await expect(app.bootstrap()).resolves.not.toThrow()
 
@@ -177,7 +178,7 @@ describe('plugin registration', () => {
       return stamping('awaiting', 'x-awaiting', log)()
     }
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .with(stamping('before', 'x-before', log))
       .with(awaiting)
       .with(stamping('after', 'x-after', log))
@@ -199,7 +200,7 @@ describe('plugin registration', () => {
     }
     void [HeadSlotController]
 
-    app = createWebApplication().with(stamping('stamp', 'x-stamp'))
+    app = createWebApplication({ adapter: node() }).with(stamping('stamp', 'x-stamp'))
 
     await app.bootstrap()
 
@@ -213,7 +214,7 @@ describe('plugin registration', () => {
   // The tail slot: the not-found answer is contributed last, so it sees whatever the plugins decorated the
   // server with and still answers a URL no route matched.
   it('answers an unmatched URL from the not-found handler registered after every plugin', async () => {
-    app = createWebApplication().with(stamping('stamp', 'x-stamp'))
+    app = createWebApplication({ adapter: node() }).with(stamping('stamp', 'x-stamp'))
 
     await app.bootstrap()
 
@@ -241,7 +242,7 @@ describe('scoped plugin registration', () => {
     // Mounted next to a plugin-scoped router all the same.
     const orders = new Router('/scoped-orders').get('/', () => ({ ok: true }))
 
-    app = createWebApplication().mount(pets, orders)
+    app = createWebApplication({ adapter: node() }).mount(pets, orders)
 
     await app.bootstrap()
 
@@ -256,7 +257,7 @@ describe('scoped plugin registration', () => {
 
     shop.group('/items', items => items.get('/', () => ({ ok: true })))
 
-    app = createWebApplication().mount(shop)
+    app = createWebApplication({ adapter: node() }).mount(shop)
 
     await app.bootstrap()
 
@@ -283,7 +284,7 @@ describe('scoped plugin registration', () => {
     }
     void [AdminController, PublicController]
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
 
     await app.bootstrap()
 
@@ -307,7 +308,7 @@ describe('scoped plugin registration', () => {
     }
     void StackedController
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
 
     await app.bootstrap()
 
@@ -330,7 +331,7 @@ describe('scoped plugin registration', () => {
         }
       })()
 
-    app = createWebApplication().with(twice).with(twice)
+    app = createWebApplication({ adapter: node() }).with(twice).with(twice)
 
     await app.bootstrap()
 
@@ -343,7 +344,7 @@ describe('scoped plugin registration', () => {
       .with(stamping('twice-group', 'x-twice'))
       .get('/', () => ({ ok: true }))
 
-    app = createWebApplication().mount(twice)
+    app = createWebApplication({ adapter: node() }).mount(twice)
 
     await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "twice-group" twice on router/)
   })
@@ -354,7 +355,7 @@ describe('scoped plugin registration', () => {
       .with(stamping('inst-orders', 'x-inst-orders'))
       .get('/', () => ({ ok: true }))
 
-    app = createWebApplication().mount(pets, orders)
+    app = createWebApplication({ adapter: node() }).mount(pets, orders)
 
     await app.bootstrap()
 
@@ -391,7 +392,7 @@ describe('a plugin factory typed against the application configuration', () => {
 
     const pets = new Router('/typed').get('/', () => ({ ok: true }))
 
-    app = createWebApplication({ config: conf })
+    app = createWebApplication({ adapter: node(), config: conf })
       .with(healthProbes((h, { config }) => h.config(config.health)))
       .with(({ config }) => new Marking(config.security.header))
       .mount(pets)

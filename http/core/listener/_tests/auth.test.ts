@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -14,7 +15,7 @@ import {
   type WebApplication,
   Router,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 import { healthProbes } from '../../health/index.js'
 import { authentication } from '../../security/security.js'
 
@@ -99,7 +100,7 @@ describe('a listener with authentication and authorization', () => {
   }
 
   it("answers 401, 403 and 200 under its router's scheme and roles, while the application server stays open", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .install(schemes())
       .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
       .server(() => ({ listen: listener }))
@@ -120,7 +121,7 @@ describe('a listener with authentication and authorization', () => {
   })
 
   it("reaches a listener's undeclared routes with the application's fallback policy", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .install(schemes())
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
@@ -138,7 +139,7 @@ describe('a listener with authentication and authorization', () => {
   // A gate covers the routes of the server it was registered on, and only those.
   describe('without a gate on the server', () => {
     it('refuses a protected route at start-up, naming the route and the fix', async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .install(schemes())
         .listener('admin', l => l.server(() => ({ listen: listener })))
         .mount(protectedMetrics(), api()) as WebApplication
@@ -151,7 +152,7 @@ describe('a listener with authentication and authorization', () => {
     })
 
     it("refuses it with the application's own server gated", async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .install(schemes())
         .listener('admin', l => l.server(() => ({ listen: listener })))
         .with(authentication())
@@ -161,7 +162,7 @@ describe('a listener with authentication and authorization', () => {
     })
 
     it('refuses an undeclared route the fallback policy reaches', async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .install(schemes())
         .install(Authorization(z => z.requireAuthenticatedByDefault()))
         .listener('admin', l => l.server(() => ({ listen: listener })))
@@ -190,7 +191,7 @@ describe('a listener with authentication and authorization', () => {
 
     // The routes register once, on the first gate to install, and the application's own server is built first.
     it("serves the login callback from the application's own gate, and not from the listener's", async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .install(oidc())
         .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
         .with(authentication())
@@ -204,7 +205,7 @@ describe('a listener with authentication and authorization', () => {
     })
 
     it("serves the login callback from a listener's gate when it is the only one", async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .install(oidc())
         .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
         .server(() => ({ listen: listener }))
@@ -217,7 +218,7 @@ describe('a listener with authentication and authorization', () => {
     })
 
     it('keeps the login callback off a listener whose gate turns the OIDC routes off', async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .install(oidc())
         .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication(g => g.oidcRoutes(false))))
         .mount(metrics()) as WebApplication
@@ -230,7 +231,7 @@ describe('a listener with authentication and authorization', () => {
 
   describe('refusals at start-up', () => {
     it('refuses a protected route with authentication never installed', async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .listener('admin', l => l.server(() => ({ listen: listener })))
         .mount(protectedMetrics()) as WebApplication
 
@@ -238,7 +239,7 @@ describe('a listener with authentication and authorization', () => {
     })
 
     it('refuses a gate on a server with authentication never installed', async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
         .mount(metrics()) as WebApplication
 
@@ -249,7 +250,7 @@ describe('a listener with authentication and authorization', () => {
     })
 
     it('refuses a route naming a scheme nothing registered', async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .install(schemes())
         .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
         .mount(

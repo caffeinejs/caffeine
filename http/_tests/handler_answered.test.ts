@@ -3,8 +3,9 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { newNoopLogger, type LogFn, type Logger } from '@caffeinejs/application/logger'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { HTTPPlugin, Responder, type HTTPSetupContext, type IContext, Router } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * A handler that answered the request itself and then returned — the shape of a sign-out: `ctx.redirect(...)`,
@@ -88,7 +89,7 @@ async function sendsOnce(run: () => Promise<void>): Promise<void> {
 describe('a handler that answered the request itself', () => {
   it('redirects once from a synchronous handler', async () => {
     const logged: LogEntry[] = []
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .logger(b => b.use(recordTo(logged, 'warn')))
       .mount(new Router('/sync').get('/', ctx => void ctx.redirect('/foo')))
     await app.bootstrap()
@@ -104,7 +105,7 @@ describe('a handler that answered the request itself', () => {
 
   it('redirects once from an asynchronous handler', async () => {
     const logged: LogEntry[] = []
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .logger(b => b.use(recordTo(logged, 'warn')))
       .mount(
         new Router('/async').get('/', async ctx => {
@@ -126,7 +127,7 @@ describe('a handler that answered the request itself', () => {
 
   it('answers once with a status shorthand', async () => {
     const logged: LogEntry[] = []
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .logger(b => b.use(recordTo(logged, 'warn')))
       .mount(
         new Router('/gone').get('/', async ctx => {
@@ -146,7 +147,7 @@ describe('a handler that answered the request itself', () => {
   })
 
   it('sends a redirect the handler set up and left unsent', async () => {
-    const app = createWebApplication().mount(
+    const app = createWebApplication({ adapter: node() }).mount(
       new Router('/prepared').get('/', ctx => void ctx.status(302).header('location', '/x')),
     )
     await app.bootstrap()
@@ -160,7 +161,7 @@ describe('a handler that answered the request itself', () => {
   })
 
   it('still sends an empty response when the handler answered nothing', async () => {
-    const app = createWebApplication().mount(
+    const app = createWebApplication({ adapter: node() }).mount(
       new Router('/quiet')
         .get('/sync', () => {})
         .get('/async', async () => {
@@ -194,7 +195,7 @@ describe('under an onSend hook that awaits', () => {
     const runs = { n: 0 }
 
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(
           new Router('/held').get('/', async ctx => {
@@ -219,7 +220,7 @@ describe('under an onSend hook that awaits', () => {
     const runs = { n: 0 }
 
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(new Router('/held-sync').get('/', ctx => void ctx.body({ ok: true })))
       await app.bootstrap()
@@ -240,7 +241,7 @@ describe('under an onSend hook that awaits', () => {
     const runs = { n: 0 }
 
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(
           new Router('/held-empty').get('/', async () => {
@@ -265,7 +266,7 @@ describe('under an onSend hook that awaits', () => {
     const runs = { n: 0 }
 
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(
           new Router('/held-value').get('/', async ctx => {
@@ -292,7 +293,7 @@ describe('under an onSend hook that awaits', () => {
     const runs = { n: 0 }
 
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(
           new Router('/held-sync-value').get('/', ctx => {
@@ -324,7 +325,7 @@ describe('under an onSend hook that awaits', () => {
     }
 
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(
           new Router('/held-responder').get('/', async ctx => {
@@ -357,7 +358,7 @@ describe('under an onSend hook that awaits', () => {
     }
 
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(new Router('/held-async-responder').get('/', () => new Rendered()))
       await app.bootstrap()
@@ -377,7 +378,7 @@ describe('under an onSend hook that awaits', () => {
     let seen: boolean | undefined
     const runs = { n: 0 }
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .with(() => new SlowSend(runs))
       .mount(
         new Router('/record').get('/', ctx => {

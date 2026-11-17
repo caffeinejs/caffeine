@@ -2,8 +2,9 @@ import { $t, validateSchema } from '@caffeinejs/application/schema'
 import { fc, it } from '@fast-check/vitest'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
 
+import { createWebApplication } from '../../application.js'
 import { ProblemSchema, type Problem, type ProblemIssue, type WebApplication, Router } from '../../index.js'
-import { createWebApplication } from '../../platform/node/index.js'
+import { node } from '../../platform/node/index.js'
 
 /**
  * The validation problem a client gets, over violations, keys and counts no one wrote down, checked against what was
@@ -56,7 +57,9 @@ describe('entries name what was sent (property)', () => {
   let app: App
 
   beforeAll(async () => {
-    app = createWebApplication().mount(new Router('/fields').post('/', { body: Fields }, () => ({ ok: true })))
+    app = createWebApplication({ adapter: node() }).mount(
+      new Router('/fields').post('/', { body: Fields }, () => ({ ok: true })),
+    )
     await app.bootstrap()
   })
 
@@ -81,7 +84,7 @@ describe('no rejected value comes back (property)', () => {
   let app: App
 
   beforeAll(async () => {
-    app = createWebApplication().mount(
+    app = createWebApplication({ adapter: node() }).mount(
       new Router('/marked').post(
         '/',
         {
@@ -123,7 +126,7 @@ describe('status and location follow the slot (property)', () => {
   let app: App
 
   beforeAll(async () => {
-    app = createWebApplication().mount(
+    app = createWebApplication({ adapter: node() }).mount(
       new Router('/slot')
         .post('/body', { body: $t.Object({}, { additionalProperties: $t.Integer() }) }, () => ({
           ok: true,
@@ -181,7 +184,7 @@ describe('every problem is well formed (property)', () => {
   let app: App
 
   beforeAll(async () => {
-    app = createWebApplication().mount(
+    app = createWebApplication({ adapter: node() }).mount(
       new Router('/any')
         .post('/', { body: $t.Object({}, { additionalProperties: $t.Integer() }) }, () => ({
           ok: true,

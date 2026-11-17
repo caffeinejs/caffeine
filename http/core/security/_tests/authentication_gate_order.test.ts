@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -9,7 +10,7 @@ import {
   Get,
   type IContext,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 import { HTTPPlugin, type HTTPPluginFactory, type HTTPSetupContext } from '../../../plugin.js'
 import { authentication } from '../security.js'
 
@@ -63,7 +64,7 @@ class GuardedController {
 void [GuardedController]
 
 function guardedApp(ran: string[]) {
-  return createWebApplication()
+  return createWebApplication({ adapter: node() })
     .install(Authentication(auth => auth.addStrategy('Never', new NeverAuthenticates()).default('Never')))
     .with(stamping('before', ran))
     .with(authentication())

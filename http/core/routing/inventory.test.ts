@@ -1,7 +1,7 @@
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { createWebApplication as createFetchApplication } from '../../application.js'
+import { createWebApplication } from '../../application.js'
 import { bindTo } from '../../decorators/bind_to.js'
 import {
   AuthenticateResult,
@@ -18,7 +18,7 @@ import {
   type ServerRoutes,
   type WebApplication,
 } from '../../index.js'
-import { createWebApplication } from '../../platform/node/index.js'
+import { node } from '../../platform/node/index.js'
 import type { HTTPSetupContext } from '../../plugin.js'
 import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../security/exempt.js'
 
@@ -56,13 +56,13 @@ describe('RouteInventory', () => {
       }
     }
 
-    app = createWebApplication().with(() => new ReadsTooEarly()) as WebApplication
+    app = createWebApplication({ adapter: node() }).with(() => new ReadsTooEarly()) as WebApplication
 
     await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_APPLICATION_NOT_READY' })
   })
 
   it('answers once the application has bootstrapped', async () => {
-    app = createWebApplication() as WebApplication
+    app = createWebApplication({ adapter: node() }) as WebApplication
 
     await app.bootstrap()
 
@@ -87,7 +87,7 @@ describe('routeRecord on the fetch application', () => {
   }
 
   async function records(router: AnyRouter) {
-    app = createFetchApplication().mount(router)
+    app = createWebApplication().mount(router)
     app.container.bind(TenantGuard, t => t.toSelf())
     await app.bootstrap()
     return app.container.get(RouteInventory).servers[0].routes
@@ -124,7 +124,7 @@ describe('routeRecord on the fetch application', () => {
   })
 
   it('reports a route the framework serves outside access control as skipped, with no scheme', async () => {
-    app = createFetchApplication()
+    app = createWebApplication()
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
       .mount(
         new Router('/marked')
@@ -143,7 +143,7 @@ describe('routeRecord on the fetch application', () => {
 
   describe('under a gate and cross-origin protection', () => {
     async function recordsOf(build: (app: FetchApp) => FetchApp) {
-      app = build(createFetchApplication().install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme()))))
+      app = build(createWebApplication().install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme()))))
       await app.bootstrap()
       const routes = app.container.get(RouteInventory).servers[0].routes
       return (url: string) => routes.find(record => record.url === url)!.security
@@ -213,7 +213,7 @@ describe('route inventory across listeners', () => {
   }
 
   it("lists the application's own server first, then each listener with the routes bound to it alone", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin')
       .mount(
         new Router('/api').get('/', () => 'api'),
@@ -235,7 +235,9 @@ describe('route inventory across listeners', () => {
       }
     }
 
-    app = createWebApplication().listener('admin', l => l.with(() => new Metrics())) as WebApplication
+    app = createWebApplication({ adapter: node() }).listener('admin', l =>
+      l.with(() => new Metrics()),
+    ) as WebApplication
 
     await app.bootstrap()
 

@@ -14,29 +14,22 @@ import {
 import { createServer as createHTTPSServer, type ServerOptions as HTTPSServerOptions } from 'node:https'
 import type { ListenOptions } from 'node:net'
 
-import { Second } from '@caffeinejs/std/duration'
-
-import { configurationError } from '../../core/server/error.js'
+import { configurationError, kindOf } from '../../core/server/error.js'
+import { IDLE_TIMEOUT } from '../../core/server/hosting.js'
 import {
+  assertObjectSections,
+  isOptions,
   NODE_SECTIONS,
   resolveServerSettings,
   type ApplicationKind,
+  type ListeningServerSettings,
   type ResolvedServerSettings,
-  type ServerSettings,
 } from '../../core/server/settings.js'
 import type { NodeHTTPServer } from './connections.js'
 import type { NodeResponse } from './platform.js'
 
-/** What `.server(...)` returns on the Node application. */
-export interface NodeServerSettings extends Omit<ServerSettings, 'trustProxy'> {
-  /**
-   * Which peers' `X-Forwarded-Host` and `X-Forwarded-Proto` decide `ctx.req.host` and `ctx.req.protocol`.
-   *
-   * `true` trusts any peer. A list, or a comma-separated string, names the proxies: each entry an address, a CIDR
-   * range, or `loopback`, `linklocal` or `uniquelocal`. The last entry of each header wins. Unset: no peer. A hop
-   * count is refused, since it cannot tell a proxy from a client.
-   */
-  trustProxy?: boolean | string | readonly string[]
+/** What `.server(...)` returns under `node()`. */
+export interface NodeServerSettings extends ListeningServerSettings {
   /**
    * Where to listen: node:net's options. `run(options)` merges over them, key by key. With no `host` and no `path`,
    * `localhost`; with nothing at all, also a port the OS assigns.
@@ -66,33 +59,22 @@ export interface ResolvedNodeSettings {
   readonly createServer: (listener: (req: unknown, res: NodeResponse) => void) => NodeHTTPServer
 }
 
-// What Fastify gives a connection kept alive, and an HTTP/2 session, when idle: longer than a load balancer's.
-const IDLE_TIMEOUT = 72 * Second
-
-const OBJECT_EXAMPLES: Readonly<Record<string, readonly [string, string]>> = {
-  listen: ['net', '{ port: 3000 }'],
-  http: ['http', '{ requestTimeout: 30 * Second }'],
-  https: ['https', '{ key, cert }'],
-}
+const OBJECT_SECTIONS = {
+  listen: ['node:net options', '{ port: 3000 }'],
+  http: ['node:http options', '{ requestTimeout: 30 * Second }'],
+  https: ['node:https options', '{ key, cert }'],
+} as const
 
 /** @throws ErrConfiguration for what `resolveServerSettings` refuses, and for a Node section it cannot use. */
 export function resolveNodeServerSettings(settings: object): ResolvedNodeSettings {
   const engine = resolveServerSettings(settings, NODE_APPLICATION)
   const { listen, http, https, http2 } = settings as Record<string, unknown>
 
-  for (const [key, value] of Object.entries({ listen, http, https })) {
-    if (value !== undefined && !isOptions(value)) {
-      const [module, example] = OBJECT_EXAMPLES[key]!
-      throw configurationError(
-        `Cannot set ${key} to "${String(value)}": it must be an object of node:${module} options`,
-        `Return ${key} as an object, such as ${example}`,
-      )
-    }
-  }
+  assertObjectSections(settings, OBJECT_SECTIONS)
 
   if (http2 !== undefined && typeof http2 !== 'boolean' && !isOptions(http2)) {
     throw configurationError(
-      `Cannot set http2 to "${String(http2)}": it must be true, false or an object of node:http2 options`,
+      `Cannot set http2: it must be true, false or an object of node:http2 options, not ${kindOf(http2)}`,
       'Write http2: true, or an object such as { allowHTTP1: true }',
     )
   }
@@ -140,7 +122,3 @@ export function resolveNodeServerSettings(settings: object): ResolvedNodeSetting
 type HTTP2Section = HTTP2ServerOptions & { allowHTTP1?: boolean }
 
 type HTTP2Listener = (request: Http2ServerRequest, response: Http2ServerResponse) => void
-
-function isOptions(value: unknown): value is object {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

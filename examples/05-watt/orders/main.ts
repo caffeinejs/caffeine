@@ -1,11 +1,11 @@
-import { Router } from '@caffeinejs/http'
-import { createWebApplication, type NodeHTTPServer } from '@caffeinejs/http/node'
+import { Router, createWebApplication } from '@caffeinejs/http'
+import { type NodeHTTPServer, node } from '@caffeinejs/http/node'
 import { OpenAPI, OpenAPIProvider, openapi } from '@caffeinejs/openapi'
 import { setOpenapiSchema } from '@platformatic/globals'
 
 import { registerWattChecks } from '../watt.js'
 
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   .install(OpenAPI())
   // Watt's gateway is the one to publish the document, so the application serves no endpoint for it.
   .with(openapi(o => o.info({ title: 'Orders', version: '1.0.0' }).json(false).yaml(false).docs(false)))

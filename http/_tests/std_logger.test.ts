@@ -1,8 +1,9 @@
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/application/logger'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 type Record_ = { severity: string; args: unknown[]; bindings: Bindings }
 
@@ -66,7 +67,7 @@ describe('a Caffeine Logger as the application logger', () => {
     void [LoggedController]
 
     const recorder = new Recorder()
-    const app = createWebApplication({ logger: recorder as unknown as Logger })
+    const app = createWebApplication({ adapter: node(), logger: recorder as unknown as Logger })
     await app.bootstrap()
 
     const res = await app.request('/logged/ping')

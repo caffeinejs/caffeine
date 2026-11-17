@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Responder, Router, blend, type RouteDef, type RoutesOf } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Responder, Router, blend, type RouteDef, type RoutesOf, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import type { Authenticator } from '../authenticator.js'
@@ -35,7 +35,7 @@ const pets = new Router('/pets')
   })
   .handler(ctx => ctx.body())
 
-const app = createWebApplication().mount(pets)
+const app = createWebApplication({ adapter: node() }).mount(pets)
 
 type App = typeof app
 type Pet = { id: number; name: string }

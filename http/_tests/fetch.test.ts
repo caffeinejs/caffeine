@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get, Header, Router } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 describe('Fetch API Response Support', () => {
   it('maps status, headers, and body to the response', async () => {
@@ -21,7 +22,7 @@ describe('Fetch API Response Support', () => {
 
     void [FetchController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/fetch/json')
@@ -42,7 +43,7 @@ describe('Fetch API Response Support', () => {
 
     void [NoBodyController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/fetch/empty')
@@ -67,7 +68,7 @@ describe('Fetch API Response Support', () => {
 
     void [BufferController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/fetch/buf')
@@ -93,7 +94,7 @@ describe('Fetch API Response Support', () => {
 
     void [BinaryController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/fetch/binary')
@@ -117,7 +118,7 @@ describe('Fetch API Response Support', () => {
 
       void [MixClassController]
 
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
       await app.bootstrap()
 
       const res = await app.request('/mix-class/route')
@@ -138,7 +139,7 @@ describe('Fetch API Response Support', () => {
 
       void [MixMethodController]
 
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
       await app.bootstrap()
 
       const res = await app.request('/mix-method/route')
@@ -159,7 +160,7 @@ describe('Fetch API Response Support', () => {
 
       void [OverrideClassController]
 
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
       await app.bootstrap()
 
       const res = await app.request('/override-class/route')
@@ -179,7 +180,7 @@ describe('Fetch API Response Support', () => {
 
       void [OverrideMethodController]
 
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
       await app.bootstrap()
 
       const res = await app.request('/override-method/route')
@@ -190,7 +191,7 @@ describe('Fetch API Response Support', () => {
 
   // What a Fetch client holds is often a `Request` already: its method and headers reach the route as they are.
   it('takes a Request object as well as a path', async () => {
-    const app = createWebApplication().mount(
+    const app = createWebApplication({ adapter: node() }).mount(
       new Router('/fetch-request').post('/', ctx => ({ probe: ctx.req.header('x-probe') })),
     )
 
@@ -210,7 +211,7 @@ describe('Fetch API Response Support', () => {
 
   // An absolute URL, as a `URL` or as a string, reaches the route with the host and query it names.
   it('takes a URL, or an absolute URL string, as well as a path', async () => {
-    const app = createWebApplication().mount(
+    const app = createWebApplication({ adapter: node() }).mount(
       new Router('/fetch-url').get('/', ctx => ({ host: ctx.req.host, q: ctx.req.query('q') })),
     )
 

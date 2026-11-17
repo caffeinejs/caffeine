@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { ErrConfiguration, Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { ErrConfiguration, Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -18,7 +18,7 @@ describe('cache plugin wiring', () => {
 
   // Named, like any other first-party plugin: a second registration in the same slot is refused.
   it('refuses a second registration on the same context', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-First')))
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-Second')))
     close = () => app.close()
@@ -33,7 +33,7 @@ describe('cache plugin wiring', () => {
     const router = new Router('/nested-install').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     router.get('/data').handler(() => ({ ok: true }))
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       .mount(router)
     close = () => app.close()
@@ -52,7 +52,9 @@ describe('cache plugin wiring', () => {
       .extend(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) }).mount(router)
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) }).mount(
+      router,
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -74,7 +76,7 @@ describe('cache plugin wiring', () => {
       return router
     }
 
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) }).mount(
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) }).mount(
       group('pets'),
       group('owners'),
     )
@@ -103,7 +105,7 @@ describe('cache plugin wiring', () => {
       .extend(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .mount(served)
       .mount(unserved)
     close = () => app.close()

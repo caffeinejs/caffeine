@@ -9,9 +9,10 @@ import {
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { authentication } from '../core/security/security.js'
 import { Controller, Get, Authentication, Authorization, Guards, HTTPPlugin } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /** A plugin that does nothing, where a factory must return one. */
 class NoopPlugin extends HTTPPlugin {
@@ -29,7 +30,7 @@ describe('createWebApplication default form', () => {
     }
     void [DefaultAppController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/default-app/data')
@@ -48,7 +49,7 @@ describe('createWebApplication default form', () => {
     void [DefaultContainerController]
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
     await app.bootstrap()
 
     expect(app.container).toBe(container)
@@ -74,7 +75,7 @@ describe('createWebApplication default form', () => {
       },
     }
 
-    const app = createWebApplication().install(probe)
+    const app = createWebApplication({ adapter: node() }).install(probe)
     await app.bootstrap()
 
     expect(app.container.getOptional(kProbe)).toEqual({ value: 'hello' })
@@ -85,7 +86,7 @@ describe('configuring a started web application', () => {
   // The HTTP-only methods are refused the same way the shared ones are: once `bootstrap()` has read the feature
   // list, a server port or an authentication scheme written afterwards would never take effect.
   it('refuses server, authentication, guards and plugin configuration once bootstrap() has run', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     expect(() => app.server(() => ({}))).toThrow(ErrApplicationStarted)

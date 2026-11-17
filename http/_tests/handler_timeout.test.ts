@@ -3,8 +3,9 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get, HTTPPlugin, Responder, Router, type HTTPSetupContext } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * A handler that outlives its timeout is answered with a 503. An `onSend` hook that is asynchronous — a
@@ -77,7 +78,7 @@ describe('a handler that outlives its timeout', () => {
 
     const runs = { n: 0 }
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .server(() => ({ handlerTimeout: 30 * Millisecond }))
         .with(() => new SlowSend(runs))
       close = () => app.close()
@@ -107,7 +108,7 @@ describe('a handler that outlives its timeout', () => {
 
     const runs = { n: 0 }
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(timed)
       close = () => app.close()
@@ -137,7 +138,7 @@ describe('a handler that outlives its timeout', () => {
 
     const runs = { n: 0 }
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(timed)
       close = () => app.close()
@@ -164,7 +165,7 @@ describe('a handler that outlives its timeout', () => {
 
     const runs = { n: 0 }
     await sendsOnce(async () => {
-      const app = createWebApplication()
+      const app = createWebApplication({ adapter: node() })
         .with(() => new SlowSend(runs))
         .mount(timed)
       close = () => app.close()
@@ -187,7 +188,7 @@ describe('a route timeout that is not a whole number of milliseconds', () => {
       .timeout(1 * Second + 0.5 * Millisecond)
       .handler(() => 'ok')
 
-    const app = createWebApplication().mount(timed)
+    const app = createWebApplication({ adapter: node() }).mount(timed)
     try {
       await app.bootstrap()
 
@@ -240,7 +241,7 @@ describe('a Responder that rejects after its handler timed out', () => {
         const failing = new Failing()
         return resolved ? Promise.resolve(failing) : failing
       })
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .with(() => plugin)
       .mount(timed)
 

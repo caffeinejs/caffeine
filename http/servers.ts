@@ -14,7 +14,13 @@ import type { IRouteGroup, RouteGroupScope } from './core/routing/route.js'
 import type { Routing } from './core/routing/routing.js'
 import type { RouteGroupSpec } from './core/routing/spec.js'
 import type { Context } from './core/server/context.js'
-import { buildEngine, findMyWayFlags, type HostedServer, type ServerHosting } from './core/server/hosting.js'
+import {
+  buildEngine,
+  findMyWayFlags,
+  type AnyServerAdapter,
+  type HostedServer,
+  type kHosting,
+} from './core/server/hosting.js'
 import type { HTTPServer } from './core/server/server.js'
 import type { HTTPPluginFactory, HTTPSetupContext } from './plugin.js'
 import { PluginSlot } from './plugin_slot.js'
@@ -47,8 +53,10 @@ export interface ServerSetupInput {
   readonly inventory: RouteInventory
   /** The slot every engine sets in each request's frame. */
   readonly contextKey: ContextKey<Context>
-  /** How the application hosts the server named `name`, `undefined` for its own, built from `settings`. */
-  readonly hosting: (settings: object, name: string | undefined) => ServerHosting
+  /** How the application's adapter hosts a server, built from `settings`. */
+  readonly hosting: AnyServerAdapter[typeof kHosting]
+  /** Runs what `.serverCallback(...)` registered on the application's own server, in call order. */
+  readonly customize: (context: HTTPSetupContext, instance: unknown) => Promise<void>
 }
 
 /**
@@ -122,7 +130,7 @@ export class ServerSet {
     // fails should do so before a factory with side effects has run.
     const settings = await resolveServerOptions(definition.server, context)
     const basePath = normalizeBasePath(await definition.basePath?.(context))
-    const hosting = input.hosting(settings, definition.name)
+    const hosting = input.hosting(settings)
     slot.forServer(basePath ?? '', findMyWayFlags(hosting.settings))
 
     // Its own `.with(...)` factories, in the order they were written. The engine installs the framework's head
@@ -151,13 +159,22 @@ export class ServerSet {
     entry.engine = engine
     await engine.ready()
 
-    return hosting.serve(engine, context)
+    // The application's own server alone runs the server callbacks: a listener is never handed over.
+    const customize =
+      definition.name === undefined
+        ? (instance: unknown) => input.customize(context, instance)
+        : () => Promise.resolve()
+
+    return hosting.serve(engine, context, customize)
   }
 
-  /** Starts every server, one after another, the application's own first. */
-  async run(): Promise<void> {
+  /**
+   * Starts every server, one after another, the application's own first: it with what `run(options)` was given, each
+   * listener on its own settings alone.
+   */
+  async run(options?: object): Promise<void> {
     for (const entry of this.#entries) {
-      await entry.server?.run()
+      await entry.server?.run(entry.definition.name === undefined ? options : undefined)
     }
   }
 

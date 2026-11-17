@@ -1,5 +1,5 @@
-import { Controller, Get, Post, type WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, Post, type WebApplication, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Minute } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
@@ -76,7 +76,7 @@ const events: string[] = []
 let app: WebApplication
 
 beforeAll(async () => {
-  app = createWebApplication().with(
+  app = createWebApplication({ adapter: node() }).with(
     HTTPCaching(b =>
       b.store(store).observer({
         onHit: () => void events.push('hit'),

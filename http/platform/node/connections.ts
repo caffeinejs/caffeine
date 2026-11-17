@@ -6,9 +6,10 @@ import type { Server as HTTPSServer } from 'node:https'
 import type { Server as NetServer, Socket } from 'node:net'
 import { Server as TLSServer, type TLSSocket } from 'node:tls'
 
+import { addressOf } from '../../core/server/hosting.js'
 import type { ServerAddress } from '../../server.js'
 
-/** Every server the Node application builds: what `app.instance` is. */
+/** Every server the Node adapter builds: what `app.instance` is under `node()`. */
 export type NodeHTTPServer = Server | HTTPSServer | Http2Server | Http2SecureServer
 
 /**
@@ -107,22 +108,11 @@ export function destroyConnections(open: OpenConnections): void {
 
 /** Where `server` is listening, or `undefined` while it is not. */
 export function serverAddress(server: NetServer): ServerAddress | undefined {
+  // `null` when nothing is listening; a string when bound to a Unix socket or a named pipe.
   const bound = server.address()
 
-  // `null` when nothing is listening.
-  if (bound == null) {
-    return undefined
-  }
-
-  // A string when bound to a unix socket or a named pipe, which has a path and no host, port or origin.
-  if (typeof bound === 'string') {
-    return { host: '', port: 0, path: bound, origin: '' }
-  }
-
   // Both HTTPS and HTTP/2 over TLS servers are TLS servers.
-  const scheme = server instanceof TLSServer ? 'https' : 'http'
-
-  return { host: bound.address, port: bound.port, path: '', origin: originOf(scheme, bound.address, bound.port) }
+  return bound == null ? undefined : addressOf(server instanceof TLSServer ? 'https' : 'http', bound)
 }
 
 /** Keeps in `open` what `server` hands over on `event`, until it closes. */
@@ -139,20 +129,4 @@ function keepOpen<T extends EventEmitter>(server: NetServer, event: string, open
  */
 function afterIO(fn: () => void): void {
   setImmediate(() => setImmediate(fn))
-}
-
-/**
- * `0.0.0.0` and `::` are addresses to accept connections on, not addresses to dial, so an origin built from
- * them is not reliably reachable. Both map to their loopback equivalent; IPv6 is bracketed.
- */
-function originOf(scheme: 'http' | 'https', host: string, port: number): string {
-  if (host === '0.0.0.0') {
-    return `${scheme}://127.0.0.1:${port}`
-  }
-
-  if (host === '::' || host === '::1') {
-    return `${scheme}://[::1]:${port}`
-  }
-
-  return host.includes(':') ? `${scheme}://[${host}]:${port}` : `${scheme}://${host}:${port}`
 }

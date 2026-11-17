@@ -1,6 +1,7 @@
 import { Injectable } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   type ActionResult,
   BindTo,
@@ -16,7 +17,7 @@ import {
   UseGuards,
   type WebApplication,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 /**
  * A controller bound with `@BindTo(...)`: the controller counterpart of `router.extend(bindTo(...))`, carrying its
@@ -85,7 +86,7 @@ describe('a controller bound with @BindTo', () => {
   })
 
   async function started(): Promise<{ main: string; admin: string }> {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', l => l.server(() => ({ listen: listener })))
       .server(() => ({ listen: listener }))
 

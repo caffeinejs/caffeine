@@ -14,8 +14,10 @@ import {
   healthProbes,
   authentication,
   Router,
+  createWebApplication,
+  type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { isDocumentRequest, sendFile, staticFiles } from '../../index.js'
@@ -117,18 +119,23 @@ const auth = () =>
       return { ok: true }
     })
 
-function application(): NodeWebApplication {
-  return createWebApplication({})
+function application(): WebApplication<never, never, unknown, NodeAdapter> {
+  return createWebApplication({ adapter: node() })
     .with(healthProbes())
     .with(staticFiles(s => s.serve(DIST, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
     .install(Authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login'))))
     .with(authentication())
     .install(Authorization(z => z.requireAuthenticatedByDefault()))
-    .mount(auth(), apiMisses(), publicPages(), memberPages(), adminPages()) as NodeWebApplication
+    .mount(auth(), apiMisses(), publicPages(), memberPages(), adminPages()) as WebApplication<
+    never,
+    never,
+    unknown,
+    NodeAdapter
+  >
 }
 
 describe('a realistic application: controllers, a router, health and a single-page application', () => {
-  let app: NodeWebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
   let member: string
   let admin: string
 

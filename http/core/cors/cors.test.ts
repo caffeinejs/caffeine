@@ -6,7 +6,7 @@ import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { bindTo } from '../../decorators/bind_to.js'
 import { version } from '../../decorators/version.js'
-import { createWebApplication as createNodeApplication } from '../../platform/node/node.js'
+import { node } from '../../platform/node/node.js'
 import { ErrConfiguration } from '../error/common.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
 import { Router } from '../routing/programmatic/programmatic.js'
@@ -435,7 +435,7 @@ describe('corsPolicy() on a preflight', () => {
   })
 
   it('answers on the Node application the same way', async () => {
-    const built = createNodeApplication()
+    const built = createWebApplication({ adapter: node() })
       .with(corsPolicy(c => c.origins(A)))
       .mount(r())
     app = built

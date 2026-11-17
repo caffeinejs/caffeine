@@ -1,6 +1,13 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { ErrConfiguration, Router, constraint, version, type ConstraintStrategy } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import {
+  ErrConfiguration,
+  Router,
+  constraint,
+  version,
+  type ConstraintStrategy,
+  createWebApplication,
+} from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second, Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -9,7 +16,7 @@ import { HTTPCaching, cacheControl, type CacheControlOptions } from '../index.js
 
 // Programmatic routes on a container that reads no decorators: the controller registry is global, and another
 // test's controller is not part of what is being refused here.
-const newApp = () => createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+const newApp = () => createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
 
 describe('what a route may ask of the cache, checked while it registers', () => {
   let close: (() => Promise<unknown>) | undefined

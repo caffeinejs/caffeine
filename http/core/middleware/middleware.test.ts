@@ -10,6 +10,7 @@ import cors from 'cors'
 import { afterEach, describe, it, expect } from 'vitest'
 
 import {
+  createWebApplication,
   type IContext,
   Controller,
   ErrHTTPForbidden,
@@ -26,7 +27,7 @@ import {
   HTTPPlugin,
   type RequestHookName,
 } from '../../index.js'
-import { createWebApplication } from '../../platform/node/index.js'
+import { node as nodeAdapter } from '../../platform/node/index.js'
 
 @Controller('/mw')
 class MiddlewareController {
@@ -67,7 +68,7 @@ class Counter implements Middleware {
 function newApp(configure: (container: CaffeineIoC) => void = () => {}) {
   const container = new CaffeineIoC()
   configure(container)
-  return createWebApplication({ container })
+  return createWebApplication({ adapter: nodeAdapter(), container })
 }
 
 describe('middleware pipeline', () => {
@@ -110,7 +111,7 @@ describe('middleware pipeline', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ middleware: { tag: 'from-config' } }))
       .build().config
-    const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
+    const app = createWebApplication({ adapter: nodeAdapter(), container: new CaffeineIoC(), config: conf })
     const seen: string[] = []
 
     app.useFn('*', ({ config }) => ({

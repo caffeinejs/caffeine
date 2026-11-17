@@ -2,8 +2,8 @@ import { once } from 'node:events'
 import { createServer, get, type Server } from 'node:https'
 import type { AddressInfo } from 'node:net'
 
-import { type WebApplication, Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { type WebApplication, Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { testTLS, testTLSCertificate } from './index.js'
@@ -62,7 +62,7 @@ describe('testTLS', () => {
   })
 
   it('serves a Caffeine web application over HTTPS', async () => {
-    app = createWebApplication().server(() => ({
+    app = createWebApplication({ adapter: node() }).server(() => ({
       https: testTLS(),
       listen: { host: '127.0.0.1', port: 0 },
     }))

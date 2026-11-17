@@ -21,10 +21,16 @@ export interface ServerAddress {
 
 /**
  * The callback `.server(configure)` takes: resolves the server's settings against the same context a plugin
- * factory gets, so `config` is the resolved tree and the container resolves. `S` is the application's settings:
- * `ServerSettings` on the fetch application, `NodeServerSettings` on the Node one.
+ * factory gets, so `config` is the resolved tree and the container resolves. `S` is what the application's adapter
+ * takes: `ServerSettings` under none, `NodeServerSettings` under `node()`, `BunServerSettings` under `bun()`.
  */
 export type ServerConfigurer<S extends object, C = unknown> = (context: HTTPSetupContext<C>) => S | Promise<S>
+
+/** What `.serverCallback(...)` takes: the setup context, then the server the adapter built. */
+export type ServerCustomizer<C = unknown, I = unknown> = (
+  context: HTTPSetupContext<C>,
+  instance: I,
+) => void | Promise<void>
 
 /**
  * An HTTP server the application runs: where it listens and a way to send it a request, but not its lifecycle,
@@ -32,9 +38,12 @@ export type ServerConfigurer<S extends object, C = unknown> = (context: HTTPSetu
  *
  * The {@link WebApplication} is one, for its own server, and so is each of `app.listeners`.
  */
-export interface IServer {
+export interface IServer<I = unknown> {
   /** Where the server is listening, or `undefined` while it is not: before it runs, and once it has closed. */
   get address(): ServerAddress | undefined
+
+  /** What serves it on its runtime: Node's server under `node()`, Bun's under `bun()`, `undefined` under none. */
+  readonly instance: I
 
   /**
    * Sends `request` to this server without a socket, whether or not it is listening: a pass-through, not a client.

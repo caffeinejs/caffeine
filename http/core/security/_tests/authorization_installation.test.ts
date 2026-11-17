@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import { authentication } from '../../../core/security/security.js'
 import {
   AllowAnonymous,
@@ -14,7 +15,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // Kept in its own file, protected-route cases last: `WebApplication` snapshots the global `@Controller`
 // registry at construction, and that registry only ever grows within a test file — so an `@Authorize`-
@@ -31,7 +32,7 @@ describe('authorization installation', () => {
     }
     void [NoneNeededController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/authz-none-needed')
@@ -51,7 +52,7 @@ describe('authorization installation', () => {
     }
     void [AnonOnlyController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/authz-anon-only')
@@ -68,7 +69,7 @@ describe('authorization installation', () => {
     }
     void [StandaloneController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     // Never named by a route: the policy is only there so `.install(Authorization(...))` has something to install.
     app.install(Authorization(authz => authz.addPolicy('SignedIn', p => p.requireAuthenticated())))
     await app.bootstrap()
@@ -92,7 +93,7 @@ describe('authorization installation', () => {
     }
     void [NeitherConfiguredController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
 
     await expect(app.bootstrap()).rejects.toThrow(ErrAuthenticationRequired)
   })
@@ -110,7 +111,7 @@ describe('authorization installation', () => {
     }
     void [BypassedController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     app.container.bind(AuthenticationService, t => t.toValue({} as AuthenticationService))
 
     await expect(app.bootstrap()).rejects.toThrow(ErrAuthorizationRequired)
@@ -135,7 +136,7 @@ describe('authorization installation', () => {
       }
     }
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap((_config, application) => {
       application
         .install(Authentication(auth => auth.addStrategy('default', new None({})).default('default')))

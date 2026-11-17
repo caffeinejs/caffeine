@@ -1,6 +1,7 @@
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import { authentication } from '../../../core/security/security.js'
 import {
   AuthenticateResult,
@@ -12,7 +13,7 @@ import {
   Authentication,
   Router,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 /**
  * What the authorization builder refuses. No controller is declared here, routers only: a controller registers
@@ -81,7 +82,7 @@ describe('AuthorizationBuilder — two handlers for one requirement kind', () =>
     const container = new CaffeineIoC()
     container.bind(AdmitsEveryRole, t => t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler))
 
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
       .install(Authentication(auth => auth.addStrategy('Never', new NeverAuthenticates())))
       .with(authentication())
       .mount(new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })))

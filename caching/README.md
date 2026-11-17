@@ -24,8 +24,8 @@ plugin fails at `app.bootstrap()`. There is no default store: you pass one.
 ```ts
 import { CacheControl, CacheInvalidate, HTTPCaching } from '@caffeinejs/caching/http'
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
-import { Controller, Get, Put } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, Put, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Minute } from '@caffeinejs/std/duration'
 
 @Controller('/pets')
@@ -44,7 +44,7 @@ class PetsController {
   }
 }
 
-const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
 await app.run()
 ```
 

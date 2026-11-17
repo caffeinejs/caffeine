@@ -1,6 +1,7 @@
 import { Injectable } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   type ActionResult,
   Catch,
@@ -17,7 +18,7 @@ import {
   type WebApplication,
   Router,
 } from '../../../index.js'
-import { createWebApplication, type NodeServerSettings } from '../../../platform/node/index.js'
+import { type NodeServerSettings, node } from '../../../platform/node/index.js'
 
 /**
  * Scenario: routers on a listener with middleware, guards and plugins.
@@ -96,7 +97,7 @@ describe('routers on a listener with middleware, guards and plugins', () => {
   }
 
   it("runs a router's own plugin on what it serves on the listener, and nowhere else", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', admin)
       .server(() => ({ listen: listener }))
       .mount(
@@ -114,7 +115,7 @@ describe('routers on a listener with middleware, guards and plugins', () => {
   })
 
   it("denies with the router's own guards on the listener, and runs the global guards there too", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', admin)
       .install(Guards(g => g.global(TokenGuard)))
       .mount(
@@ -133,7 +134,7 @@ describe('routers on a listener with middleware, guards and plugins', () => {
   })
 
   it('carries the binding, the plugin and the guards of a router down to the routers nested in it', async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', admin)
       .server(() => ({ listen: listener }))
       .mount(
@@ -156,7 +157,7 @@ describe('routers on a listener with middleware, guards and plugins', () => {
   })
 
   it("answers on the listener with the application's error handlers and its not-found problem", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', admin)
       .server(() => ({ listen: listener }))
       .errorHandling(e => e.globalHandlers(TeapotHandler))

@@ -1,6 +1,6 @@
 import { CaffeineIoC, Configuration, Injectable, Profile, Provides } from '@caffeinejs/di'
-import { Controller, ErrConfiguration, Get, Post, Put, Router, Status } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Controller, ErrConfiguration, Get, Post, Put, Router, Status, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -28,7 +28,7 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
   })
 
   async function start() {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
     return app
@@ -194,9 +194,10 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
     }
     void [ServiceController, CacheConfig]
 
-    const app = createWebApplication({ container: new CaffeineIoC({ profiles: ['inv-service'] }) }).with(
-      HTTPCaching(b => b.store(kHTTPCacheStore)),
-    )
+    const app = createWebApplication({
+      adapter: node(),
+      container: new CaffeineIoC({ profiles: ['inv-service'] }),
+    }).with(HTTPCaching(b => b.store(kHTTPCacheStore)))
     close = () => app.close()
     await app.bootstrap()
 
@@ -249,7 +250,7 @@ describe('@CacheInvalidate and the status of the mutation', () => {
     }
     void [StatusController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -295,7 +296,7 @@ describe('the request a key function is handed', () => {
         return { ok: true }
       })
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       .mount(router)
     close = () => app.close()
@@ -316,7 +317,7 @@ describe('cacheInvalidate refuses an eviction that names nothing at start-up', (
   })
 
   function ready(router: Router) {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       .mount(router)
     close = () => app.close()

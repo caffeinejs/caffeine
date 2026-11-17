@@ -1,8 +1,9 @@
 import { Injectable } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import { type IContext, ErrConfiguration, ErrorHandler } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // Bound, and shaped like a handler, but it never declared which errors it renders.
 @Injectable()
@@ -12,7 +13,7 @@ class UntaggedHandler implements ErrorHandler<Error> {
 
 describe('untagged error handler', () => {
   it('rejects a handler enrolled without an error type', async () => {
-    const app = createWebApplication().errorHandling(e => e.globalHandlers(UntaggedHandler))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.globalHandlers(UntaggedHandler))
 
     await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
@@ -20,7 +21,7 @@ describe('untagged error handler', () => {
   // Declaring a class is no longer what puts it to work, so the same class nobody enrolled is inert rather
   // than a start-up failure.
   it('ignores the same handler when it is not enrolled', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
 
     await app.bootstrap()
 

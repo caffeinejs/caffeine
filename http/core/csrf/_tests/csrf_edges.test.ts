@@ -4,8 +4,9 @@ import { connect } from 'node:net'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import { bindTo, csrfExempt, type OriginPredicate, type WebApplication, Router } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 import { corsPolicy } from '../../cors/cors.js'
 import { csrf } from '../csrf.js'
 
@@ -103,7 +104,7 @@ describe('csrf() at the edges', () => {
     // either: the check reads it as it is, and refuses it.
     it('refuses a Sec-Fetch-Site or an Origin sent twice', async () => {
       const app = (await running(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .server(() => ({ listen: listener }))
           .with(csrf())
           .mount(echo()),
@@ -128,7 +129,7 @@ describe('csrf() at the edges', () => {
     it('refuses Sec-Fetch-Site from another site when the Origin is missing, and asks no check', async () => {
       const asked: string[] = []
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.allowSecFetchSite((_ctx, site) => asked.push(site) > 0)))
           .mount(echo()),
       )
@@ -140,7 +141,7 @@ describe('csrf() at the edges', () => {
 
     // `none` is a navigation the user started: the browser's word decides, whatever the Origin says.
     it('lets Sec-Fetch-Site: none through, whatever the Origin says', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
 
       expect((await post(app, '/echo', { 'sec-fetch-site': 'none', origin: 'https://evil.example' })).status).toBe(200)
     })
@@ -149,7 +150,9 @@ describe('csrf() at the edges', () => {
   describe('methods', () => {
     // `QUERY` is safe, like `GET`, even with a body: a cross-site one is a read.
     it('never refuses a QUERY', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(new Router('/search').query('/', ok)))
+      const app = await ready(
+        createWebApplication({ adapter: node() }).with(csrf()).mount(new Router('/search').query('/', ok)),
+      )
       const res = await app.request('/search', {
         method: 'QUERY',
         headers: { ...CROSS_SITE, 'content-type': 'application/json' },
@@ -165,7 +168,7 @@ describe('csrf() at the edges', () => {
     it('protects every spelling of a route the router accepts, and exempts no other route', async () => {
       const ran: string[] = []
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .server(() => ({
             router: { ignoreTrailingSlash: true, caseSensitive: false, ignoreDuplicateSlashes: true },
           }))
@@ -186,7 +189,7 @@ describe('csrf() at the edges', () => {
 
     it('reads an exclusion written with a trailing slash as the same prefix', async () => {
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.exclude('/webhooks/')))
           .mount(new Router('/webhooks').post('/', ok).post('/:id', ok), new Router('/webhooksx').post('/', ok)),
       )
@@ -203,7 +206,7 @@ describe('csrf() at the edges', () => {
       const seen: string[] = []
       const record: OriginPredicate = (_ctx, { hostname }) => seen.push(hostname) < 0
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.trustedOrigins('https://bücher.example').trustOrigin(record)))
           .mount(echo()),
       )
@@ -218,7 +221,7 @@ describe('csrf() at the edges', () => {
     // The host is `:authority` and the scheme is the TLS socket's: no Host header and no proxy to read.
     it('compares the Origin with :authority, and refuses the same host over plain HTTP', async () => {
       const app = (await running(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .server(() => ({ http2: true, https: { key, cert }, listen: listener }))
           .with(csrf())
           .mount(echo()),
@@ -242,7 +245,7 @@ describe('csrf() at the edges', () => {
 
     it('follows the forwarding headers of a proxy trusted by address', async () => {
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .server(() => ({ trustProxy: '127.0.0.1' }))
           .with(csrf())
           .mount(echo()),
@@ -255,7 +258,7 @@ describe('csrf() at the edges', () => {
     // A proxy appends what it saw: a client's own entry ahead of it does not count, and `Forwarded` is not read.
     it('reads the last X-Forwarded-Proto entry, and never Forwarded', async () => {
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .server(() => ({ trustProxy: true }))
           .with(csrf())
           .mount(echo()),
@@ -278,14 +281,14 @@ describe('csrf() at the edges', () => {
     // Behind a proxy that ended TLS and is not trusted, the server sees `http` while the page was `https`. Only this
     // same host's HTTPS side can send that Origin, so the host decides, as Go and NestJS have it.
     it('lets an https Origin naming this host through on a request seen as http, with no Fetch Metadata', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
 
       expect((await post(app, '/echo', { origin: 'https://localhost' })).status).toBe(200)
     })
 
     // What a browser sends when an https page posts a form to an http URL, under its default referrer policy.
     it('refuses Origin: null, what a browser sends for a form posted from https to http', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
 
       expect((await post(app, '/echo', { origin: 'null', 'sec-fetch-mode': 'navigate' })).status).toBe(403)
     })
@@ -303,8 +306,8 @@ describe('csrf() at the edges', () => {
     ])('carries the CORS headers on a refusal, with %s', async (_order, corsFirst) => {
       const app = await ready(
         corsFirst
-          ? createWebApplication().with(cors).with(csrf()).mount(echo())
-          : createWebApplication().with(csrf()).with(cors).mount(echo()),
+          ? createWebApplication({ adapter: node() }).with(cors).with(csrf()).mount(echo())
+          : createWebApplication({ adapter: node() }).with(csrf()).with(cors).mount(echo()),
       )
       const refused = await post(app, '/echo', fromFront)
 
@@ -313,7 +316,7 @@ describe('csrf() at the edges', () => {
     })
 
     it('never refuses a preflight', async () => {
-      const app = await ready(createWebApplication().with(cors).with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(cors).with(csrf()).mount(echo()))
       const res = await app.request('/echo', {
         method: 'OPTIONS',
         headers: { ...fromFront, 'access-control-request-method': 'POST' },
@@ -333,7 +336,7 @@ describe('csrf() at the edges', () => {
         .extend(csrfExempt())
         .handler(ok)
 
-      const app = await ready(createWebApplication().with(csrf()).mount(admin))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(admin))
 
       expect((await post(app, '/admin/hooks', CROSS_SITE)).status).toBe(403)
       expect((await post(app, '/admin/marked', CROSS_SITE)).status).toBe(200)
@@ -341,7 +344,7 @@ describe('csrf() at the edges', () => {
 
     it("leaves the application server's paths to its own plugin, whatever a listener excludes", async () => {
       const app = (await running(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .listener('admin', l => l.server(() => ({ listen: listener })).with(csrf(c => c.exclude('/hooks'))))
           .server(() => ({ listen: listener }))
           .with(csrf())

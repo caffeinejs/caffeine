@@ -1,5 +1,5 @@
-import { Controller, Get, Prefix, Router } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, Prefix, Router, createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'
@@ -23,7 +23,7 @@ const isAdmin = (_group: unknown, _route: unknown, path: string) => path.startsW
 const isStorefront = (_group: unknown, _route: unknown, path: string) => !path.startsWith('/admin')
 
 describe('include on a prefixed controller', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -32,11 +32,11 @@ describe('include on a prefixed controller', () => {
 
   // Matching the router's path alone would publish the back office in the storefront's document.
   it('selects routes by the path the document publishes, prefix included', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi('storefront', o => o.docs(false).include(isStorefront)))
       .with(openapi('back-office', o => o.docs(false).include(isAdmin)))
-      .mount(catalog()) as NodeWebApplication
+      .mount(catalog()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const provider = app.container.get(OpenAPIProvider)

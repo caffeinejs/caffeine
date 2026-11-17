@@ -1,8 +1,9 @@
 import { fc, it } from '@fast-check/vitest'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Attachment, Router } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 import { expectRangeAnswer, extendedName, NAMED_DOWNLOAD, type RangeAnswer } from './bodies.js'
 import { patterned } from './patterned.js'
 
@@ -217,7 +218,7 @@ routes.get('/conditional/:id').handler(ctx => {
   return Attachment(patterned(0, CONDITIONAL_SIZE), content)
 })
 
-const app = createWebApplication().mount(routes)
+const app = createWebApplication({ adapter: node() }).mount(routes)
 
 beforeAll(async () => {
   await app.bootstrap()

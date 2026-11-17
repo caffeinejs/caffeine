@@ -1,7 +1,7 @@
 import { $t } from '@caffeinejs/application/schema'
 import { Injectable } from '@caffeinejs/di'
-import { GuardResult, Router, type Guard, type GuardInput } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { GuardResult, Router, type Guard, type GuardInput, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 
@@ -54,7 +54,7 @@ api
     }
   })
 
-const app = createWebApplication().mount(api)
+const app = createWebApplication({ adapter: node() }).mount(api)
 
 app.use((ctx, next) => {
   ctx.header('x-request-id', Math.random().toString(36).slice(2))

@@ -11,7 +11,7 @@ import {
   Router,
   type Guard,
 } from '../../index.js'
-import { createWebApplication as createNodeApplication } from '../../platform/node/node.js'
+import { node } from '../../platform/node/node.js'
 import { ErrHealthConfiguration } from './errors.js'
 import { healthProbes } from './plugin.js'
 
@@ -180,7 +180,7 @@ describe('healthProbes', () => {
   describe('on Node', () => {
     it("leaves the application's global guards off the probes", async () => {
       const app = track(
-        createNodeApplication()
+        createWebApplication({ adapter: node() })
           .install(Guards(g => g.global(DenyAll)))
           .with(healthProbes(h => h.enabled(true))),
       )
@@ -193,7 +193,7 @@ describe('healthProbes', () => {
     it('runs the root hooks for a probe', async () => {
       let count = 0
       const app = track(
-        createNodeApplication()
+        createWebApplication({ adapter: node() })
           .hook('onRequest', () => {
             count++
           })

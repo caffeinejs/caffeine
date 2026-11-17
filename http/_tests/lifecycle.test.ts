@@ -1,8 +1,9 @@
 import { Injectable, type OnBootstrap, type OnDestroy } from '@caffeinejs/di'
 import { describe, it, expect, vi } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 describe('Adapter Lifecycle', () => {
   it('a container OnBootstrap hook runs before the first request is served', async () => {
@@ -26,7 +27,7 @@ describe('Adapter Lifecycle', () => {
 
     void [LifecycleController, Warmup]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
 
     await app.bootstrap()
 
@@ -56,7 +57,7 @@ describe('Adapter Lifecycle', () => {
 
     void [Lc3Controller, Resource]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
 
     await app.bootstrap()
     await app.close()
@@ -75,7 +76,7 @@ describe('Adapter Lifecycle', () => {
 
     void [Lc4Controller]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const beforeClose = await app.request('/lc4/ping')

@@ -13,13 +13,14 @@ import { newNoopLogger } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication, type WebApplication } from '../../application.js'
 import { bindTo, Router, type AnyRouter } from '../../index.js'
-import { createWebApplication } from './node.js'
+import { node, type NodeAdapter } from './node.js'
 
 const key = readFileSync(new URL('../../_tests/_testdata/tls/localhost.key', import.meta.url))
 const cert = readFileSync(new URL('../../_tests/_testdata/tls/localhost.crt', import.meta.url))
 
-type App = ReturnType<typeof createWebApplication>
+type App = WebApplication<never, never, unknown, NodeAdapter>
 
 const apps: Array<{ close(): Promise<void> }> = []
 
@@ -39,7 +40,7 @@ function hello(): AnyRouter {
 }
 
 function app(settings: object = {}): App {
-  const built = createWebApplication()
+  const built = createWebApplication({ adapter: node() })
     .logger(b => b.use(newNoopLogger()))
     .server(() => settings as never)
     .mount(hello())
@@ -139,7 +140,7 @@ describe('the Node application', () => {
 
   it('logs where it listens', async () => {
     const info = vi.fn()
-    const built = createWebApplication()
+    const built = createWebApplication({ adapter: node() })
       .logger(b => b.use({ ...newNoopLogger(), info }))
       .mount(hello())
     apps.push(built)
@@ -223,7 +224,7 @@ describe('the Node application', () => {
   })
 
   it('serves a listener on its own listen settings', async () => {
-    const built = createWebApplication()
+    const built = createWebApplication({ adapter: node() })
       .logger(b => b.use(newNoopLogger()))
       .listener('admin', l => l.server(() => ({ listen: { host: '127.0.0.1', port: 0 } })))
       .mount(new Router('/admin').extend(bindTo('admin')).get('/', () => ({ up: true })))
@@ -259,7 +260,7 @@ describe('the Node application from its configuration', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ server: { host: '0.0.0.0', port: 0 } }))
       .build().config
-    const built = createWebApplication({ config: conf })
+    const built = createWebApplication({ adapter: node(), config: conf })
       .logger(b => b.use(newNoopLogger()))
       .server(({ config }) => ({ listen: config.server }))
     apps.push(built)
@@ -273,7 +274,7 @@ describe('the Node application from its configuration', () => {
     const conf = newConfiguration(schema)
       .source(new EnvConfigSource({ env: { SERVER__HOST: '0.0.0.0', SERVER__PORT: '0' } }))
       .build().config
-    const built = createWebApplication({ config: conf })
+    const built = createWebApplication({ adapter: node(), config: conf })
       .logger(b => b.use(newNoopLogger()))
       .server(({ config }) => ({ listen: config.server }))
     apps.push(built)

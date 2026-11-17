@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   Catch,
   CatchWith,
@@ -10,7 +11,7 @@ import {
   Get,
   type ActionResult,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // Both handlers cover ErrAmbiguous, and one @CatchWith names them both.
 class ErrAmbiguous extends Error {}
@@ -38,7 +39,7 @@ void [AmbiguousController]
 
 describe('ambiguous @CatchWith', () => {
   it('rejects when two referenced handlers cover the same error type', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
 
     await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })

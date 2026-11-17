@@ -104,7 +104,7 @@ internal applications, which other applications reach through the runtime withou
 ### Script mode
 
 ```ts
-const app = createWebApplication().with(healthProbes()).mount(routes)
+const app = createWebApplication({ adapter: node() }).with(healthProbes()).mount(routes)
 
 await app.bootstrap()
 registerWattChecks(app)
@@ -121,7 +121,7 @@ application in script mode listens on whatever port it asks for, and the runtime
 ### Factory mode
 
 ```ts
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   .mount(routes)
   .shutdown(s => s.drainDelay(0))
 
@@ -138,8 +138,9 @@ export async function close(): Promise<void> {
 }
 ```
 
-`create()` returns the node:http server, typed `NodeHTTPServer` and imported from `@caffeinejs/http/node`: Watt serves it
-through its request listener, listening on it for the entrypoint and sending it requests in process otherwise.
+`create()` returns the node:http server the `node()` adapter built, typed `NodeHTTPServer`, which
+`@caffeinejs/http/node` exports beside `node`. Watt serves it through its request listener, listening on it for the
+entrypoint and sending it requests in process otherwise.
 
 `markStarted().acceptTraffic()` is not optional. Without it the application stays "starting", readiness never
 passes, and since `/status` fails with readiness, an orchestrator restarts the pod in a loop.
@@ -224,7 +225,9 @@ already has. Read it with `getBasePath` from `@platformatic/globals`, which answ
 not to throw. Its type also allows `null`, which `.basePath(...)` does not take:
 
 ```ts
-const app = createWebApplication().basePath(() => getBasePath({ throwOnMissing: false }) ?? undefined)
+const app = createWebApplication({ adapter: node() }).basePath(
+  () => getBasePath({ throwOnMissing: false }) ?? undefined,
+)
 ```
 
 `.basePath(...)` drops the trailing slash. The example's `web` is served under `/shop` this way. See
@@ -237,7 +240,7 @@ A Watt gateway composes the APIs it fronts from the OpenAPI documents its applic
 ready and keeps it in `OpenAPIProvider`, so read it once `bootstrap()` has resolved:
 
 ```ts
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   .install(OpenAPI())
   .with(openapi(o => o.info({ title: 'Orders', version: '1.0.0' }).json(false).yaml(false).docs(false)))
   .mount(routes)

@@ -1,6 +1,7 @@
 import { $t } from '@caffeinejs/application/schema'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import { authentication } from '../../../core/security/security.js'
 import {
   AllowAnonymous,
@@ -18,7 +19,7 @@ import {
   Schema,
   Authentication,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 /**
  * The authentication gate — authentication and the authorization that is folded into it.
@@ -76,7 +77,7 @@ function newApp() {
   const first = new HeaderSchemeHandler('First', 'x-first')
   const second = new HeaderSchemeHandler('Second', 'x-second')
 
-  const builder = createWebApplication()
+  const builder = createWebApplication({ adapter: node() })
   builder
     .install(
       Authentication(auth =>

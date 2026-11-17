@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:net'
 import { Byte } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication, type WebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -18,7 +19,7 @@ import {
   bindTo,
   Router,
 } from '../../../index.js'
-import { createWebApplication, type NodeWebApplication } from '../../../platform/node/index.js'
+import { node, type NodeAdapter } from '../../../platform/node/index.js'
 import { healthProbes } from '../../health/index.js'
 import { authentication } from '../../security/security.js'
 
@@ -74,7 +75,7 @@ const operator = { 'x-ops': 'alice:operator' }
  * serving the probes. `adminPlugin` is one more plugin on `admin`.
  */
 function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; adminPlugin?: HTTPPluginFactory } = {}) {
-  return createWebApplication()
+  return createWebApplication({ adapter: node() })
     .install(Authentication(a => a.addStrategy('Ops', new OpsScheme()).default('Ops')))
     .listener('admin', l => {
       l.server(() => ({ bodyLimit: 64 * Byte, listen: listener })).with(authentication())
@@ -92,11 +93,11 @@ function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; ad
         .post('/echo', ctx => ({ received: ctx.req.body() })),
       new Router('/metrics').extend(bindTo('metrics')).get('/', () => ({ up: true })),
       new Router('/api').post('/echo', ctx => ({ received: ctx.req.body() })),
-    ) as NodeWebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 }
 
 describe('several listeners with different settings', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close().catch(() => undefined)
@@ -212,7 +213,7 @@ describe('several listeners with different settings', () => {
   })
 
   it('refuses two listeners of one name', () => {
-    const twice = () => createWebApplication().listener('admin').listener('admin')
+    const twice = () => createWebApplication({ adapter: node() }).listener('admin').listener('admin')
 
     expect(twice).toThrow(expect.objectContaining({ name: 'ErrConfiguration', code: 'ERR_CONFIGURATION' }))
     expect(twice).toThrow(/^Cannot add listener "admin": a listener named "admin" is already added/)

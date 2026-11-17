@@ -7,10 +7,10 @@ import { DEFAULT_ROUTER_FLAGS, type RouteMatcherFactory, type RouterFlags } from
 import { typeBoxSchemaCompiler } from '../validation/typebox.js'
 import type { SchemaCompiler } from '../validation/validation.js'
 import { DEFAULT_BODY_LIMIT, isBodyLimit } from './body.js'
-import { configurationError, USE_NODE } from './error.js'
+import { configurationError, kindOf, USE_ADAPTER, USE_NODE } from './error.js'
 import { compileTrustProxy, type TrustProxy } from './trust.js'
 
-/** What `.server(...)` returns on the fetch application. */
+/** What `.server(...)` returns under no adapter, and what every adapter's settings start from. */
 export interface ServerSettings {
   /**
    * How long a route's handler may run before the request is answered 503. Unset: no limit. A route's `@Timeout`
@@ -28,8 +28,8 @@ export interface ServerSettings {
   constraints?: readonly ConstraintStrategy<unknown>[]
   /**
    * Whether `X-Forwarded-Host` and `X-Forwarded-Proto` decide `ctx.req.host` and `ctx.req.protocol`: `true` trusts
-   * any peer, and the last entry of each header wins. Unset: no peer. The fetch runtime gives no peer address, so
-   * proxies named by address are the Node application's.
+   * any peer, and the last entry of each header wins. Unset: no peer. Under no adapter the runtime gives no peer
+   * address, so proxies named by address need an adapter that knows the peer: `node()` or `bun()`.
    */
   trustProxy?: boolean
   /** The request header `ctx.req.id` is taken from when a request carries it. Unset: requests are numbered. */
@@ -46,6 +46,18 @@ export interface ServerSettings {
   schemaCompiler?: SchemaCompiler
 }
 
+/** What every adapter that listens takes besides {@link ServerSettings}: it knows each request's peer. */
+export interface ListeningServerSettings extends Omit<ServerSettings, 'trustProxy'> {
+  /**
+   * Which peers' `X-Forwarded-Host` and `X-Forwarded-Proto` decide `ctx.req.host` and `ctx.req.protocol`.
+   *
+   * `true` trusts any peer. A list, or a comma-separated string, names the proxies: each entry an address, a CIDR
+   * range, or `loopback`, `linklocal` or `uniquelocal`. The last entry of each header wins. Unset: no peer. A hop
+   * count is refused, since it cannot tell a proxy from a client.
+   */
+  trustProxy?: boolean | string | readonly string[]
+}
+
 /** {@link ServerSettings} with every default filled in. */
 export interface ResolvedServerSettings {
   readonly handlerTimeout: Duration | undefined
@@ -55,7 +67,7 @@ export interface ResolvedServerSettings {
   readonly trustProxy: TrustProxy | undefined
   /** Lower-cased. */
   readonly requestIDHeader: string | undefined
-  /** The application's name in messages: `fetch application`, `Node application`. */
+  /** The application's name in messages: `fetch application`, `Node application`, `Bun application`. */
   readonly application: string
   readonly bodyLimit: ByteSize
   readonly schemaCompiler: SchemaCompiler
@@ -88,8 +100,37 @@ const SETTINGS = [
   'bodyLimit',
   'schemaCompiler',
 ]
-/** The settings sections only the Node application takes: what Node itself configures. */
+/** The settings sections only the Node adapter takes: what Node itself configures. */
 export const NODE_SECTIONS: ReadonlySet<string> = new Set(['listen', 'http', 'https', 'http2'])
+/** The sections every adapter that listens takes: where, and the TLS it serves. */
+export const SOCKET_SECTIONS: ReadonlySet<string> = new Set(['listen', 'https'])
+
+/**
+ * Refuses a section of `settings` that is not an object of options. `sections` names each one an adapter reads as
+ * such: what it holds, such as `node:net options`, and an example of it.
+ *
+ * @throws ErrConfiguration naming the section and what it is, never its value: a key may stand in its place.
+ */
+export function assertObjectSections(
+  settings: object,
+  sections: Readonly<Record<string, readonly [kind: string, example: string]>>,
+): void {
+  for (const [key, [kind, example]] of Object.entries(sections)) {
+    const value = (settings as Record<string, unknown>)[key]
+
+    if (value !== undefined && !isOptions(value)) {
+      throw configurationError(
+        `Cannot set ${key}: it must be an object of ${kind}, not ${kindOf(value)}`,
+        `Return ${key} as an object, such as ${example}`,
+      )
+    }
+  }
+}
+
+/** Whether `value` is an object of options: not `null`, not an array. */
+export function isOptions(value: unknown): value is object {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 /** A header name, as RFC 9110 writes a token. */
 export const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
@@ -111,13 +152,17 @@ export function resolveServerSettings(
     if (!SETTINGS.includes(key) && !application.sections.has(key)) {
       throw configurationError(
         `Cannot build the server: "${key}" is not a setting of the ${application.name}`,
-        ...(NODE_SECTIONS.has(key) ? [`${USE_NODE} to serve on a Node server`] : []),
+        ...(SOCKET_SECTIONS.has(key)
+          ? [`${USE_ADAPTER} to serve on a socket`]
+          : NODE_SECTIONS.has(key)
+            ? [`${USE_NODE} to serve on a Node server`]
+            : []),
         `Return only ${[...SETTINGS, ...application.sections].join(', ')} from ".server(...)"`,
       )
     }
   }
 
-  // `trustProxy` and `requestIDHeader` are read as given: a Node application's `trustProxy` is wider.
+  // `trustProxy` and `requestIDHeader` are read as given: an adapter that listens takes a wider `trustProxy`.
   const { handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler } =
     settings as Omit<
       ServerSettings,

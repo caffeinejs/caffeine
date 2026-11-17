@@ -8,13 +8,15 @@ runtime and the process. Every tool is a set of REST resources returning JSON.
 
 ## Serve the devtools
 
-Install them on a server of their own. By default it listens on `127.0.0.1:9090`, away from the port your users
-reach:
+Install them on a server of their own, which takes an adapter that listens, such as `node()`. By default it listens on
+`127.0.0.1:9090`, away from the port your users reach:
 
 ```ts
 import { DevTools } from '@caffeinejs/devtools'
+import { createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 
-const app = createWebApplication().install(DevTools())
+const app = createWebApplication({ adapter: node() }).install(DevTools())
 ```
 
 ```sh
@@ -24,7 +26,7 @@ curl http://127.0.0.1:9090/devtools
 Read where they listen from the configuration. A fluent setter wins over what the configuration holds:
 
 ```ts
-const app = createWebApplication({ config }).install(
+const app = createWebApplication({ config, adapter: node() }).install(
   DevTools((d, { config }) => d.config(config.app.devtools)), // { host, port, path }
 )
 ```
@@ -55,7 +57,7 @@ The devtools show the shape of your application to anyone who can reach them, so
 To require something of every devtools route, use `authorize(...)`. It takes what `router.authorize(...)` takes:
 
 ```ts
-createWebApplication()
+createWebApplication({ adapter: node() })
   .install(Authentication(a => a.addJWTBearer(...)))
   .install(DevTools(d => d.authorize({ roles: ['ops'] })))
 ```

@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import { ErrResponseBodyConsumed } from '../../index.js'
-import { createWebApplication as createNodeApplication } from '../../platform/node/index.js'
+import { node } from '../../platform/node/index.js'
 import { Responder } from '../../response.js'
 import { ErrHTTPUnprocessableContent } from '../error/http.js'
 import { Router } from '../routing/programmatic/programmatic.js'
@@ -383,7 +383,7 @@ describe('a Node stream answer an onSend hook is handed', () => {
     })
     .handler(() => Readable.from(['a', 'b', 'c']))
 
-  const served = createNodeApplication()
+  const served = createWebApplication({ adapter: node() })
     .logger(b => b.use(newNoopLogger()))
     .mount(streams)
 

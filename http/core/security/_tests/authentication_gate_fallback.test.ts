@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   AuthenticationTicket,
@@ -14,7 +15,7 @@ import {
   CookieAuthenticationOptionsBuilder,
   ErrAuthenticationCookies,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
 import { healthProbes } from '../../health/index.js'
 import { Router } from '../../routing/programmatic/programmatic.js'
@@ -88,7 +89,7 @@ describe('the authentication gate and routes a plugin mounted', () => {
 
   it('leaves them open when the application set no fallback policy', async () => {
     const app = await ready(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
         .with(authentication())
         .with(() => new PlainRoutes()),
@@ -100,7 +101,7 @@ describe('the authentication gate and routes a plugin mounted', () => {
   describe('under a fallback policy', () => {
     function build() {
       return ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
           .with(authentication())
           .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
@@ -147,7 +148,7 @@ describe('the authentication gate and routes a plugin mounted', () => {
   // orchestrator see a 500 and restart a process that was in fact alive.
   it('keeps a failing authentication scheme away from the health probes', async () => {
     const app = await ready(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .install(Authentication(auth => auth.addStrategy('Broken', new BrokenScheme())))
         .with(authentication())
         .with(healthProbes())
@@ -179,7 +180,7 @@ describe('the challenge of a route that names several schemes', () => {
 
   function build(schemes: string[]) {
     return ready(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .install(
           Authentication(auth =>
             auth
@@ -249,7 +250,7 @@ describe('an application whose scheme reads cookies', () => {
   // Cookies are parsed when first read, so whatever slot the gate lands in finds them. Ordering this by hand used to
   // be the application's job, and getting it wrong was a TypeError on every request.
   it('starts with nothing registered by the application', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addCookie(c => c.sessionSecret(secret))))
       .with(authentication())
 
@@ -258,7 +259,7 @@ describe('an application whose scheme reads cookies', () => {
   })
 
   it('parses the cookies of a request reaching a route registered before authentication', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .with(
         () =>
           new (class extends HTTPPlugin {
@@ -282,7 +283,7 @@ describe('an application whose scheme reads cookies', () => {
 
   // Every request carrying the session cookie would fail to read it, so the server does not start.
   it('refuses to start a cookie scheme on a server whose cookies are off', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .cookie(k => k.enabled(false))
       .install(Authentication(auth => auth.addCookie(c => c.sessionSecret(secret))))
       .with(authentication())
@@ -299,7 +300,7 @@ describe('an application whose scheme reads cookies', () => {
       'session',
       new CookieAuthenticationOptionsBuilder().sessionSecret(secret).build(),
     )
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .cookie(k => k.enabled(false))
       .install(Authentication(auth => auth.addStrategy('session', handler)))
       .with(authentication())
@@ -309,7 +310,7 @@ describe('an application whose scheme reads cookies', () => {
   })
 
   it('asks nothing of an application whose schemes read no cookie', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .cookie(k => k.enabled(false))
       .install(Authentication(auth => auth.addBasic(b => b.validate(() => null))))
       .with(authentication())

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   Catch,
   type IContext,
@@ -9,7 +10,7 @@ import {
   Get,
   type ActionResult,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // Isolated: two controller methods handling the same error type. buildRouting rejects at bootstrap(),
 // which poisons every app build in the module — so it lives alone.
@@ -30,7 +31,7 @@ void [DupController]
 
 describe('duplicate controller error handler', () => {
   it('rejects when two methods handle the same error type, naming the controller', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     const started = app.bootstrap()
 
     await expect(started).rejects.toThrow(ErrConfiguration)

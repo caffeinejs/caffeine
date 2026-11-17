@@ -2,6 +2,7 @@ import { ErrGuardConfiguration } from '@caffeinejs/application/framework'
 import { CaffeineIoC, ErrInvalidDecorator, Injectable, Lifetime, Scopes, reflect, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../application.js'
 import {
   Catch,
   Claim,
@@ -21,14 +22,14 @@ import {
   type WebApplication,
   Guards,
 } from '../../index.js'
-import { createWebApplication } from '../../platform/node/index.js'
+import { node } from '../../platform/node/index.js'
 import type { GuardInput } from './guard.js'
 
 // What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
 const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
 
 function buildApp() {
-  return createWebApplication()
+  return createWebApplication({ adapter: node() })
 }
 
 describe('guard', () => {
@@ -332,7 +333,7 @@ describe('use_guards', () => {
 
   it('runs global, then controller, then method', async () => {
     order.length = 0
-    const app = createWebApplication().install(Guards(g => g.global(GlobalGuard)))
+    const app = createWebApplication({ adapter: node() }).install(Guards(g => g.global(GlobalGuard)))
     await app.bootstrap()
 
     const res = await app.request('/use-guards/both')
@@ -356,7 +357,7 @@ describe('use_guards', () => {
 
   it('runs a guard listed at several levels once, at its first position', async () => {
     order.length = 0
-    const app = createWebApplication().install(Guards(g => g.global(RepeatedGuard)))
+    const app = createWebApplication({ adapter: node() }).install(Guards(g => g.global(RepeatedGuard)))
     await app.bootstrap()
 
     const res = await app.request('/use-guards-repeated')
@@ -418,7 +419,7 @@ describe('builder', () => {
   void [ListedGuard, NotAGuard, BuilderOkController, BuilderUseController]
 
   it('runs a global guard listed by InjectionToken on every route', async () => {
-    const app = createWebApplication().install(Guards(g => g.global(ListedGuard)))
+    const app = createWebApplication({ adapter: node() }).install(Guards(g => g.global(ListedGuard)))
     await app.bootstrap()
 
     const res = await app.request('/builder-ok')
@@ -439,13 +440,13 @@ describe('builder', () => {
 
   it('rejects a missing InjectionToken at start-up', async () => {
     const kMissing = token<Guard>(Symbol('missing-guard'))
-    const app = createWebApplication().install(Guards(g => g.global(kMissing)))
+    const app = createWebApplication({ adapter: node() }).install(Guards(g => g.global(kMissing)))
 
     await expect(app.bootstrap()).rejects.toThrow(ErrGuardConfiguration)
   })
 
   it('rejects an InjectionToken that is not a Guard at start-up', async () => {
-    const app = createWebApplication().install(Guards(g => g.global(NotAGuard as never)))
+    const app = createWebApplication({ adapter: node() }).install(Guards(g => g.global(NotAGuard as never)))
 
     await expect(app.bootstrap()).rejects.toThrow(ErrGuardConfiguration)
   })
@@ -469,7 +470,7 @@ describe('builder', () => {
     const router = new Router('/abstract-guard').guards([AuditGuard])
     router.get('/').handler(() => ({ ok: true }))
 
-    const app = createWebApplication({ container }).mount(router) as WebApplication
+    const app = createWebApplication({ adapter: node(), container }).mount(router) as WebApplication
     await app.bootstrap()
 
     const res = await app.request('/abstract-guard')
@@ -839,7 +840,7 @@ describe('authorization', () => {
   void [AuthGuard, RolesGuard, CatsController]
 
   async function ready() {
-    const app = createWebApplication().install(Guards(g => g.global(AuthGuard, RolesGuard)))
+    const app = createWebApplication({ adapter: node() }).install(Guards(g => g.global(AuthGuard, RolesGuard)))
     await app.bootstrap()
     return app
   }

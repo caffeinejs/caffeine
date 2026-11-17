@@ -1,14 +1,15 @@
 import { CaffeineIoC, ErrInvalidDecorator, type Ctor } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication, type WebApplication } from '../application.js'
 import type { IContext } from '../context.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node, type NodeAdapter } from '../platform/node/index.js'
 import { Keys } from '../symbols.js'
 import { Controller } from './controller.js'
 import { OnRequest, OnSend } from './hooks.js'
 import { Get } from './verbs.js'
 
-type App = ReturnType<typeof createWebApplication>
+type App = WebApplication<never, never, unknown, NodeAdapter>
 let app: App | undefined
 
 afterEach(async () => {
@@ -20,7 +21,7 @@ afterEach(async () => {
 async function serve(controller: Ctor): Promise<App> {
   const container = new CaffeineIoC({ decorators: false })
   container.bind(controller, t => t.toSelf().labels(Keys.CONTROLLER))
-  app = createWebApplication({ container })
+  app = createWebApplication({ adapter: node(), container })
   await app.bootstrap()
   return app
 }

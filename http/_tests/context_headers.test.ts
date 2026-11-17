@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Router } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * A handler, or a `Responder` answering for one, reads back a response header before it sends: the type the route
@@ -33,7 +34,7 @@ routes.get('/case').handler(ctx => {
   return { read: ctx.getHeader('x-request-id') }
 })
 
-const app = createWebApplication().mount(routes)
+const app = createWebApplication({ adapter: node() }).mount(routes)
 
 beforeAll(async () => {
   await app.bootstrap()

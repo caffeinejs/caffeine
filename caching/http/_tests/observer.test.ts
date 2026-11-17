@@ -1,6 +1,6 @@
 import type { Logger } from '@caffeinejs/application/logger'
-import { Controller, Get, Post, Status } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -58,7 +58,9 @@ afterEach(async () => {
 
 async function start(observer: CacheObserver, options: { store?: HTTPCacheStore; logger?: Logger } = {}) {
   const store = options.store ?? new MemoryHTTPCacheStore()
-  const app = createWebApplication({ logger: options.logger }).with(HTTPCaching(b => b.store(store).observer(observer)))
+  const app = createWebApplication({ adapter: node(), logger: options.logger }).with(
+    HTTPCaching(b => b.store(store).observer(observer)),
+  )
   close = () => app.close()
   await app.bootstrap()
   return app

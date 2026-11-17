@@ -1,8 +1,9 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get, Version } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * `@Version` on a decorated controller must compile to the same `version` constraint a programmatic
@@ -31,7 +32,7 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
     await app.bootstrap()
 
     expect(await (await app.request('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
@@ -58,7 +59,7 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
     await app.bootstrap()
 
     expect(await (await app.request('/catalog/item', { headers: { 'accept-version': '1.x' } })).json()).toEqual({

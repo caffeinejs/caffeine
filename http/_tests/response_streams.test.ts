@@ -2,8 +2,9 @@ import { Readable } from 'node:stream'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Router } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 import { expectPatternedBody, streamOf } from './bodies.js'
 import { firstMismatch, patterned } from './patterned.js'
 
@@ -76,7 +77,7 @@ describe('a stream a handler returns goes out labelled as bytes, unless somethin
     })
   })
 
-  const app = createWebApplication().mount(routes)
+  const app = createWebApplication({ adapter: node() }).mount(routes)
 
   beforeAll(async () => {
     await app.bootstrap()
@@ -194,7 +195,7 @@ describe('over a socket, a returned stream', () => {
     })
   })
 
-  const app = createWebApplication()
+  const app = createWebApplication({ adapter: node() })
     .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
     .mount(routes)
 

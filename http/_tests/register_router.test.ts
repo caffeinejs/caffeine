@@ -9,10 +9,11 @@ import { token } from '@caffeinejs/di'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { authentication } from '../core/security/security.js'
 import { registerRouteGroup } from '../decorators/registrar/index.js'
 import { $p, Keys, type RouteAuthzOptions, RouteBuilder, WebApplication, Authentication } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 
@@ -83,7 +84,7 @@ describe('registerRouteGroup', () => {
   })
 
   it('routes a controller bound during configure()', async () => {
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder.install(new ProgrammaticService())
     app = builder
     await app.bootstrap()
@@ -95,7 +96,7 @@ describe('registerRouteGroup', () => {
   })
 
   it('applies authentication and authorization to the registered route', async () => {
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -117,7 +118,7 @@ describe('registerRouteGroup', () => {
   })
 
   it('enforces role requirements on the registered route', async () => {
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -144,7 +145,7 @@ describe('registerRouteGroup', () => {
   // it by name, and resolving its plugins first must not get in the way.
   it('refuses a key labelled as a controller that is not a class', async () => {
     const kNotAController = token<{ marker: boolean }>(Symbol('NotAController'))
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
     app.container.bind(kNotAController, t => t.toValue({ marker: true }).labels(Keys.CONTROLLER))
 
     await expect(app.bootstrap()).rejects.toMatchObject({
@@ -159,7 +160,7 @@ describe('registerRouteGroup', () => {
     class Unrouted {
       readonly marker = true
     }
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
     app.container.bind(Unrouted, t => t.toSelf().labels(Keys.CONTROLLER))
 
     await expect(app.bootstrap()).rejects.toMatchObject({

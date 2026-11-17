@@ -3,6 +3,7 @@ import { Blob as NodeBlob } from 'node:buffer'
 import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import {
   type ActionResult,
   Catch,
@@ -16,7 +17,7 @@ import {
   Responder,
   Router,
 } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 import { expectPatternedBody } from './bodies.js'
 import { patterned } from './patterned.js'
 
@@ -72,7 +73,7 @@ describe('a handler that returns a Blob, a File or an ArrayBuffer sends the byte
   routes.get('/view-of-larger').handler(() => patterned(0, 4000).subarray(1000, 2000))
   routes.get('/float64').handler(() => new Float64Array([1.5, -2, Math.PI]))
 
-  const app = createWebApplication().mount(routes)
+  const app = createWebApplication({ adapter: node() }).mount(routes)
 
   beforeAll(async () => {
     await app.bootstrap()
@@ -163,7 +164,7 @@ describe('the edges of a body', () => {
   routes.get('/typed-with-parameters').handler(() => new Blob(['a,b\n'], { type: 'text/csv;charset=utf-8' }))
   routes.get('/untyped').handler(() => new Blob([BYTES]))
 
-  const app = createWebApplication().mount(routes)
+  const app = createWebApplication({ adapter: node() }).mount(routes)
 
   beforeAll(async () => {
     await app.bootstrap()
@@ -224,7 +225,7 @@ describe("whose Content-Type a Blob goes out under: the route's or the handler's
     .header('x-route', 'yes')
     .handler(() => pdf())
 
-  const app = createWebApplication().mount(routes)
+  const app = createWebApplication({ adapter: node() }).mount(routes)
 
   beforeAll(async () => {
     await app.bootstrap()
@@ -404,7 +405,7 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
     throw new ErrGroupBlob()
   })
 
-  const app = createWebApplication()
+  const app = createWebApplication({ adapter: node() })
     .errorHandling(e => e.globalHandlers(GlobalCatcher))
     .use('/sites/gated', (ctx: IContext) => {
       ctx.body(pdf())

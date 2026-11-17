@@ -1,6 +1,7 @@
 import { Injectable } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication, type WebApplication } from '../application.js'
 import {
   type ActionResult,
   Catch,
@@ -12,7 +13,7 @@ import {
   type RouteDefinition,
   Router,
 } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node, type NodeAdapter } from '../platform/node/index.js'
 
 // The lifecycle as every application runs it: this file is in the Node and fetch projects alike.
 
@@ -44,7 +45,7 @@ function plugin(fn: (context: HTTPSetupContext) => void): () => HTTPPlugin {
     })()
 }
 
-type App = ReturnType<typeof createWebApplication>
+type App = WebApplication<never, never, unknown, NodeAdapter>
 let app: App | undefined
 
 afterEach(async () => {
@@ -54,7 +55,7 @@ afterEach(async () => {
 })
 
 async function boot(build: (app: App) => unknown): Promise<App> {
-  app = createWebApplication()
+  app = createWebApplication({ adapter: node() })
   build(app)
   await app.bootstrap()
   return app

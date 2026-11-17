@@ -16,8 +16,10 @@ import {
   type ErrorHandler,
   type IContext,
   Router,
+  createWebApplication,
+  type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, inject, it, vi } from 'vitest'
 
@@ -45,10 +47,15 @@ class GuardedFilesController {
 void GuardedFilesController
 
 describe('sendFile', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   const start = async (configure: StaticConfigurer, routes?: Router<any, any, any, any, any>) => {
-    app = createWebApplication({}).with(staticFiles(configure)) as NodeWebApplication
+    app = createWebApplication({ adapter: node() }).with(staticFiles(configure)) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     if (routes !== undefined) {
       app.mount(routes)
     }
@@ -296,9 +303,14 @@ describe('sendFile', () => {
     try {
       await writeFile(join(root, 'slow.txt'), 'slow')
       await buildStatic({ root })
-      app = createWebApplication({})
+      app = createWebApplication({ adapter: node() })
         .server(() => ({ handlerTimeout: 30 * Millisecond }))
-        .with(staticFiles(s => s.serve(root, { unrouted: ['**'] }))) as NodeWebApplication
+        .with(staticFiles(s => s.serve(root, { unrouted: ['**'] }))) as WebApplication<
+        never,
+        never,
+        unknown,
+        NodeAdapter
+      >
       app.mount(new Router().get('/pick', ctx => sendFile(ctx, 'slow.txt')))
       await app.bootstrap()
       const fifo = join(await realpath(root), 'slow.txt')
@@ -331,7 +343,7 @@ describe('sendFile', () => {
 
   it('names the cause when staticFiles(...) is not installed', async () => {
     let thrown: unknown
-    app = createWebApplication({}).mount(
+    app = createWebApplication({ adapter: node() }).mount(
       new Router().get('/pick', ctx => {
         try {
           return sendFile(ctx, 'hello.txt')
@@ -340,7 +352,7 @@ describe('sendFile', () => {
           throw err
         }
       }),
-    ) as NodeWebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await app.request('/pick')).status).toBe(500)
@@ -363,9 +375,9 @@ describe('sendFile', () => {
       }
     }
 
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .with(staticFiles(s => s.serve(fixtures)))
-      .errorHandling(e => e.globalHandlers(MissHandler)) as NodeWebApplication
+      .errorHandling(e => e.globalHandlers(MissHandler)) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const res = await app.request('/nothing')

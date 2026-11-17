@@ -6,7 +6,7 @@ import type { StandardSchemaV1 } from '@standard-schema/spec'
 export type CompiledSerializer = (value: unknown) => string
 
 /**
- * Turns a route's schemas into what the Node and fetch applications run, once, while routes are being registered.
+ * Turns a route's schemas into what the application runs under any adapter, once, while routes are being registered.
  * The server's `schemaCompiler` setting picks it; {@link typeBoxSchemaCompiler} is the default.
  *
  * Only a TypeBox slot reaches `validator`: a Standard Schema slot validates itself. The engine has already applied its

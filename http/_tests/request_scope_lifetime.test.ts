@@ -4,8 +4,9 @@ import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Router } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * The request scope has to live as long as the response, not as long as the handler's promise. Everything here
@@ -36,7 +37,7 @@ describe('request scope lifetime', () => {
             notify()
           }),
       )
-      return createWebApplication({ container })
+      return createWebApplication({ adapter: node(), container })
     }
 
     /** Resolves on the next teardown. Call it before the request that should trigger one. */
@@ -199,7 +200,7 @@ describe('request scope lifetime', () => {
       .inject(i => ({ session: i.provide(Session) }))
       .handler((_ctx, deps) => ({ id: deps.session.get().id }))
 
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
       .logger(b => b.use({ ...newNoopLogger(), error }))
       .mount(router)
     await app.bootstrap()

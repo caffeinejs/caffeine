@@ -8,8 +8,9 @@ import {
   Identity,
   Principal,
   type IContext,
+  createWebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http/node'
 import { inject } from 'vitest'
 
 import { isDocumentRequest, sendFile } from '../../index.js'
@@ -77,7 +78,7 @@ export const CURL: Record<string, string> = {
  * scenario's routers are its whole surface.
  */
 export function isolated() {
-  return createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+  return createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
 }
 
 /** The `caf.session=...` pair to send back, read off a login response. */

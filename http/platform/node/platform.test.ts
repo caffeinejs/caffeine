@@ -10,6 +10,7 @@ import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { Byte, MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication, type WebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import type { ErrorHandler } from '../../core/error/handler.js'
 import { ErrHTTPContentTooLarge } from '../../core/error/http.js'
@@ -19,7 +20,7 @@ import { bodyAsStream } from '../../decorators/body_as_stream.js'
 import { Args, Catch, Controller, Get } from '../../decorators/index.js'
 import { Router, type AnyRouter } from '../../index.js'
 import type { ActionResult } from '../../response.js'
-import { createWebApplication } from './node.js'
+import { node, type NodeAdapter } from './node.js'
 
 @Controller('/peer')
 class Peer {
@@ -32,7 +33,7 @@ class Peer {
 
 void [Peer]
 
-type App = ReturnType<typeof createWebApplication>
+type App = WebApplication<never, never, unknown, NodeAdapter>
 
 const apps: Array<{ close(): Promise<void> }> = []
 
@@ -44,7 +45,7 @@ async function serve(
   routes: AnyRouter,
   options: { settings?: object; logger?: { error?: (...args: unknown[]) => void } } = {},
 ): Promise<{ app: App; origin: string; port: number }> {
-  const app = createWebApplication()
+  const app = createWebApplication({ adapter: node() })
     .logger(b => b.use({ ...newNoopLogger(), ...options.logger }))
     .server(() => (options.settings ?? {}) as never)
     .mount(routes)
@@ -558,7 +559,7 @@ describe('the Node platform', () => {
         deps.session.get()
         return 'x'.repeat(16 * 1024 * 1024)
       })
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
       .logger(b => b.use(newNoopLogger()))
       .mount(routes)
     apps.push(app)
@@ -604,7 +605,7 @@ describe('the Node platform', () => {
           },
         })
       })
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
       .logger(b => b.use(newNoopLogger()))
       .mount(routes)
     apps.push(app)
@@ -645,7 +646,7 @@ describe('the Node platform', () => {
           },
         })
       })
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
       .logger(b => b.use(newNoopLogger()))
       .mount(routes)
     const { address } = await app.run({ host: '127.0.0.1', port: 0 })
@@ -671,10 +672,10 @@ describe('the Node platform', () => {
     const routes = new Router('/a')
     routes.get('/scheme').handler(ctx => ctx.req.protocol)
 
-    const trusted = createWebApplication()
+    const trusted = createWebApplication({ adapter: node() })
       .server(() => ({ trustProxy: '127.0.0.1' }))
       .mount(routes)
-    const other = createWebApplication()
+    const other = createWebApplication({ adapter: node() })
       .server(() => ({ trustProxy: '10.0.0.0/8' }))
       .mount(routes)
     apps.push(trusted, other)
@@ -691,7 +692,7 @@ describe('the Node platform', () => {
       .get('/cached')
       .config('cache', { maxAge: 1 })
       .handler(() => 'never')
-    const app = createWebApplication().mount(routes)
+    const app = createWebApplication({ adapter: node() }).mount(routes)
     apps.push(app)
 
     await expect(app.bootstrap()).rejects.toThrow('on the Node application')
@@ -719,7 +720,7 @@ describe('Node middleware', () => {
   it('hands a mounted middleware the rest of the URL and gives it back', async () => {
     const seen: string[] = []
     const origin = await run(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .use('/admin', (req: IncomingMessage, _res: ServerResponse, next: Next) => {
           seen.push(req.url!)
           next()
@@ -744,7 +745,7 @@ describe('Node middleware', () => {
     const onSend = vi.fn()
     const ended = latch()
     const origin = await run(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .use((_req: IncomingMessage, res: ServerResponse, _next: Next) => {
           res.statusCode = 401
           res.end('no')
@@ -766,7 +767,7 @@ describe('Node middleware', () => {
   it('runs no handler after a middleware ended the response and called next', async () => {
     let handled = 0
     const origin = await run(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .use((_req: IncomingMessage, res: ServerResponse, next: Next) => {
           res.statusCode = 401
           res.end('no')
@@ -789,7 +790,7 @@ describe('Node middleware', () => {
 
   it('keeps the headers a middleware set on the response', async () => {
     const origin = await run(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .use((_req: IncomingMessage, res: ServerResponse, next: Next) => {
           res.setHeader('x-frame-options', 'DENY')
           next()
@@ -806,7 +807,7 @@ describe('Node middleware', () => {
   // A client that leaves while a middleware waits must not keep the request in flight: close() would never drain.
   it('settles the request when the client leaves during a middleware', async () => {
     const entered = latch()
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .use((_req: IncomingMessage, _res: ServerResponse, _next: Next) => entered.release())
       .mount(new Router('/x').get('/', () => 'x'))
     const origin = await run(app)
@@ -824,7 +825,7 @@ describe('Node middleware', () => {
   it('runs a Node middleware at onResponse after a streamed answer', async () => {
     const ran = latch()
     const origin = await run(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .use(
           (_req: IncomingMessage, res: ServerResponse, next: Next) => {
             ran.release()
@@ -845,7 +846,7 @@ describe('Node middleware', () => {
     const seen = latch()
     let url: string | undefined
     const origin = await run(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .use('/admin', (_req: IncomingMessage, _res: ServerResponse, _next: Next) => {
           throw new Error('boom')
         })
@@ -872,7 +873,7 @@ describe('Node middleware', () => {
     container.bind(Session, t => t.toSelf().lifetime(Scopes.REQUEST))
 
     const origin = await run(
-      createWebApplication({ container })
+      createWebApplication({ adapter: node(), container })
         .hook('onRequest', () => void ids.push(container.get(Session).id))
         .hook('onResponse', () => {
           ids.push(container.get(Session).id)
@@ -1201,7 +1202,7 @@ describe('the request body on Node', () => {
         cancelled = head.promise.then(() => body.cancel())
         return new ReadableStream<Uint8Array>({ start: controller => answer.resolve(controller) })
       })
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .logger(b => b.use(newNoopLogger()))
       .mount(routes)
     apps.push(app)
@@ -1252,7 +1253,7 @@ describe('the request body on Node', () => {
     const routes = new Router('/b')
     routes.post('/partial').handler(() => 'never')
     const port = await listen(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .logger(b => b.use(newNoopLogger()))
         .use((req: IncomingMessage, _res: ServerResponse, next: Next) => {
           req.once('data', () => {
@@ -1342,7 +1343,7 @@ describe('the request body on Node', () => {
 
   it('closes the connection after a Node middleware answered without reading the body', async () => {
     const port = await listen(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .logger(b => b.use(newNoopLogger()))
         .use((_req: IncomingMessage, res: ServerResponse, _next: Next) => {
           res.statusCode = 401
@@ -1457,7 +1458,7 @@ describe('the request body on Node', () => {
       })
       .handler(() => 'never')
     const port = await listen(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .logger(b => b.use(newNoopLogger()))
         .use((req: IncomingMessage, _res: ServerResponse, next: Next) => {
           req.once('data', () => {
@@ -1515,7 +1516,7 @@ describe('the request body on Node', () => {
     const routes = new Router('/b')
     declare(routes)
     const port = await listen(
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .logger(b => b.use({ ...newNoopLogger(), error }))
         .use((req: IncomingMessage, _res: ServerResponse, next: Next) => {
           req.once('data', () => {

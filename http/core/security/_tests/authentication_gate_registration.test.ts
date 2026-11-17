@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -12,7 +13,7 @@ import {
   Principal,
   Router,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 import { HTTPPlugin } from '../../../plugin.js'
 import { authentication } from '../security.js'
 
@@ -63,7 +64,7 @@ function schemes() {
 
 describe('gate registration', () => {
   it('refuses a gate whose feature was never installed, at bootstrap', async () => {
-    const app = createWebApplication().with(authentication())
+    const app = createWebApplication({ adapter: node() }).with(authentication())
 
     await expect(app.bootstrap()).rejects.toMatchObject({
       code: 'ERR_FEATURE_NOT_INSTALLED',
@@ -73,7 +74,7 @@ describe('gate registration', () => {
 
   it('refuses a gate default scheme nothing registered, at bootstrap', async () => {
     const { a } = schemes()
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .with(authentication(g => g.defaultScheme('Missing')))
 
@@ -82,7 +83,7 @@ describe('gate registration', () => {
 
   it('refuses two root gates under the default label', async () => {
     const { a } = schemes()
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .with(authentication())
       .with(authentication())
@@ -96,7 +97,7 @@ describe('gate registration', () => {
     const { a } = schemes()
     const guarded = new Router('/dup-scoped').with(authentication()).get('/', () => ({ ok: true }))
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .with(authentication())
       .mount(guarded)
@@ -114,7 +115,7 @@ describe('gate registration', () => {
       .with(authentication(g => g.name('admin').defaultScheme('B')))
       .get('/', () => ({ ok: true }))
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).addStrategy('B', b).default('A')))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .with(authentication())
@@ -154,7 +155,7 @@ describe('gate registration', () => {
       .authorize()
       .get('/', () => ({ ok: true }))
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .mount(open, gated)
 
@@ -175,7 +176,7 @@ describe('gate registration', () => {
     const open = new Router('/feature-no-gate').get('/', () => ({ ok: true }))
 
     let has: boolean | undefined
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .with(context => {
         has = context.hasFeature('auth')

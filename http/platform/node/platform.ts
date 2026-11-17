@@ -25,7 +25,7 @@ import type { HTTPServer } from '../../core/server/server.js'
 /** The response of one request a Node server received, over HTTP/1.1 or HTTP/2. */
 export type NodeResponse = NodeContextPlatform['outgoing']
 
-/** The Node application's platform: what serves each request a Node server received. */
+/** The Node adapter's platform: what serves each request a Node server received. */
 export type NodePlatform = ServerPlatform<NodeResponse, NodeContextPlatform, void>
 
 /** What the platform keeps for a request that declares a body: the keep-alive it closed, and the bytes it read. */
@@ -236,7 +236,7 @@ export function serveNode(
 
   if (isThenable(answer)) {
     // A forced close fails what it cuts with a 503 error: the response is destroyed, as its socket is, not answered.
-    // An in-process caller is handed that error, as the fetch application's is.
+    // An in-process caller is handed that error, as one under no adapter is.
     answer.then(undefined, (err: unknown) => {
       if (!(err instanceof ErrHTTPServiceUnavailable)) {
         fail(res)

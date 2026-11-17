@@ -1,5 +1,5 @@
-import { Router } from '@caffeinejs/http'
-import { type NodeWebApplication } from '@caffeinejs/http/node'
+import { Router, type WebApplication } from '@caffeinejs/http'
+import { type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
@@ -12,7 +12,9 @@ import { clientRouteOf, dist, expectNotFoundJSON, fixtures, isolated, NAVIGATION
  * `/app`, so the bare path is covered by the pair every subtree needs anyway. `/app/` needs no route of its
  * own — `/app/*` matches it with an empty wildcard. See `http/_tests/group_root_path.test.ts`.
  */
-function site(routerOptions: { ignoreTrailingSlash?: boolean } = {}): NodeWebApplication {
+function site(
+  routerOptions: { ignoreTrailingSlash?: boolean } = {},
+): WebApplication<never, never, unknown, NodeAdapter> {
   return isolated()
     .server(() => ({ router: routerOptions }))
     .with(
@@ -30,11 +32,11 @@ function site(routerOptions: { ignoreTrailingSlash?: boolean } = {}): NodeWebApp
         .get('/', shellOf(dist))
         .get('/index.html', shellOf(dist))
         .get('/*', clientRouteOf(dist)),
-    ) as NodeWebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 }
 
 describe('an application mounted under a prefix', () => {
-  let app: NodeWebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
 
   afterEach(async () => {
     await app?.close()

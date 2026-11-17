@@ -6,6 +6,7 @@ import { $t } from '@caffeinejs/application/schema'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
 import type { IContext } from '../../../../context.js'
 import { authentication } from '../../../../core/security/security.js'
 import {
@@ -23,7 +24,7 @@ import {
   Authentication,
   type ActionResult,
 } from '../../../../index.js'
-import { createWebApplication } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node/index.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthSchemeDescriptors } from '../keys.js'
 
@@ -94,9 +95,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema)
       .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }))
       .build().config
-    const app = createWebApplication({
-      config: conf,
-    })
+    const app = createWebApplication({ adapter: node(), config: conf })
       .install(
         Authentication((a, { config }) =>
           a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
@@ -121,7 +120,7 @@ describe('authentication configuration', () => {
   })
 
   it('leaves the code-set secret in place when configuration carries none', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Authentication(a => a.addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience())))
       .with(authentication())
 
@@ -140,9 +139,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema)
       .source(new InlineConfigSource({ auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } } }))
       .build().config
-    const app = createWebApplication({
-      config: conf,
-    })
+    const app = createWebApplication({ adapter: node(), config: conf })
       .install(
         Authentication((a, { config }) =>
           a.config(config.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
@@ -168,9 +165,7 @@ describe('authentication configuration', () => {
       .build().config
     // A cookie scheme is registered, so the server's cookies have to be on, or the application refuses to start.
 
-    const app = createWebApplication({
-      config: conf,
-    })
+    const app = createWebApplication({ adapter: node(), config: conf })
       .install(
         Authentication((a, { config }) =>
           a
@@ -202,9 +197,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema)
       .source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }))
       .build().config
-    const app = createWebApplication({
-      config: conf,
-    })
+    const app = createWebApplication({ adapter: node(), config: conf })
       .install(
         Authentication((a, { config }) =>
           a
@@ -229,9 +222,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema)
       .source(new InlineConfigSource({ auth: { schemes: { Basic: { realm: 'Configured' } } } }))
       .build().config
-    const app = createWebApplication({
-      config: conf,
-    })
+    const app = createWebApplication({ adapter: node(), config: conf })
       .install(
         Authentication((a, { config }) =>
           a.config(config.auth).addBasic(b =>
@@ -267,9 +258,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))
       .build().config
-    const app = createWebApplication({
-      config: conf,
-    })
+    const app = createWebApplication({ adapter: node(), config: conf })
       .install(
         Authentication((a, { config }) =>
           a.config(config.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
@@ -319,7 +308,7 @@ describe('authentication configuration', () => {
     function appFrom(values: Record<string, string>) {
       const conf = newConfiguration(openSchema).source(env(values)).build().config
 
-      return createWebApplication({ config: conf })
+      return createWebApplication({ adapter: node(), config: conf })
         .install(
           Authentication((a, { config }) =>
             a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).issuer('local').audience('local')),
@@ -388,7 +377,7 @@ describe('authentication configuration', () => {
         )
         .build().config
 
-      const app = createWebApplication({ config: conf })
+      const app = createWebApplication({ adapter: node(), config: conf })
         .install(
           Authentication((a, { config }) =>
             a.config(config.auth).addCookie('cookie', b => b.sessionSecret('a-code-session-secret-of-32-characters')),
@@ -428,7 +417,7 @@ describe('authentication configuration', () => {
         )
         .build().config
 
-      const app = createWebApplication({ config: conf })
+      const app = createWebApplication({ adapter: node(), config: conf })
         .install(
           Authentication((a, { config }) =>
             a

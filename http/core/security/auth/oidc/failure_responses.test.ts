@@ -3,8 +3,9 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { newNoopLogger, type LogFn, type Logger } from '@caffeinejs/application/logger'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
 import { type IContext, Authentication, Router } from '../../../../index.js'
-import { createWebApplication } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node/index.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../../../plugin.js'
 import { authentication } from '../../security.js'
 import { ErrOAuthCallback } from '../internal/remote/errors.js'
@@ -76,7 +77,7 @@ class SlowSend extends HTTPPlugin {
 }
 
 function application(onFail?: (ctx: IContext, error: Error) => void, logged: LogEntry[] = []) {
-  return createWebApplication()
+  return createWebApplication({ adapter: node() })
     .logger(b => b.use(recordTo(logged)))
     .install(
       Authentication(auth =>
@@ -153,7 +154,7 @@ describe('a sign-in that cannot go ahead', () => {
   // The log has it, as information: a request somebody got wrong is not a fault for an operator to be paged about.
   it('keeps the detail of a 4xx from the client as well, and logs it as information, not as an error', async () => {
     const logged: LogEntry[] = []
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       // At `info`, since that is the level the record is expected at.
       .logger(b => b.use(recordTo(logged, 'info')))
       .mount(
@@ -179,7 +180,7 @@ describe('a sign-in that cannot go ahead', () => {
   })
 
   it('still describes an ordinary error the ordinary way', async () => {
-    const app = createWebApplication().mount(
+    const app = createWebApplication({ adapter: node() }).mount(
       new Router('/broken').get('/', () => {
         throw Object.assign(new Error('teapot'), { statusCode: 418 })
       }),

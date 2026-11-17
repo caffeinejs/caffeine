@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { type ActionResult, Catch, IContext, ErrHTTPNotFound, ErrorHandler } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 @Catch(ErrHTTPNotFound)
 class GlobalNotFound implements ErrorHandler<ErrHTTPNotFound> {
@@ -12,7 +13,7 @@ class GlobalNotFound implements ErrorHandler<ErrHTTPNotFound> {
 
 describe('@Catch and unmatched routes', () => {
   it('an enrolled @Catch(ErrHTTPNotFound) sees a URL that matched no route', async () => {
-    const app = createWebApplication().errorHandling(e => e.globalHandlers(GlobalNotFound))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.globalHandlers(GlobalNotFound))
     await app.bootstrap()
 
     const res = await app.request('/definitely-not-a-route')

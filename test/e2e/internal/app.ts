@@ -1,7 +1,7 @@
 import type { ConfigDefinition } from '@caffeinejs/application/config'
 import type { Container } from '@caffeinejs/di'
-import { type WebApplicationOptions } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { type WebApplicationOptions, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 
 /**
  * Starts an application on a real socket for the authentication e2e specs.
@@ -19,7 +19,7 @@ function newApplication<C>(options: StartAppOptions<C>) {
     logger: false,
   }
 
-  return createWebApplication(applicationOptions)
+  return createWebApplication({ ...applicationOptions, adapter: node() })
 }
 
 export type E2EApplication<C = unknown> = ReturnType<typeof newApplication<C>>

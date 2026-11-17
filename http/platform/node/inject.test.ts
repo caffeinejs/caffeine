@@ -6,11 +6,12 @@ import { newNoopLogger } from '@caffeinejs/application/logger'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication, type WebApplication } from '../../application.js'
 import { ErrHTTPServiceUnavailable } from '../../core/error/http.js'
 import { Router, type AnyRouter } from '../../index.js'
-import { createWebApplication } from './node.js'
+import { node, type NodeAdapter } from './node.js'
 
-type App = ReturnType<typeof createWebApplication>
+type App = WebApplication<never, never, unknown, NodeAdapter>
 
 const apps: Array<{ close(): Promise<void> }> = []
 
@@ -24,7 +25,7 @@ afterEach(async () => {
 })
 
 async function ready(routes: AnyRouter): Promise<App> {
-  const app = createWebApplication().mount(routes)
+  const app = createWebApplication({ adapter: node() }).mount(routes)
   apps.push(app)
   await app.bootstrap()
   return app
@@ -54,7 +55,7 @@ describe('request() on the Node application', () => {
       await held.promise
       return 'late'
     })
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .logger(b => b.use(newNoopLogger()))
       .shutdown(s => s.drainDelay(0).shutdownTimeout(1 * Second))
       .mount(routes)
@@ -105,7 +106,7 @@ describe('request() on the Node application', () => {
         },
       })
     })
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .logger(b => b.use({ ...newNoopLogger(), error }))
       .mount(routes)
     apps.push(app)

@@ -8,8 +8,9 @@ import { join } from 'node:path'
 import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Attachment, Router } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 import { expectPatternedBody, expectRangeAnswer } from './bodies.js'
 import { fillPatterned, firstMismatch, patterned } from './patterned.js'
 
@@ -95,7 +96,7 @@ routes.get('/stream').handler(() => generated(FILE_SIZE))
 
 // A client that stops a download part-way can leave the server a connection with no request on it, which its
 // graceful close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
   .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(routes)
@@ -432,7 +433,7 @@ describe('a large download over HTTP/2', { timeout: 60_000 }, () => {
   const key = readFileSync(new URL('./_testdata/tls/localhost.key', import.meta.url))
   const cert = readFileSync(new URL('./_testdata/tls/localhost.crt', import.meta.url))
 
-  const secure = createWebApplication()
+  const secure = createWebApplication({ adapter: node() })
     .server(() => ({ http2: true, https: { key, cert }, listen: { host: '127.0.0.1', port: 0 } }))
     .mount(new Router('/h2').get('/file').handler(bigFile))
 

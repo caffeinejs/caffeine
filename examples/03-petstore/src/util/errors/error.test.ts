@@ -12,8 +12,9 @@ import {
   Post,
   Schema,
   type ActionResult,
+  createWebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http/node'
 import { describe, it, expect } from 'vitest'
 
 import { FallbackErrorHandler, HTTPErrorHandler, type ErrorBody } from './error.handlers.js'
@@ -77,7 +78,7 @@ class GadgetsController {
 void [GadgetsController]
 
 async function buildApp() {
-  const app = createWebApplication({})
+  const app = createWebApplication({ adapter: node() })
     .errorHandling(e => e.globalHandlers(HTTPErrorHandler, FallbackErrorHandler))
     .with(html())
   await app.bootstrap()

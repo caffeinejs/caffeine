@@ -1,5 +1,5 @@
-import { JWTService, Authentication, authentication, Router } from '@caffeinejs/http'
-import { type NodeWebApplication } from '@caffeinejs/http/node'
+import { JWTService, Authentication, authentication, Router, type WebApplication } from '@caffeinejs/http'
+import { type NodeAdapter } from '@caffeinejs/http/node'
 import { Minute } from '@caffeinejs/std/duration'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 
@@ -27,7 +27,7 @@ const signer = new JWTService({ secret: SECRET, issuer: ISSUER, audience: AUDIEN
  * A public single-page application whose API takes bearer tokens: the page is for everyone, every call it
  * makes carries a token, and a token is never redirected anywhere.
  */
-function publicSPA(): NodeWebApplication {
+function publicSPA(): WebApplication<never, never, unknown, NodeAdapter> {
   return isolated()
     .install(Authentication(a => a.addJWTBearer(j => j.secret(SECRET).issuer(ISSUER).audience(AUDIENCE))))
     .with(authentication())
@@ -44,11 +44,11 @@ function publicSPA(): NodeWebApplication {
         .get('/', shellOf(dist))
         .get('/index.html', shellOf(dist))
         .get('/*', clientRouteOf(dist)),
-    ) as NodeWebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 }
 
 describe('public single-page application with a bearer-token API', () => {
-  let app: NodeWebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
   let user: string
   let admin: string
 

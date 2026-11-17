@@ -21,8 +21,10 @@ import {
   Identity,
   Principal,
   Router,
+  createWebApplication,
+  type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { testClient, type TestClient } from '@caffeinejs/testing/http'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -121,7 +123,7 @@ function expectView(actual: number[], expected: number[]): void {
 }
 
 describe('devtools UI', () => {
-  let target: NodeWebApplication
+  let target: WebApplication<never, never, unknown, NodeAdapter>
   let ui: ReturnType<typeof buildApp>
   // Typed by the UI's own routes: a page renamed or removed breaks this file.
   let client: TestClient<ReturnType<typeof buildApp>>
@@ -131,9 +133,14 @@ describe('devtools UI', () => {
       .source(new InlineConfigSource({ db: { pass: 'hunter2', pool: 4 } }))
       .build().config
 
-    target = createWebApplication({ container: new CaffeineIoC({ decorators: false }), config: conf, logger: false })
+    target = createWebApplication({
+      adapter: node(),
+      container: new CaffeineIoC({ decorators: false }),
+      config: conf,
+      logger: false,
+    })
       .server(() => ({ listen: listener }))
-      .install(DevTools(d => d.port(0).showConfigValues())) as NodeWebApplication
+      .install(DevTools(d => d.port(0).showConfigValues())) as WebApplication<never, never, unknown, NodeAdapter>
     target.container.bind(Repository, t => t.toSelf())
     target.container.bind(PetService, t => t.toSelf([Repository]))
     target.container.bind(Rates, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('rates')))
@@ -522,10 +529,10 @@ class BearerScheme extends BaseAuthenticationHandler<object> {
 }
 
 describe('devtools UI over devtools that require credentials', () => {
-  let target: NodeWebApplication
+  let target: WebApplication<never, never, unknown, NodeAdapter>
 
   beforeAll(async () => {
-    target = createWebApplication({ logger: false })
+    target = createWebApplication({ adapter: node(), logger: false })
       .server(() => ({ listen: listener }))
       .install(Authentication(a => a.addStrategy('Bearer', new BearerScheme())))
       .install(DevTools(d => d.port(0).authorize({ roles: ['ops'] })))
@@ -538,7 +545,7 @@ describe('devtools UI over devtools that require credentials', () => {
           .authorize({ roles: ['keeper'] })
           .get('/', () => [])
           .post('/', () => ({})),
-      ) as NodeWebApplication
+      ) as WebApplication<never, never, unknown, NodeAdapter>
     await target.run()
   })
 

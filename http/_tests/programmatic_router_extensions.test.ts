@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { RouteBuilder } from '../core/routing/builder.js'
 import { $p } from '../core/routing/picker.js'
 import {
@@ -12,7 +13,7 @@ import {
   bodyAsStream,
   type RouteExtension,
 } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 // A third party annotating a route it does not own: the namespace is declared here, exactly as
 // `@caffeinejs/openapi` declares its own.
@@ -53,7 +54,7 @@ describe('route extensions', () => {
       }
       void [DecoratedStreamController]
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const payload = Buffer.from('hello stream world')
@@ -77,7 +78,7 @@ describe('route extensions', () => {
           return { isBuffer: Buffer.isBuffer(body), text: body.toString() }
         })
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const res = await app.request('/ext-buffer/upload', {
@@ -124,7 +125,7 @@ describe('route extensions', () => {
       )
       router.get('/').handler(() => ({ ok: true }))
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const res = await app.request('/group-ext')
@@ -149,7 +150,7 @@ describe('route extensions', () => {
         nested.get('/').handler(() => null)
       })
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const outer = app.routeGroups.find(group => group.path === '/detailed')!

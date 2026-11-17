@@ -1,9 +1,9 @@
 import { ErrApplicationNotReady, ErrApplicationStarted } from '@caffeinejs/application'
 import { afterEach, describe, expect, it, expectTypeOf } from 'vitest'
 
-import { createWebApplication as createFetchApplication, type WebApplication, type WebRunInfo } from './application.js'
+import { type WebApplication, type WebRunInfo, createWebApplication } from './application.js'
 import { ErrConfiguration, Router } from './index.js'
-import { createWebApplication } from './platform/node/index.js'
+import { node, type NodeAdapter } from './platform/node/index.js'
 
 let app: WebApplication | undefined
 
@@ -17,7 +17,7 @@ describe('WebApplication', () => {
   it('answers through request handed on as a bare function', async () => {
     const router = new Router('/detached')
     router.get('/').handler(() => ({ ok: true }))
-    app = createWebApplication().mount(router) as WebApplication
+    app = createWebApplication({ adapter: node() }).mount(router) as WebApplication
     await app.bootstrap()
 
     const { request } = app
@@ -26,7 +26,7 @@ describe('WebApplication', () => {
   })
 
   it('has no server to reach before bootstrap()', async () => {
-    const built = createWebApplication().mount(new Router('/hi').get('/').handler(() => 'hi'))
+    const built = createWebApplication({ adapter: node() }).mount(new Router('/hi').get('/').handler(() => 'hi'))
 
     expect(() => built.instance).toThrow(ErrApplicationNotReady)
     await expect(built.request('/hi')).rejects.toThrow(ErrApplicationNotReady)
@@ -38,7 +38,7 @@ describe('WebApplication', () => {
 
   // Like the server, the route table exists only once start-up has built it.
   it('has no route table to read before bootstrap()', async () => {
-    const built = createWebApplication().mount(new Router('/hi').get('/').handler(() => 'hi'))
+    const built = createWebApplication({ adapter: node() }).mount(new Router('/hi').get('/').handler(() => 'hi'))
     app = built as WebApplication
 
     expect(() => built.routeGroups).toThrow(ErrApplicationNotReady)
@@ -50,7 +50,7 @@ describe('WebApplication', () => {
 
 describe('the fetch application', () => {
   it('builds from the package root and answers app.fetch', async () => {
-    const app = createFetchApplication().mount(new Router('/hello').get('/').handler(() => 'hi'))
+    const app = createWebApplication().mount(new Router('/hello').get('/').handler(() => 'hi'))
     await app.bootstrap()
 
     try {
@@ -61,14 +61,14 @@ describe('the fetch application', () => {
   })
 
   it('throws ErrApplicationNotReady from app.fetch before bootstrap', () => {
-    const app = createFetchApplication()
+    const app = createWebApplication()
 
     expect(() => app.fetch(new Request('http://x/'))).toThrow(ErrApplicationNotReady)
   })
 
   // Code expecting a listener's address does not compile against an application that opens no socket.
   it('resolves run() with no address', async () => {
-    const app = createFetchApplication()
+    const app = createWebApplication()
 
     const info = await app.run()
 
@@ -81,14 +81,64 @@ describe('the fetch application', () => {
   })
 
   it("keeps address on the Node application's run()", () => {
-    expectTypeOf<Awaited<ReturnType<ReturnType<typeof createWebApplication>['run']>>>().toEqualTypeOf<WebRunInfo>()
+    expectTypeOf<
+      Awaited<ReturnType<WebApplication<never, never, unknown, NodeAdapter>['run']>>
+    >().toEqualTypeOf<WebRunInfo>()
+  })
+
+  it('hands over no server instance once ready, since no adapter built one', async () => {
+    const app = createWebApplication()
+    await app.bootstrap()
+
+    try {
+      expect(app.instance).toBe(undefined)
+    } finally {
+      await app.close()
+    }
+  })
+
+  // A caller the types did not stop, since the parameter is `never` under no adapter: refused where it wrote the call.
+  it('refuses serverCallback, since there is no server to hand over', () => {
+    const app = createWebApplication()
+    let failure: unknown
+
+    try {
+      app.serverCallback((() => undefined) as never)
+    } catch (err) {
+      failure = err
+    }
+
+    expect(failure).toBeInstanceOf(ErrConfiguration)
+    expect((failure as ErrConfiguration).code).toBe('ERR_CONFIGURATION')
+    expect((failure as Error).message.split('\n')[0]).toBe(
+      'Cannot call serverCallback: the application has no adapter, so no server to hand over',
+    )
+  })
+})
+
+describe('createWebApplication({ adapter })', () => {
+  // A JavaScript caller, or one past a cast, is refused at once rather than served by no adapter at all.
+  it('refuses an adapter that is not one', () => {
+    let failure: unknown
+
+    try {
+      createWebApplication({ adapter: {} as never })
+    } catch (err) {
+      failure = err
+    }
+
+    expect(failure).toBeInstanceOf(ErrConfiguration)
+    expect((failure as ErrConfiguration).code).toBe('ERR_CONFIGURATION')
+    expect((failure as Error).message.split('\n')[0]).toBe(
+      'Cannot create the application: "adapter" is not a server adapter',
+    )
   })
 })
 
 describe('WebApplication.hook()', () => {
   // A hook added once the server is built would never be installed: refused so the caller finds out.
   it('refuses a hook once bootstrap has started', async () => {
-    const fetchApp = createFetchApplication()
+    const fetchApp = createWebApplication()
     await fetchApp.bootstrap()
 
     try {
@@ -99,8 +149,6 @@ describe('WebApplication.hook()', () => {
   })
 
   it('refuses a point that is not a hook, for a caller the types did not stop', () => {
-    expect(() => createFetchApplication().hook('preValidation' as 'onRequest', () => undefined)).toThrow(
-      ErrConfiguration,
-    )
+    expect(() => createWebApplication().hook('preValidation' as 'onRequest', () => undefined)).toThrow(ErrConfiguration)
   })
 })

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { healthProbes } from '../core/health/index.js'
 import { Controller, Get } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 // Isolated in its own file: the container snapshots the controller registry when it is constructed, so the
 // colliding controller below would otherwise be picked up by every application built after this test runs.
@@ -18,7 +19,7 @@ describe('health probe path collisions', () => {
 
     void [CollidingController]
 
-    const app = createWebApplication().with(healthProbes())
+    const app = createWebApplication({ adapter: node() }).with(healthProbes())
 
     await expect(app.bootstrap()).rejects.toThrow(/already registered at "\/readyz"/)
   })

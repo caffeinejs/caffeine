@@ -3,8 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 
-import { ErrHTTPNotAcceptable, ErrHTTPPreconditionFailed, Router } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import {
+  ErrHTTPNotAcceptable,
+  ErrHTTPPreconditionFailed,
+  Router,
+  createWebApplication,
+  type WebApplication,
+} from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest'
 
 import { buildStatic } from './build/build.js'
@@ -245,15 +251,20 @@ describe('prepareFile', () => {
 
 describe('a file served by a route and by sendFile', () => {
   let site: string
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   beforeEach(async () => {
     site = await mkdtemp(join(tmpdir(), 'caffeine-serve-app-'))
     await cp(spa, site, { recursive: true })
     await buildStatic({ root: site })
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .with(staticFiles(s => s.serve(site, { anonymous: true })))
-      .mount(new Router().get('/sent', ctx => sendFile(ctx, 'index.html'))) as NodeWebApplication
+      .mount(new Router().get('/sent', ctx => sendFile(ctx, 'index.html'))) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.bootstrap()
   })
 

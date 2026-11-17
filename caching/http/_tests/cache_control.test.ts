@@ -1,8 +1,8 @@
 import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Get, Post, Status } from '@caffeinejs/http'
-import { createWebApplication as newWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, Post, Status, createWebApplication as newWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Hour, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
@@ -14,7 +14,7 @@ import type { HTTPCacheEntry, HTTPCacheStore } from '../index.js'
 const opened: { close(): Promise<unknown> }[] = []
 
 function createWebApplication(options?: { container: CaffeineIoC }) {
-  const app = newWebApplication(options)
+  const app = newWebApplication({ ...options, adapter: node() })
   opened.push(app)
 
   return app

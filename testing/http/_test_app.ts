@@ -7,8 +7,8 @@ import {
   type ObjectInjection,
   type ObjectInjections,
 } from '@caffeinejs/di'
-import type { AnyRouter } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { createWebApplication, type AnyRouter } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 
 import { ErrTestClientAlreadyReady } from './error.js'
 import type { TestApplication } from './types.js'
@@ -45,7 +45,7 @@ export class Harness {
     // controller the test file happened to import. Passing `container` opts back in — `new CaffeineIoC()` registers
     // the decorated bindings as an application does.
     const container = init.container ?? new CaffeineIoC({ decorators: false })
-    const app: TestApplication = createWebApplication({ container })
+    const app: TestApplication = createWebApplication({ adapter: node(), container })
 
     init.configure?.(app)
 

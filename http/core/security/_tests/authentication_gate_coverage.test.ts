@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -11,7 +12,7 @@ import {
   Identity,
   Principal,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
 import { healthProbes } from '../../health/index.js'
 import { Router } from '../../routing/programmatic/programmatic.js'
@@ -71,7 +72,9 @@ async function refusal(app: { bootstrap(): Promise<unknown> }): Promise<Error & 
 
 describe('routes no authentication gate covers', () => {
   it('refuses a protected route when the feature is installed and no gate is registered', async () => {
-    const app = createWebApplication().install(header()).mount(new Router('/no-gate').authorize().get('/', ok))
+    const app = createWebApplication({ adapter: node() })
+      .install(header())
+      .mount(new Router('/no-gate').authorize().get('/', ok))
 
     const err = await refusal(app)
 
@@ -86,7 +89,7 @@ describe('routes no authentication gate covers', () => {
     const gated = new Router('/sibling-gated').with(authentication()).authorize().get('/', ok)
     const bare = new Router('/sibling-bare').authorize().get('/', ok)
 
-    const err = await refusal(createWebApplication().install(header()).mount(gated, bare))
+    const err = await refusal(createWebApplication({ adapter: node() }).install(header()).mount(gated, bare))
 
     expect(err.code).toBe('ERR_AUTHENTICATION_GATE_REQUIRED')
     expect(err.message).toContain('"GET|HEAD /sibling-bare"')
@@ -99,7 +102,7 @@ describe('routes no authentication gate covers', () => {
     const gated = new Router('/fallback-gated').with(authentication()).get('/', ok)
     const open = new Router('/fallback-open').get('/', ok)
 
-    const app = createWebApplication().install(header()).install(byDefault()).mount(gated, open)
+    const app = createWebApplication({ adapter: node() }).install(header()).install(byDefault()).mount(gated, open)
 
     const err = await refusal(app)
 
@@ -111,7 +114,7 @@ describe('routes no authentication gate covers', () => {
   // The root gate covers every route of its server, including one a plugin written ahead of it mounted, so starting
   // is right.
   it('lets a route registered before the root gate through, and gates it', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(header())
       .install(byDefault())
       .with(pluginRoute('/early-root'))
@@ -128,7 +131,7 @@ describe('routes no authentication gate covers', () => {
   })
 
   it('starts with no gate at all when nothing a gate would authorize is left', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(header())
       .install(byDefault())
       .with(healthProbes())
@@ -147,7 +150,9 @@ describe('routes no authentication gate covers', () => {
 
   // No gate can be registered without the feature, so the missing feature is the fix to name.
   it('names the missing feature when a fallback policy protects a route and authentication was never installed', async () => {
-    const app = createWebApplication().install(byDefault()).mount(new Router('/unauthenticated').get('/', ok))
+    const app = createWebApplication({ adapter: node() })
+      .install(byDefault())
+      .mount(new Router('/unauthenticated').get('/', ok))
 
     expect((await refusal(app)).code).toBe('ERR_AUTHENTICATION_REQUIRED')
   })
@@ -163,7 +168,7 @@ describe('routes no authentication gate covers', () => {
       .get('/r5', ok)
       .get('/r6', ok)
 
-    const err = await refusal(createWebApplication().install(header()).mount(bare))
+    const err = await refusal(createWebApplication({ adapter: node() }).install(header()).mount(bare))
 
     expect(err.message).toMatch(
       /^Cannot start application: routes "GET\|HEAD \/many\/r0", "GET\|HEAD \/many\/r1", "GET\|HEAD \/many\/r2", "GET\|HEAD \/many\/r3", "GET\|HEAD \/many\/r4" and 2 more require authentication and no authentication gate covers them/,

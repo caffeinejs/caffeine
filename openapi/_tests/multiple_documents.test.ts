@@ -1,6 +1,16 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Authentication, authentication, bindTo, Claim, Identity, Principal, Router } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import {
+  Authentication,
+  authentication,
+  bindTo,
+  Claim,
+  Identity,
+  Principal,
+  Router,
+  createWebApplication,
+  type WebApplication,
+} from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from '../errors.js'
@@ -57,7 +67,7 @@ async function warningsDuring(run: () => Promise<void>): Promise<string[]> {
 }
 
 describe('several OpenAPI documents in one application', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -66,11 +76,11 @@ describe('several OpenAPI documents in one application', () => {
 
   // Publishing the back office in the storefront's document would hand every client its admin endpoints.
   it('splits one server between documents with include, each describing only its own routes', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi('storefront', o => o.info({ title: 'Storefront', version: '1.0.0' }).include(isStorefront)))
       .with(openapi('back-office', o => o.info({ title: 'Back office', version: '1.0.0' }).include(isAdmin)))
-      .mount(catalog(), backOffice()) as NodeWebApplication
+      .mount(catalog(), backOffice()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const storefront = await json(await app.request('/openapi/storefront.json'))
@@ -88,11 +98,11 @@ describe('several OpenAPI documents in one application', () => {
 
   // Each named document gets its own default paths, so two of them never fight over /openapi.json.
   it('serves each named document at its own paths, UI included', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi('storefront', o => o.include(isStorefront)))
       .with(openapi('back-office', o => o.include(isAdmin)))
-      .mount(catalog(), backOffice()) as NodeWebApplication
+      .mount(catalog(), backOffice()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await app.request('/openapi/storefront.yaml')).status).toBe(200)
@@ -107,11 +117,11 @@ describe('several OpenAPI documents in one application', () => {
 
   // A listener is a second server; the document registered on it sees only the routes bound to it.
   it('documents a listener on its own, beside the main server', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .listener('internal', l => l.with(openapi('internal', o => o.info({ title: 'Internal', version: '1.0.0' }))))
       .with(openapi(o => o.info({ title: 'Public', version: '1.0.0' })))
-      .mount(catalog(), backOffice().extend(bindTo('internal'))) as NodeWebApplication
+      .mount(catalog(), backOffice().extend(bindTo('internal'))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const internal = await json(await app.listeners.get('internal')!.request('/openapi/internal.json'))
@@ -131,11 +141,11 @@ describe('several OpenAPI documents in one application', () => {
       paths: { '/v0/stock': { get: { operationId: 'stock', responses: { 200: { description: 'OK' } } } } },
     }
 
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi(o => o.docs(false)))
       .with(openapi('legacy', o => o.document(legacy).docs(false)))
-      .mount(catalog()) as NodeWebApplication
+      .mount(catalog()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect(Object.keys((await json(await app.request('/openapi.json'))).paths ?? {})).toEqual(['/products'])
@@ -145,7 +155,7 @@ describe('several OpenAPI documents in one application', () => {
   // The back office's description is internal; the storefront's is meant for everyone.
   it('secures one document while another stays public, warning only about the one left implicit', async () => {
     const warnings = await warningsDuring(async () => {
-      app = createWebApplication({})
+      app = createWebApplication({ adapter: node() })
         .install(
           Authentication(a =>
             a.addBasic('Basic', b =>
@@ -164,7 +174,7 @@ describe('several OpenAPI documents in one application', () => {
         .mount(
           catalog().authorize({ allowAnonymous: true }),
           backOffice().authorize({ allowAnonymous: true }),
-        ) as NodeWebApplication
+        ) as WebApplication<never, never, unknown, NodeAdapter>
       await app.bootstrap()
     })
 
@@ -182,10 +192,10 @@ describe('several OpenAPI documents in one application', () => {
 
   // An internal service under Watt hands its document to the runtime and serves no endpoint of its own.
   it('generates a document that serves nothing, for a consumer of the provider alone', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi(o => o.json(false).yaml(false).docs(false)))
-      .mount(catalog()) as NodeWebApplication
+      .mount(catalog()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await app.request('/openapi.json')).status).toBe(404)
@@ -195,10 +205,10 @@ describe('several OpenAPI documents in one application', () => {
   })
 
   it('serves the YAML document alone when the JSON one is off', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi(o => o.json(false).docs(false)))
-      .mount(catalog()) as NodeWebApplication
+      .mount(catalog()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await app.request('/openapi.json')).status).toBe(404)
@@ -210,11 +220,11 @@ describe('several OpenAPI documents in one application', () => {
     const search = () => new Router('/search').name('Search').route('QUERY', '/', () => [])
 
     const warnings = await warningsDuring(async () => {
-      app = createWebApplication({})
+      app = createWebApplication({ adapter: node() })
         .install(OpenAPI())
         .with(openapi('v31', o => o.version('3.1.1').docs(false)))
         .with(openapi('v32', o => o.version('3.2.0').docs(false)))
-        .mount(search()) as NodeWebApplication
+        .mount(search()) as WebApplication<never, never, unknown, NodeAdapter>
       await app.bootstrap()
     })
 
@@ -229,12 +239,12 @@ describe('several OpenAPI documents in one application', () => {
 
   // The paths describe the routes as declared; the server entry is where a client finds them under the base.
   it('names the base path as the server of every document, and links each UI under it', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .basePath('/shop')
       .install(OpenAPI())
       .with(openapi('storefront', o => o.include(isStorefront)))
       .with(openapi('back-office', o => o.include(isAdmin)))
-      .mount(catalog(), backOffice()) as NodeWebApplication
+      .mount(catalog(), backOffice()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const storefront = await json(await app.request('/shop/openapi/storefront.json'))
@@ -247,10 +257,15 @@ describe('several OpenAPI documents in one application', () => {
   })
 
   it('fails start-up when two documents are given the same path', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .with(openapi('a', o => o.json('/openapi.json').yaml(false).docs(false)))
-      .with(openapi('b', o => o.json('/openapi.json').yaml(false).docs(false))) as NodeWebApplication
+      .with(openapi('b', o => o.json('/openapi.json').yaml(false).docs(false))) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined
@@ -261,9 +276,9 @@ describe('several OpenAPI documents in one application', () => {
 
   // The page loads the JSON document, so without it every browser opening the page would show an error.
   it('refuses a UI whose JSON endpoint is off', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
-      .with(openapi('internal', o => o.json(false))) as NodeWebApplication
+      .with(openapi('internal', o => o.json(false))) as WebApplication<never, never, unknown, NodeAdapter>
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined

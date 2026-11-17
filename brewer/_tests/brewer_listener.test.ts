@@ -1,5 +1,5 @@
-import { Router, bindTo } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Router, bindTo, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../brewer.js'
@@ -18,8 +18,8 @@ const metrics = new Router('/metrics')
 
 const pets = new Router('/pets').get('/').handler(() => [{ id: 1 }])
 
-const app = createWebApplication()
-  // A listener's settings are typed for every application; the Node application's `listen` section is what it reads.
+const app = createWebApplication({ adapter: node() })
+  // A listener's settings are typed by the application's adapter; under `node()`, `listen` is what it reads.
   .listener('admin', l => l.server(() => ({ listen: listener }) as never))
   .server(() => ({ listen: listener }))
   .mount(pets, metrics)

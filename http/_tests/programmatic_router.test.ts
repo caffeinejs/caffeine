@@ -2,8 +2,9 @@ import { $t } from '@caffeinejs/application/schema'
 import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get, Router, blend } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 class Greeter {
   greet(name: string) {
@@ -19,7 +20,7 @@ class Counter {
 function newApp(configure?: (container: CaffeineIoC) => void) {
   const container = new CaffeineIoC()
   configure?.(container)
-  return createWebApplication({ container })
+  return createWebApplication({ adapter: node(), container })
 }
 
 describe('programmatic router', () => {

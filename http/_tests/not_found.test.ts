@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, ErrHTTPNotFound, Get, type ActionResult } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 @Controller('/pets')
 class PetsController {
@@ -19,7 +20,7 @@ void [PetsController]
 
 describe('unmatched routes', () => {
   it('renders the same problem as a 404 a handler threw', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const thrown = (await (await app.request('/pets/42')).json()) as Record<string, unknown>

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import {
   Controller,
   Get,
@@ -10,7 +11,7 @@ import {
   type IRouteGroup,
   type WebApplication,
 } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * A plugin learns the application's routes from `onRoute`, and finds what Caffeine compiled on the route and its
@@ -65,7 +66,7 @@ describe('route metadata on onRoute', () => {
 
   it('reaches onRoute for decorated and programmatic routes', async () => {
     const seen: Seen[] = []
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .with(() => new Observer(seen))
       .mount(routerWithOneRoute()) as WebApplication
     await app.bootstrap()

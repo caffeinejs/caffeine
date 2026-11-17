@@ -12,8 +12,9 @@ import {
   type Guard,
   type GuardInput,
   type IContext,
+  createWebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http/node'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 
@@ -89,7 +90,7 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
 
 app.use((ctx, next) => {
   ctx.header('x-request-id', Math.random().toString(36).slice(2))

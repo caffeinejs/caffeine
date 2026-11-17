@@ -1,5 +1,5 @@
-import { Authentication, Authorization, authentication, Router } from '@caffeinejs/http'
-import { type NodeWebApplication } from '@caffeinejs/http/node'
+import { Authentication, Authorization, authentication, Router, type WebApplication } from '@caffeinejs/http'
+import { type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { sendFile, staticFiles } from '../../index.js'
@@ -27,7 +27,7 @@ import {
  * `unrouted: ['**']` is what makes that possible: the mount registers no routes at all, and exists only to
  * name the files and the root `sendFile` resolves against.
  */
-function adminSite(authenticateByDefault: boolean): NodeWebApplication {
+function adminSite(authenticateByDefault: boolean): WebApplication<never, never, unknown, NodeAdapter> {
   const app = isolated()
     .install(Authentication(a => a.addStrategy('header', new HeaderAuthenticationHandler())))
     .with(authentication())
@@ -41,7 +41,7 @@ function adminSite(authenticateByDefault: boolean): NodeWebApplication {
         .get('/index.html', shellOf(dist))
         .get('/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!, dist))
         .get('/*', clientRouteOf(dist)),
-    ) as NodeWebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 
   if (authenticateByDefault) {
     app.install(Authorization(z => z.requireAuthenticatedByDefault()))
@@ -55,7 +55,7 @@ const bob = { 'x-user': 'bob' }
 const ann = { 'x-user': 'ann', 'x-roles': 'admin' }
 
 describe('role-gated administration site', () => {
-  let app: NodeWebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
 
   afterEach(async () => {
     await app?.close()

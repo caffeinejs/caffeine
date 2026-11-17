@@ -50,7 +50,7 @@ export class ErrRequestBodyConsumed extends ErrCaffeineWebApplication {
 }
 
 /**
- * The read of a route that answered before reading its body, failed once the answer has gone. On the Node application
+ * The read of a route that answered before reading its body, failed once the answer has gone. Under `node()`
  * over HTTP/1.1, the server then reads what is left of the body and drops it, so the connection can serve the next
  * request. Nothing answers it: the route has answered already.
  */

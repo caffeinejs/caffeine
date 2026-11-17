@@ -206,8 +206,24 @@ function asIContext(ctx: Context): IContext {
   return ctx as unknown as IContext
 }
 
-/** The solution that sends a reader to the Node application. */
-export const USE_NODE = 'Build the application with createWebApplication() from "@caffeinejs/http/node"'
+/** The solution that sends a reader to the Node adapter. */
+export const USE_NODE = 'Pass adapter: node() from "@caffeinejs/http/node" to createWebApplication()'
+
+/** The solution that sends a reader to an adapter that listens. */
+export const USE_ADAPTER =
+  'Pass adapter: node() from "@caffeinejs/http/node" or adapter: bun() from "@caffeinejs/http/bun" to createWebApplication()'
+
+/**
+ * What `value` is, for a message that refuses it: `a string`, `an array`, `null`. Never the value itself, which may be a
+ * key or a secret handed over in place of the section.
+ */
+export function kindOf(value: unknown): string {
+  if (value === null) {
+    return 'null'
+  }
+
+  return Array.isArray(value) ? 'an array' : `a ${typeof value}`
+}
 
 /** An `ErrConfiguration` with its solutions and reference, as the engine writes every start-up refusal. */
 export function configurationError(message: string, ...solutions: string[]): ErrConfiguration {

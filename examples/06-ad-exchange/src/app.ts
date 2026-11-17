@@ -1,8 +1,8 @@
 import type { ConfigDefinition } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
-import { healthProbes } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { healthProbes, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Resilience } from '@caffeinejs/resilience/aop'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 
@@ -26,6 +26,7 @@ export interface BuildAppOptions {
 export function buildApp(container: Container, options: BuildAppOptions = {}) {
   return (
     createWebApplication({
+      adapter: node(),
       container,
       config: options.config ?? configuration,
       logger: options.logger ?? createLogger(),

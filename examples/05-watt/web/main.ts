@@ -1,5 +1,5 @@
-import { healthProbes, Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { healthProbes, Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { getBasePath } from '@platformatic/globals'
 
 import { registerWattChecks } from '../watt.js'
@@ -11,7 +11,7 @@ const routes = new Router()
 
 // Script mode: the module starts the application exactly as it would outside Watt, which takes over the `listen()`
 // inside `run()` and binds the host and port `watt.json` names. The same file runs under plain Node.
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   // `/livez` on the public port as well: Watt's own `/status` also fails whenever readiness does, so a liveness
   // probe that must not restart the pod over a dependency points here instead.
   .with(healthProbes())

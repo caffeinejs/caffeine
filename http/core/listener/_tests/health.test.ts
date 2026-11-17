@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -9,7 +10,7 @@ import {
   type WebApplication,
   Router,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 import { healthProbes } from '../../health/index.js'
 import { authentication } from '../../security/security.js'
 
@@ -44,7 +45,7 @@ describe('health probes on a listener', () => {
   }
 
   it("serves the three probes on the server that registered them, and not on the application's own", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
       .server(() => ({ listen: listener })) as WebApplication
 
@@ -61,7 +62,7 @@ describe('health probes on a listener', () => {
   it('serves them on both servers when both registered them', async () => {
     const probes = healthProbes()
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', l => l.server(() => ({ listen: listener })).with(probes))
       .with(probes)
       .server(() => ({ listen: listener })) as WebApplication
@@ -73,7 +74,7 @@ describe('health probes on a listener', () => {
   })
 
   it('stays exempt from the fallback policy on the server serving it', async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme()).default('Nobody')))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .listener('admin', l =>
@@ -92,7 +93,7 @@ describe('health probes on a listener', () => {
   })
 
   it('checks probe paths only against the routes of the server serving them', async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
       .server(() => ({ listen: listener }))
       .mount(new Router().get('/livez', () => ({ mine: true }))) as WebApplication
@@ -104,7 +105,7 @@ describe('health probes on a listener', () => {
   })
 
   it('refuses a route of the server serving the probes that takes a probe path', async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
       .mount(new Router().extend(bindTo('admin')).get('/readyz', () => ({}))) as WebApplication
 

@@ -1,5 +1,5 @@
-import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from './errors.js'
@@ -9,7 +9,7 @@ import { openapi } from './openapi.js'
 describe('openapi', () => {
   // A document describes a server, its base path included, and a router is shared by every server that serves it.
   it('refuses openapi() on a router, which belongs to no server', async () => {
-    const app = createWebApplication({})
+    const app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
       .mount(
         new Router('/r')

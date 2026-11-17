@@ -1,8 +1,8 @@
 import { connect } from 'node:net'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Get, Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { type Duration, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -84,7 +84,7 @@ describe('the signal a store call carries', () => {
       .config('cacheInvalidate', { tags: ['data'] })
       .handler(() => ({ ok: true }))
 
-    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
     if (options.handlerTimeout !== undefined) {
       const handlerTimeout = options.handlerTimeout
       app.server(() => ({ handlerTimeout }))
@@ -273,7 +273,9 @@ describe('storeTimeout on HTTPCaching', () => {
       put: () => Promise.resolve(),
       evictByTag: () => Promise.resolve(),
     })
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer({ onError: e => errors.push(e) })))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer({ onError: e => errors.push(e) })),
+    )
     close = () => app.close()
     await app.bootstrap()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })

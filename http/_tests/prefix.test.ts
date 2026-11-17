@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get, Prefix } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 describe('Prefix', () => {
   it('prepends prefix to all routes in the controller', async () => {
@@ -16,7 +17,7 @@ describe('Prefix', () => {
 
     void [UsersController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const hit = await app.request('/v1/users/list')
@@ -47,7 +48,7 @@ describe('Prefix', () => {
 
     void [ItemsController, ItemsV2Controller]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const v1 = await app.request('/v1/items/all')

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import {
   Controller,
   Get,
@@ -9,7 +10,7 @@ import {
   type WebApplication,
   Router,
 } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * What a group's prefix and a route at `/` compose to.
@@ -43,7 +44,7 @@ function collectURLs(urls: string[]) {
 describe('a group prefix and a route at "/"', () => {
   it('composes to the bare prefix, not to a trailing slash', async () => {
     const urls: string[] = []
-    const app = createWebApplication({})
+    const app = createWebApplication({ adapter: node() })
       .with(collectURLs(urls))
       .mount(new Router('/app').get('/', () => ({ ok: true }))) as WebApplication
     await app.bootstrap()
@@ -57,7 +58,9 @@ describe('a group prefix and a route at "/"', () => {
   })
 
   it('answers the bare path and not the trailing slash', async () => {
-    const app = createWebApplication({}).mount(new Router('/app').get('/', () => ({ ok: true }))) as WebApplication
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router('/app').get('/', () => ({ ok: true })),
+    ) as WebApplication
     await app.bootstrap()
 
     try {
@@ -71,7 +74,7 @@ describe('a group prefix and a route at "/"', () => {
 
   it('composes a nested mount the same way', async () => {
     const urls: string[] = []
-    const app = createWebApplication({})
+    const app = createWebApplication({ adapter: node() })
       .with(collectURLs(urls))
       .mount(new Router('/api').mount(new Router('/v1').get('/', () => ({ ok: true })))) as WebApplication
     await app.bootstrap()
@@ -94,7 +97,7 @@ describe('a group prefix and a route at "/"', () => {
     }
     void [RootController]
 
-    const app = createWebApplication({}) as WebApplication
+    const app = createWebApplication({ adapter: node() }) as WebApplication
     await app.bootstrap()
 
     try {
@@ -106,7 +109,9 @@ describe('a group prefix and a route at "/"', () => {
 
   // The half of the documented papercut that is real: a wildcard covers the empty match but not the bare path.
   it('does not match a bare path against a sibling wildcard', async () => {
-    const app = createWebApplication({}).mount(new Router().get('/dash/*', () => ({ ok: true }))) as WebApplication
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router().get('/dash/*', () => ({ ok: true })),
+    ) as WebApplication
     await app.bootstrap()
 
     try {

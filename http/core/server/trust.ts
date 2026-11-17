@@ -1,6 +1,6 @@
 import ipaddr from 'ipaddr.js'
 
-import { configurationError, USE_NODE } from './error.js'
+import { configurationError, USE_ADAPTER } from './error.js'
 import type { ApplicationKind } from './settings.js'
 
 /** Whether the peer at `address` is a proxy whose `X-Forwarded-Host` and `X-Forwarded-Proto` the server believes. */
@@ -38,7 +38,7 @@ export function compileTrustProxy(
   // Where the runtime gives no peer address, naming proxies is no way out: only `true` is.
   const onlyTrue = [
     'Write trustProxy: true when only trusted proxies can reach the application',
-    `${USE_NODE} to trust proxies by address`,
+    `${USE_ADAPTER} to trust proxies by address`,
   ]
 
   if (typeof value === 'number') {

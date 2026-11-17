@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
-import { createWebApplication as createNodeApplication } from '../../platform/node/node.js'
+import { node } from '../../platform/node/node.js'
 import type { Guard, GuardInput } from '../guards/guard.js'
 import { Guards } from '../guards/guards.js'
 import { Router } from '../routing/programmatic/programmatic.js'
@@ -338,7 +338,7 @@ describe('OIDC routes on the engine', () => {
   })
 
   it('serves them from a listener whose gate is the only one', async () => {
-    const built = createNodeApplication()
+    const built = createWebApplication({ adapter: node() })
       .install(oidc())
       .listener('admin', l => l.with(authentication()))
     app = built

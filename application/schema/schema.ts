@@ -10,7 +10,7 @@ import type { SchemaIO } from './json_schema.js'
  *
  * TypeBox is the first-class dialect because a TypeBox schema *is* a JSON Schema: one declaration validates,
  * types, and (later) documents. Standard Schema libraries are fully supported wherever Caffeine runs the
- * validator itself: configuration, and the request of an HTTP route on the Node and fetch applications. They are
+ * validator itself: configuration, and the request of an HTTP route under any adapter. They are
  * supported to the extent they convert to JSON Schema where a JSON Schema is all that is read: a route's response,
  * which is serialized from it on every application, and the OpenAPI document.
  */

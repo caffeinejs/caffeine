@@ -2,8 +2,9 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Catch, Controller, Get, HTTPPlugin, type HTTPSetupContext, type IContext } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /** An asynchronous `onSend` hook, counting each run through `onRun` and holding the send for `ms`. */
 class SlowSend extends HTTPPlugin {
@@ -62,7 +63,7 @@ describe('the global error handler under an asynchronous onSend hook', () => {
     let runs = 0
 
     try {
-      const app = createWebApplication().with(() => new SlowSend(() => runs++, 1))
+      const app = createWebApplication({ adapter: node() }).with(() => new SlowSend(() => runs++, 1))
       close = () => app.close()
       await app.bootstrap()
 
@@ -114,7 +115,7 @@ describe('the global error handler under an asynchronous onSend hook', () => {
     let runs = 0
 
     try {
-      const app = createWebApplication().with(() => new SlowSend(() => runs++, 20))
+      const app = createWebApplication({ adapter: node() }).with(() => new SlowSend(() => runs++, 20))
       close = () => app.close()
       await app.bootstrap()
 

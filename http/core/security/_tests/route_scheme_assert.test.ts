@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -8,7 +9,7 @@ import {
   Controller,
   Get,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 /**
  * The whole-table scheme check: a route naming a scheme the feature never registered is a start-up failure,
@@ -40,7 +41,7 @@ void [GhostSchemeController]
 
 describe('route scheme resolution', () => {
   it('refuses a route naming an unregistered scheme even with no gate registered', async () => {
-    const app = createWebApplication().install(
+    const app = createWebApplication({ adapter: node() }).install(
       Authentication(auth => auth.addStrategy('Real', new AlwaysAnonymous()).default('Real')),
     )
 

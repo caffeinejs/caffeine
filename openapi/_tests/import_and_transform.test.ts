@@ -14,8 +14,10 @@ import {
   Schema,
   type HTTPSetupContext,
   type AnyRouter,
+  createWebApplication,
+  type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from '../errors.js'
@@ -47,23 +49,23 @@ const HAND_WRITTEN: OpenAPIDocument = {
   },
 }
 
-function build(configure: (o: OpenAPIOptionsBuilder) => void): NodeWebApplication {
-  return createWebApplication({})
+function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication<never, never, unknown, NodeAdapter> {
+  return createWebApplication({ adapter: node() })
     .install(OpenAPI())
     .with(
       openapi(o => {
         o.docs(false).public()
         configure(o)
       }),
-    ) as NodeWebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 }
 
-async function documentOf(app: NodeWebApplication): Promise<OpenAPIDocument> {
+async function documentOf(app: WebApplication<never, never, unknown, NodeAdapter>): Promise<OpenAPIDocument> {
   return (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 }
 
 describe('imported specifications', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -183,7 +185,7 @@ describe('imported specifications', () => {
 })
 
 describe('transformDocument', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -245,7 +247,7 @@ describe('transformDocument', () => {
 })
 
 describe('derived response detail', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -301,7 +303,7 @@ describe('derived response detail', () => {
 // Here rather than in `openapi.test.ts`: that file's controllers carry `@Roles`, and every application built in it
 // must install authentication to start, which is exactly what these tests leave out.
 describe('openapi without authentication', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -329,9 +331,9 @@ describe('openapi without authentication', () => {
   // Nothing is secured, so a public document hides nothing and is not worth a line of output.
   it('serves the document publicly without a warning', async () => {
     const warnings = await warningsDuring(async () => {
-      app = createWebApplication({})
+      app = createWebApplication({ adapter: node() })
         .install(OpenAPI())
-        .with(openapi(o => o.docs(false))) as NodeWebApplication
+        .with(openapi(o => o.docs(false))) as WebApplication<never, never, unknown, NodeAdapter>
       await app.bootstrap()
     })
 
@@ -341,9 +343,9 @@ describe('openapi without authentication', () => {
 
   // Securing the endpoints with no scheme registered would protect them with nothing; the fix is to register one.
   it('refuses to secure the document, pointing at Authentication(...)', async () => {
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
-      .with(openapi(o => o.docs(false).secure('Basic'))) as NodeWebApplication
+      .with(openapi(o => o.docs(false).secure('Basic'))) as WebApplication<never, never, unknown, NodeAdapter>
 
     const failure = await app.bootstrap().catch((error: unknown) => error)
     app = undefined
@@ -358,7 +360,7 @@ describe('openapi without authentication', () => {
   // A route the document cannot represent is dropped, and the operator must hear about it at start-up.
   it('emits the warnings generation collected once the server is ready', async () => {
     const warnings = await warningsDuring(async () => {
-      app = createWebApplication({})
+      app = createWebApplication({ adapter: node() })
         .install(OpenAPI())
         .with(openapi(o => o.docs(false)))
         .with(
@@ -368,7 +370,7 @@ describe('openapi without authentication', () => {
               .query('/')
               .handler(() => []),
           ),
-        ) as NodeWebApplication
+        ) as WebApplication<never, never, unknown, NodeAdapter>
       await app.bootstrap()
     })
 

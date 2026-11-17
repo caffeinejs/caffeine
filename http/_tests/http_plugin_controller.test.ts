@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import {
   Controller,
   Get,
@@ -10,7 +11,7 @@ import {
   Use,
   type WebApplication,
 } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * Scenario: a controller's `@Use(...)` taking an `HTTPPlugin`. Its middleware runs in front of the controller's
@@ -92,7 +93,7 @@ describe('HTTPPlugin on a controller', () => {
   })
 
   it("runs its middleware in front of the controller's routes alone, a path relative to the controller", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const sub = await app.request('/ctl/sub')
@@ -109,7 +110,7 @@ describe('HTTPPlugin on a controller', () => {
   })
 
   it("starts a relative path at the controller's prefix", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     expect((await app.request('/v1/prefixed/sub')).headers.get('x-sub')).toBe('yes')

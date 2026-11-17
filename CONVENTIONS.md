@@ -6,11 +6,11 @@ How to change **this** monorepo. Agent behavior is in [`AGENTS.md`](AGENTS.md); 
 
 In this repository these names mean **this project**, not a third-party library:
 
-| You say                                  | It means                                                                                           |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Caffeine Framework, Caffeine, CaffeineJS | This monorepo (`caffeinejs/caffeine`). npm scope `@caffeinejs/*`.                                  |
-| CaffeineIoC                              | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`.                                 |
-| Caffeine HTTP, the HTTP package          | `@caffeinejs/http`, its own web-standards server; the Node application at `@caffeinejs/http/node`. |
+| You say                                  | It means                                                                                                                                                                                                          |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Caffeine Framework, Caffeine, CaffeineJS | This monorepo (`caffeinejs/caffeine`). npm scope `@caffeinejs/*`.                                                                                                                                                 |
+| CaffeineIoC                              | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`.                                                                                                                                                |
+| Caffeine HTTP, the HTTP package          | `@caffeinejs/http`, its own web-standards server, run on a runtime by a server adapter: one per runtime, from `@caffeinejs/http/<runtime>` (`node()` from `@caffeinejs/http/node`), and none for a fetch runtime. |
 
 This is not NestJS, Express, or Spring Boot.
 

@@ -2,8 +2,9 @@ import { newConfiguration } from '@caffeinejs/application'
 import { $t } from '@caffeinejs/application/schema'
 import { expectTypeOf } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { type IContext } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * What `.basePath(...)` accepts, and what a handler reads back. Nothing at run time fails when a callback stops
@@ -15,7 +16,7 @@ const schema = $t.Object({
   app: $t.Object({ basePath: $t.String({ default: '/api' }), port: $t.Number({ default: 0 }) }, { default: {} }),
 })
 
-const app = createWebApplication({ config: newConfiguration(schema).build().config })
+const app = createWebApplication({ adapter: node(), config: newConfiguration(schema).build().config })
 
 // The callback reads the application's own configuration, typed, and may take its time.
 app.basePath(({ config }) => config.app.basePath)

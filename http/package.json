@@ -28,6 +28,10 @@
       "types": "./dist/core/bff/index.d.ts",
       "default": "./dist/core/bff/index.js"
     },
+    "./bun": {
+      "types": "./dist/platform/bun/index.d.ts",
+      "default": "./dist/platform/bun/index.js"
+    },
     "./conditional": {
       "types": "./dist/core/conditional/index.d.ts",
       "default": "./dist/core/conditional/index.js"

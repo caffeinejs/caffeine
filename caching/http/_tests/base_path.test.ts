@@ -1,5 +1,5 @@
-import { $p, Args, Controller, Get, type IContext } from '@caffeinejs/http'
-import { createWebApplication, type NodeWebApplication } from '@caffeinejs/http/node'
+import { $p, Args, Controller, Get, type IContext, createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -25,7 +25,7 @@ class BasedController {
 void [BasedController]
 
 describe('caching under a base path', () => {
-  let app: NodeWebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -33,7 +33,7 @@ describe('caching under a base path', () => {
   })
 
   it('keeps a page answered under the base apart from the same page without it', async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .basePath('/api')
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()

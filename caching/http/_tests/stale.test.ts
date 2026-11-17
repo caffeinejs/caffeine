@@ -1,5 +1,5 @@
-import { $p, Args, Controller, Get, Header, type IContext } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { $p, Args, Controller, Get, Header, type IContext, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -81,7 +81,7 @@ describe('stale-while-revalidate, served by the store', () => {
     void [FollowersController]
 
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
@@ -134,7 +134,7 @@ describe('stale-while-revalidate, served by the store', () => {
     }
     void [UnlockedController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -185,7 +185,9 @@ describe('stale-while-revalidate, served by the store', () => {
     const spy = new RetentionSpy()
     const store = new WatchedStore(spy)
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -249,7 +251,9 @@ describe('stale-while-revalidate, served by the store', () => {
 
     const spy = new RetentionSpy()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(spy).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(spy).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -296,7 +300,9 @@ describe('stale-while-revalidate, served by the store', () => {
 
     const spy = new RetentionSpy()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(spy).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(spy).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -346,7 +352,9 @@ describe('stale-while-revalidate, served by the store', () => {
 
     const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -417,7 +425,7 @@ describe('max-stale, asked for by the client', () => {
     void [MaxStaleController]
 
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
@@ -522,7 +530,7 @@ describe('stale-if-error, served by the store', () => {
 
   async function start() {
     const recording = new Recording()
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
@@ -649,7 +657,9 @@ describe('stale-if-error, served by the store', () => {
 
     const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
     close = () => app.close()
     await app.bootstrap()
 

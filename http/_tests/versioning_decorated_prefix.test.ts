@@ -1,8 +1,9 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get, Prefix } from '../index.js'
-import { createWebApplication } from '../platform/node/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * Kept in its own file: `@Controller` registers into a module-global registry that every later
@@ -22,7 +23,7 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
     await app.bootstrap()
 
     expect(await (await app.request('/v1/pets')).json()).toEqual({ prefixed: true })

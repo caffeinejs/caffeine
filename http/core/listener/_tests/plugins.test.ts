@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   Health,
   HTTPPlugin,
@@ -9,7 +10,7 @@ import {
   type WebApplication,
   Router,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 /**
  * A listener's own plugins and middleware: registered on its builder, `l.with(...)`, `l.use(...)` and
@@ -72,7 +73,7 @@ describe("a listener's own plugins and middleware", () => {
   }
 
   it("installs its own plugins in the order they were written, and none of the application's", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', l =>
         l
           .server(() => ({ listen: listener }))
@@ -95,7 +96,7 @@ describe("a listener's own plugins and middleware", () => {
   })
 
   it("runs its own middleware on its own requests, by path, and the application's on the application's", async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .listener('admin', l =>
         l
           .server(() => ({ listen: listener }))
@@ -126,7 +127,7 @@ describe("a listener's own plugins and middleware", () => {
   })
 
   it('refuses a feature handed to its with(...), as the application refuses one', async () => {
-    app = createWebApplication().listener('admin', l => l.with(Health() as never)) as WebApplication
+    app = createWebApplication({ adapter: node() }).listener('admin', l => l.with(Health() as never)) as WebApplication
 
     await expect(app.bootstrap()).rejects.toThrow(
       /^Cannot register feature "health" with "\.with\(\.\.\.\)": a feature is not a server plugin/,

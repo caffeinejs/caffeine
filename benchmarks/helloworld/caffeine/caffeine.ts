@@ -1,5 +1,5 @@
-import { Controller, Get } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { Controller, Get, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 
@@ -13,6 +13,6 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
 
 await app.run({ port: PORT, host: '0.0.0.0' })

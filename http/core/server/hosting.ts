@@ -1,5 +1,7 @@
 import { ErrApplicationClosed } from '@caffeinejs/application'
+import type { Logger } from '@caffeinejs/application/logger'
 import { contextKey, ContextStorage, Scopes, type Container, type ContextKey } from '@caffeinejs/di'
+import { Second, type Duration } from '@caffeinejs/std/duration'
 
 import type { HTTPSetupContext } from '../../plugin.js'
 import type { IServer, ServerAddress } from '../../server.js'
@@ -16,28 +18,139 @@ import { Context } from './context.js'
 import { fetchPlatform } from './fetch.js'
 import { requestInProcess } from './in_process.js'
 import { HTTPServer } from './server.js'
-import type { ResolvedServerSettings } from './settings.js'
+import { resolveServerSettings, type ResolvedServerSettings, type ServerSettings } from './settings.js'
 
-/** The method key of how an application hosts its servers. Kept out of every barrel. */
+/** The key of an adapter's hosting function: how it hosts each server. Kept out of every barrel. */
 export const kHosting: unique symbol = Symbol('@caffeinejs/http:hosting')
 
-/** A server the application runs: the engine behind it, and its lifecycle. */
-export interface HostedServer extends IServer {
-  /** Starts listening, on a server that listens; resolves at once on one that does not. */
-  run(): Promise<void>
+/** A server the application runs: the engine behind it, and its lifecycle. `L` is what its `run` listens with. */
+export interface HostedServer<I = unknown, L = unknown> extends IServer<I> {
+  /**
+   * Starts listening, on a server that listens; resolves at once on one that does not. `options` is what `run(options)`
+   * was given, for the application's own server; `undefined` for a listener.
+   */
+  run(options: L | undefined): Promise<void>
   teardown(): Promise<void>
   /** Abandons what is in flight, once the shutdown budget is spent. */
   forceTeardown(): Promise<void>
-  /** What `app.listeners` hands out for it: what it is and where it listens, but not its lifecycle. */
-  view(): IServer
 }
 
 /** How an application hosts one server: the settings its engine runs with, and what serves the ready engine. */
-export interface ServerHosting {
+export interface ServerHosting<I = unknown, L = unknown> {
   readonly settings: ResolvedServerSettings
   /** Whether the platform runs a Node middleware: one is refused at start-up otherwise. */
   readonly nodeMiddleware: boolean
-  serve(engine: HTTPServer, context: HTTPSetupContext): Promise<HostedServer>
+  /**
+   * `customize` runs the `serverCallback`s on the server: the adapter awaits it as soon as its server exists, and on a
+   * failure closes what it built and rethrows.
+   */
+  serve(
+    engine: HTTPServer,
+    context: HTTPSetupContext,
+    customize: (instance: NonNullable<I>) => Promise<void>,
+  ): Promise<HostedServer<I, L>>
+}
+
+/**
+ * What serves an application on a runtime: `node()` from `@caffeinejs/http/node`, `bun()` from `@caffeinejs/http/bun`.
+ * `S` is what `.server(...)` returns under it, `I` what `app.instance` is, `L` what `run(options)` takes. An
+ * application given none answers through `fetch` alone.
+ */
+export interface ServerAdapter<S extends object = object, I = unknown, L = never> {
+  /** Never set: carries `S`, `I` and `L` for the application's types. */
+  readonly __types?: { readonly settings: S; readonly instance: I; readonly listen: L }
+  /** How one server is hosted, the application's own or a listener alike. */
+  readonly [kHosting]: (settings: object) => ServerHosting<I, L>
+}
+
+/** Any adapter: a bare `WebApplication` takes an application under any of them. */
+export type AnyServerAdapter = ServerAdapter<object, unknown, unknown>
+
+/** What `.server(...)` returns under `A`. */
+export type AdapterSettings<A extends AnyServerAdapter> = NonNullable<A['__types']>['settings']
+
+/** What `app.instance` is under `A`. */
+export type AdapterInstance<A extends AnyServerAdapter> = NonNullable<A['__types']>['instance']
+
+/** What `run(options)` takes under `A`: `never` under an adapter that does not listen. */
+export type AdapterListen<A extends AnyServerAdapter> = NonNullable<A['__types']>['listen']
+
+/** The adapter an application gets when given none: no socket, answering through `app.fetch`. */
+export type FetchAdapter = ServerAdapter<ServerSettings, undefined, never>
+
+/** The adapter an application gets when given none. */
+export const fetchAdapter: FetchAdapter = {
+  [kHosting]: settings => ({
+    settings: resolveServerSettings(settings),
+    nodeMiddleware: false,
+    serve: engine => Promise.resolve(new FetchServer(engine)),
+  }),
+}
+
+/** How long an adapter that listens keeps an idle connection open: 72 seconds. */
+export const IDLE_TIMEOUT: Duration = 72 * Second
+
+/**
+ * Where a server is bound, as {@link ServerAddress} describes it: `bound` is a Unix socket's path, or the address and
+ * port of a TCP bind.
+ */
+export function addressOf(
+  scheme: 'http' | 'https',
+  bound: string | { readonly address: string; readonly port: number },
+): ServerAddress {
+  if (typeof bound === 'string') {
+    return { host: '', port: 0, path: bound, origin: '' }
+  }
+
+  return { host: bound.address, port: bound.port, path: '', origin: originOf(scheme, bound.address, bound.port) }
+}
+
+/**
+ * An origin for `host` that can be dialled: `0.0.0.0` and `::` are addresses to accept connections on, not addresses
+ * to dial, so both map to their loopback equivalent; IPv6 is bracketed.
+ */
+function originOf(scheme: 'http' | 'https', host: string, port: number): string {
+  if (host === '0.0.0.0') {
+    return `${scheme}://127.0.0.1:${port}`
+  }
+
+  if (host === '::' || host === '::1') {
+    return `${scheme}://[::1]:${port}`
+  }
+
+  return host.includes(':') ? `${scheme}://[${host}]:${port}` : `${scheme}://${host}:${port}`
+}
+
+/** Logs where a server listens, once it does: the same line under every adapter. */
+export function logListening(logger: Logger, address: ServerAddress | undefined): void {
+  const where = address === undefined ? '' : address.origin || address.path
+  logger.info({ address: where }, `Server listening at ${where}`)
+}
+
+/**
+ * What `app.listeners` hands out for `server`: what it is and where it listens, read on each access, but not its
+ * lifecycle.
+ */
+export function viewOf<I>(server: IServer<I>): IServer<I> {
+  return {
+    get instance() {
+      return server.instance
+    },
+    get address() {
+      return server.address
+    },
+    request: (request, options) => server.request(request, options),
+    fetch: (request, ...runtime) => server.fetch(request, ...runtime),
+  }
+}
+
+/** Whether `value` is a server adapter: an object with a hosting function. */
+export function isServerAdapter(value: unknown): value is AnyServerAdapter {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Partial<Record<typeof kHosting, unknown>>)[kHosting] === 'function'
+  )
 }
 
 /** What one server's engine is built from. */
@@ -120,8 +233,8 @@ export function buildEngine(input: EngineInput): HTTPServer {
   return server
 }
 
-/** One server of the fetch application: no socket of its own, answering what the runtime hands `fetch`. */
-export class FetchServer implements HostedServer {
+/** One server under no adapter: no socket of its own, answering what the runtime hands `fetch`. */
+export class FetchServer implements HostedServer<undefined, never> {
   readonly #server: HTTPServer
   // Set once the teardown is over: a request() then rejects, while the runtime's fetch keeps the engine's 503.
   #closed = false
@@ -134,6 +247,10 @@ export class FetchServer implements HostedServer {
     this.#server.serve(fetchPlatform, request, runtime)
 
   get address(): ServerAddress | undefined {
+    return undefined
+  }
+
+  get instance(): undefined {
     return undefined
   }
 
@@ -159,14 +276,5 @@ export class FetchServer implements HostedServer {
     this.#closed = true
     this.#server.forceClose()
     return Promise.resolve()
-  }
-
-  view(): IServer {
-    // A server of the fetch application never listens: it has no address to change.
-    return {
-      address: undefined,
-      request: (request, options) => this.request(request, options),
-      fetch: (request, ...runtime) => this.fetch(request, ...runtime),
-    }
   }
 }

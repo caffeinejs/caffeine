@@ -13,8 +13,9 @@ import {
   Post,
   Prefix,
   Put,
+  createWebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -46,7 +47,7 @@ const instances = (r: ResilienceBuilder) =>
 
 // Boots a web application whose container sees the controllers of one profile only.
 async function boot(profile: string, ...features: Feature[]) {
-  let app = createWebApplication({ container: new CaffeineIoC({ profiles: [profile] }) })
+  let app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ profiles: [profile] }) })
   for (const feature of features) {
     app = app.install(feature)
   }
@@ -482,7 +483,7 @@ describe('ResilienceHTTP() and how a controller is bound', () => {
   it('refuses a POST handler retried by the class a controller key is bound to', async () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(OrdersController, t => t.toClass(RetriedOrders).labels(Keys.CONTROLLER, Keys.ENTRYPOINT))
-    const app = createWebApplication({ container, logger: false })
+    const app = createWebApplication({ adapter: node(), container, logger: false })
       .install(Resilience(instances))
       .install(ResilienceHTTP())
     opened.push(() => app.close())
@@ -642,7 +643,10 @@ describe('ResilienceHTTP() and client errors', () => {
 
   // The defaults a preset gets when nobody thought of client errors: retry every error, count every error.
   async function serve() {
-    const app = createWebApplication({ container: new CaffeineIoC({ profiles: ['rh-client-errors'] }) })
+    const app = createWebApplication({
+      adapter: node(),
+      container: new CaffeineIoC({ profiles: ['rh-client-errors'] }),
+    })
       .errorHandling(e => e.globalHandlers(ResilienceErrorHandler))
       .install(Resilience(r => r.preset('items', p => p.retry({ backoff: 0 }).circuitBreaker())))
       .install(ResilienceHTTP())

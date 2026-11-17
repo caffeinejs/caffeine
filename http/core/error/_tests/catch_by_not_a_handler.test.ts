@@ -1,8 +1,9 @@
 import { Injectable, Named, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import { CatchWith, Controller, ErrConfiguration, ErrorHandler, Get, type ActionResult } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // Isolated: the invalid reference poisons every app build in its module, so it must be the only
 // error-handler concern in this file. Referencing by name is the only way to reach this check —
@@ -24,7 +25,7 @@ void [UndeclaredController]
 
 describe('@CatchWith with a binding that is not an error handler', () => {
   it('rejects when the referenced binding is not decorated with @Catch', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
 
     await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })

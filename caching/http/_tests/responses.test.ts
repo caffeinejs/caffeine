@@ -1,5 +1,17 @@
-import { $p, Args, Controller, Get, Head, Header, Post, Principal, Status, type IContext } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/node'
+import {
+  $p,
+  Args,
+  Controller,
+  Get,
+  Head,
+  Header,
+  Post,
+  Principal,
+  Status,
+  type IContext,
+  createWebApplication,
+} from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -31,7 +43,7 @@ describe('what the cache says about a response', () => {
     }
     void [StatusController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -71,7 +83,7 @@ describe('what the cache says about a response', () => {
     }
     void [NonCacheableController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -99,7 +111,7 @@ describe('what the cache says about a response', () => {
     }
     void [NoStoreController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -130,7 +142,7 @@ describe('what the cache says about a response', () => {
     }
     void [NoStoreOverHandlerController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -157,7 +169,7 @@ describe('what the cache says about a response', () => {
     }
     void [HandlerDecidesController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -182,7 +194,7 @@ describe('what the cache says about a response', () => {
     }
     void [HandlerValidatorsController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -212,7 +224,7 @@ describe('what the cache says about a response', () => {
     }
     void [HeadersController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -241,7 +253,7 @@ describe('what the cache says about a response', () => {
     }
     void [CookieController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -270,7 +282,7 @@ describe('what the cache says about a response', () => {
     }
     void [ContextCookieController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -295,7 +307,7 @@ describe('what the cache says about a response', () => {
     }
     void [PublicCookieController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -319,7 +331,7 @@ describe('what the cache says about a response', () => {
     }
     void [VaryController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .hook('onRequest', ctx => {
         ctx.header('Vary', 'Origin')
         ctx.header('Access-Control-Allow-Origin', String(ctx.req.header('origin')))
@@ -349,7 +361,7 @@ describe('what the cache says about a response', () => {
     }
     void [HeadController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -375,7 +387,7 @@ describe('what the cache says about a response', () => {
     }
     void [HeadETagController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -405,7 +417,7 @@ describe('what the cache says about a response', () => {
     }
     void [OwnHeadController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -430,7 +442,7 @@ describe('what the cache says about a response', () => {
     }
     void [NotModifiedController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -459,7 +471,7 @@ describe('what the cache says about a response', () => {
     }
     void [FreshNotModifiedController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -489,7 +501,7 @@ describe('a request authenticated without an Authorization header', () => {
   })
 
   function signedIn(observer?: CacheObserver) {
-    return createWebApplication()
+    return createWebApplication({ adapter: node() })
       .hook('onRequest', ctx => {
         if (ctx.req.header('cookie')?.includes('session=')) {
           ctx.user = new Principal(true, [])

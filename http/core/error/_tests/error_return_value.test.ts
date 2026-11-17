@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import { Catch, type ActionResult, type IContext, Controller, ErrorHandler, Get } from '../../../index.js'
-import { createWebApplication } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // Error handlers, like controller handlers, may RETURN a value the framework finalizes: a plain object
 // serializes as JSON, and a handler that responds via ctx (returning void) is unchanged.
@@ -41,7 +42,9 @@ void [ErrReturnController]
 
 describe('error handler return values', () => {
   it('serializes a returned object as JSON', async () => {
-    const app = createWebApplication().errorHandling(e => e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e =>
+      e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler),
+    )
     await app.bootstrap()
 
     const res = await app.request('/err-return/json')
@@ -52,7 +55,9 @@ describe('error handler return values', () => {
   })
 
   it('leaves a ctx-based (void-returning) handler unchanged', async () => {
-    const app = createWebApplication().errorHandling(e => e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e =>
+      e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler),
+    )
     await app.bootstrap()
 
     const res = await app.request('/err-return/void')

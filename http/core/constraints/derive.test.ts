@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createWebApplication } from '../../application.js'
 import { constraint } from '../../decorators/constraint.js'
 import { version } from '../../decorators/version.js'
-import { createWebApplication as createNodeApplication } from '../../platform/node/node.js'
+import { node } from '../../platform/node/node.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrRouteConflict } from '../matcher/matcher.js'
@@ -237,7 +237,7 @@ describe('route constraints on the engine', () => {
   })
 
   it("reads a strategy's header from a Node request", async () => {
-    const built = createNodeApplication()
+    const built = createWebApplication({ adapter: node() })
       .server(() => ({ constraints: [strategy('flavor', 'x-flavor')] }))
       .mount(dish())
     app = built
