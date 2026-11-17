@@ -112,6 +112,15 @@ describe('WebApplication.with()', () => {
       'Cannot register an HTTP plugin: expected a plugin factory function, got undefined',
     )
   })
+
+  // `{ register() {} }` has every member HTTPPlugin declares: the brand makes the compiler refuse it, as start-up does.
+  it('refuses a factory that returns a plain object, at compile time and at start-up', async () => {
+    // @ts-expect-error a plain object with a register method is not an HTTPPlugin
+    const app = createWebApplication().with(() => ({ register() {} }))
+
+    await expect(app.bootstrap()).rejects.toThrow('only an HTTPPlugin can be installed')
+    await app.close()
+  })
 })
 
 describe('HTTPPlugin.name', () => {

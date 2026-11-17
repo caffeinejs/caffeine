@@ -2,7 +2,7 @@ import { kFeatureConfigure, kFeatureName, type Feature } from '@caffeinejs/appli
 import { Byte } from '@caffeinejs/std/bytes'
 import { describe, expect, it } from 'vitest'
 
-import { createWebApplication as createFetchApplication } from './application.js'
+import { createWebApplication as createFetchApplication, type WebApplication } from './application.js'
 import { findMyWayMatcher } from './core/matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS } from './core/matcher/matcher.js'
 import { Router } from './core/routing/programmatic/programmatic.js'
@@ -101,6 +101,40 @@ describe('ServerSet', () => {
     } finally {
       await app.close()
     }
+  })
+
+  // close() after a failed bootstrap() tears down what the boot brought up: an engine whose server never got built too.
+  it.each<[string, (closed: string[], boom: Error) => WebApplication]>([
+    [
+      'its Node server failed to build',
+      (closed, boom) =>
+        createNodeApplication()
+          .hook('onClose', () => void closed.push('closed'))
+          .serverCallback(() => {
+            throw boom
+          }),
+    ],
+    [
+      'its onReady failed',
+      (closed, boom) =>
+        createFetchApplication()
+          .hook('onReady', () => {
+            throw boom
+          })
+          .hook('onClose', () => void closed.push('closed')),
+    ],
+  ])('runs the onClose hooks of a server when %s, once close() is called', async (_what, build) => {
+    const boom = new Error('boom')
+    const closed: string[] = []
+    const app = build(closed, boom)
+
+    try {
+      await expect(app.bootstrap()).rejects.toBe(boom)
+    } finally {
+      await app.close()
+    }
+
+    expect(closed).toEqual(['closed'])
   })
 })
 

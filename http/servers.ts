@@ -15,6 +15,7 @@ import type { Routing } from './core/routing/routing.js'
 import type { RouteGroupSpec } from './core/routing/spec.js'
 import type { Context } from './core/server/context.js'
 import { buildEngine, findMyWayFlags, type HostedServer, type ServerHosting } from './core/server/hosting.js'
+import type { HTTPServer } from './core/server/server.js'
 import type { HTTPPluginFactory, HTTPSetupContext } from './plugin.js'
 import { PluginSlot } from './plugin_slot.js'
 import type { ServerConfigurer } from './server.js'
@@ -25,6 +26,7 @@ interface Entry {
   readonly definition: ServerDefinition
   groups: IRouteGroup<Context>[]
   server?: HostedServer
+  engine?: HTTPServer
 }
 
 /** What every server is built with that is not its own. */
@@ -146,6 +148,7 @@ export class ServerSet {
       recordRoutes: routes =>
         input.inventory[kRecordServer]({ server: definition.name, basePath: basePath ?? '', routes }),
     })
+    entry.engine = engine
     await engine.ready()
 
     return hosting.serve(engine, context)
@@ -158,13 +161,16 @@ export class ServerSet {
     }
   }
 
-  /** Closes every server built, the rest even when one fails. Resolves to what failed. */
+  /**
+   * Closes every server built, and the engine of a server whose build failed after its engine was built. Closes the
+   * rest even when one fails. Resolves to what failed.
+   */
   async teardown(): Promise<unknown[]> {
     const failures: unknown[] = []
 
     for (const entry of this.#entries) {
       try {
-        await entry.server?.teardown()
+        await (entry.server?.teardown() ?? entry.engine?.close())
       } catch (err) {
         failures.push(err)
       }

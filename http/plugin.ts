@@ -129,6 +129,8 @@ export interface HTTPSetupContext<C = unknown> extends BootstrapKit<C> {
  */
 export type HTTPPluginFactory<C = unknown> = (context: HTTPSetupContext<C>) => HTTPPlugin | Promise<HTTPPlugin>
 
+declare const kHTTPPlugin: unique symbol
+
 /**
  * A server plugin: what a `.with(...)` factory returns.
  *
@@ -136,7 +138,8 @@ export type HTTPPluginFactory<C = unknown> = (context: HTTPSetupContext<C>) => H
  * `context.container` resolves, `context.hasFeature(name)` lets a plugin that depends on a feature refuse a missing
  * one with `ErrFeatureNotInstalled`, and `context.app` mounts routers, adds middleware and adds hooks:
  * `context.app.hook('onSend', ...)`. Never deduplicated: two factories register two plugins. A package
- * exporting one types its factory `HTTPPluginFactory<C>`.
+ * exporting one types its factory `HTTPPluginFactory<C>`. A plugin extends this class: a plain object with a
+ * `register` method is refused by the compiler and at start-up.
  *
  * Where it is registered decides what `context.app` reaches:
  *
@@ -160,6 +163,9 @@ export type HTTPPluginFactory<C = unknown> = (context: HTTPSetupContext<C>) => H
  * ```
  */
 export abstract class HTTPPlugin {
+  // Makes the type nominal: an object with a register method is not a plugin, and the compiler says so.
+  declare private readonly [kHTTPPlugin]: true
+
   /**
    * What `context.app.hasPlugin(name)` answers to. A named plugin is refused twice in one slot, a server's, a router's
    * or a controller's, and allowed once in each of several. An empty name is refused.
