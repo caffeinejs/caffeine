@@ -5,6 +5,7 @@ import { ErrHTTPBadRequest, ErrHTTPContentTooLarge, ErrHTTPUnsupportedMediaType 
 import {
   declaredOver,
   ErrRequestBodyConsumed,
+  ErrRequestBodyDiscarded,
   isBodyLimit,
   limitStream,
   parsedMediaType,
@@ -197,6 +198,18 @@ describe('ErrRequestBodyConsumed', () => {
     expect(err.name).toBe('ErrRequestBodyConsumed')
     expect(err.message.split('\n')[0]).toBe(
       'Cannot read the request body of "POST /pets": something read it before the route did',
+    )
+  })
+})
+
+describe('ErrRequestBodyDiscarded', () => {
+  it('carries its code and name, and names the request in its first line', () => {
+    const err = new ErrRequestBodyDiscarded('POST /pets/42')
+
+    expect(err.code).toBe('ERR_REQUEST_BODY_DISCARDED')
+    expect(err.name).toBe('ErrRequestBodyDiscarded')
+    expect(err.message.split('\n')[0]).toBe(
+      'Cannot read the request body of "POST /pets/42": the route answered before reading it, and it was dropped',
     )
   })
 })

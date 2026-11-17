@@ -63,6 +63,11 @@ export interface ServerPlatform<N, P extends IContextPlatform, R> {
    * short or other than its `Content-Length`.
    */
   readBody(native: N, limit: ByteSize): Promise<Uint8Array>
+  /**
+   * Holds what is left of the request's body to `limit` once the answer has gone: called as the answer is handed over,
+   * on a platform that reads and drops that rest so its connection can serve the next request.
+   */
+  holdBodyTo?(native: N, limit: ByteSize): void
   /** Aborts when the client leaves. */
   signal(native: N): AbortSignal
   remoteAddress(native: N): string | undefined

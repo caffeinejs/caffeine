@@ -73,6 +73,27 @@ function connected(port: number): Promise<Socket> {
   })
 }
 
+// What `socket` sends from now on, once it matches `until`.
+function receive(socket: Socket, until: RegExp): Promise<string> {
+  return new Promise(resolve => {
+    let received = ''
+    const onData = (chunk: Buffer | string): void => {
+      received += String(chunk)
+      if (until.test(received)) {
+        socket.off('data', onData)
+        resolve(received)
+      }
+    }
+    socket.on('data', onData)
+  })
+}
+
+async function readAll(stream: ReadableStream<Uint8Array>): Promise<void> {
+  for await (const _chunk of stream) {
+    // Dropped.
+  }
+}
+
 describe('the Node platform', () => {
   it('writes text, bytes and an empty answer under their lengths', async () => {
     const routes = newRouter('/a')
@@ -894,30 +915,124 @@ describe('the request body on Node', () => {
     expect(answer).toMatch(/\r\nConnection: close\r\n/i)
   })
 
-  it('closes the connection after a 415 that left the body unread', async () => {
-    const { port } = await serve(echo())
+  // A body nothing read is dropped once the answer has gone, as Node drops it, so the connection serves the next
+  // request: closing under a client still sending would reset the connection before it read the answer.
+  it('keeps the connection after a 415 that left the body unread, and serves the next request on it', async () => {
+    const routes = echo()
+    routes.get('/next').handler(() => 'next')
+    const { port } = await serve(routes)
+    const socket = await connected(port)
+    socket.setEncoding('utf8')
 
-    const answer = await raw(
-      port,
-      'POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: application/xml\r\nContent-Length: 4\r\n\r\n<a/>',
-    )
+    const answered = receive(socket, /next$/)
+    socket.write('POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: application/xml\r\nContent-Length: 4\r\n\r\n<a/>')
+    socket.write('GET /b/next HTTP/1.1\r\nHost: x\r\n\r\n')
+    const received = await answered
 
-    expect(answer.startsWith('HTTP/1.1 415')).toBe(true)
-    expect(answer).toMatch(/\r\nConnection: close\r\n/i)
+    expect(received.startsWith('HTTP/1.1 415')).toBe(true)
+    expect(received).toMatch(/\r\nConnection: keep-alive\r\n/i)
+    expect(received).toMatch(/HTTP\/1\.1 200 OK\r\n/)
+    socket.destroy()
   })
 
-  it('closes the connection after an early answer that left the body unread', async () => {
+  it('keeps the connection after an early answer that left the body unread, and serves the next request on it', async () => {
     const routes = newRouter('/b')
     routes
       .post('/echo')
       .hook('onRequest', ctx => void ctx.status(401).body('no'))
       .handler(() => 'never')
+    routes.get('/next').handler(() => 'next')
     const { port } = await serve(routes)
+    const socket = await connected(port)
+    socket.setEncoding('utf8')
 
-    const answer = await raw(port, text('ping'))
+    const refused = receive(socket, /no$/)
+    socket.write('POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nping')
+    const first = await refused
+    expect(first.startsWith('HTTP/1.1 401')).toBe(true)
+    expect(first).toMatch(/\r\nConnection: keep-alive\r\n/i)
 
-    expect(answer.startsWith('HTTP/1.1 401')).toBe(true)
-    expect(answer).toMatch(/\r\nConnection: close\r\n/i)
+    const served = receive(socket, /next$/)
+    socket.write('pong')
+    socket.write('GET /b/next HTTP/1.1\r\nHost: x\r\n\r\n')
+    expect((await served).startsWith('HTTP/1.1 200')).toBe(true)
+    socket.destroy()
+  })
+
+  // A body read through `ctx.req.raw` once the answer has gone was dropped, not read by something else.
+  it('fails a read of ctx.req.raw that starts once the answer has gone', async () => {
+    const answered = Promise.withResolvers<void>()
+    let late: Promise<unknown> = Promise.resolve()
+    const routes = newRouter('/b')
+    routes
+      .post('/late')
+      .hook('onRequest', ctx => {
+        const request = ctx.req.raw
+        late = answered.promise
+          .then(() => request.arrayBuffer())
+          .then(
+            () => undefined,
+            (err: unknown) => err,
+          )
+        ctx.status(202).body('accepted')
+      })
+      .handler(() => 'never')
+    const { port } = await serve(routes)
+    const socket = await connected(port)
+    socket.setEncoding('utf8')
+
+    const accepted = receive(socket, /accepted$/)
+    socket.write('POST /b/late HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nping')
+    expect((await accepted).startsWith('HTTP/1.1 202')).toBe(true)
+    answered.resolve()
+
+    expect(await late).toMatchObject({ code: 'ERR_REQUEST_BODY_DISCARDED' })
+    socket.destroy()
+  })
+
+  // No route matched: the body is dropped up to the server's limit.
+  it('keeps the connection after a 404 on a request that carries a body', async () => {
+    const routes = newRouter('/b')
+    routes.get('/next').handler(() => 'next')
+    const { port } = await serve(routes)
+    const socket = await connected(port)
+    socket.setEncoding('utf8')
+
+    const answered = receive(socket, /next$/)
+    socket.write('POST /nowhere HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nping')
+    socket.write('GET /b/next HTTP/1.1\r\nHost: x\r\n\r\n')
+    const received = await answered
+
+    expect(received.startsWith('HTTP/1.1 404')).toBe(true)
+    expect(received).toMatch(/\r\nConnection: keep-alive\r\n/i)
+    expect(received).toMatch(/HTTP\/1\.1 200 OK\r\n/)
+    socket.destroy()
+  })
+
+  // The body dropped after the answer is held to the request's limit: a client cannot hold the connection by sending
+  // on.
+  it('closes the connection when a body nothing read goes over its limit after the answer', async () => {
+    const routes = newRouter('/b')
+    routes
+      .post('/echo')
+      .bodyLimit(6 * Byte)
+      .hook('onRequest', ctx => void ctx.status(401).body('no'))
+      .handler(() => 'never')
+    const { port } = await serve(routes)
+    const socket = await connected(port)
+    socket.setEncoding('utf8')
+    const closed = once(socket, 'close')
+
+    const refused = receive(socket, /no$/)
+    socket.write(
+      'POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nping\r\n',
+    )
+    const first = await refused
+    expect(first.startsWith('HTTP/1.1 401')).toBe(true)
+    expect(first).toMatch(/\r\nConnection: keep-alive\r\n/i)
+    socket.write('6\r\npongpo\r\n')
+
+    await closed
   })
 
   // A route that answers before its body has arrived, and reads on, as a server refusing a token does: the client is
@@ -939,40 +1054,36 @@ describe('the request body on Node', () => {
   it('keeps the connection of a route that answered while it reads the body, and serves the next request on it', async () => {
     const { port } = await serve(answeringEarly())
     const socket = await connected(port)
-    let received = ''
     socket.setEncoding('utf8')
-    socket.on('data', chunk => (received += chunk))
 
+    const refused = receive(socket, /no$/)
     socket.write('POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nping')
-    await vi.waitFor(() => expect(received).toMatch(/no$/))
+    const first = await refused
 
-    expect(received.startsWith('HTTP/1.1 401')).toBe(true)
-    expect(received).toMatch(/\r\nConnection: keep-alive\r\n/i)
+    expect(first.startsWith('HTTP/1.1 401')).toBe(true)
+    expect(first).toMatch(/\r\nConnection: keep-alive\r\n/i)
 
-    received = ''
+    const served = receive(socket, /next$/)
     socket.write('pong')
     socket.write('GET /b/next HTTP/1.1\r\nHost: x\r\n\r\n')
-    await vi.waitFor(() => expect(received).toMatch(/next$/))
-    expect(received.startsWith('HTTP/1.1 200')).toBe(true)
+    expect((await served).startsWith('HTTP/1.1 200')).toBe(true)
     socket.destroy()
   })
 
   it('closes the connection when the read of a route that answered early goes over its limit', async () => {
     const { port } = await serve(answeringEarly(6 * Byte))
     const socket = await connected(port)
-    let received = ''
     socket.setEncoding('utf8')
-    socket.on('data', chunk => (received += chunk))
     const closed = once(socket, 'close')
 
+    const refused = receive(socket, /no$/)
     socket.write(
       'POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nping\r\n',
     )
-    await vi.waitFor(() => expect(received).toMatch(/no(\r\n0\r\n\r\n)?$/))
+    expect((await refused).startsWith('HTTP/1.1 401')).toBe(true)
     socket.write('6\r\npongpo\r\n0\r\n\r\n')
 
     await closed
-    expect(received.startsWith('HTTP/1.1 401')).toBe(true)
   })
 
   // A route that takes the body and never reads it must not hold the connection until Node's `requestTimeout`: the
@@ -990,26 +1101,154 @@ describe('the request body on Node', () => {
     routes.get('/next').handler(() => 'next')
     const { port } = await serve(routes)
     const socket = await connected(port)
-    let received = ''
     socket.setEncoding('utf8')
-    socket.on('data', chunk => (received += chunk))
 
-    const body = Buffer.alloc(2 * 1024 * 1024, 'x')
+    const body = Buffer.alloc(2 * MiB, 'x')
+    const refused = receive(socket, /no$/)
     socket.write(
       `POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: ${body.length}\r\n\r\n`,
     )
-    await vi.waitFor(() => expect(received).toMatch(/no$/))
-    expect(received.startsWith('HTTP/1.1 401')).toBe(true)
+    expect((await refused).startsWith('HTTP/1.1 401')).toBe(true)
 
-    received = ''
+    const served = receive(socket, /next$/)
     socket.write(body)
     socket.write('GET /b/next HTTP/1.1\r\nHost: x\r\n\r\n')
-    await vi.waitFor(() => expect(received).toMatch(/next$/))
-    expect(received.startsWith('HTTP/1.1 200')).toBe(true)
+    expect((await served).startsWith('HTTP/1.1 200')).toBe(true)
     socket.destroy()
   })
 
-  it('closes the connection when a route that answered early cancels its read', async () => {
+  // In process, the request has no socket to cut: a route that cancels its read once the head is out still has its
+  // answer end.
+  it('ends the answer of an in-process route that cancels its read after its head is out', async () => {
+    const head = Promise.withResolvers<void>()
+    const answer = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>()
+    let cancelled: Promise<void> = Promise.resolve()
+    const routes = newRouter('/b')
+    routes
+      .post('/early')
+      .extend(bodyAsStream())
+      .handler(ctx => {
+        const body = ctx.req.body() as ReadableStream<Uint8Array>
+        cancelled = head.promise.then(() => body.cancel())
+        return new ReadableStream<Uint8Array>({ start: controller => answer.resolve(controller) })
+      })
+    const app = createWebApplication()
+      .logger(b => b.use(newNoopLogger()))
+      .mount(routes)
+    apps.push(app)
+    await app.bootstrap()
+
+    const res = await app.request('/b/early', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: 'ping',
+    })
+    head.resolve()
+    await cancelled
+    ;(await answer.promise).close()
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('')
+  })
+
+  // Once its answer has gone, the route cannot read what is left: the server discards it to keep the connection.
+  it('fails the read of a route that answered early once the answer has gone', async () => {
+    let failure: Promise<unknown> = Promise.resolve()
+    const routes = newRouter('/b')
+    routes
+      .post('/early')
+      .extend(bodyAsStream())
+      .handler(ctx => {
+        failure = readAll(ctx.req.body() as ReadableStream<Uint8Array>).then(
+          () => undefined,
+          (err: unknown) => err,
+        )
+        return ctx.status(401).body('no')
+      })
+    const { port } = await serve(routes)
+    const socket = await connected(port)
+    socket.setEncoding('utf8')
+
+    const refused = receive(socket, /no$/)
+    socket.write('POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nping')
+    expect((await refused).startsWith('HTTP/1.1 401')).toBe(true)
+
+    expect(await failure).toMatchObject({ code: 'ERR_REQUEST_BODY_DISCARDED' })
+    socket.destroy()
+  })
+
+  // A body something other than the route's stream started reading is left as it is: a kept connection would hold it
+  // half-read, and the next request on it would never be served.
+  it('closes the connection after a Node middleware read part of the body and stopped', async () => {
+    const routes = newRouter('/b')
+    routes.post('/partial').handler(() => 'never')
+    const port = await listen(
+      createWebApplication()
+        .logger(b => b.use(newNoopLogger()))
+        .use((req: IncomingMessage, _res: ServerResponse, next: Next) => {
+          req.once('data', () => {
+            req.pause()
+            next(new Error('stopped'))
+          })
+        })
+        .mount(routes),
+    )
+    const socket = await connected(port)
+    socket.setEncoding('utf8')
+
+    const answered = receive(socket, /\r\n\r\n/)
+    socket.write('POST /b/partial HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nping')
+    const received = await answered
+
+    expect(received.startsWith('HTTP/1.1 500')).toBe(true)
+    expect(received).toMatch(/\r\nConnection: close\r\n/i)
+    socket.destroy()
+  })
+
+  // The head goes out on a kept connection while the answer streams; the read that then goes over its limit leaves the
+  // rest of the body unread, so the connection closes once the answer ends.
+  it('closes the connection when a read goes over its limit while the answer streams', async () => {
+    const answer = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>()
+    let failure: Promise<unknown> = Promise.resolve()
+    const routes = newRouter('/b')
+    routes
+      .post('/early')
+      .extend(bodyAsStream())
+      .bodyLimit(6 * Byte)
+      .handler(ctx => {
+        failure = readAll(ctx.req.body() as ReadableStream<Uint8Array>).then(
+          () => undefined,
+          (err: unknown) => err,
+        )
+        // A first chunk sends the head: Node holds it until the body starts.
+        return new ReadableStream<Uint8Array>({
+          start: controller => {
+            controller.enqueue(new TextEncoder().encode('a'))
+            answer.resolve(controller)
+          },
+        })
+      })
+    const { port } = await serve(routes)
+    const socket = await connected(port)
+    socket.setEncoding('utf8')
+    const closed = once(socket, 'close')
+
+    const headed = receive(socket, /\r\n\r\n/)
+    socket.write(
+      'POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nping\r\n',
+    )
+    const received = await headed
+    expect(received.startsWith('HTTP/1.1 200')).toBe(true)
+    expect(received).toMatch(/\r\nConnection: keep-alive\r\n/i)
+
+    socket.write('6\r\npongpo\r\n')
+    expect(await failure).toMatchObject({ code: 'ERR_HTTP_CONTENT_TOO_LARGE' })
+    ;(await answer.promise).close()
+
+    await closed
+  })
+
+  it('closes the connection when a route cancels its read before answering', async () => {
     const routes = newRouter('/b')
     routes
       .post('/early')
@@ -1017,20 +1256,19 @@ describe('the request body on Node', () => {
       .handler(async ctx => {
         const reader = (ctx.req.body() as ReadableStream<Uint8Array>).getReader()
         await reader.read()
-        ctx.status(401).body('no')
         await reader.cancel()
+        return ctx.status(401).body('no')
       })
     const { port } = await serve(routes)
     const socket = await connected(port)
-    let received = ''
     socket.setEncoding('utf8')
-    socket.on('data', chunk => (received += chunk))
     const closed = once(socket, 'close')
 
+    const refused = receive(socket, /no$/)
     socket.write('POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nping')
 
+    expect((await refused).startsWith('HTTP/1.1 401')).toBe(true)
     await closed
-    expect(received.startsWith('HTTP/1.1 401')).toBe(true)
   })
 
   it('closes the connection after a Node middleware answered without reading the body', async () => {

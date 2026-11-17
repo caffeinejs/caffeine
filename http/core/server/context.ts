@@ -170,10 +170,15 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
       this.#basePath,
       this.#params,
       this.#query,
-      this.#store.input?.limit ?? this.#shared.bodyLimit,
+      this.bodyLimit,
       // Only a matched route reads its body, so only a matched route's name is ever read here.
       this.#store.input?.route ?? '',
     ))
+  }
+
+  /** The limit the request's body is held to: the route's, or the server's where no route says. */
+  get bodyLimit(): ByteSize {
+    return this.#store.input?.limit ?? this.#shared.bodyLimit
   }
 
   /** Where the request came from. See {@link IContext.platform}. */

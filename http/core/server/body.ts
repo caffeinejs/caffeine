@@ -49,6 +49,29 @@ export class ErrRequestBodyConsumed extends ErrCaffeineWebApplication {
   }
 }
 
+/**
+ * The read of a route that answered before reading its body, failed once the answer has gone. On the Node application
+ * over HTTP/1.1, the server then reads what is left of the body and drops it, so the connection can serve the next
+ * request. Nothing answers it: the route has answered already.
+ */
+export class ErrRequestBodyDiscarded extends ErrCaffeineWebApplication {
+  /**
+   * @param request - The request whose body was dropped: its method and path, e.g. `POST /pets/42`.
+   */
+  constructor(request: string) {
+    super(
+      errMessage(
+        `Cannot read the request body of "${request}": the route answered before reading it, and it was dropped`,
+      )
+        .solutions('Read the body before answering: whole with @BodyAsBuffer() or $p.body(), or with @BodyAsStream()')
+        .reference('@caffeinejs/http', ErrRequestBodyDiscarded)
+        .build(),
+      'ERR_REQUEST_BODY_DISCARDED',
+    )
+    this.name = 'ErrRequestBodyDiscarded'
+  }
+}
+
 /** Whether `value` is a body limit: a whole number of bytes above 0. */
 export function isBodyLimit(value: unknown): value is ByteSize {
   return Number.isSafeInteger(value) && (value as number) > 0

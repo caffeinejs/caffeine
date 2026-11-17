@@ -1121,6 +1121,7 @@ class Pipeline<N, R> {
     }
 
     ctx.markResponded()
+    this.#platform.holdBodyTo?.(this.#native, ctx.bodyLimit)
 
     let sent: R
     try {
