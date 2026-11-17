@@ -46,7 +46,7 @@ export interface GenerateInput {
 /**
  * Builds the OpenAPI document from the routes the application already declared.
  *
- * Pure: no Fastify, no container, no I/O. That keeps it testable against hand-built `IRouteGroup[]` fixtures and
+ * Pure: no server, no container, no I/O. That keeps it testable against hand-built `IRouteGroup[]` fixtures and
  * leaves the door open for a CLI that emits the document without starting a server.
  *
  * The package's own document-serving routes reach `routeGroups` like any other registered route; their group

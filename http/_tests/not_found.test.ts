@@ -1,8 +1,7 @@
-import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
 import { Controller, ErrHTTPNotFound, Get, type ActionResult } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 @Controller('/pets')
 class PetsController {
@@ -32,65 +31,6 @@ describe('unmatched routes', () => {
     expect(unmatched.title).toBe('Not Found')
     expect(unmatched.code).toBe('ERR_HTTP_NOT_FOUND')
     expect(unmatched.detail).toBe('Route GET:/no-such-route not found')
-
-    await app.close()
-  })
-
-  // The default is installed after every plugin, so a plugin that took the handler is not displaced by it.
-  it('lets a plugin take the not-found handler, with the request context populated', async () => {
-    let seenURL: string | undefined
-
-    const shell = fp(async instance => {
-      instance.setNotFoundHandler(async (req, reply) => {
-        // Would throw if httpContext were absent.
-        seenURL = req.httpContext.req.url
-        return reply.code(200).type('text/html').send('<p>shell</p>')
-      })
-    })
-
-    const app = createWebApplication().with(() => shell)
-    await app.bootstrap()
-
-    const res = await app.request('/client/route?a=b')
-
-    expect(res.status).toBe(200)
-    expect(await res.text()).toBe('<p>shell</p>')
-    expect(seenURL).toBe('/client/route?a=b')
-
-    await app.close()
-  })
-
-  it('renders a miss thrown from a plugin handler through the error pipeline', async () => {
-    const partial = fp(async instance => {
-      instance.setNotFoundHandler(async req => {
-        throw new ErrHTTPNotFound(`Route ${req.method}:${req.url} not found`)
-      })
-    })
-
-    const app = createWebApplication().with(() => partial)
-    await app.bootstrap()
-
-    const res = await app.request('/nope')
-
-    expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
-    expect(await res.json()).toMatchObject({ status: 404, code: 'ERR_HTTP_NOT_FOUND' })
-
-    await app.close()
-  })
-
-  it('keeps a not-found handler the application set on the server itself', async () => {
-    const app = createWebApplication().serverCallback((_context, server) => {
-      server.setNotFoundHandler((_req, reply) => {
-        void reply.code(418).send({ mine: true })
-      })
-    })
-    await app.bootstrap()
-
-    const res = await app.request('/nope')
-
-    expect(res.status).toBe(418)
-    expect(await res.json()).toEqual({ mine: true })
 
     await app.close()
   })

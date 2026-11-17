@@ -1,6 +1,4 @@
 import { Injectable } from '@caffeinejs/di'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -12,11 +10,13 @@ import {
   Get,
   type Guard,
   type GuardInput,
+  HTTPPlugin,
+  type HTTPSetupContext,
   Use,
   UseGuards,
   type WebApplication,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 /**
  * A controller bound with `@BindTo(...)`: the controller counterpart of `router.extend(bindTo(...))`, carrying its
@@ -30,6 +30,22 @@ const listener = { host: '127.0.0.1', port: 0 }
 
 class Teapot extends Error {}
 
+/** A plugin marking every response it covers with `header`. */
+class Marking extends HTTPPlugin {
+  override readonly name: string
+  readonly #header: string
+
+  constructor(header: string) {
+    super()
+    this.#header = header
+    this.name = `marking:${header}`
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onRequest', ctx => void ctx.header(this.#header, 'yes'))
+  }
+}
+
 @Injectable()
 class TokenGuard implements Guard {
   guard(input: GuardInput): boolean {
@@ -38,17 +54,7 @@ class TokenGuard implements Guard {
 }
 
 @BindTo('admin')
-@Use(() =>
-  fp(
-    async (instance: FastifyInstance) => {
-      instance.addHook('onRequest', (_request, reply, done) => {
-        reply.header('x-controller-plugin', 'yes')
-        done()
-      })
-    },
-    { name: 'decorated-controller-plugin' },
-  ),
-)
+@Use(() => new Marking('x-controller-plugin'))
 @UseGuards(TokenGuard)
 @Controller('/decorated')
 class DecoratedController {
@@ -80,8 +86,8 @@ describe('a controller bound with @BindTo', () => {
 
   async function started(): Promise<{ main: string; admin: string }> {
     app = createWebApplication()
-      .listener('admin', l => l.server(() => ({ listener })))
-      .server(() => ({ listener }))
+      .listener('admin', l => l.server(() => ({ listen: listener })))
+      .server(() => ({ listen: listener }))
 
     await app.run()
 

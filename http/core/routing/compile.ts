@@ -92,20 +92,6 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         }
       }
 
-      // Route Options
-      // https://fastify.dev/docs/latest/Reference/Routes/#routes-options
-      const options = new Map<string, unknown>()
-      if (spec.options) {
-        for (const [k, v] of spec.options) {
-          options.set(k, v)
-        }
-      }
-      if (route.options) {
-        for (const [k, v] of route.options) {
-          options.set(k, v)
-        }
-      }
-
       const header = new Map<string, string | string[]>()
       if (spec.header) {
         for (const [k, v] of spec.header) {
@@ -141,7 +127,6 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         statusCode: route.statusCode,
         bodyAs: route.bodyAs,
         config: config,
-        options: options,
         // Copied, not shared: a plugin enriching the compiled route's detail from an `onRoute` hook must not
         // write back into the spec the route was authored from.
         detail: route.detail === undefined ? undefined : { ...route.detail },

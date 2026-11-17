@@ -7,6 +7,7 @@ import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
 
 import type { IContext } from '../../../../context.js'
+import { authentication } from '../../../../core/security/security.js'
 import {
   AllowAnonymous,
   AuthenticationSchemeProvider,
@@ -22,7 +23,7 @@ import {
   Authentication,
   type ActionResult,
 } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../../platform/node/index.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthSchemeDescriptors } from '../keys.js'
 

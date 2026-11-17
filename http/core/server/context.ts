@@ -234,11 +234,6 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     return (this.#normalized ??= normalizePath(sanitizeURL(this.#url), this.#shared.router))
   }
 
-  /** What the route declared lives on the route itself; there is no adapter config to hand out. */
-  get routeConfig(): unknown {
-    return undefined
-  }
-
   /** See {@link IContext.signal}. Aborts when the client leaves and when the request's timeout fires. */
   get signal(): AbortSignal {
     if (this.#signal === undefined) {
@@ -663,7 +658,7 @@ const VALIDATORS: ReadonlySet<string> = new Set(['if-none-match', 'if-modified-s
  * function puts them back: what a cache calls on a miss it will store, so the handler answers whole rather than `304`.
  * `ctx.req.raw` and Node's own request still carry them.
  *
- * @throws ErrConfiguration for a context the engine did not build, a Fastify application's.
+ * @throws ErrConfiguration for a context the engine did not build.
  */
 export function withholdValidators(ctx: IContext): () => void {
   if (!(ctx instanceof Context)) {

@@ -1,3 +1,4 @@
+import { Byte } from '@caffeinejs/std/bytes'
 import { describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from './adapter.js'
@@ -5,7 +6,6 @@ import { createWebApplication as createFetchApplication } from './application.js
 import { findMyWayMatcher } from './core/matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS } from './core/matcher/matcher.js'
 import { Router } from './core/routing/programmatic/programmatic.js'
-import { createWebApplication } from './platform/fastify/application.js'
 import { createWebApplication as createNodeApplication } from './platform/node/node.js'
 import { HTTPPlugin } from './plugin.js'
 import { ServerDefinition } from './server_definition.js'
@@ -23,9 +23,9 @@ describe('ServerSet', () => {
 
   // A configurer that leaves a section out, as `undefined`, does not erase what an earlier one set for it.
   it('keeps a section an earlier .server(...) set when a later one leaves it undefined', async () => {
-    const app = createWebApplication()
-      .server(() => ({ factory: { bodyLimit: 8 } }))
-      .server(() => ({ factory: undefined }))
+    const app = createNodeApplication()
+      .server(() => ({ bodyLimit: 8 * Byte }))
+      .server(() => ({ bodyLimit: undefined }))
       .mount(new Router('/limited').post('/', () => ({ ok: true })))
 
     try {
@@ -123,7 +123,7 @@ describe('context.app.server', () => {
   it("reports the listener's server on a listener's slot", async () => {
     expect(
       await serverSeen(seen =>
-        createWebApplication()
+        createNodeApplication()
           .basePath('/api')
           .listener('admin', l => l.with(recorder(seen))),
       ),

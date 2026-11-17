@@ -10,24 +10,22 @@ import type {
   IAdapterTypes,
   ServerAddress,
 } from '../../adapter.js'
-import { kFastifyOnly } from '../../plugin_marks.js'
 import { HookBatch } from '../lifecycle/batch.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
 import type { RouterFlags } from '../matcher/matcher.js'
 import { rebaseMiddlewares } from '../middleware/path.js'
 import type { IRouteGroup, RouteGroupScope } from '../routing/route.js'
-import { assertAuthorizationConfigured, kAuthzOpts } from '../security/authz/index.js'
+import { assertAuthorizationConfigured } from '../security/authz/index.js'
 import { assertAuthenticationConfigured, assertRouteSchemesResolve } from '../security/security.js'
 import { Context, type EngineContextTypes } from './context.js'
-import { configurationError, USE_FASTIFY } from './error.js'
+import { configurationError, USE_NODE } from './error.js'
 import { fetchPlatform, type FetchContextPlatform } from './fetch.js'
 import { requestInProcess } from './in_process.js'
 import { HTTPServer } from './server.js'
 import { resolveServerSettings, type ResolvedServerSettings, type ServerSettings } from './settings.js'
 
 /**
- * The fetch application's adapter types. They are not in `AdapterRegistry`, so a plain `IContext` keeps Fastify's
- * types.
+ * The fetch application's adapter types, an entry of `EngineAdapterRegistry`.
  */
 export interface FetchAdapterTypes extends EngineContextTypes {
   instance: never
@@ -66,7 +64,7 @@ class FetchAdapter implements IAdapter<FetchAdapterTypes> {
     if (input.customize !== undefined) {
       throw configurationError(
         'Cannot run ".serverCallback(...)" on the fetch application: it has no server instance',
-        USE_FASTIFY,
+        USE_NODE,
       )
     }
 
@@ -127,12 +125,9 @@ export function buildEngine<T extends IAdapterTypes>(
     // By index: a factory that returned nothing leaves `undefined`, which is foreign too.
     const at = entries.findIndex(entry => !(entry instanceof HookBatch))
     if (at !== -1) {
-      // A Fastify plugin the engine has its own of, under the same name: the import is the fix.
-      const own = (entries[at] as { [kFastifyOnly]?: string } | null | undefined)?.[kFastifyOnly]
-
       throw configurationError(
-        `Cannot install a server plugin on the ${settings.application}: only an HTTPPlugin is supported yet`,
-        own === undefined ? USE_FASTIFY : `Import "${own}" from "@caffeinejs/http"`,
+        `Cannot install a server plugin on the ${settings.application}: only an HTTPPlugin can be installed`,
+        'Return an HTTPPlugin instance from the factory given to ".with(...)" or "@Use(...)"',
       )
     }
 
@@ -156,19 +151,6 @@ export function buildEngine<T extends IAdapterTypes>(
   assertAuthenticationConfigured(container, routeGroups)
   assertRouteSchemesResolve(container, routeGroups)
   assertAuthorizationConfigured(container, routeGroups)
-
-  // `except` names routes a plugin registered straight on a Fastify server; every route here is compiled, so it would
-  // exempt nothing and say nothing.
-  const except = container.getOptional(kAuthzOpts)?.fallbackExcept ?? []
-  if (except.length > 0) {
-    throw configurationError(
-      `Cannot use the except "${except[0]}" of requireAuthenticatedByDefault() or fallbackPolicy() on the ` +
-        `${settings.application}: it exempts only routes registered straight on a Fastify server, and this ` +
-        'application compiles every route',
-      'Open the route with @AllowAnonymous() or .authorize({ allowAnonymous: true }), and remove except',
-      'Open a static mount with serve(root, { anonymous: true }), and remove except',
-    )
-  }
 
   const server = new HTTPServer({
     routeGroups,

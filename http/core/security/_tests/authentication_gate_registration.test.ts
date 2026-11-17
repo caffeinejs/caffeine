@@ -11,8 +11,9 @@ import {
   Identity,
   Principal,
 } from '../../../index.js'
-import { authentication, createWebApplication } from '../../../platform/fastify/index.js'
-import { newRouter } from '../../../platform/fastify/routing/new_router.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { HTTPPlugin } from '../../../plugin.js'
+import { authentication } from '../security.js'
 
 /**
  * How the gate registers: once at the root, per route group, or both — and how it fails when the feature it
@@ -21,6 +22,11 @@ import { newRouter } from '../../../platform/fastify/routing/new_router.js'
  * Programmatic routers only: a `@Controller` registers into the process-global registry and would leak into
  * every application this file builds after it.
  */
+
+/** A plugin that does nothing, where a factory must return one. */
+class NoopPlugin extends HTTPPlugin {
+  register(): void {}
+}
 
 /** Authenticates any request carrying `header`, and counts what the gate asked of it. */
 class HeaderSchemeHandler extends BaseAuthenticationHandler<object> {
@@ -80,7 +86,7 @@ describe('gate registration', () => {
       .with(authentication())
       .with(authentication())
 
-    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_HTTP_DUPLICATE_PLUGIN' })
+    await expect(app.bootstrap()).rejects.toThrow('Cannot register plugin "caffeine-authentication" twice')
   })
 
   // A scoped chain inherits the root's registered plugin names, so a scoped gate under a root one must carry
@@ -96,7 +102,7 @@ describe('gate registration', () => {
       .with(authentication())
       .mount(guarded)
 
-    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_HTTP_DUPLICATE_PLUGIN' })
+    await expect(app.bootstrap()).rejects.toThrow('Cannot register a second authentication gate labelled "default"')
   })
 
   // The ownership model: each gate stamps the routes its context registers and the innermost stamp wins, so a
@@ -169,14 +175,19 @@ describe('gate registration', () => {
     const { a } = schemes()
     const open = newRouter('/feature-no-gate').get('/', () => ({ ok: true }))
 
+    let has: boolean | undefined
     const app = createWebApplication()
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
+      .with(context => {
+        has = context.hasFeature('auth')
+        return new NoopPlugin()
+      })
       .mount(open)
 
     try {
       await app.bootstrap()
 
-      expect(app.instance.$hasFeature('auth')).toBe(true)
+      expect(has).toBe(true)
       expect((await app.request('/feature-no-gate')).status).toBe(200)
     } finally {
       await app.close()

@@ -9,11 +9,17 @@ import {
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Authentication, Authorization, Guards } from '../index.js'
-import { createWebApplication, authentication } from '../platform/fastify/index.js'
+import { authentication } from '../core/security/security.js'
+import { Controller, Get, Authentication, Authorization, Guards, HTTPPlugin } from '../index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
-describe('createWebApplication default Fastify form', () => {
-  it('builds a working app with no adapter factory or Fastify instance', async () => {
+/** A plugin that does nothing, where a factory must return one. */
+class NoopPlugin extends HTTPPlugin {
+  register(): void {}
+}
+
+describe('createWebApplication default form', () => {
+  it('builds a working app with no adapter factory', async () => {
     @Controller('/default-app')
     class DefaultAppController {
       @Get('/data')
@@ -29,13 +35,6 @@ describe('createWebApplication default Fastify form', () => {
     const res = await app.request('/default-app/data')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
-  })
-
-  it('exposes a Fastify instance', async () => {
-    const app = createWebApplication()
-    await app.bootstrap()
-
-    expect(typeof (app.instance as { inject?: unknown }).inject).toBe('function')
   })
 
   it('uses a container supplied through options', async () => {
@@ -95,6 +94,6 @@ describe('configuring a started web application', () => {
     )
     expect(() => app.install(Authorization(a => a.requireAuthenticatedByDefault()))).toThrow(ErrApplicationStarted)
     expect(() => app.install(Guards(() => undefined))).toThrow(ErrApplicationStarted)
-    expect(() => app.with(() => async () => undefined)).toThrow(ErrApplicationStarted)
+    expect(() => app.with(() => new NoopPlugin())).toThrow(ErrApplicationStarted)
   })
 })

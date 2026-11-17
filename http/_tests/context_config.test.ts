@@ -6,7 +6,7 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { type MiddlewareFn, Router } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 const schema = $t.Object({
   catalog: $t.Object({ pageSize: $t.Number() }),
@@ -197,7 +197,7 @@ describe('ctx.config with an application schema', () => {
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build().config
     const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
-      .server(({ config }) => ({ listener: config.server }))
+      .server(({ config }) => ({ listen: config.server }))
       .mount(routes)
 
     await app.bootstrap()
@@ -218,7 +218,7 @@ describe('ctx.config with an application schema', () => {
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build().config
     const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
-      .server(({ config }) => ({ listener: config.server }))
+      .server(({ config }) => ({ listen: config.server }))
       .mount(routes)
 
     await app.bootstrap()
@@ -260,7 +260,7 @@ describe('ctx.config with an application schema', () => {
     const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
-    }).server(({ config }) => ({ listener: config.server }))
+    }).server(({ config }) => ({ listen: config.server }))
 
     await app.run()
 

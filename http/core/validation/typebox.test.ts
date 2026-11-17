@@ -98,4 +98,12 @@ describe('typeBoxSchemaCompiler.serializer', () => {
   it('writes a Zod schema the same way', () => {
     expect(write(z.object({ a: z.number() }), { a: 1, b: 2 })).toBe('{"a":1}')
   })
+
+  // On the way in a client may omit a defaulted property; on the way out it is always there.
+  it('writes a Standard Schema response from its output side', () => {
+    const schema = z.object({ limit: z.number().default(10) })
+
+    expect(write(schema, { limit: 3 })).toBe('{"limit":3}')
+    expect(write(schema, {})).toBe('{"limit":10}')
+  })
 })

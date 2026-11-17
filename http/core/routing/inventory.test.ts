@@ -1,7 +1,9 @@
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import type { HTTPSetupContext } from '../../adapter.js'
 import { createWebApplication as createFetchApplication } from '../../application.js'
+import { bindTo } from '../../decorators/bind_to.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -13,9 +15,11 @@ import {
   Router,
   RouteInventory,
   type Guard,
+  type RouteRecord,
+  type ServerRoutes,
   type WebApplication,
 } from '../../index.js'
-import { createWebApplication } from '../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../platform/node/index.js'
 import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../security/exempt.js'
 import type { FetchAdapterTypes } from '../server/adapter.js'
 
@@ -48,7 +52,7 @@ describe('RouteInventory', () => {
 
   it('refuses a read while servers are still being built', async () => {
     class ReadsTooEarly extends HTTPPlugin {
-      register(context: Parameters<HTTPPlugin['register']>[0]): void {
+      register(context: HTTPSetupContext): void {
         void context.container.get(RouteInventory).servers
       }
     }
@@ -187,5 +191,58 @@ describe('routeRecord on the fetch application', () => {
       expect(security('/hooks/x').csrf).toBe('excluded')
       expect(security('/form').csrf).toBe('protected')
     })
+  })
+})
+
+// A tool reading the inventory (the devtools routes page) must see a listener's routes under that listener.
+describe('route inventory across listeners', () => {
+  let app: WebApplication | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+  })
+
+  function servers(): readonly ServerRoutes[] {
+    return app!.container.get(RouteInventory).servers
+  }
+
+  function route(server: string | undefined, url: string): RouteRecord | undefined {
+    return servers()
+      .find(entry => entry.server === server)
+      ?.routes.find(record => record.url === url)
+  }
+
+  it("lists the application's own server first, then each listener with the routes bound to it alone", async () => {
+    app = createWebApplication()
+      .listener('admin')
+      .mount(
+        newRouter('/api').get('/', () => 'api'),
+        newRouter('/jobs')
+          .extend(bindTo('admin'))
+          .get('/', () => 'jobs'),
+      ) as WebApplication
+
+    await app.bootstrap()
+
+    expect(servers().map(entry => [entry.server, entry.routes.map(record => record.url)])).toEqual([
+      [undefined, ['/api']],
+      ['admin', ['/jobs']],
+    ])
+  })
+
+  it('lists the routes a plugin mounted on a listener under that listener', async () => {
+    class Metrics extends HTTPPlugin {
+      register(context: HTTPSetupContext): void {
+        context.app.mount(new Router('/metrics').get('/', () => 'up'))
+      }
+    }
+
+    app = createWebApplication().listener('admin', l => l.with(() => new Metrics())) as WebApplication
+
+    await app.bootstrap()
+
+    expect(route('admin', '/metrics')?.kind).toBe('compiled')
+    expect(route(undefined, '/metrics')).toBe(undefined)
   })
 })

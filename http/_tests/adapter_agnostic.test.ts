@@ -10,7 +10,6 @@ import type { ConfigSnapshot, InferConfig } from '@caffeinejs/application/config
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type {
@@ -20,7 +19,6 @@ import type {
   AdapterIn,
   IAdapterServer,
   IAdapterTypes,
-  AnyAdapterTypes,
   IContextPlatform,
   HTTPSetupContext,
 } from '../adapter.js'
@@ -31,26 +29,22 @@ import type { ResolvedMiddleware } from '../core/middleware/pipeline.js'
 import { blend } from '../core/routing/programmatic/blend.js'
 import { Router } from '../core/routing/programmatic/programmatic.js'
 import type { AdapterOf, RoutesOf } from '../core/routing/programmatic/types.js'
-import type { RouterTypes, AdapterTypes } from '../platform/fastify/adapter.js'
-import { createWebApplication } from '../platform/fastify/application.js'
-import { constraints } from '../platform/fastify/index.js'
-import type { HTTPPluginFactory } from '../platform/fastify/plugin.js'
-import { newRouter } from '../platform/fastify/routing/new_router.js'
+import { createWebApplication, newRouter, type NodeAdapterTypes, type NodeResponse } from '../platform/node/index.js'
 import { HTTPPlugin, type HTTPPluginConfigurer } from '../plugin.js'
 
 /**
- * The adapter contract, held to its word: an application whose adapter is not Fastify's.
+ * The adapter contract, held to its word: an application whose adapter is not the Node application's.
  *
- * Nothing between `.with(...)` and the adapter may assume Fastify, and what one adapter installs must not compile
- * on an application running another. The fake adapter below records what it is handed and installs nothing.
+ * Nothing between `.with(...)` and the adapter may assume Node, and what one adapter installs must not compile on an
+ * application running another. The fake adapter below records what it is handed and installs nothing.
  */
 
-/** A server that is not Fastify. */
+/** A server that is not Node's. */
 interface FakeServer {
   readonly fake: true
 }
 
-/** What the fake adapter installs: an object, so no Fastify plugin, being a function, passes for one. */
+/** What the fake adapter installs: an object, so no function passes for one. */
 interface FakeUnit {
   readonly unit: string
 }
@@ -150,12 +144,18 @@ function fakeFeature(name: string): Feature {
   }
 }
 
-const noop: FastifyPluginAsync = async () => undefined
+/** A function, which no adapter here installs. */
+const noop = async (): Promise<void> => undefined
 
-describe('an application on an adapter that is not Fastify', () => {
+/** A plugin written for no adapter. */
+class NoopPlugin extends HTTPPlugin {
+  register(): void {}
+}
+
+describe('an application on an adapter that is not Node', () => {
   // The contract's whole claim at run time: the adapter gets the root list in the order it was written, and nothing
-  // else. The framework's head slots are each adapter's own to install, so one that is not Fastify is never handed
-  // a Fastify plugin. A feature installed anywhere in the chain takes no slot at all, and the middleware pipeline
+  // else. The framework's head slots are each adapter's own to install, so one that is not Node is never handed
+  // the Node application's. A feature installed anywhere in the chain takes no slot at all, and the middleware pipeline
   // resolves with no server in sight.
   it('hands the adapter its extensions in order and a pipeline it resolves alone', async () => {
     const adapter = new RecordingAdapter<FakeTypes>({ fake: true })
@@ -244,19 +244,12 @@ describe('an application on an adapter that is not Fastify', () => {
 })
 
 describe('adapter types', () => {
-  it('registers the Fastify adapter through the registry', () => {
-    expectTypeOf<AnyAdapterTypes>().toEqualTypeOf<AdapterTypes>()
-  })
-
   it('refuses what another adapter installs, and takes a feature on any adapter', () => {
     // Refused at compile time, and loudly at run time too; the runtime error's shape is plugin.test.ts's to pin.
     // @ts-expect-error a feature is not a plugin factory
     expect(() => createWebApplication().with(fakeFeature('elsewhere'))).toThrow()
 
-    // @ts-expect-error a factory producing a Fastify plugin on an application that does not run Fastify
-    onFake().with(constraints())
-
-    // @ts-expect-error a Fastify plugin on an application that does not run Fastify
+    // @ts-expect-error a function on an application whose adapter installs objects
     onFake().with(() => noop)
 
     onFake().with(() => ({ unit: 'fake' }))
@@ -275,58 +268,58 @@ describe('adapter types', () => {
     createWebApplication().use(fn, { hook: 'preHandler' })
     onFake().use(fn, { hook: 'before' })
 
-    // @ts-expect-error a Fastify hook on an adapter that does not have it
+    // @ts-expect-error a Node hook on an adapter that does not have it
     onFake().use(fn, { hook: 'preHandler' })
 
     // @ts-expect-error an adapter with no hooks takes none
     onBare().use(fn, { hook: 'before' })
   })
 
-  it('lets only a router bound to an adapter take a plugin', () => {
-    // @ts-expect-error a router bound to no adapter takes no Fastify plugin
+  it('takes a plugin on a bound router, and keeps its path', () => {
+    // @ts-expect-error a router takes a plugin, not a function
     new Router('/unbound').with(() => noop)
 
     const bound = newRouter('/x')
-      .with(() => noop)
+      .with(() => new NoopPlugin())
       .get('/y', () => 1)
 
     expectTypeOf<RoutesOf<typeof bound>['path']>().toEqualTypeOf<'/x/y'>()
   })
 
   // What a plugin mounts reaches the adapter the application runs, so it must be a router that adapter can serve:
-  // one bound to no adapter from a plugin written for none, a Fastify-bound one only from a plugin written for Fastify.
+  // one bound to no adapter from a plugin written for none, a Node-bound one only from a plugin written for Node.
   it('keeps what a plugin mounts on the adapter the application runs', () => {
     const fn: MiddlewareFn = (_ctx, next) => next()
 
     class Agnostic extends HTTPPlugin {
       register({ app }: HTTPSetupContext): void {
         app.mount(new Router('/free').get('/', () => 1))
-        // @ts-expect-error a plugin written for no adapter mounts no Fastify-bound router
+        // @ts-expect-error a plugin written for no adapter mounts no Node-bound router
         app.mount(newRouter('/bound'))
         // @ts-expect-error a plugin written for no adapter names no hook
         app.use(fn, { hook: 'preHandler' })
       }
     }
 
-    class OnFastify extends HTTPPlugin<RouterTypes> {
-      register({ app }: HTTPSetupContext<unknown, RouterTypes>): void {
+    class OnNode extends HTTPPlugin<NodeAdapterTypes> {
+      register({ app }: HTTPSetupContext<unknown, NodeAdapterTypes>): void {
         app.mount(newRouter('/bound')).use(fn, { hook: 'preHandler' })
       }
     }
 
     onFake().with(() => new Agnostic())
     onBare().with(() => new Agnostic())
-    createWebApplication().with(() => new OnFastify())
-    newRouter('/r').with(() => new OnFastify())
+    createWebApplication().with(() => new OnNode())
+    newRouter('/r').with(() => new OnNode())
     new Router('/u').with(() => new Agnostic())
 
-    // @ts-expect-error a plugin written for Fastify on an application that does not run Fastify
-    onFake().with(() => new OnFastify())
-    // @ts-expect-error a plugin written for Fastify on a router bound to no adapter
-    new Router('/u').with(() => new OnFastify())
+    // @ts-expect-error a plugin written for Node on an application that does not run Node
+    onFake().with(() => new OnNode())
+    // @ts-expect-error a plugin written for Node on a router bound to no adapter
+    new Router('/u').with(() => new OnNode())
 
     onFake().with(({ app }) => {
-      // @ts-expect-error a Fastify-bound router mounted from a factory on an application that does not run Fastify
+      // @ts-expect-error a Node-bound router mounted from a factory on an application that does not run Node
       app.mount(newRouter('/x'))
       return { unit: 'fake' }
     })
@@ -343,54 +336,45 @@ describe('adapter types', () => {
     const mounted = routed.mount(new Router('/child').get('/', () => 2))
     const blended = blend(mounted, newRouter('/other'))
 
-    expectTypeOf<AdapterOf<typeof base>>().toEqualTypeOf<RouterTypes>()
-    expectTypeOf<AdapterOf<typeof vars>>().toEqualTypeOf<RouterTypes>()
-    expectTypeOf<AdapterOf<typeof configured>>().toEqualTypeOf<RouterTypes>()
-    expectTypeOf<AdapterOf<typeof injected>>().toEqualTypeOf<RouterTypes>()
-    expectTypeOf<AdapterOf<typeof routed>>().toEqualTypeOf<RouterTypes>()
-    expectTypeOf<AdapterOf<typeof mounted>>().toEqualTypeOf<RouterTypes>()
-    expectTypeOf<AdapterOf<typeof blended>>().toEqualTypeOf<RouterTypes>()
+    expectTypeOf<AdapterOf<typeof base>>().toEqualTypeOf<NodeAdapterTypes>()
+    expectTypeOf<AdapterOf<typeof vars>>().toEqualTypeOf<NodeAdapterTypes>()
+    expectTypeOf<AdapterOf<typeof configured>>().toEqualTypeOf<NodeAdapterTypes>()
+    expectTypeOf<AdapterOf<typeof injected>>().toEqualTypeOf<NodeAdapterTypes>()
+    expectTypeOf<AdapterOf<typeof routed>>().toEqualTypeOf<NodeAdapterTypes>()
+    expectTypeOf<AdapterOf<typeof mounted>>().toEqualTypeOf<NodeAdapterTypes>()
+    expectTypeOf<AdapterOf<typeof blended>>().toEqualTypeOf<NodeAdapterTypes>()
   })
 
   it('mounts a router bound to no adapter anywhere, and a bound one only where it belongs', () => {
     const unbound = new Router('/free').get('/', () => 1)
-    const bound = newRouter('/fastify').get('/', () => 1)
+    const bound = newRouter('/node').get('/', () => 1)
 
     createWebApplication().mount(unbound, bound)
     createWebApplication().mount(bound)
     onFake().mount(unbound)
     newRouter('/parent').mount(unbound)
 
-    // @ts-expect-error a Fastify-bound router on an application that does not run Fastify
+    // @ts-expect-error a Node-bound router on an application that does not run Node
     onFake().mount(bound)
-  })
-
-  it('types ctx.platform wherever a context is read', () => {
-    const fromContext = (ctx: IContext) => ctx.platform.reply
-    const fromUnbound = new Router('/u').get('/', ctx => ctx.platform.reply.statusCode)
-    const fromBound = newRouter('/b').get('/', ctx => ctx.platform.reply.statusCode)
-
-    expectTypeOf<ReturnType<typeof fromContext>>().toEqualTypeOf<FastifyReply>()
-    expectTypeOf<RoutesOf<typeof fromUnbound>['output']>().toEqualTypeOf<number>()
-    expectTypeOf<RoutesOf<typeof fromBound>['output']>().toEqualTypeOf<number>()
   })
 
   // What a second registered adapter does to code written without knowing its adapter. Augmenting the registry
   // here would reach every file this check project compiles, so the union it would produce is spelled out instead.
   it('makes a reader narrow on the platform name once a second adapter is registered', () => {
-    type Both = AdapterTypes | FakeTypes
+    type Both = NodeAdapterTypes | FakeTypes
 
     const read = (ctx: IContext<Record<never, never>, Record<never, never>, Both>) => {
-      // @ts-expect-error the fake platform has no reply
-      void ctx.platform.reply
+      // @ts-expect-error the fake platform has no outgoing response
+      void ctx.platform.outgoing
 
-      return ctx.platform.name === 'fastify' ? ctx.platform.reply : undefined
+      return ctx.platform.name === 'node' ? ctx.platform.outgoing : undefined
     }
 
-    expectTypeOf<ReturnType<typeof read>>().toEqualTypeOf<FastifyReply | undefined>()
+    expectTypeOf<ReturnType<typeof read>>().toEqualTypeOf<NodeResponse | undefined>()
 
     const accepts = (factory: AdapterExtensionFactory<Both['extension']>) => factory
     accepts(() => ({ unit: 'fake' }))
+    // @ts-expect-error neither adapter installs a function
     accepts(() => noop)
   })
 })
@@ -410,11 +394,11 @@ describe('configure callback typing', () => {
   class PluginSideBuilder {}
 
   function pluginSide<C = unknown>(
-    configure: HTTPPluginConfigurer<PluginSideBuilder, C, RouterTypes>,
-  ): HTTPPluginFactory<C> {
+    configure: HTTPPluginConfigurer<PluginSideBuilder, C>,
+  ): AdapterExtensionFactory<HTTPPlugin, C> {
     return context => {
       configure(new PluginSideBuilder(), context)
-      return noop
+      return new NoopPlugin()
     }
   }
 

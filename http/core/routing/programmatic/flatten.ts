@@ -83,8 +83,8 @@ function walk<R>(
 
   assertUniqueRouteNames(spec.routes, name)
 
-  // A nested group is its own Fastify context, so what a parent router registered cannot reach it through
-  // encapsulation. Carrying the chain is what makes `router.with(...)` inherit the way `router.extend(...)` does,
+  // A nested group is a scope of its own, so what a parent router registered reaches it only through this chain.
+  // Carrying the chain is what makes `router.with(...)` inherit the way `router.extend(...)` does,
   // and the path is where a relative middleware path of that router starts in this group.
   const scopes = [...parentScopes, { key: state, path }]
 

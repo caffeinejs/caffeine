@@ -1,11 +1,11 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
 import type { IAdapter, AdapterIn, IAdapterServer, HTTPSetupContext } from '../../../adapter.js'
 import { WebApplication } from '../../../application.js'
-import type { AdapterTypes } from '../../../platform/fastify/adapter.js'
-import { pluginName, type AnyPlugin } from '../../../platform/fastify/plugin.js'
+import { HTTPPlugin } from '../../../index.js'
+import type { NodeAdapterTypes } from '../../../platform/node/index.js'
+import type { HookBatch } from '../../lifecycle/batch.js'
 
 /**
  * A listener goes through the adapter call the application's own server goes through, with an input of its own:
@@ -14,18 +14,18 @@ import { pluginName, type AnyPlugin } from '../../../platform/fastify/plugin.js'
  */
 
 /** Records what every server is set up with, and builds none: the contract is all this file needs. */
-class RecordingAdapter implements IAdapter<AdapterTypes> {
+class RecordingAdapter implements IAdapter<NodeAdapterTypes> {
   /** In call order: the application's own server first. */
-  readonly inputs: AdapterIn<AdapterTypes>[] = []
+  readonly inputs: AdapterIn<NodeAdapterTypes>[] = []
 
-  async setup(input: AdapterIn<AdapterTypes>): Promise<IAdapterServer<AdapterTypes>> {
+  async setup(input: AdapterIn<NodeAdapterTypes>): Promise<IAdapterServer<NodeAdapterTypes>> {
     this.inputs.push(input)
     return new IdleServer()
   }
 }
 
 /** What {@link RecordingAdapter} hands back: nothing was built, so it never listens and answers nothing. */
-class IdleServer implements IAdapterServer<AdapterTypes> {
+class IdleServer implements IAdapterServer<NodeAdapterTypes> {
   get instance(): never {
     throw new Error('No server was built')
   }
@@ -51,7 +51,15 @@ class IdleServer implements IAdapterServer<AdapterTypes> {
   }
 }
 
-const named = (name: string) => () => fp(async () => undefined, { name })
+// A plugin that adds no hook leaves an empty batch, which the server does not record: each one hooks something.
+const named = (name: string) => () =>
+  new (class extends HTTPPlugin {
+    override readonly name = name
+
+    register({ app }: HTTPSetupContext): void {
+      app.hook('onRequest', () => undefined)
+    }
+  })()
 
 describe('a listener, as its adapter is handed it', () => {
   it('is set up from its own plugins, middleware, settings and context, and from nothing only the application takes', async () => {
@@ -63,7 +71,7 @@ describe('a listener, as its adapter is handed it', () => {
         l
           .server(context => {
             seen.push(context)
-            return { listener: { port: 9464 } }
+            return { listen: { port: 9464 } }
           })
           .with(context => {
             seen.push(context)
@@ -79,8 +87,8 @@ describe('a listener, as its adapter is handed it', () => {
 
     await app.bootstrap()
 
-    const names = (input: AdapterIn<AdapterTypes>) =>
-      input.extensions.root().map(entry => pluginName(entry as AnyPlugin))
+    const names = (input: AdapterIn<NodeAdapterTypes>) =>
+      input.extensions.root().map(entry => (entry as HookBatch).name)
     const [own, admin] = adapter.inputs
 
     expect(adapter.inputs).toHaveLength(2)
@@ -90,7 +98,7 @@ describe('a listener, as its adapter is handed it', () => {
     expect(own.middlewares.resolve(own.context).map(middleware => middleware.hook)).toEqual(['onSend'])
     expect(admin.middlewares.resolve(admin.context).map(middleware => middleware.hook)).toEqual(['preHandler'])
 
-    expect(admin.server).toEqual({ listener: { port: 9464 } })
+    expect(admin.server).toEqual({ listen: { port: 9464 } })
     expect(own.basePath).toBe('/api')
     expect(admin.basePath).toBeUndefined()
     expect(own.customize).toBeDefined()

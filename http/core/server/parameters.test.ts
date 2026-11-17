@@ -5,8 +5,9 @@ import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { Args, Controller, Get, Post } from '../../decorators/index.js'
 import { HMACCookieSigner } from '../cookie/signer.js'
+import { ErrConfiguration } from '../error/common.js'
 import { $p } from '../routing/picker.js'
-import { portOf } from './parameters.js'
+import { engineCompilers, portOf } from './parameters.js'
 
 @Controller('/picks')
 class Picks {
@@ -175,5 +176,16 @@ describe('the cookie picks', () => {
     )
 
     expect(await res.json()).toEqual({ s: 'v' })
+  })
+})
+
+describe('engineCompilers', () => {
+  // A pick names what it reads by its type: one no picker reads is refused when the route is compiled, not served.
+  it('refuses a pick type no picker reads', () => {
+    const compile = () => engineCompilers.args([{ type: 'nope' }] as never)
+
+    expect(compile).toThrow(ErrConfiguration)
+    expect(compile).toThrow(expect.objectContaining({ code: 'ERR_CONFIGURATION' }))
+    expect(compile).toThrow('Cannot compile a parameter of type "nope": no picker reads it')
   })
 })

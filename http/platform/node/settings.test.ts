@@ -31,8 +31,10 @@ describe('resolveNodeServerSettings', () => {
     expect(() => resolveNodeServerSettings(settings)).toThrow(message)
   })
 
-  it('refuses a Fastify section and names the Fastify entry', () => {
-    expect(() => resolveNodeServerSettings({ factory: {} })).toThrow('@caffeinejs/http/fastify')
+  it('refuses a section it does not know', () => {
+    expect(() => resolveNodeServerSettings({ factory: {} })).toThrow(
+      'Cannot build the server: "factory" is not a setting of the Node application',
+    )
   })
 
   it('refuses a trustProxy hop count and takes a list of addresses', () => {

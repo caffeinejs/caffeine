@@ -10,7 +10,7 @@ import {
   Get,
   type ActionResult,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 // Both handlers cover ErrAmbiguous, and one @CatchWith names them both.
 class ErrAmbiguous extends Error {}

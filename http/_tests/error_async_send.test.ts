@@ -1,11 +1,29 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import type { FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Catch, Controller, Get, type IContext } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { Catch, Controller, Get, HTTPPlugin, type HTTPSetupContext, type IContext } from '../index.js'
+import { createWebApplication } from '../platform/node/index.js'
+
+/** An asynchronous `onSend` hook, counting each run through `onRun` and holding the send for `ms`. */
+class SlowSend extends HTTPPlugin {
+  override readonly name = 'slow-send'
+
+  constructor(
+    private readonly onRun: () => void,
+    private readonly ms: number,
+  ) {
+    super()
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onSend', async (_ctx, payload) => {
+      this.onRun()
+      await sleep(this.ms)
+      return payload
+    })
+  }
+}
 
 /**
  * The global error handler is asynchronous and, on the default path, sends the reply itself. An `onSend` hook
@@ -44,15 +62,7 @@ describe('the global error handler under an asynchronous onSend hook', () => {
     let runs = 0
 
     try {
-      const slowSend: FastifyPluginAsync = async instance => {
-        instance.addHook('onSend', async (_request, _reply, payload) => {
-          runs++
-          await sleep(1)
-          return payload
-        })
-      }
-
-      const app = createWebApplication().with(() => fp(slowSend, { name: 'slow-send' }))
+      const app = createWebApplication().with(() => new SlowSend(() => runs++, 1))
       close = () => app.close()
       await app.bootstrap()
 
@@ -104,14 +114,7 @@ describe('the global error handler under an asynchronous onSend hook', () => {
     let runs = 0
 
     try {
-      const slowSend: FastifyPluginAsync = async instance => {
-        instance.addHook('onSend', async (_request, _reply, payload) => {
-          runs++
-          await sleep(20)
-          return payload
-        })
-      }
-      const app = createWebApplication().with(() => fp(slowSend, { name: 'slow-send' }))
+      const app = createWebApplication().with(() => new SlowSend(() => runs++, 20))
       close = () => app.close()
       await app.bootstrap()
 

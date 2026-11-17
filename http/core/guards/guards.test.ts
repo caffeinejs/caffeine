@@ -1,7 +1,6 @@
 import { ErrGuardConfiguration } from '@caffeinejs/application/framework'
 import { CaffeineIoC, ErrInvalidDecorator, Injectable, Lifetime, Scopes, reflect, token } from '@caffeinejs/di'
-import { type RouteOptions } from 'fastify'
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 import {
   Catch,
@@ -22,7 +21,7 @@ import {
   type WebApplication,
   Guards,
 } from '../../index.js'
-import { createWebApplication } from '../../platform/fastify/index.js'
+import { createWebApplication } from '../../platform/node/index.js'
 import type { GuardInput } from './guard.js'
 
 // What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
@@ -964,60 +963,6 @@ describe('scope', () => {
     expect(singleton).toBe(constructedAtReady)
 
     await app.close()
-  })
-})
-
-describe('zero_cost', () => {
-  @Injectable()
-  class HookGuard implements Guard {
-    guard(): boolean {
-      return true
-    }
-  }
-
-  @Controller('/guard-hooks')
-  class GuardHookController {
-    @Get('/plain')
-    plain() {
-      return { ok: true }
-    }
-
-    @UseGuards(HookGuard)
-    @Get('/guarded')
-    guarded() {
-      return { ok: true }
-    }
-  }
-
-  void [HookGuard, GuardHookController]
-
-  const registered = new Map<string, RouteOptions>()
-  let app: WebApplication
-
-  beforeAll(async () => {
-    app = createWebApplication().serverCallback((_context, server) => {
-      server.addHook('onRoute', route => {
-        registered.set(`${route.method} ${route.url}`, route as RouteOptions)
-      })
-    })
-    await app.bootstrap()
-  })
-
-  afterAll(async () => {
-    await app?.close()
-  })
-
-  it('leaves onRequest empty on a route with no guards', () => {
-    const route = registered.get('GET /guard-hooks/plain')!
-
-    expect(route).toBeDefined()
-    expect(route.onRequest).toBeUndefined()
-  })
-
-  it('attaches a function, not a one-element array, when a route has guards', () => {
-    const route = registered.get('GET /guard-hooks/guarded')!
-
-    expect(typeof route.onRequest).toBe('function')
   })
 })
 

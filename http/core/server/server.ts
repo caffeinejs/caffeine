@@ -39,7 +39,7 @@ import { assertGated, gateOf } from '../security/gate.js'
 import type { CompiledSerializer } from '../validation/validation.js'
 import { answer, compileSerializers, connectionFields, HeldStream, NO_SERIALIZER } from './answer.js'
 import { Context, kAppendCookies, type ServerShared } from './context.js'
-import { answerError, configurationError, defaultProblem, sendProblem, USE_FASTIFY } from './error.js'
+import { answerError, configurationError, defaultProblem, sendProblem } from './error.js'
 import { compileLevel, composeRouteHooks, type LevelInput, type StoreHooks } from './hooks.js'
 import { compileRouteInput, readInput, type RouteInput } from './input.js'
 import { engineCompilers } from './parameters.js'
@@ -436,7 +436,7 @@ export class HTTPServer {
         const methods = [...new Set(route.method.map(method => method.toUpperCase()))]
         const paths = pathsOf(group.prefix, joinPaths(group.path, route.path), settings.router.ignoreTrailingSlash)
 
-        assertServable(route, methods, paths[0], settings.application)
+        assertServable(route, methods, paths[0])
         const declared = this.#constraints.of(route, methods, paths[0])
 
         const store = this.#storeOf(group, route, methods, paths[0], settings)
@@ -1141,40 +1141,16 @@ class Pipeline<N, R> {
 }
 
 /**
- * Refuses what the engine cannot serve yet, at start-up rather than as a route that quietly never does what it
- * declares.
+ * Refuses a route whose `@Timeout` no timer can wait out, at start-up rather than as a route that never times out as
+ * declared.
  */
-function assertServable(route: IRoute<Context>, methods: readonly string[], url: string, application: string): void {
-  const types = new Set(route.parameters.map(parameter => parameter.type))
+function assertServable(route: IRoute<Context>, methods: readonly string[], url: string): void {
   const timeout = route.timeout
 
   if (timeout !== undefined && !isTimeout(timeout)) {
     throw configurationError(
       `Cannot serve "${methods.join('|')} ${url}": a @Timeout of "${String(timeout)}ms" is not a duration above 0 and at most ${formatDuration(MAX_TIMEOUT)}`,
       'Write a positive duration, such as 30 * Second',
-    )
-  }
-
-  // Fastify's `cors()` writes @fastify/cors's options under `cors`; the engine's writes `kCORSRoute`.
-  if (route.config.has('cors')) {
-    throw configurationError(
-      `Cannot serve "${methods.join('|')} ${url}" on the ${application}: its cors(...) or @CORS(...) is the one from ` +
-        '"@caffeinejs/http/fastify", which @fastify/cors reads',
-      'Import "cors" and "CORS" from "@caffeinejs/http"',
-    )
-  }
-
-  // The first that applies names the refusal.
-  const refusals: ReadonlyArray<readonly [boolean, string]> = [
-    [route.options.size > 0, `route options ("${[...route.options.keys()].map(String).join('", "')}")`],
-    [types.has('fastify:request') || types.has('fastify:reply'), 'the Fastify request or reply'],
-  ]
-  const unsupported = refusals.find(([applies]) => applies)?.[1]
-
-  if (unsupported !== undefined) {
-    throw configurationError(
-      `Cannot serve "${methods.join('|')} ${url}" on the ${application}: ${unsupported} is not supported yet`,
-      USE_FASTIFY,
     )
   }
 }

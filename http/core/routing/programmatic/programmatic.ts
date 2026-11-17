@@ -326,7 +326,7 @@ export class Router<
    * OpenAPI 3.2's QUERY method: a GET-shaped read with a request body — safe and idempotent like a `GET`, for
    * search criteria too structured to fit in a query string.
    *
-   * Fastify carries QUERY in its default method set, so nothing has to be opted into. Documenting it does need
+   * The default matcher carries QUERY in its method set, so nothing has to be opted into. Documenting it does need
    * `.version('3.2.0')` on `@caffeinejs/openapi`: a 3.1 path item has no field for a method outside the fixed set.
    */
   query<P extends string>(path: P): Chain<'QUERY', P, V, C, GD, GP, R, T>
@@ -471,10 +471,11 @@ export class Router<
    * configuration there is typed `unknown`. Routing is built during start-up, so this has to be called before the
    * application is ready.
    *
-   * A router bound to no adapter takes only an `HTTPPlugin` written for none; `newRouter()` binds one to Fastify.
+   * A router bound to no adapter takes only an `HTTPPlugin` written for none; `newRouter()` binds one to the Node
+   * application.
    *
    * ```ts
-   * const pets = newRouter('/pets').with(() => [fastifyCors, { origin: 'https://pets.example' }])
+   * const pets = newRouter('/pets').with(authentication(g => g.name('pets')))
    * ```
    */
   with(factory: AdapterExtensionFactory<T['extension'] | HTTPPlugin<T>, unknown, T>): this {

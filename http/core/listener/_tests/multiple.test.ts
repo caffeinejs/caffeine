@@ -1,7 +1,6 @@
 import { createServer, type Server } from 'node:net'
 
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
+import { Byte } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -13,16 +12,15 @@ import {
   type IContext,
   Identity,
   Principal,
+  HTTPPlugin,
+  type AdapterExtensionFactory,
+  type HTTPSetupContext,
   bindTo,
   type WebApplication,
 } from '../../../index.js'
-import {
-  type HTTPPluginFactory,
-  authentication,
-  createWebApplication,
-  newRouter,
-} from '../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
 import { healthProbes } from '../../health/index.js'
+import { authentication } from '../../security/security.js'
 
 /**
  * Scenario: several listeners with different settings.
@@ -54,24 +52,42 @@ class OpsScheme extends BaseAuthenticationHandler<object> {
   }
 }
 
+/** Collects the server each route group is bound to, as every route registers. */
+class Recording extends HTTPPlugin {
+  constructor(private readonly seen: Array<string | undefined>) {
+    super()
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onRoute', route => {
+      if (route.group.boundTo !== undefined) {
+        this.seen.push(route.group.boundTo)
+      }
+    })
+  }
+}
+
 const operator = { 'x-ops': 'alice:operator' }
 
 /**
  * Two listeners: `admin`, its router authorized behind a gate of its own and with a small body limit, and `metrics`, open and
  * serving the probes. `adminPlugin` is one more plugin on `admin`.
  */
-function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; adminPlugin?: HTTPPluginFactory } = {}) {
+function twoServers({
+  metricsPort = 0,
+  adminPlugin,
+}: { metricsPort?: number; adminPlugin?: AdapterExtensionFactory<HTTPPlugin> } = {}) {
   return createWebApplication()
     .install(Authentication(a => a.addStrategy('Ops', new OpsScheme()).default('Ops')))
     .listener('admin', l => {
-      l.server(() => ({ factory: { bodyLimit: 64 }, listener })).with(authentication())
+      l.server(() => ({ bodyLimit: 64 * Byte, listen: listener })).with(authentication())
 
       if (adminPlugin !== undefined) {
         l.with(adminPlugin)
       }
     })
-    .listener('metrics', l => l.server(() => ({ listener: { ...listener, port: metricsPort } })).with(healthProbes()))
-    .server(() => ({ listener }))
+    .listener('metrics', l => l.server(() => ({ listen: { ...listener, port: metricsPort } })).with(healthProbes()))
+    .server(() => ({ listen: listener }))
     .mount(
       newRouter('/admin')
         .extend(bindTo('admin'))
@@ -153,15 +169,7 @@ describe('several listeners with different settings', () => {
   it('names on every compiled group the server serving it, for whoever reads the route table', async () => {
     const seen: Array<string | undefined> = []
     app = twoServers({
-      adminPlugin: () =>
-        fp(async (instance: FastifyInstance) => {
-          instance.addHook('onRoute', route => {
-            const group = route.config?.$caffeine?.compiled?.group
-            if (group !== undefined) {
-              seen.push(group.boundTo)
-            }
-          })
-        }),
+      adminPlugin: () => new Recording(seen),
     })
 
     await app.bootstrap()
@@ -171,7 +179,7 @@ describe('several listeners with different settings', () => {
       ['Admin', 'admin'],
       ['Metrics', 'metrics'],
     ])
-    // What a plugin's `onRoute` hook on the listener sees, a GET route's HEAD twin aside.
+    // What a plugin's `onRoute` hook on the listener sees.
     expect([...new Set(seen)]).toEqual(['admin'])
   })
 
@@ -182,7 +190,7 @@ describe('several listeners with different settings', () => {
 
     await app.close()
 
-    expect(servers.map(instance => instance.server.listening)).toEqual([false, false, false])
+    expect(servers.map(instance => instance.listening)).toEqual([false, false, false])
     app = undefined
   })
 
@@ -201,7 +209,7 @@ describe('several listeners with different settings', () => {
 
       await app.close()
 
-      expect(servers.map(instance => instance.server.listening)).toEqual([false, false, false])
+      expect(servers.map(instance => instance.listening)).toEqual([false, false, false])
       app = undefined
     } finally {
       await new Promise(resolve => taken.close(resolve))

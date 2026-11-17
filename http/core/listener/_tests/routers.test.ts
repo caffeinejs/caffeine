@@ -1,6 +1,4 @@
 import { Injectable } from '@caffeinejs/di'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -12,12 +10,13 @@ import {
   type Guard,
   type GuardInput,
   Guards,
+  HTTPPlugin,
+  type HTTPSetupContext,
   type ListenerConfigurer,
-  RouteBuilder,
   bindTo,
   type WebApplication,
 } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
 
 /**
  * Scenario: routers on a listener with middleware, guards and plugins.
@@ -29,19 +28,30 @@ import { createWebApplication, newRouter } from '../../../platform/fastify/index
 
 const listener = { host: '127.0.0.1', port: 0 }
 
+/** A plugin marking every response it covers with `header`: a value already there is kept, this one appended. */
+class Marking extends HTTPPlugin {
+  override readonly name: string
+  readonly #header: string
+  readonly #value: string
+
+  constructor(header: string, value = 'yes') {
+    super()
+    this.#header = header
+    this.#value = value
+    this.name = `marking:${header}:${value}`
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onRequest', ctx => {
+      const previous = ctx.getHeader(this.#header)
+      ctx.header(this.#header, previous === undefined ? this.#value : `${String(previous)},${this.#value}`)
+    })
+  }
+}
+
 /** A plugin marking every response it covers with `header`. */
 function marking(header: string, value = 'yes') {
-  return () =>
-    fp(
-      async (instance: FastifyInstance) => {
-        instance.addHook('onRequest', (_request, reply, done) => {
-          const previous = reply.getHeader(header)
-          reply.header(header, previous === undefined ? value : `${String(previous)},${value}`)
-          done()
-        })
-      },
-      { name: `marking:${header}:${value}` },
-    )
+  return () => new Marking(header, value)
 }
 
 @Injectable()
@@ -77,7 +87,7 @@ describe('routers on a listener with middleware, guards and plugins', () => {
     app = undefined
   })
 
-  const admin: ListenerConfigurer = l => l.server(() => ({ listener }))
+  const admin: ListenerConfigurer = l => l.server(() => ({ listen: listener }))
 
   function at(server: 'main' | 'admin', path: string, headers?: Record<string, string>): Promise<Response> {
     const origin = server === 'main' ? app!.address!.origin : app!.listeners.get('admin')!.address!.origin
@@ -87,7 +97,7 @@ describe('routers on a listener with middleware, guards and plugins', () => {
   it("runs a router's own plugin on what it serves on the listener, and nowhere else", async () => {
     app = createWebApplication()
       .listener('admin', admin)
-      .server(() => ({ listener }))
+      .server(() => ({ listen: listener }))
       .mount(
         newRouter('/jobs')
           .extend(bindTo('admin'))
@@ -126,7 +136,7 @@ describe('routers on a listener with middleware, guards and plugins', () => {
   it('carries the binding, the plugin and the guards of a router down to the routers nested in it', async () => {
     app = createWebApplication()
       .listener('admin', admin)
-      .server(() => ({ listener }))
+      .server(() => ({ listen: listener }))
       .mount(
         newRouter('/ops')
           .extend(bindTo('admin'))
@@ -146,60 +156,10 @@ describe('routers on a listener with middleware, guards and plugins', () => {
     expect((await at('main', '/ops/child', { 'x-token': 'ok' })).status).toBe(404)
   })
 
-  describe('$route', () => {
-    const extra = (bind?: string) => (instance: FastifyInstance) => {
-      instance.$route('extra', group => {
-        if (bind !== undefined) {
-          bindTo(bind)(group)
-        }
-
-        group.path('/extra').routes([
-          new RouteBuilder()
-            .method('GET')
-            .path('/')
-            .handle(() => ({ extra: true })),
-        ])
-      })
-    }
-
-    it('adds the group to the listener whose plugin calls it', async () => {
-      app = createWebApplication()
-        .listener('admin', l =>
-          l.server(() => ({ listener })).with(() => async (instance: FastifyInstance) => extra()(instance)),
-        )
-        .server(() => ({ listener })) as WebApplication
-
-      await app.run()
-
-      expect(await (await at('admin', '/extra')).json()).toEqual({ extra: true })
-      expect((await at('main', '/extra')).status).toBe(404)
-    })
-
-    it("refuses a group bound to a listener from the application's own server", async () => {
-      app = createWebApplication()
-        .listener('admin', admin)
-        .with(() => async (instance: FastifyInstance) => extra('admin')(instance)) as WebApplication
-
-      await expect(app.bootstrap()).rejects.toThrow(
-        /^Cannot add route group "extra" to the application's own server: it is bound to "admin"/,
-      )
-    })
-
-    it('refuses a group bound to another server from a listener', async () => {
-      app = createWebApplication().listener('admin', l =>
-        l.server(() => ({ listener })).with(() => async (instance: FastifyInstance) => extra('metrics')(instance)),
-      ) as WebApplication
-
-      await expect(app.bootstrap()).rejects.toThrow(
-        /^Cannot add route group "extra" to listener "admin": it is bound to "metrics"/,
-      )
-    })
-  })
-
   it("answers on the listener with the application's error handlers and its not-found problem", async () => {
     app = createWebApplication()
       .listener('admin', admin)
-      .server(() => ({ listener }))
+      .server(() => ({ listen: listener }))
       .errorHandling(e => e.globalHandlers(TeapotHandler))
       .mount(
         newRouter('/failing')

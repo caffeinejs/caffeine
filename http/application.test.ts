@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, expectTypeOf } from 'vitest'
 
 import { createWebApplication as createFetchApplication, type WebApplication, type WebRunInfo } from './application.js'
 import { ErrConfiguration, Router } from './index.js'
-import { createWebApplication } from './platform/fastify/index.js'
+import { createWebApplication } from './platform/node/index.js'
 
 let app: WebApplication | undefined
 
@@ -58,7 +58,7 @@ describe('the fetch application', () => {
     }
   })
 
-  it("keeps address on the Fastify application's run()", () => {
+  it("keeps address on the Node application's run()", () => {
     expectTypeOf<Awaited<ReturnType<ReturnType<typeof createWebApplication>['run']>>>().toEqualTypeOf<WebRunInfo>()
   })
 })

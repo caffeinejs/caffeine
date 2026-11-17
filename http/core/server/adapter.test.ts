@@ -3,28 +3,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
 import { bindTo } from '../../decorators/bind_to.js'
-import { csrf as fastifyCSRF } from '../../platform/fastify/csrf/csrf.js'
-import { authentication as fastifyAuthentication } from '../../platform/fastify/security/security.js'
 import { HTTPPlugin } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { Router } from '../routing/programmatic/programmatic.js'
-import { Authentication } from '../security/auth/auth.js'
-import { BaseAuthenticationHandler } from '../security/auth/handler.js'
-import { AuthenticateResult } from '../security/auth/ticket.js'
-import { Authorization } from '../security/authz/index.js'
-import { authentication } from '../security/security.js'
 import type { FetchAdapterTypes } from './adapter.js'
-
-/** A scheme that authenticates nobody: enough for a gate to be built. */
-class NobodyScheme extends BaseAuthenticationHandler<object> {
-  constructor() {
-    super({})
-  }
-
-  async authenticate(): Promise<AuthenticateResult> {
-    return AuthenticateResult.none()
-  }
-}
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
 type AnyRouter = Router<any, any, any, any, any, any>
@@ -41,13 +23,13 @@ describe('the fetch adapter', () => {
   it.each<[string, (app: FetchApp) => unknown, string]>([
     ['.serverCallback(...)', a => a.serverCallback(() => undefined), 'Cannot run ".serverCallback(...)"'],
     [
-      'a Fastify plugin factory at the root',
+      'a factory returning a function, at the root',
       a => a.with((() => async () => undefined) as never),
       'Cannot install a server plugin',
     ],
-    ['a factory that returns nothing', a => a.with((() => undefined) as never), 'Cannot install a server plugin'],
+    ['a factory that returns nothing', a => a.with((() => undefined) as never), 'only an HTTPPlugin can be installed'],
     [
-      'a Fastify plugin factory on a router',
+      'a factory returning a function, on a router',
       a =>
         a.mount(
           new Router('/r')
@@ -73,21 +55,6 @@ describe('the fetch adapter', () => {
 
     await expect(booting).rejects.toThrow(ErrConfiguration)
     await expect(booting).rejects.toThrow(message)
-  })
-
-  // The engine exports a gate of its own under the same name: the refusal names the import to take.
-  it("names the engine's import for the Fastify authentication()", async () => {
-    app = createWebApplication()
-      .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
-      .with(fastifyAuthentication() as never)
-
-    await expect(app.bootstrap()).rejects.toThrow('Import "authentication" from "@caffeinejs/http"')
-  })
-
-  it("names the engine's import for the Fastify csrf()", async () => {
-    app = createWebApplication().with(fastifyCSRF() as never)
-
-    await expect(app.bootstrap()).rejects.toThrow('Import "csrf" from "@caffeinejs/http"')
   })
 
   // The fetch application has no Node request, but a context middleware needs none.
@@ -157,37 +124,6 @@ describe('the fetch adapter', () => {
 
     expect(await res.text()).toBe('jobs')
     expect((await app.fetch(new Request('http://localhost/jobs'))).status).toBe(404)
-  })
-
-  // `except` exempts only what a plugin registers straight on a Fastify server; here it would exempt nothing, silently.
-  it("refuses the fallback policy's except, which no compiled route reads", async () => {
-    app = createWebApplication()
-      .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
-      .with(authentication())
-      .install(Authorization(z => z.requireAuthenticatedByDefault({ except: ['/assets'] })))
-      .mount(new Router('/assets').get('/').handler(() => 'a'))
-
-    const booting = app.run()
-
-    await expect(booting).rejects.toThrow(ErrConfiguration)
-    const err = (await booting.catch((e: unknown) => e)) as Error
-    expect(err.message.split('\n')[0]).toBe(
-      'Cannot use the except "/assets" of requireAuthenticatedByDefault() or fallbackPolicy() on the fetch ' +
-        'application: it exempts only routes registered straight on a Fastify server, and this application compiles ' +
-        'every route',
-    )
-  })
-
-  it('accepts an empty except, which leaves every route that declares nothing gated', async () => {
-    app = createWebApplication()
-      .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
-      .with(authentication())
-      .install(Authorization(z => z.requireAuthenticatedByDefault({ except: [] })))
-      .mount(new Router('/assets').get('/').handler(() => 'a'))
-
-    await app.run()
-
-    expect((await app.request('/assets')).status).toBe(401)
   })
 
   // request() is the in-process call a test makes; a closed application refuses it rather than answering 503 for good.

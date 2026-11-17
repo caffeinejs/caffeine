@@ -8,7 +8,7 @@ import {
   Controller,
   Get,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 /**
  * The whole-table scheme check: a route naming a scheme the feature never registered is a start-up failure,

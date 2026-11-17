@@ -9,7 +9,7 @@ import {
   Get,
   type ActionResult,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 // Isolated: two controller methods handling the same error type. buildRouting rejects at bootstrap(),
 // which poisons every app build in the module — so it lives alone.

@@ -1,19 +1,15 @@
 import { createHash } from 'node:crypto'
 import { openAsBlob, readFileSync } from 'node:fs'
 import { mkdtemp, open, rm, stat } from 'node:fs/promises'
-import { request as httpRequest, type IncomingHttpHeaders } from 'node:http'
 import { connect as connectH2 } from 'node:http2'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { gunzipSync } from 'node:zlib'
 
-import fastifyCompress from '@fastify/compress'
-import { type FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { Attachment, Router } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 import { expectPatternedBody, expectRangeAnswer } from './bodies.js'
 import { fillPatterned, firstMismatch, patterned } from './patterned.js'
 
@@ -100,7 +96,8 @@ routes.get('/stream').handler(() => generated(FILE_SIZE))
 // A client that stops a download part-way can leave the server a connection with no request on it, which its
 // graceful close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
 const app = createWebApplication()
-  .server(() => ({ factory: { forceCloseConnections: true }, listener: { host: '127.0.0.1', port: 0 } }))
+  .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(routes)
 
 let origin: string
@@ -431,83 +428,12 @@ describe('a download at and past the 32-bit limit', { timeout: 60_000 }, () => {
   })
 })
 
-/** A CSV export of about `size` bytes: text a compressor shrinks, unlike the pattern. */
-function csv(size: number): Uint8Array<ArrayBuffer> {
-  const lines: string[] = ['region,order,total\n']
-  let length = lines[0].length
-  for (let i = 0; length < size; i++) {
-    const line = `region-${i % 17},${i},${(i * 7919) % 100_000}\n`
-    lines.push(line)
-    length += line.length
-  }
-
-  return new TextEncoder().encode(lines.join(''))
-}
-
-describe('a large CSV export behind a compressor', { timeout: 60_000 }, () => {
-  const compress: FastifyPluginAsync = async instance => {
-    await instance.register(fastifyCompress)
-  }
-
-  // Built here, so a run that filters this suite out does not pay for 32 MiB of text.
-  let csvBytes: Uint8Array<ArrayBuffer>
-  let report: Blob
-
-  const compressing = createWebApplication()
-    .server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
-    .with(() => fp(compress, { name: 'compress' }))
-    .mount(new Router('/export').get('/q3').handler(() => report))
-
-  beforeAll(async () => {
-    csvBytes = csv(32 * MiB)
-    report = new Blob([csvBytes], { type: 'text/csv' })
-    await compressing.run()
-  })
-
-  afterAll(async () => {
-    await compressing.close()
-  })
-
-  /** The raw bytes and headers as they cross the wire: `fetch` would decompress them out of sight. */
-  function raw(headers: Record<string, string>): Promise<{ headers: IncomingHttpHeaders; body: Buffer }> {
-    return new Promise((resolve, reject) => {
-      const req = httpRequest(`${compressing.address!.origin}/export/q3`, { headers }, res => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk: Buffer) => chunks.push(chunk))
-        res.on('end', () => resolve({ headers: res.headers, body: Buffer.concat(chunks) }))
-        res.on('error', reject)
-      })
-      req.on('error', reject)
-      req.end()
-    })
-  }
-
-  it('compresses it for a client that accepts gzip, never claiming the uncompressed length', async () => {
-    const { headers, body } = await raw({ 'accept-encoding': 'gzip' })
-
-    expect(headers['content-encoding']).toBe('gzip')
-    if (headers['content-length'] !== undefined) {
-      expect(Number(headers['content-length'])).toBe(body.length)
-    }
-    expect(body.length).toBeLessThan(csvBytes.length / 2)
-    expect(gunzipSync(body).equals(csvBytes)).toBe(true)
-  })
-
-  it('sends it as it is to a client that accepts no encoding, with its exact length', async () => {
-    const { headers, body } = await raw({ 'accept-encoding': 'identity' })
-
-    expect(headers['content-encoding']).toBeUndefined()
-    expect(headers['content-length']).toBe(String(csvBytes.length))
-    expect(body.equals(csvBytes)).toBe(true)
-  })
-})
-
 describe('a large download over HTTP/2', { timeout: 60_000 }, () => {
   const key = readFileSync(new URL('./_testdata/tls/localhost.key', import.meta.url))
   const cert = readFileSync(new URL('./_testdata/tls/localhost.crt', import.meta.url))
 
   const secure = createWebApplication()
-    .server(() => ({ factory: { http2: true, https: { key, cert } }, listener: { host: '127.0.0.1', port: 0 } }))
+    .server(() => ({ http2: true, https: { key, cert }, listen: { host: '127.0.0.1', port: 0 } }))
     .mount(new Router('/h2').get('/file').handler(bigFile))
 
   beforeAll(async () => {

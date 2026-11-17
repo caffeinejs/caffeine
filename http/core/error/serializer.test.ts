@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../platform/node/index.js'
 import { ErrHTTPConflict } from './http.js'
 
 function orders() {

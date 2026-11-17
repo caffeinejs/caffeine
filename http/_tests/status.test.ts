@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Get, Post, Status } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 describe('Status', () => {
   it('returns the custom status code set by @Status', async () => {
@@ -24,7 +24,7 @@ describe('Status', () => {
     expect(res.status).toBe(201)
   })
 
-  it('leaves status code to Fastify when @Status is not set', async () => {
+  it('leaves the status code to the server when @Status is not set', async () => {
     @Controller('/status-default')
     class StatusDefaultController {
       @Get('/ok')

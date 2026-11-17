@@ -1,6 +1,5 @@
 import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
 import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
-import { kEngineOnly, type EngineOnly } from '../../plugin_marks.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import { ErrCSRFCrossOrigin } from './errors.js'
 import {
@@ -66,9 +65,8 @@ export class CSRFBuilder {
   /**
    * Registered route paths the check leaves alone, each a prefix of whole segments: `/webhooks` covers `/webhooks`
    * and `/webhooks/stripe`, not `/webhooks-old`. Judged by the path a route was registered under, never the URL
-   * requested. For a route the application cannot mark itself; its own are marked with `@CSRFExempt()`,
-   * `csrfExempt()` or `csrfExemptConfig()`, and a route's own mark wins: `csrfExempt(false)` keeps it protected
-   * under an excluded prefix.
+   * requested. For a route the application cannot mark itself; its own are marked with `@CSRFExempt()` or
+   * `csrfExempt()`, and a route's own mark wins: `csrfExempt(false)` keeps it protected under an excluded prefix.
    *
    * @throws ErrCSRFConfiguration at start-up when one does not start with `/`, or is `/` itself.
    */
@@ -113,8 +111,7 @@ export class CSRFBuilder {
 
   /**
    * Names this plugin: `caffeine-csrf` for the default, `caffeine-csrf:<label>` otherwise. A second one under one
-   * label is refused at start-up: on Fastify on one registration chain, a scoped one under a root one included; on the
-   * web-standards engine in one slot.
+   * label in one slot is refused at start-up.
    */
   name(label: string): this {
     this.#label = label
@@ -137,8 +134,7 @@ export class CSRFBuilder {
 }
 
 /**
- * Cross-origin protection by Fetch Metadata on the web-standards engine: `.with(csrf())`. A Fastify application takes
- * `csrf` from `@caffeinejs/http/fastify`, and refuses this one at start-up.
+ * Cross-origin protection by Fetch Metadata: `.with(csrf())`.
  *
  * Every request with an unsafe method is judged by `Sec-Fetch-Site`, then by `Origin` against the request's host
  * ({@link checkOrigin}), and refused with {@link ErrCSRFCrossOrigin}, a 403, when it comes from another origin. A
@@ -186,7 +182,6 @@ export function csrfCoversOf(route: RouteDefinition): ReadonlyArray<readonly Exc
 
 class CSRFProtection extends HTTPPlugin {
   override readonly name: string
-  readonly [kEngineOnly]: EngineOnly = { factory: 'csrf', instead: 'Import "csrf" from "@caffeinejs/http/fastify"' }
   readonly #options: CSRFOptions
 
   constructor(name: string, options: CSRFOptions) {

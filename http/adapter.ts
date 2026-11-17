@@ -82,7 +82,8 @@ export interface IAdapterTypes {
  *
  * Code written without knowing its adapter is typed against every entry at once: `@Use(...)` takes any registered
  * extension, and `ctx.platform` on a plain `IContext` is any registered platform. With more than one entry, a
- * reader narrows on `ctx.platform.name` first. The Fastify entry is declared by `@caffeinejs/http/fastify`.
+ * reader narrows on `ctx.platform.name` first. This package registers none: its applications are in
+ * {@link EngineAdapterRegistry}.
  */
 export interface AdapterRegistry {}
 
@@ -93,8 +94,7 @@ export interface AdapterRegistry {}
 export interface EngineAdapterRegistry {}
 
 /**
- * Any registered adapter's types. With none registered, as in a program that never imports
- * `@caffeinejs/http/fastify`, the types of the engine applications the program loads.
+ * Any registered adapter's types. With none registered, the types of the engine applications the program loads.
  */
 export type AnyAdapterTypes = [keyof AdapterRegistry] extends [never]
   ? EngineAdapterRegistry[keyof EngineAdapterRegistry]
@@ -127,8 +127,7 @@ export interface ServerAddress {
 
 /**
  * The callback `.server(configure)` takes: resolves the server's settings against the same context a plugin
- * factory gets, so `config` is the resolved tree and the container resolves. Returns the adapter's own shape —
- * under Fastify, `{ factory, listener }`.
+ * factory gets, so `config` is the resolved tree and the container resolves. Returns the adapter's own shape.
  */
 export type ServerConfigurer<T extends IAdapterTypes, C = unknown> = (
   context: HTTPSetupContext<C>,
@@ -336,8 +335,8 @@ export interface HTTPSetupContext<C = unknown, T extends IAdapterTypes = never> 
 }
 
 /**
- * Produces what an adapter installs on its server from what the application resolved at start-up. Under the
- * Fastify adapter that is a plugin: see `HTTPPluginFactory`.
+ * Produces what an adapter installs on its server from what the application resolved at start-up: an `HTTPPlugin`
+ * on the Node and fetch applications.
  *
  * What `.with(...)` takes, and what `router.with(...)` and `@Use(...)` take. Called once, after the container
  * has initialized. Never deduplicated: two factories install two extensions.

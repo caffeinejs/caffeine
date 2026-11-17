@@ -33,7 +33,6 @@ export class RouteGroupBuilder {
   #timeout?: Duration
   #authorize?: RouteAuthz
   #config?: Map<string, unknown>
-  #options?: Map<string, unknown>
   #detail?: RouteGroupDetail
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
@@ -158,20 +157,6 @@ export class RouteGroupBuilder {
     return this
   }
 
-  options<K extends string>(key: K, value: unknown): this
-  options<K extends string>(options: Map<K, unknown>): this
-  options<K extends string>(keyOrOptions: K | Map<K, unknown>, value?: unknown): this {
-    this.#options ??= new Map()
-    if (typeof keyOrOptions === 'string') {
-      this.#options.set(keyOrOptions, mergeValue(this.#options.get(keyOrOptions), value))
-    } else {
-      for (const [key, value] of keyOrOptions) {
-        this.#options.set(key, mergeValue(this.#options.get(key), value))
-      }
-    }
-    return this
-  }
-
   /** Where a package attaches its own per-group metadata, under the namespace it owns. */
   detail<K extends keyof RouteGroupDetail>(key: K, value: RouteGroupDetail[K]): this {
     this.#detail ??= {}
@@ -201,7 +186,6 @@ export class RouteGroupBuilder {
       timeout: this.#timeout,
       authz: this.#authorize,
       config: this.#config,
-      options: this.#options,
       detail: this.#detail,
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,
@@ -230,7 +214,6 @@ export class RouteBuilder {
   #bodyAs?: BodyMode
   #authorize?: RouteAuthz
   #config?: Map<string, unknown>
-  #options?: Map<string, unknown>
   #detail?: RouteDetail
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
@@ -338,20 +321,6 @@ export class RouteBuilder {
     return this
   }
 
-  options<K extends string>(key: K, value: unknown): this
-  options<K extends string>(options: Map<K, unknown>): this
-  options<K extends string>(keyOrOptions: K | Map<K, unknown>, value?: unknown): this {
-    this.#options ??= new Map()
-    if (typeof keyOrOptions === 'string') {
-      this.#options.set(keyOrOptions, mergeValue(this.#options.get(keyOrOptions), value))
-    } else {
-      for (const [key, value] of keyOrOptions) {
-        this.#options.set(key, mergeValue(this.#options.get(key), value))
-      }
-    }
-    return this
-  }
-
   /**
    * Adds a hook for this route alone, after those already added.
    *
@@ -392,7 +361,6 @@ export class RouteBuilder {
       bodyAs: this.#bodyAs,
       authz: this.#authorize,
       config: this.#config,
-      options: this.#options,
       detail: this.#detail,
       catchBy: this.#catchBy,
       guards: this.#guards,

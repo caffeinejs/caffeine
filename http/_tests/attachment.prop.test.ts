@@ -2,7 +2,7 @@ import { fc, it } from '@fast-check/vitest'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
 
 import { Attachment, Router } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 import { expectRangeAnswer, extendedName, NAMED_DOWNLOAD, type RangeAnswer } from './bodies.js'
 import { patterned } from './patterned.js'
 

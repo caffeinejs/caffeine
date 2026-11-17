@@ -37,7 +37,7 @@ describe('$t', () => {
       pair: $t.Tuple([$t.String(), $t.Number()]),
     })
 
-    // A round trip through JSON is exactly what Ajv sees. `http` asserts the same schema compiles in Fastify.
+    // A round trip through JSON is exactly what Ajv sees. `http` asserts the same schema compiles in its schema compiler.
     expect(JSON.parse(JSON.stringify(schema))).toEqual({
       type: 'object',
       required: ['name', 'tags', 'status', 'count', 'pair'],

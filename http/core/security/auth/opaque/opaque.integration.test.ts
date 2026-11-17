@@ -1,6 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
+import { authentication } from '../../../../core/security/security.js'
 import {
   Authorize,
   Claim,
@@ -15,7 +16,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../../platform/node/index.js'
 
 class FakeOpaqueStore extends OpaqueTokenStore {
   validate(token: string): Principal | null {

@@ -12,9 +12,9 @@ import {
   type RouteDefinition,
   Router,
 } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
-// The lifecycle as every application runs it: this file is in the Fastify, fetch and Node projects alike.
+// The lifecycle as every application runs it: this file is in the Node and fetch projects alike.
 
 const trace: string[] = []
 

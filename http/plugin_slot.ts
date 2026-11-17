@@ -9,7 +9,6 @@ import { parseUse } from './core/middleware/middleware.js'
 import { MiddlewarePipeline } from './core/middleware/pipeline.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
 import { HTTPPlugin } from './plugin.js'
-import { kEngineOnly, type EngineOnly } from './plugin_marks.js'
 
 type Operation = 'mount' | 'use' | 'useFn' | 'hook' | 'hasPlugin'
 
@@ -76,7 +75,6 @@ export class PluginSlot implements WebApplicationOps<any, any> {
       const extension = await factory(context)
 
       if (extension instanceof HTTPPlugin) {
-        batch.engineOnly = (extension as { [kEngineOnly]?: EngineOnly })[kEngineOnly]
         batch.name = extension.name
         this.claim(extension, where)
         await extension.register(context)
@@ -190,10 +188,6 @@ function slotClosed(operation: Operation): ErrConfiguration {
     'Call it from a ".with(...)" factory or from "HTTPPlugin.register", on the application, a listener or a ' +
       'router',
   )
-
-  if (operation === 'mount') {
-    message.solutions('A Fastify plugin body adds a group with "instance.$route(...)" instead')
-  }
 
   return new ErrConfiguration(message.reference('@caffeinejs/http', ErrConfiguration).build())
 }

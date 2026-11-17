@@ -18,8 +18,7 @@ export function version(version: string): AnyRouteExtension {
  * `1.0.0`, and when several versions satisfy the header the highest wins. A request that sends no
  * `Accept-Version` does not match a versioned route.
  *
- * Sugar for `@Constraint('version', v)`. On Fastify it needs `.with(constraints())` installed, and without it the
- * application fails at start-up; the web-standards engine needs nothing. URI versioning is a separate concern — use
+ * Sugar for `@Constraint('version', v)`; nothing is installed for it. URI versioning is a separate concern — use
  * `@Prefix('/v1')`.
  */
 export function Version(v: string) {

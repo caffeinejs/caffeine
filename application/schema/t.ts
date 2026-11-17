@@ -161,10 +161,10 @@ const caffeineT = {
    * Declaring the upload is what documents it: `{ type: 'string', format: 'binary' }` is how JSON Schema and
    * OpenAPI spell a file, and a consumer reading the document renders a file picker rather than a text box.
    *
-   * **The declaration does not parse the request.** A body holding a file is left unvalidated and
-   * `ctx.req.body()` stays empty, because the parts are streamed rather than buffered; read them with
-   * `formData(ctx)` from `@caffeinejs/multipart`. The other slots — `params`, `querystring`, `headers` —
-   * still validate.
+   * **The declaration does not parse the request.** A body holding a file is not validated: read the route's body
+   * with `bodyAsBuffer()` (or `@BodyAsBuffer()`) and parse it with
+   * `new Response(body, { headers: { 'content-type': type } }).formData()`. The other slots — `params`,
+   * `querystring`, `headers` — still validate.
    */
   File: (options: SchemaOptions = {}) => Type.Unsafe<File>({ ...options, type: 'string', format: 'binary' }),
 

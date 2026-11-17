@@ -108,7 +108,6 @@ export interface IRoute<R = unknown> {
   /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
   bodyAs?: BodyMode
   config: Map<string, unknown>
-  options: Map<string, unknown>
   /**
    * What packages annotated this route with.
    *

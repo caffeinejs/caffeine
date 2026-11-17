@@ -20,7 +20,7 @@ beforeEach(() => {
   lines = []
 })
 
-// The jar is the caller's own object, and its two fields are what callers read: a Fastify reply, or the engine's context.
+// The jar is the caller's own object, and its two fields are what the engine's context reads.
 function jar(): CookieJar {
   return { [kPendingCookies]: null, [kCookieFlush]: 'open' }
 }

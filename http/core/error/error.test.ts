@@ -1,3 +1,4 @@
+import { newNoopLogger, type Logger, type LogFn } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
 import type { Ctor, Provider } from '@caffeinejs/di'
 import { Injectable, Lifetime, Named, Primary, Scopes, token } from '@caffeinejs/di'
@@ -19,7 +20,7 @@ import {
   $p,
   type ActionResult,
 } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../platform/node/index.js'
 import { ErrConfiguration } from './common.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
@@ -701,11 +702,9 @@ describe('serializer', () => {
 
   // An error page that fails must not turn one error into a hung request or a second, opaque one.
   it('falls back to JSON and logs the failure when a serializer throws', async () => {
-    const logged: string[] = []
+    const logged: LogEntry[] = []
     const app = createWebApplication()
-      .server(() => ({
-        factory: { logger: { level: 'error', stream: { write: (line: string) => logged.push(line) } } },
-      }))
+      .logger(b => b.use(recordTo(logged)))
       .errorHandling(e =>
         e.serializer('text/html', () => {
           throw new Error('template missing')
@@ -719,7 +718,8 @@ describe('serializer', () => {
     expect(res.status).toBe(409)
     expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
     expect(await res.json()).toMatchObject({ status: 409, code: 'ERR_HTTP_CONFLICT' })
-    expect(logged.some(line => line.includes('Cannot serialize a problem as \\"text/html\\"'))).toBe(true)
+    expect(logged).toHaveLength(1)
+    expect(logged[0]!.msg).toContain('Cannot serialize a problem as "text/html"')
 
     await app.close()
   })
@@ -740,6 +740,34 @@ describe('serializer', () => {
   })
 })
 
+interface LogEntry {
+  level: number
+  msg: string
+  [field: string]: unknown
+}
+
+const LEVELS = { info: 30, warn: 40, error: 50 } as const
+
+/** The application logger, recording each line at `threshold` or above. */
+function recordTo(logged: LogEntry[], threshold: keyof typeof LEVELS = 'info'): Logger {
+  const at = (level: keyof typeof LEVELS): LogFn =>
+    ((obj: unknown, msg?: string) => {
+      if (LEVELS[level] < LEVELS[threshold]) {
+        return
+      }
+      const [fields, text] = typeof obj === 'string' ? [{}, obj] : [obj as Record<string, unknown>, msg ?? '']
+      logged.push({ ...fields, level: LEVELS[level], msg: text })
+    }) as LogFn
+  const logger: Logger = {
+    ...newNoopLogger(),
+    info: at('info'),
+    warn: at('warn'),
+    error: at('error'),
+    child: () => logger,
+  }
+  return logger
+}
+
 describe('correlationID', () => {
   function payments() {
     return newRouter('/payments')
@@ -754,7 +782,7 @@ describe('correlationID', () => {
   // The ID a support request quotes is the one the server's log lines carry for that request.
   it('is the request ID by default', async () => {
     const app = createWebApplication()
-      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+      .server(() => ({ requestIDHeader: 'x-request-id' }))
       .mount(payments())
     await app.bootstrap()
 
@@ -804,11 +832,9 @@ describe('correlationID', () => {
 
   // The error is what the client needs; a provider failing on top of it must not cost them the answer.
   it('is absent, and the failure logged, when the provider throws', async () => {
-    const logged: string[] = []
+    const logged: LogEntry[] = []
     const app = createWebApplication()
-      .server(() => ({
-        factory: { logger: { level: 'error', stream: { write: (line: string) => logged.push(line) } } },
-      }))
+      .logger(b => b.use(recordTo(logged)))
       .errorHandling(e =>
         e.correlationID(() => {
           throw new Error('no active span')
@@ -822,7 +848,9 @@ describe('correlationID', () => {
 
     expect(res.status).toBe(409)
     expect(Object.keys(problem)).not.toContain('correlation_id')
-    expect(logged.some(line => line.includes('Cannot read the correlation ID'))).toBe(true)
+    expect(logged.filter(entry => entry.level === 50).map(entry => entry.msg)).toEqual([
+      'Cannot read the correlation ID: sending the problem without one',
+    ])
 
     await app.close()
   })

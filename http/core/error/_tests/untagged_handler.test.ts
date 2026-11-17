@@ -2,7 +2,7 @@ import { Injectable } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
 import { type IContext, ErrConfiguration, ErrorHandler } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 // Bound, and shaped like a handler, but it never declared which errors it renders.
 @Injectable()

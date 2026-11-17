@@ -7,7 +7,7 @@ import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { type ActionResult, Catch, ErrHTTP, type ErrorHandler, Router, version } from '../index.js'
-import { constraints, createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 import { expectPatternedBody, streamOf } from './bodies.js'
 import { patterned } from './patterned.js'
 
@@ -72,7 +72,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
     .handler(() => {
       throw new ErrTeapot()
     })
-  // Timed, so a request left unanswered fails as Fastify's 503 rather than as a hung test.
+  // Timed, so a request left unanswered fails as a 503 rather than as a hung test.
   routes
     .get('/consumed-context')
     .timeout(1 * Second)
@@ -235,7 +235,7 @@ describe("a Response's headers join the ones the server adds, rather than replac
   const versioned = new Router('/versioned').extend(version('1.0.0'))
   versioned.get('/').handler(() => new Response('v1', { headers: { vary: 'Accept-Language' } }))
 
-  const app = createWebApplication().with(constraints()).mount(versioned)
+  const app = createWebApplication().mount(versioned)
 
   beforeAll(async () => {
     await app.bootstrap()
@@ -297,7 +297,7 @@ describe('a Response fetched from upstream and returned is sent as the bytes the
   const key = readFileSync(new URL('./_testdata/tls/localhost.key', import.meta.url))
   const cert = readFileSync(new URL('./_testdata/tls/localhost.crt', import.meta.url))
   const secure = createWebApplication()
-    .server(() => ({ factory: { http2: true, https: { key, cert } }, listener: { host: '127.0.0.1', port: 0 } }))
+    .server(() => ({ http2: true, https: { key, cert }, listen: { host: '127.0.0.1', port: 0 } }))
     .mount(new Router('/h2').get('/gzip').handler(() => fetch(`${upstreamOrigin}/gzip`)))
 
   beforeAll(async () => {

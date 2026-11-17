@@ -43,8 +43,6 @@
     "@caffeinejs/application": "0.0.0",
     "@caffeinejs/di": "0.0.0",
     "@caffeinejs/http": "0.0.0",
-    "@caffeinejs/multipart": "0.0.0",
-    "@caffeinejs/std": "0.0.0",
-    "fastify": "^5.12.8"
+    "@caffeinejs/std": "0.0.0"
   }
 }

@@ -201,13 +201,10 @@ function catchBy(map: CatchByMap | undefined, err: Error): ReturnType<CatchByMap
   return map === undefined || map.size === 0 ? undefined : resolveByErrorChain(map, err)
 }
 
-// Handed to code typed on `IContext`, which names Fastify's types until the fetch application joins the registry.
+// Handed to code typed on `IContext`.
 function asIContext(ctx: Context): IContext {
   return ctx as unknown as IContext
 }
-
-/** The solution every refusal of what the fetch application cannot serve yet offers. */
-export const USE_FASTIFY = 'Build the application with createWebApplication() from "@caffeinejs/http/fastify"'
 
 /** The solution that sends a reader to the Node application. */
 export const USE_NODE = 'Build the application with createWebApplication() from "@caffeinejs/http/node"'

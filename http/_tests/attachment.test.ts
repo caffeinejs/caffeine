@@ -14,7 +14,7 @@ import {
   type IContext,
   Router,
 } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 import {
   expectPatternedBody,
   expectRangeAnswer,

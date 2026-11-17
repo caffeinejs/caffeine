@@ -11,10 +11,9 @@ import { nodeAdapterFactory, type NodeAdapterTypes } from './adapter.js'
  * const { address } = await app.run()
  * ```
  *
- * What the engine cannot serve yet is refused at start-up, pointing at `createWebApplication()` from
- * `@caffeinejs/http/fastify`. `ctx.req.raw` is a `Request` whose URL follows the socket and the `Host` header, while
- * `ctx.req.host` and `ctx.req.protocol` follow `trustProxy`. A handler typed with a plain `IContext` sees Fastify's
- * `raw` and `platform` types: reach Node's request through a router from {@link newRouter}, or narrow on
+ * `ctx.req.raw` is a `Request` whose URL follows the socket and the `Host` header, while `ctx.req.host` and
+ * `ctx.req.protocol` follow `trustProxy`. A handler typed with a plain `IContext` sees the `platform` types of every
+ * engine application the program loads: reach Node's request through a router from {@link newRouter}, or narrow on
  * `ctx.platform.name === 'node'`.
  */
 export function createWebApplication<TConfig = unknown>(

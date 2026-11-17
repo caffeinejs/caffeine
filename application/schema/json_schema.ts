@@ -14,7 +14,7 @@ export type JSONSchema = Record<string, unknown>
 export type SchemaIO = 'input' | 'output'
 
 /**
- * Ajv is configured for draft-07 in Fastify, and it rejects a schema whose `$schema` names a draft it has no
+ * Draft-07: Ajv, which fast-json-stringify builds on, rejects a schema whose `$schema` names a draft it has no
  * meta-schema for.
  */
 const JSON_SCHEMA_TARGET = 'draft-07'

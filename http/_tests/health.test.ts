@@ -12,8 +12,9 @@ import { describe, it, expect } from 'vitest'
 import type { WebApplication } from '../application.js'
 import { healthProbes } from '../core/health/index.js'
 import type { HealthProbesBuilder } from '../core/health/probes_builder.js'
+import { authentication } from '../core/security/security.js'
 import { Authentication, Authorize, Controller, Get, Health } from '../index.js'
-import { authentication, createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 class DownIndicator extends HealthIndicator {
   get name(): string {

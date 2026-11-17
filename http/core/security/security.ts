@@ -4,7 +4,6 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
-import { kEngineOnly, type EngineOnly } from '../../plugin_marks.js'
 import { kCookieSettings } from '../cookie/keys.js'
 import type { IRouteGroup } from '../routing/route.js'
 import {
@@ -78,9 +77,8 @@ export class AuthenticationGateBuilder {
 
   /**
    * Names this gate: `caffeine-authentication` for the default, `caffeine-authentication:<label>` otherwise. Two
-   * gates under one label are refused at start-up, on one registration chain on Fastify, and on the web-standards
-   * engine in one slot or when both cover a route, so a gate inside a route group under a root gate carries its own
-   * label.
+   * gates under one label are refused at start-up, in one slot or when both cover a route, so a gate inside a route
+   * group under a root gate carries its own label.
    */
   name(label: string): this {
     this.#label = label
@@ -120,10 +118,8 @@ export class AuthenticationGateBuilder {
 }
 
 /**
- * The authentication gate on the web-standards engine: authenticates the request and, when the route is protected,
- * authorizes it, in that order, in one `onRequest` hook. Requires `Authentication(...)` to be installed; the feature
- * binds what the gate runs on. A Fastify application takes `authentication` from `@caffeinejs/http/fastify`, and
- * refuses this one at start-up.
+ * The authentication gate: authenticates the request and, when the route is protected, authorizes it, in that order,
+ * in one `onRequest` hook. Requires `Authentication(...)` to be installed; the feature binds what the gate runs on.
  *
  * The hook runs at `onRequest`, before the body is parsed or validated: an unauthenticated caller is answered 401,
  * not a 400 describing the route's schema. It runs where the gate was registered among the plugins, and before the
@@ -161,10 +157,6 @@ export function authentication<C = unknown>(
 
 class AuthenticationGate extends HTTPPlugin {
   override readonly name: string
-  readonly [kEngineOnly]: EngineOnly = {
-    factory: 'authentication',
-    instead: 'Import "authentication" from "@caffeinejs/http/fastify"',
-  }
   readonly #gate: ResolvedGate
 
   constructor(gate: ResolvedGate) {

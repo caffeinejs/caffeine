@@ -168,8 +168,8 @@ describe('compileChain', () => {
     expect(ctx.log).toEqual(['a', 'b'])
   })
 
-  // As connect mounts it, and as the Fastify adapter does: under its prefix a middleware sees the rest of the URL, and
-  // the request gets its own URL back once it calls next.
+  // As connect mounts it: under its prefix a middleware sees the rest of the URL, and the request gets its own URL back
+  // once it calls next.
   it('hands a context middleware the rest of the URL under its prefix, and gives it back', () => {
     const ctx = new Target('/admin/users?page=2')
     const seen: string[] = []

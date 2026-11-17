@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
+import { authentication } from '../../../core/security/security.js'
 import {
   AllowAnonymous,
   AuthenticateResult,
@@ -13,7 +14,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../index.js'
-import { createWebApplication, authentication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 // Kept in its own file, protected-route cases last: `WebApplication` snapshots the global `@Controller`
 // registry at construction, and that registry only ever grows within a test file — so an `@Authorize`-
@@ -76,7 +77,7 @@ describe('authorization installation', () => {
     expect(res.status).toBe(200)
   })
 
-  // Authentication is checked first (see `platform/fastify/adapter.ts`), so a protected route with neither feature configured
+  // Authentication is checked first (see `assertAuthenticationConfigured`), so a protected route with neither feature configured
   // is refused with the authentication-specific error — calling `.install(Authentication(...)).with(authentication())` would also auto-install
   // authorization, so that is the one actionable fix. This is unaffected by the authorization changes; it is
   // asserted here as a regression guard alongside the narrower authorization-only case below.

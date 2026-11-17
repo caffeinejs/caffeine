@@ -3,7 +3,7 @@ import { $t } from '@caffeinejs/application/schema'
 import { expectTypeOf } from 'vitest'
 
 import { type IContext } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 /**
  * What `.basePath(...)` accepts, and what a handler reads back. Nothing at run time fails when a callback stops

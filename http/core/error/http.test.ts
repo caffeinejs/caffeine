@@ -1,3 +1,4 @@
+import { newNoopLogger, type Logger, type LogFn } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
 import { describe, it, expect, vi } from 'vitest'
 
@@ -42,20 +43,39 @@ import {
   Schema,
   type ActionResult,
 } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../platform/node/index.js'
 
 interface LogEntry {
-  level?: number
-  msg?: string
+  level: number
+  msg: string
+  [field: string]: unknown
 }
 
-/** Fastify's own logger, writing every line into `logged`. Named in the factory settings, so it is the server's. */
-function pinoTo(logged: LogEntry[], level = 'info') {
-  return { level, stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } }
+const LEVELS = { info: 30, warn: 40, error: 50 } as const
+
+/** The application logger, recording each line at `threshold` or above. */
+function recordTo(logged: LogEntry[], threshold: keyof typeof LEVELS = 'info'): Logger {
+  const at = (level: keyof typeof LEVELS): LogFn =>
+    ((obj: unknown, msg?: string) => {
+      if (LEVELS[level] < LEVELS[threshold]) {
+        return
+      }
+      const [fields, text] = typeof obj === 'string' ? [{}, obj] : [obj as Record<string, unknown>, msg ?? '']
+      logged.push({ ...fields, level: LEVELS[level], msg: text })
+    }) as LogFn
+  const logger: Logger = {
+    ...newNoopLogger(),
+    info: at('info'),
+    warn: at('warn'),
+    error: at('error'),
+    child: () => logger,
+  }
+  return logger
 }
 
+/** An application whose logger records every line into `logged`. */
 function loggingTo(logged: LogEntry[]) {
-  return createWebApplication().server(() => ({ factory: { logger: pinoTo(logged) } }))
+  return createWebApplication().logger(b => b.use(recordTo(logged)))
 }
 
 async function bodyOf(response: Response): Promise<Problem> {
@@ -402,7 +422,7 @@ describe('an unexpected failure', () => {
     // The name of the table a statement failed on is the caller's business in no deployment.
     expect(text).not.toContain('customers')
 
-    // On record for whoever looks, as a fault (pino: 30 is info, 50 is error).
+    // On record for whoever looks, as a fault (30 is info, 50 is error).
     const entries = logged.filter(entry => entry.msg?.includes('relation "customers" does not exist'))
     expect(entries.map(entry => entry.level)).toEqual([50])
 
@@ -446,9 +466,8 @@ describe('an unexpected failure', () => {
 
     const issue = {
       code: 'ERR_VALIDATION_MIN_LENGTH',
-      detail: 'name must NOT have fewer than 1 characters',
+      detail: 'name Expected string length greater or equal to 1',
       source: { in: 'body', pointer: '/name' },
-      params: { limit: 1 },
     }
     expect(res.status).toBe(422)
     expect(res.headers.get('content-type')).toBe(JSON_UTF8)
@@ -486,36 +505,10 @@ describe('an unexpected failure', () => {
     expect((await bodyOf(res)).errors).toEqual([
       {
         code: 'ERR_VALIDATION_REQUIRED',
-        detail: "must have required property 'name'",
+        detail: 'name Expected required property',
         source: { in: 'body', pointer: '/name' },
-        params: { missingProperty: 'name' },
       },
     ])
-
-    await app.close()
-  })
-
-  // Fastify refuses a body it cannot parse before any handler runs; its code is what a client can look up.
-  it('renders a request Fastify refused as a problem with its own code', async () => {
-    const app = createWebApplication()
-    await app.bootstrap()
-
-    const res = await app.request('/unexpected/validated', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{',
-    })
-
-    expect(res.status).toBe(400)
-    expect(res.headers.get('content-type')).toBe(JSON_UTF8)
-    expect(await res.json()).toEqual({
-      type: 'about:blank',
-      title: 'Bad Request',
-      status: 400,
-      detail: "Body is not valid JSON but content-type is set to 'application/json'",
-      code: 'FST_ERR_CTP_INVALID_JSON_BODY',
-      ...STAMPED,
-    })
 
     await app.close()
   })
@@ -1056,9 +1049,8 @@ describe('a route that declares an error response schema', () => {
       errors: [
         {
           code: 'ERR_VALIDATION_TYPE',
-          detail: 'limit must be integer',
+          detail: 'limit Expected integer',
           source: { in: 'query', name: 'limit' },
-          params: { type: 'integer' },
         },
       ],
     })
@@ -1127,7 +1119,7 @@ describe('the members an agent acts on', () => {
   // no prose to interpret, and quotes the correlation ID if it has to escalate.
   it('tells an agent asking for Markdown what failed, what to do and how to quote it', async () => {
     const app = createWebApplication()
-      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+      .server(() => ({ requestIDHeader: 'x-request-id' }))
       .mount(checkout())
     await app.bootstrap()
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -1175,7 +1167,7 @@ describe('the members an agent acts on', () => {
   // The same members in JSON, set through the options a subclass takes.
   it('sends the category and the guidance an error was given in its options', async () => {
     const app = createWebApplication()
-      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+      .server(() => ({ requestIDHeader: 'x-request-id' }))
       .mount(checkout())
     await app.bootstrap()
     vi.useFakeTimers({ toFake: ['Date'] })

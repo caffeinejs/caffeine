@@ -2,6 +2,7 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 
+import { authentication } from '../../../../core/security/security.js'
 import {
   Authorize,
   AuthenticationService,
@@ -25,7 +26,7 @@ import {
   $p,
   Authentication,
 } from '../../../../index.js'
-import { createWebApplication, newRouter, authentication } from '../../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../../platform/node/index.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
 let ALICE_HASH = ''

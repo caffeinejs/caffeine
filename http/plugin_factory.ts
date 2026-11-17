@@ -25,7 +25,7 @@ export function assertPluginFactory(factory: unknown): void {
           'Install a feature with ".install(...)", at any position in the chain',
         )
       : errMessage(`Cannot register an HTTP plugin: expected a plugin factory function, got ${got}`).solutions(
-          'Pass a factory: ".with(({ config }) => [plugin, options])"',
+          'Pass a factory that returns an HTTPPlugin: ".with(({ config }) => new MyPlugin(config.x))"',
           'Install a feature with ".install(feature)"',
         )
     )

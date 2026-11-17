@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
+import { KiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -17,7 +16,9 @@ import {
   csrfExempt,
   type IContext,
 } from '../../../index.js'
-import { authentication, createWebApplication, csrf, newRouter } from '../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { authentication } from '../../security/security.js'
+import { csrf } from '../csrf.js'
 
 /**
  * A webhook receiver behind `csrf()`: what a provider's delivery looks like, what a forgery from a victim's browser
@@ -173,32 +174,22 @@ describe('csrf() in front of a webhook receiver', () => {
     expect(handled).toBe(0)
   })
 
-  // A forgery costs nothing past its headers: refused before a body parser, or a body limit, ever sees it.
+  // A forgery costs nothing past its headers: refused before the body limit ever sees it.
   it('refuses a forged delivery before reading its body: 403, not 413', async () => {
-    let parsed = 0
-    const parsing = () =>
-      fp(
-        async (instance: FastifyInstance) => {
-          instance.addHook('preParsing', async (_request, _reply, payload) => {
-            parsed++
-            return payload
-          })
-        },
-        { name: 'parsing' },
-      )
-
     const app = await ready(
       createWebApplication()
         .with(csrf())
-        .with(parsing)
-        .mount(newRouter('/webhooks/stripe').post('/').bodyLimit(1024).handler(ok)),
+        .mount(
+          newRouter('/webhooks/stripe')
+            .post('/')
+            .bodyLimit(1 * KiB)
+            .handler(ok),
+        ),
     )
     const oversized = JSON.stringify({ data: 'x'.repeat(4096) })
 
     expect((await deliver(app, '/webhooks/stripe', oversized, FORGED)).status).toBe(403)
-    expect(parsed).toBe(0)
     expect((await deliver(app, '/webhooks/stripe', oversized, GITHUB)).status).toBe(413)
-    expect(parsed).toBe(1)
   })
 
   it('refuses a sender that sets an Origin of its own', async () => {

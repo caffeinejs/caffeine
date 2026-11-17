@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { $p } from '../core/routing/picker.js'
 import { type IContext, Controller, Get, Header, Args, Post } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 describe('Redirect', () => {
   describe('given a router with different redirect strategies', () => {

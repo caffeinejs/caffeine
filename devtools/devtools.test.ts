@@ -255,7 +255,7 @@ describe('devtools', () => {
     it('takes the name it is given, beside a listener of the application already named devtools', async () => {
       const devtools = await serve(d => d.listener('ops'), {
         listener: 'ops',
-        // A listener's settings are typed by the registered adapter, Fastify's in this program: Node reads `listen`.
+        // A listener's settings are typed by the application's adapter: Node reads `listen`.
         prepare: a => a.listener('devtools', l => l.server(() => ({ listen: loopback }) as never)),
       })
 

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Get, Header, Router } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 describe('Fetch API Response Support', () => {
-  it('maps status, headers, and body to fastify reply', async () => {
+  it('maps status, headers, and body to the response', async () => {
     @Controller('/fetch')
     class FetchController {
       @Get('/json')
@@ -225,23 +225,6 @@ describe('Fetch API Response Support', () => {
         host: 'api.example:8080',
         q: '2',
       })
-    } finally {
-      await app.close()
-    }
-  })
-
-  // A 1xx answer has no `Response` form. The call rejects rather than never settling.
-  it('rejects an informational answer it cannot hand back as a Response', async () => {
-    const app = createWebApplication().serverCallback((_context, instance) => {
-      instance.get('/fetch-early', (_request, reply) => {
-        void reply.code(101).send()
-      })
-    })
-
-    try {
-      await app.bootstrap()
-
-      await expect(app.request('/fetch-early')).rejects.toThrow(RangeError)
     } finally {
       await app.close()
     }

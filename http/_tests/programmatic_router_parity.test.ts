@@ -1,6 +1,7 @@
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { authentication } from '../core/security/security.js'
 import {
   AuthenticateResult,
   AuthenticationTicket,
@@ -20,7 +21,7 @@ import {
   Authentication,
   Guards,
 } from '../index.js'
-import { constraints, createWebApplication, authentication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 class FakeAuthHandler extends BaseAuthenticationHandler<{}> {
   result: AuthenticateResult = AuthenticateResult.none()
@@ -311,7 +312,7 @@ describe('programmatic router parity with the decorator feature set', () => {
 
   describe('given the verb helpers past the common four', () => {
     it('should answer HEAD alone on a head() route', async () => {
-      // No GET on this path: Fastify gives a GET route a HEAD twin, which a head() route on the same path would meet.
+      // No GET on this path: a GET route also answers HEAD, which a head() route on the same path would meet.
       const router = new Router('/probe').head('/', ctx => {
         ctx.header('x-probe', 'yes')
         return { ok: true }
@@ -352,10 +353,14 @@ describe('programmatic router parity with the decorator feature set', () => {
       const app = createWebApplication().mount(router)
       await app.bootstrap()
 
-      for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']) {
+      for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
         expect(await (await app.request('/any', { method })).json()).toEqual({ method })
       }
-      // A QUERY carries a body, and Fastify wants its content type before it finds there is no route.
+      // The engine strips the body of a HEAD answer.
+      const head = await app.request('/any', { method: 'HEAD' })
+      expect(head.status).toBe(200)
+      expect(await head.text()).toBe('')
+      // A QUERY carries a body, so it is sent with its content type.
       const query = await app.request('/any', {
         method: 'QUERY',
         headers: { 'content-type': 'application/json' },
@@ -415,7 +420,7 @@ describe('programmatic router parity with the decorator feature set', () => {
     // What a feature reads per request, as `@Config` writes it. The more specific level wins a key outright.
     it("should give every route the group's entries, a route's own replacing the group's for its key", async () => {
       const read = (ctx: IContext) => {
-        const config = ctx.routeConfig as Record<string, unknown>
+        const config = Object.fromEntries(ctx.route?.config ?? [])
         return { feature: config.feature, other: config.other }
       }
       const router = new Router('/configured').config('feature', { level: 'group' }).config('other', 'kept')
@@ -467,7 +472,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       const v2 = new Router('/pets').name('ParityPetsV2').extend(version('2.0.0'))
       v2.get('/').handler(() => ({ v: 2 }))
 
-      const app = createWebApplication().with(constraints()).mount(v1, v2)
+      const app = createWebApplication().mount(v1, v2)
       await app.bootstrap()
 
       expect(await (await app.request('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })

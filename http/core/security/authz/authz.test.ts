@@ -1,6 +1,7 @@
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { authentication } from '../../../core/security/security.js'
 import {
   AuthenticateResult,
   AuthorizationBuilder,
@@ -10,7 +11,7 @@ import {
   type AuthzRequirement,
   Authentication,
 } from '../../../index.js'
-import { createWebApplication, newRouter, authentication } from '../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
 
 /**
  * What the authorization builder refuses. No controller is declared here, routers only: a controller registers

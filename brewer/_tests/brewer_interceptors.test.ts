@@ -2,12 +2,14 @@ import { createHash, createHmac } from 'node:crypto'
 
 import { $t } from '@caffeinejs/application/schema'
 import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { formData, multipart } from '@caffeinejs/multipart'
+import { createWebApplication } from '@caffeinejs/http/node'
+import { KiB } from '@caffeinejs/std/bytes'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { brewer, type BrewOptions, type Interceptor } from '../index.js'
 import { bodies, profileForm } from './_bodies.js'
+import { formOf } from './_forms.js'
 import { etagCache, idempotency, logging, mapErrors, retry, signing, timeout } from './_interceptors.js'
 
 /**
@@ -166,25 +168,28 @@ type Part = { field: string; value: string } | { field: string; name: string; ty
 // What each form that reached the server carried, part by part, in the order they arrived.
 const forms: Part[][] = []
 
-const uploads = new Router('/uploads').post('/form').handler(async ctx => {
-  const parts: Part[] = []
-  for (const [field, value] of await formData(ctx).form()) {
-    parts.push(
-      typeof value === 'string'
-        ? { field, value }
-        : { field, name: value.name, type: value.type, sha256: sha256(await value.bytes()) },
-    )
-  }
-  forms.push(parts)
-  ctx.status(script.shift() ?? 200)
-  return { parts }
-})
+const uploads = new Router('/uploads')
+  .post('/form')
+  .extend(bodyAsBuffer())
+  .bodyLimit(64 * KiB)
+  .handler(async ctx => {
+    const parts: Part[] = []
+    for (const [field, value] of await formOf(ctx)) {
+      parts.push(
+        typeof value === 'string'
+          ? { field, value }
+          : { field, name: value.name, type: value.type, sha256: sha256(await value.bytes()) },
+      )
+    }
+    forms.push(parts)
+    ctx.status(script.shift() ?? 200)
+    return { parts }
+  })
 
-// An abort can leave the client a connection it opened and never finished a request on, which the server's graceful
-// close would otherwise wait out: a connection quiet for a second is dropped instead.
+// A client that stops part-way can leave a connection holding a partial request, which a graceful close would wait
+// out (caffeinejs/caffeine#131): the close cuts it after a second.
 const app = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 } }))
-  .with(multipart(() => ({ limits: { fileSize: 64 * 1024 } })))
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(api, uploads)
 
 let origin: string

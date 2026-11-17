@@ -1,9 +1,14 @@
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Health, type IContext, bindTo, type WebApplication } from '../../../index.js'
-import { createWebApplication, newRouter } from '../../../platform/fastify/index.js'
+import {
+  Health,
+  HTTPPlugin,
+  type HTTPSetupContext,
+  type IContext,
+  bindTo,
+  type WebApplication,
+} from '../../../index.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
 
 /**
  * A listener's own plugins and middleware: registered on its builder, `l.with(...)`, `l.use(...)` and
@@ -12,19 +17,30 @@ import { createWebApplication, newRouter } from '../../../platform/fastify/index
 
 const listener = { host: '127.0.0.1', port: 0 }
 
+/** A plugin marking every response it covers with `header`: a value already there is kept, this one appended. */
+class Marking extends HTTPPlugin {
+  override readonly name: string
+  readonly #header: string
+  readonly #value: string
+
+  constructor(header: string, value = 'yes') {
+    super()
+    this.#header = header
+    this.#value = value
+    this.name = `marking:${header}:${value}`
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onRequest', ctx => {
+      const previous = ctx.getHeader(this.#header)
+      ctx.header(this.#header, previous === undefined ? this.#value : `${String(previous)},${this.#value}`)
+    })
+  }
+}
+
 /** A plugin marking every response it covers with `header`. */
 function marking(header: string, value = 'yes') {
-  return () =>
-    fp(
-      async (instance: FastifyInstance) => {
-        instance.addHook('onRequest', (_request, reply, done) => {
-          const previous = reply.getHeader(header)
-          reply.header(header, previous === undefined ? value : `${String(previous)},${value}`)
-          done()
-        })
-      },
-      { name: `marking:${header}:${value}` },
-    )
+  return () => new Marking(header, value)
 }
 
 /** A middleware marking every response it runs for with `header`. */
@@ -64,11 +80,11 @@ describe("a listener's own plugins and middleware", () => {
     app = createWebApplication()
       .listener('admin', l =>
         l
-          .server(() => ({ listener }))
+          .server(() => ({ listen: listener }))
           .with(marking('x-order', 'first'))
           .with(marking('x-order', 'second')),
       )
-      .server(() => ({ listener }))
+      .server(() => ({ listen: listener }))
       .with(marking('x-app-plugin'))
       .mount(jobs(), api()) as WebApplication
 
@@ -87,12 +103,12 @@ describe("a listener's own plugins and middleware", () => {
     app = createWebApplication()
       .listener('admin', l =>
         l
-          .server(() => ({ listener }))
+          .server(() => ({ listen: listener }))
           .use(tagging('x-admin-middleware'))
           .use('/jobs', tagging('x-jobs-middleware'))
           .useFn(() => tagging('x-built-middleware')),
       )
-      .server(() => ({ listener }))
+      .server(() => ({ listen: listener }))
       .mount(jobs(), status(), api()) as WebApplication
     app.use(tagging('x-app-middleware'))
 

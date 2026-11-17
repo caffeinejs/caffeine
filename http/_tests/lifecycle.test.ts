@@ -2,7 +2,7 @@ import { Injectable, type OnBootstrap, type OnDestroy } from '@caffeinejs/di'
 import { describe, it, expect, vi } from 'vitest'
 
 import { Controller, Get } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 describe('Adapter Lifecycle', () => {
   it('a container OnBootstrap hook runs before the first request is served', async () => {
@@ -64,7 +64,7 @@ describe('Adapter Lifecycle', () => {
     expect(closeFired).toHaveBeenCalledOnce()
   })
 
-  it('close() shuts down the Fastify instance', async () => {
+  it('close() shuts down the server', async () => {
     @Controller('/lc4')
     class Lc4Controller {
       @Get('/ping')

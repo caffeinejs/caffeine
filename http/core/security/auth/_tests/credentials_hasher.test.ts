@@ -1,6 +1,7 @@
 import { $cond, CaffeineIoC, mod } from '@caffeinejs/di'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { authentication } from '../../../../core/security/security.js'
 import {
   type CredentialUser,
   PasswordHasher,
@@ -8,7 +9,7 @@ import {
   UserProvider,
   Authentication,
 } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../../platform/node/index.js'
 
 const JWT_SECRET = 'a-jwt-secret-that-is-at-least-32-bytes!!'
 

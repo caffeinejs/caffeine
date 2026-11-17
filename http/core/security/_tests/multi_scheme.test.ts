@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { authentication } from '../../../core/security/security.js'
 import {
   AllowAnonymous,
   AuthenticateResult,
@@ -17,7 +18,7 @@ import {
   $p,
   Authentication,
 } from '../../../index.js'
-import { createWebApplication, authentication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 /**
  * Per-route authentication scheme selection.

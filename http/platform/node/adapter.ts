@@ -32,8 +32,7 @@ import { createNodePlatform, serveNode, type NodeContextPlatform, type NodeRespo
 import { resolveNodeServerSettings, type NodeServerSettings } from './settings.js'
 
 /**
- * The Node application's adapter types. They are not in `AdapterRegistry`, so a plain `IContext` keeps Fastify's
- * types.
+ * The Node application's adapter types, an entry of `EngineAdapterRegistry`.
  */
 export interface NodeAdapterTypes extends EngineContextTypes {
   instance: NodeHTTPServer
@@ -76,7 +75,7 @@ class NodeAdapter implements IAdapter<NodeAdapterTypes> {
     await engine.ready()
     const platform = createNodePlatform(input.context.logger)
     const server = createServer((_req, res) => serveNode(engine, platform, res, false))
-    // Tracked first, as the Fastify adapter does: a callback may make the server listen, and every connection it then
+    // Tracked first: a callback may make the server listen, and every connection it then
     // accepts must be one a close can end.
     const open = trackConnections(server)
 

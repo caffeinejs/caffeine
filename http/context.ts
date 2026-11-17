@@ -65,8 +65,7 @@ export interface IContext<
    * it is read. A reload that lands mid-request is not observed once the snapshot has been taken.
    *
    * `C` is declared where the routes are, with `.configType<C>()`. This is a getter, not a function: a package
-   * that needs its own settings cannot look them up from here. It binds them and resolves them, or reads a
-   * decoration off the Fastify instance as `@caffeinejs/html` does.
+   * that needs its own settings cannot look them up from here: it binds them and resolves them.
    */
   get config(): ConfigSnapshot<C>
 
@@ -109,12 +108,6 @@ export interface IContext<
    * and for a route Caffeine did not compile itself.
    */
   get route(): RouteDefinition | undefined
-
-  /**
-   * What the route declared, as the adapter recorded it. The shape belongs to the adapter — the Fastify one
-   * returns its `FastifyContextConfig` — so a consumer narrows it to the adapter it is written against.
-   */
-  get routeConfig(): unknown
 
   status(code: number): this
 

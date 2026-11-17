@@ -5,7 +5,7 @@ import type { IContext } from '../../context.js'
 import { Controller } from '../../decorators/controller.js'
 import { OnRequest, OnSend } from '../../decorators/hooks.js'
 import { Get } from '../../decorators/verbs.js'
-import { createWebApplication } from '../../platform/fastify/index.js'
+import { createWebApplication } from '../../platform/node/index.js'
 import { Keys } from '../../symbols.js'
 import { ErrConfiguration } from '../error/common.js'
 

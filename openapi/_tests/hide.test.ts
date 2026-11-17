@@ -30,7 +30,7 @@ function drafts() {
   return router
 }
 
-// `hide` is the convention `@fastify/swagger` reads off a Fastify schema; Caffeine honours it the same way.
+// `hide: true` on a route schema leaves the route out of the document, as `@Operation({ hidden: true })` does.
 describe('a route schema with hide: true', () => {
   let app: WebApplication<NodeAdapterTypes> | undefined
 

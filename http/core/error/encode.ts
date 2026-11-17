@@ -10,7 +10,7 @@ export interface EncodedProblem {
   body: string
 }
 
-/** Where encoding logs what it could not do. Fastify's request logger and the application's logger both fit. */
+/** Where encoding logs what it could not do: the application's logger. */
 export interface ProblemLog {
   error(obj: object, msg: string): void
 }

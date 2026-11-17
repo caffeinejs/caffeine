@@ -8,8 +8,7 @@ import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
  *
  * Writes into `route.config` under `kRouteConstraints` rather than a dedicated field, so group→route
  * inheritance is the existing generic `config` merge (`.extend(constraint(...))` on a route overrides the same
- * name set on its group). The server matches on it: on Fastify through the `constraints()` plugin, on the
- * web-standards engine by itself.
+ * name set on its group). The server matches on it by itself.
  */
 export function constraint(name: string, value: unknown, options?: { header?: string }): AnyRouteExtension {
   return (target: { config(key: string, value: unknown): unknown }) => {
@@ -24,9 +23,8 @@ export function constraint(name: string, value: unknown, options?: { header?: st
  * Selects the route — or every route of the group, on a class — when the request carries `value` for the
  * constraint `name`.
  *
- * On Fastify, `.with(constraints())` must be installed, and a name other than `version` and `host` needs its
- * strategy there. On the web-standards engine nothing is installed, and such a name needs its strategy in
- * `.server(...)`'s `constraints`. A route whose constraint the request does not satisfy is not matched, and the
+ * Nothing is installed for it; a name other than `version` and `host` needs its strategy in `.server(...)`'s
+ * `constraints`. A route whose constraint the request does not satisfy is not matched, and the
  * request is answered 404. The programmatic form is {@link constraint}, applied with
  * `.extend(constraint(name, value), ...)`.
  */

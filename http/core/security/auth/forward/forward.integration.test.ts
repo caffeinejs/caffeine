@@ -1,8 +1,9 @@
 import { SignJWT } from 'jose'
 import { describe, it, expect } from 'vitest'
 
+import { authentication } from '../../../../core/security/security.js'
 import { Authorize, Claim, Controller, Get, Identity, Principal, Authentication } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../../platform/node/index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 const secretBytes = new TextEncoder().encode(TEST_SECRET)

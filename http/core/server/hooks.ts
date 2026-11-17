@@ -162,7 +162,7 @@ function push(hooks: Mutable, point: RequestHookName, fns: readonly ((...args: n
   ;(hooks[point] as unknown[]).push(...fns)
 }
 
-// Handed to code typed on `IContext`, which names Fastify's types until the engine's applications join the registry.
+// Handed to code typed on `IContext`.
 function asIContext(ctx: Context): IContext {
   return ctx as unknown as IContext
 }

@@ -1,7 +1,5 @@
 import { ErrFeatureNotInstalled } from '@caffeinejs/application'
 import { Injectable } from '@caffeinejs/di'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -18,26 +16,34 @@ import {
   bindTo,
   type WebApplication,
 } from '../index.js'
-import { type RouterTypes, createWebApplication, newRouter } from '../platform/fastify/index.js'
+import { createWebApplication, newRouter, type NodeAdapterTypes } from '../platform/node/index.js'
 
 /**
  * Scenario: a plugin written against Caffeine alone. An `HTTPPlugin` registers in its `.with(...)` slot, and
  * `context.app` mounts routers and adds middleware where that slot belongs: on a server, or on a router. What a
- * Fastify plugin does in that slot is `plugins.test.ts`'s; a controller's `@Use(...)` is in its own files.
+ * factory returning a plugin does in that slot is `plugins.test.ts`'s; a controller's `@Use(...)` is in its own files.
  */
 
 /** A plugin marking every response it covers with `header`. */
+class Marking extends HTTPPlugin {
+  override readonly name: string
+  readonly #header: string
+  readonly #value: string
+
+  constructor(header: string, value = 'yes') {
+    super()
+    this.#header = header
+    this.#value = value
+    this.name = `marking:${header}`
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onRequest', ctx => void ctx.header(this.#header, this.#value))
+  }
+}
+
 function marking(header: string, value = 'yes') {
-  return () =>
-    fp(
-      async (instance: FastifyInstance) => {
-        instance.addHook('onRequest', (_request, reply, done) => {
-          reply.header(header, value)
-          done()
-        })
-      },
-      { name: `marking:${header}` },
-    )
+  return () => new Marking(header, value)
 }
 
 /** A middleware stamping `header` on what it covers. */
@@ -105,6 +111,19 @@ class Keeper extends HTTPPlugin {
 class Nester extends HTTPPlugin {
   register({ app }: HTTPSetupContext): void {
     app.mount(new Router('/jobs').get('/', () => ({ jobs: true })))
+  }
+}
+
+/** Collects the URL of every route registered after it. */
+class Collector extends HTTPPlugin {
+  constructor(private readonly seen: string[]) {
+    super()
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onRoute', route => {
+      this.seen.push(route.url)
+    })
   }
 }
 
@@ -205,37 +224,10 @@ describe('HTTPPlugin', () => {
     app = undefined
   })
 
-  it('registers in slot order, and before any Fastify plugin body runs', async () => {
-    const order: string[] = []
-
-    class Recording extends HTTPPlugin {
-      readonly #name: string
-
-      constructor(name: string) {
-        super()
-        this.#name = name
-      }
-
-      register(): void {
-        order.push(this.#name)
-      }
-    }
-
-    app = createWebApplication()
-      .with(() => new Recording('a'))
-      .with(() => async () => {
-        order.push('fastify-body')
-      })
-      .with(() => new Recording('b'))
-    await app.bootstrap()
-
-    expect(order).toEqual(['a', 'b', 'fastify-body'])
-  })
-
-  it("lets a Fastify plugin's factory mount from context.app and still return its plugin", async () => {
+  it('lets a plugin factory mount from context.app and still return its plugin', async () => {
     app = createWebApplication().with(context => {
       context.app.mount(newRouter('/from-factory').get('/', () => ({ ok: true })))
-      return marking('x-marked')()
+      return new Marking('x-marked')
     })
     await app.bootstrap()
 
@@ -261,7 +253,7 @@ describe('HTTPPlugin', () => {
   })
 
   // `app.mount(...)` gave the server its groups before any slot ran: compiling the router again for the plugin would
-  // register every route twice, and Fastify refuses the second.
+  // register every route twice, and the second registration is refused.
   it('serves a router the application mounted once when a plugin on the same server mounts it again', async () => {
     const shared = new Router('/shared').get('/', () => ({ shared: true }))
 
@@ -286,7 +278,7 @@ describe('HTTPPlugin', () => {
     expect((await app.request('/shared')).status).toBe(200)
   })
 
-  it('keeps the group out of app.routeGroups, as a $route group is', async () => {
+  it('keeps the group a plugin mounted out of app.routeGroups', async () => {
     app = createWebApplication().with(() => new Metrics())
     await app.bootstrap()
 
@@ -406,8 +398,8 @@ describe('HTTPPlugin', () => {
     })
 
     it("matches a path of the server's own and takes the adapter's hook", async () => {
-      class Hooked extends HTTPPlugin<RouterTypes> {
-        register({ app }: HTTPSetupContext<unknown, RouterTypes>): void {
+      class Hooked extends HTTPPlugin<NodeAdapterTypes> {
+        register({ app }: HTTPSetupContext<unknown, NodeAdapterTypes>): void {
           app.use('/only', stamp('x-hooked'), { hook: 'preHandler' })
         }
       }
@@ -753,29 +745,18 @@ describe('HTTPPlugin', () => {
 
       app = createWebApplication()
         .with(() => new Metrics())
-        .with(() =>
-          fp(
-            async (instance: FastifyInstance) => {
-              instance.addHook('onRoute', route => {
-                seen.push(route.url)
-              })
-            },
-            { name: 'collector' },
-          ),
-        )
+        .with(() => new Collector(seen))
       await app.bootstrap()
 
       expect(seen).toContain('/metrics')
     })
 
     it("installs a mounted router's own plugin in front of its routes only", async () => {
-      class Stamped extends HTTPPlugin<RouterTypes> {
-        register({ app }: HTTPSetupContext<unknown, RouterTypes>): void {
+      class Stamped extends HTTPPlugin {
+        register({ app }: HTTPSetupContext): void {
           app.mount(
-            newRouter('/stamped')
-              .with(marking('x-router-plugin'))
-              .get('/', () => ({ stamped: true })),
-            newRouter('/plain').get('/', () => ({ plain: true })),
+            new Router('/stamped').with(marking('x-router-plugin')).get('/', () => ({ stamped: true })),
+            new Router('/plain').get('/', () => ({ plain: true })),
           )
         }
       }
@@ -791,15 +772,15 @@ describe('HTTPPlugin', () => {
     // server must not resolve it again, or that server would install it twice in front of the group.
     it("resolves a router's own plugin once when the application and a plugin both mount it", async () => {
       let resolved = 0
-      const shared = newRouter('/shared')
+      const shared = new Router('/shared')
         .with(() => {
           resolved++
-          return marking('x-shared')()
+          return new Marking('x-shared')
         })
         .get('/', () => ({ shared: true }))
 
-      class Sharing extends HTTPPlugin<RouterTypes> {
-        register({ app }: HTTPSetupContext<unknown, RouterTypes>): void {
+      class Sharing extends HTTPPlugin {
+        register({ app }: HTTPSetupContext): void {
           app.mount(shared)
         }
       }

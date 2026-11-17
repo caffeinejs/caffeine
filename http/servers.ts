@@ -251,8 +251,7 @@ async function registerPlugins<T extends IAdapterTypes>(
       where,
     )
 
-    // A batch of an engine-only plugin is kept even when empty: the adapter that refuses it must see it.
-    if (!batch.empty || batch.engineOnly !== undefined) {
+    if (!batch.empty) {
       root.push(batch)
     }
 

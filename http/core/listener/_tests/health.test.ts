@@ -8,8 +8,9 @@ import {
   bindTo,
   type WebApplication,
 } from '../../../index.js'
-import { authentication, createWebApplication, newRouter } from '../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
 import { healthProbes } from '../../health/index.js'
+import { authentication } from '../../security/security.js'
 
 /**
  * Health probes on a listener. The probes know nothing about servers: registered on one with `l.with(...)`, they
@@ -43,8 +44,8 @@ describe('health probes on a listener', () => {
 
   it("serves the three probes on the server that registered them, and not on the application's own", async () => {
     app = createWebApplication()
-      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
-      .server(() => ({ listener })) as WebApplication
+      .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
+      .server(() => ({ listen: listener })) as WebApplication
 
     await app.run()
     const admin = app.listeners.get('admin')!.address!.origin
@@ -60,9 +61,9 @@ describe('health probes on a listener', () => {
     const probes = healthProbes()
 
     app = createWebApplication()
-      .listener('admin', l => l.server(() => ({ listener })).with(probes))
+      .listener('admin', l => l.server(() => ({ listen: listener })).with(probes))
       .with(probes)
-      .server(() => ({ listener })) as WebApplication
+      .server(() => ({ listen: listener })) as WebApplication
 
     await app.run()
 
@@ -76,7 +77,7 @@ describe('health probes on a listener', () => {
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .listener('admin', l =>
         l
-          .server(() => ({ listener }))
+          .server(() => ({ listen: listener }))
           .with(authentication())
           .with(healthProbes()),
       )
@@ -95,8 +96,8 @@ describe('health probes on a listener', () => {
 
   it('checks probe paths only against the routes of the server serving them', async () => {
     app = createWebApplication()
-      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
-      .server(() => ({ listener }))
+      .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
+      .server(() => ({ listen: listener }))
       .mount(newRouter().get('/livez', () => ({ mine: true }))) as WebApplication
 
     await app.run()
@@ -107,7 +108,7 @@ describe('health probes on a listener', () => {
 
   it('refuses a route of the server serving the probes that takes a probe path', async () => {
     app = createWebApplication()
-      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
+      .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
       .mount(
         newRouter()
           .extend(bindTo('admin'))

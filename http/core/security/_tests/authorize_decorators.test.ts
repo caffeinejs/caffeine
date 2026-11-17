@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
+import { authentication } from '../../../core/security/security.js'
 import {
   AllowAnonymous,
   Authorize,
@@ -18,7 +19,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../index.js'
-import { createWebApplication, authentication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 // ---------------------------------------------------------------------------
 // Helpers

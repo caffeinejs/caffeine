@@ -3,7 +3,6 @@ import { describe, it, expect, vi } from 'vitest'
 
 import type { HTTPSetupContext } from '../../../../adapter.js'
 import type { IContext } from '../../../../context.js'
-import { installOIDCRoutes } from '../../../../platform/fastify/security/auth/oidc/oidc.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
@@ -13,6 +12,7 @@ import { encodeState } from '../internal/remote/state_store.js'
 import { OIDCAuthenticationHandler } from './oidc.js'
 import { OIDCRoutesRef } from './oidc_routes_ref.js'
 import { resolveOIDCOptions } from './options.js'
+import { mountOIDCRoutes } from './routes.js'
 
 const SESSION_SECRET = 'multi-idp-test-secret-at-least-32ch!!'
 const GOOGLE = 'https://accounts.google.example.com'
@@ -76,8 +76,8 @@ async function configure(build: (b: AuthenticationBuilder) => void): Promise<voi
  * Runs what configuring OIDC produced and collects the warnings it emitted.
  *
  * An unreachable strategy is only ever observable as a warning, so the routes the configure step bound through
- * {@link OIDCRoutesRef} are installed against a server double and the process warnings are captured — the same
- * thing an application would see on its console.
+ * {@link OIDCRoutesRef} are mounted against a setup-context double and the logger's warnings are captured — the
+ * same thing an application would see in its log.
  */
 async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => void): Promise<string[]> {
   const builder = new AuthenticationBuilder()
@@ -90,34 +90,29 @@ async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => 
     return []
   }
 
-  const warnings: string[] = []
-  const emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(warning => {
-    warnings.push(String(warning))
-  })
-
   // The warning is decided in `onReady`, once routes have registered, so the double runs those hooks. No route
   // registers here, which is what leaves a non-default strategy unreachable.
-  const onReady: Array<() => Promise<void>> = []
-  const server = {
-    get: vi.fn(),
-    addHook: (name: string, hook: () => Promise<void>) => {
-      if (name === 'onReady') {
-        onReady.push(hook)
-      }
+  const onReady: Array<() => unknown> = []
+  const warn = vi.fn()
+  const context = {
+    app: {
+      hook: (name: string, hook: () => unknown) => {
+        if (name === 'onReady') {
+          onReady.push(hook)
+        }
+      },
+      mount: () => undefined,
     },
-    $basePath: '',
+    logger: { warn, error: vi.fn() },
   }
 
-  try {
-    installOIDCRoutes(server as never, ref.meta)
+  mountOIDCRoutes(context as never, ref.meta, '')
 
-    for (const hook of onReady) {
-      await hook()
-    }
-  } finally {
-    emitWarning.mockRestore()
+  for (const hook of onReady) {
+    await hook()
   }
 
+  const warnings = warn.mock.calls.map(call => String(call[1]))
   return warnings
 }
 

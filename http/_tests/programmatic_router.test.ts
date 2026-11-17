@@ -3,7 +3,7 @@ import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { Controller, Get, Router, blend } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 class Greeter {
   greet(name: string) {

@@ -9,9 +9,10 @@ import { token } from '@caffeinejs/di'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { authentication } from '../core/security/security.js'
 import { registerRouteGroup } from '../decorators/registrar/index.js'
 import { $p, Keys, type RouteAuthzOptions, RouteBuilder, WebApplication, Authentication } from '../index.js'
-import { createWebApplication, authentication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 
@@ -31,7 +32,7 @@ class ProgrammaticService implements Feature {
   readonly #authz: RouteAuthzOptions | undefined
   // A fresh class per service, not a module-level one. `registerRouteGroup` is get-or-create and `routes()` appends,
   // so a shared constructor identity would accumulate a duplicate route for every application built in the
-  // process — Fastify then rejects the second registration outright.
+  // process — the server then refuses the second registration outright.
   readonly #endpoints = class ProgrammaticEndpoints {
     json() {
       return { ok: true }

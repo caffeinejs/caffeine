@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
-import { findMyWayMatcher, preflightTable } from './find_my_way.js'
+import { findMyWayMatcher, preflightTable, starParameterRefusal } from './find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS, ErrRouteConflict, type RouterFlags } from './matcher.js'
 
 function matcher(flags: Partial<RouterFlags> = {}) {
@@ -135,8 +135,38 @@ describe('findMyWayMatcher', () => {
     expect(() => m.add('GET', '/h', { host }, 'B')).toThrow('Cannot register "GET /h" for host "/.*\\.example$/"')
   })
 
-  it('refuses a parameter named *', () => {
-    expect(() => matcher().add('GET', '/:*', undefined, 'x')).toThrow(ErrConfiguration)
+  // find-my-way gives such a parameter the wildcard's name: whoever reads params['*'] could not tell the two apart.
+  describe('a parameter named *', () => {
+    it('is refused, naming the route', () => {
+      const add = () => matcher().add('GET', '/assets/:*', undefined, 'x')
+
+      expect(add).toThrow(ErrConfiguration)
+      expect(add).toThrow('a parameter named "*" reads as a wildcard, whose value has that name')
+      expect(add).toThrow('"/assets/:*"')
+    })
+
+    it.each(['/:*', '/a/:x-:*', '/a/:*?'])('is refused in %s', url => {
+      expect(() => matcher().add('GET', url, undefined, 'x')).toThrow(ErrConfiguration)
+    })
+
+    it('leaves a wildcard and a named parameter alone', () => {
+      expect(() => matcher().add('GET', '/assets/:name/*', undefined, 'x')).not.toThrow()
+    })
+
+    it.each(['*tail', 'name:*'])('serves a route with the distinct parameter name %s', name => {
+      const m = matcher()
+      m.add('GET', `/assets/:${name}`, undefined, 'x')
+
+      expect(m.match('GET', '/assets/report.txt', undefined)?.params[name]).toBe('report.txt')
+    })
+
+    // An escaped colon is text, and a parameter's regular expression is the parameter's, whatever it holds.
+    it.each([['/a::*'], ['/files/:name(^[a-z]+:*$)'], ['/files/:name(^\\(:*\\)$)'], ['/files/:name(:*']])(
+      'reads no parameter named * in %s',
+      url => {
+        expect(starParameterRefusal(url)).toBe(undefined)
+      },
+    )
   })
 
   it('refuses a path not starting with / as ErrConfiguration, not an assertion', () => {

@@ -22,7 +22,6 @@ import {
   type AnyRouter,
 } from '@caffeinejs/http'
 import { createWebApplication, type NodeAdapterTypes } from '@caffeinejs/http/node'
-import { $multipart } from '@caffeinejs/multipart'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -70,14 +69,6 @@ class PetsController {
   @Args([$p.body()])
   create(body: object) {
     return body
-  }
-
-  @Post('/:id/images')
-  @Status(201)
-  @Roles('write:pets')
-  @Args([$p.param('id'), $multipart.file('file')])
-  upload() {
-    return { uploaded: true }
   }
 }
 void [PetsController]
@@ -131,7 +122,7 @@ describe('openapi endpoints', () => {
 
     const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
 
-    expect(Object.keys(document.paths ?? {}).sort()).toEqual(['/pets', '/pets/{id}', '/pets/{id}/images'])
+    expect(Object.keys(document.paths ?? {}).sort()).toEqual(['/pets', '/pets/{id}'])
     expect(operationAt(document, '/pets')?.operationId).toBe('listPets')
     expect(operationAt(document, '/pets')?.tags).toEqual(['Pets'])
     expect(document.tags).toContainEqual({ name: 'Pets', description: 'Browse and manage pets' })
@@ -163,18 +154,6 @@ describe('openapi endpoints', () => {
     expect(document.components?.schemas?.Pet).toMatchObject({ type: 'object' })
     expect(operationAt(document, '/pets/{id}')?.responses?.['200'].content?.['application/json'].schema).toEqual({
       $ref: '#/components/schemas/Pet',
-    })
-  })
-
-  it('synthesizes a multipart body from the file picker', async () => {
-    app = buildApp(o => o.docs(false).public())
-    await app.bootstrap()
-
-    const document = (await (await app.request('/openapi.json')).json()) as OpenAPIDocument
-    const body = operationAt(document, '/pets/{id}/images', 'post')?.requestBody
-
-    expect(body?.content['multipart/form-data'].schema).toMatchObject({
-      properties: { file: { type: 'string', format: 'binary' } },
     })
   })
 

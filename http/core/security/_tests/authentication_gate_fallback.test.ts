@@ -1,7 +1,6 @@
-import { type FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import type { HTTPSetupContext } from '../../../adapter.js'
 import {
   AuthenticateResult,
   AuthenticationTicket,
@@ -16,18 +15,17 @@ import {
   CookieAuthenticationOptionsBuilder,
   ErrAuthenticationCookies,
 } from '../../../index.js'
-import {
-  createWebApplication,
-  authenticationExempt,
-  newRouter,
-  authentication,
-} from '../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { HTTPPlugin } from '../../../plugin.js'
 import { healthProbes } from '../../health/index.js'
+import { Router } from '../../routing/programmatic/programmatic.js'
+import { accessControlExempt } from '../exempt.js'
+import { authentication } from '../security.js'
 
 /**
- * The authentication gate in front of routes the application's router did not compile, and the ways a route stays
- * out of its reach. Routers and plain Fastify routes only: a controller registers globally, and these
- * applications turn on a policy that gates whatever declares nothing.
+ * The authentication gate in front of routes a plugin mounted rather than the application, and the ways a route stays
+ * out of its reach. Routers only: a controller registers globally, and these applications turn on a policy that gates
+ * whatever declares nothing.
  */
 
 class HeaderScheme extends BaseAuthenticationHandler<object> {
@@ -59,22 +57,19 @@ class BrokenScheme extends BaseAuthenticationHandler<object> {
 
 const ok = () => ({ ok: true })
 
-function plainRoutes() {
-  return () =>
-    fp(
-      async (instance: FastifyInstance) => {
-        instance.get('/admin-ui/users', ok)
-        instance.get('/assets/app.js', ok)
-        instance.get('/assets-but-not-really', ok)
-        instance.get('/metrics', { config: authenticationExempt() }, async request => ({
-          user: request.user,
-        }))
-      },
-      { name: 'plain-routes' },
+/** Routes a plugin mounts from its own slot, one of them exempt from access control. */
+class PlainRoutes extends HTTPPlugin {
+  override readonly name = 'plain-routes'
+
+  register({ app }: HTTPSetupContext): void {
+    app.mount(
+      new Router().get('/admin-ui/users', ok).get('/assets/app.js', ok).get('/assets-but-not-really', ok),
+      new Router('/metrics').extend(accessControlExempt()).get('/', ctx => ({ user: ctx.user })),
     )
+  }
 }
 
-describe('the authentication gate and routes registered straight on the server', () => {
+describe('the authentication gate and routes a plugin mounted', () => {
   let close: (() => Promise<unknown>) | undefined
 
   afterEach(async () => {
@@ -97,7 +92,7 @@ describe('the authentication gate and routes registered straight on the server',
       createWebApplication()
         .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
         .with(authentication())
-        .with(plainRoutes()),
+        .with(() => new PlainRoutes()),
     )
 
     expect((await app.request('/admin-ui/users')).status).toBe(200)
@@ -109,9 +104,9 @@ describe('the authentication gate and routes registered straight on the server',
         createWebApplication()
           .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
           .with(authentication())
-          .install(Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets/'] })))
+          .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
           .with(healthProbes())
-          .with(plainRoutes())
+          .with(() => new PlainRoutes())
           .mount(newRouter('/compiled').get('/', ok)),
       )
     }
@@ -123,13 +118,6 @@ describe('the authentication gate and routes registered straight on the server',
       expect((await running.request('/compiled')).status).toBe(401)
       expect((await running.request('/admin-ui/users')).status).toBe(401)
       expect((await running.request('/admin-ui/users', signedIn)).status).toBe(200)
-    })
-
-    it('leaves open the prefixes the application excepted, matched on the path the route was registered under', async () => {
-      const running = await build()
-
-      expect((await running.request('/assets/app.js')).status).toBe(200)
-      expect((await running.request('/assets-but-not-really')).status).toBe(401)
     })
 
     it('does not run at all for a route marked exempt, so no principal is established either', async () => {
@@ -154,30 +142,6 @@ describe('the authentication gate and routes registered straight on the server',
 
       expect((await running.request('/no-such-route')).status).toBe(404)
     })
-
-    // The not-found context is the one route config no `onRoute` hook reaches, so the gate finds no `$caffeine`
-    // on it and falls through to the policy, which excuses it. Authenticating is the half that must survive: the
-    // handler answering an unmatched URL is where the shell is served, and it renders a signed-in caller
-    // differently from an anonymous one.
-    it('still establishes a principal for a URL no route matches', async () => {
-      const app = await ready(
-        createWebApplication()
-          .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
-          .with(authentication())
-          .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
-          .with(() =>
-            fp(
-              async (instance: FastifyInstance) => {
-                instance.setNotFoundHandler(async request => ({ user: request.user.authenticated }))
-              },
-              { name: 'echoing-not-found' },
-            ),
-          ),
-      )
-
-      expect(await (await app.request('/no-such-route', signedIn)).json()).toEqual({ user: true })
-      expect(await (await app.request('/no-such-route')).json()).toEqual({ user: false })
-    })
   })
 
   // A probe used to run the default scheme like any other request, so a scheme that was failing made the
@@ -193,53 +157,6 @@ describe('the authentication gate and routes registered straight on the server',
 
     expect((await app.request('/compiled')).status).toBe(500)
     expect((await app.request('/livez')).status).toBe(200)
-  })
-
-  // A prefix is a run of whole path segments. Read as a run of characters, `/assets` would also open
-  // `/assets-but-not-really`, which nobody who wrote `/assets` meant to leave unguarded.
-  it('excepts whole path segments, so a prefix written without its trailing slash opens no neighbour', async () => {
-    const app = await ready(
-      createWebApplication()
-        .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
-        .with(authentication())
-        .install(
-          Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets', '/admin-ui/users'] })),
-        )
-        .with(plainRoutes()),
-    )
-
-    expect((await app.request('/assets/app.js')).status).toBe(200)
-    expect((await app.request('/assets-but-not-really')).status).toBe(401)
-    // The prefix itself is a path too.
-    expect((await app.request('/admin-ui/users')).status).toBe(200)
-  })
-
-  // The server takes the base path off a request before routing, so a route is registered where the application
-  // declared it, and an excepted prefix is written the way the application writes its routes: without the base.
-  it('matches excepted prefixes relative to the application under a base path', async () => {
-    const app = await ready(
-      createWebApplication()
-        .basePath('/api')
-        .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
-        .with(authentication())
-        .install(Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets'] })))
-        .with(healthProbes())
-        .with(plainRoutes()),
-    )
-
-    expect((await app.request('/api/assets/app.js')).status).toBe(200)
-    expect((await app.request('/api/admin-ui/users')).status).toBe(401)
-    expect((await app.request('/api/admin-ui/users', signedIn)).status).toBe(200)
-    // The probes are still the orchestrator's.
-    expect((await app.request('/api/livez')).status).not.toBe(401)
-  })
-
-  it('refuses a path to except that is not absolute', () => {
-    const building = createWebApplication()
-
-    expect(() =>
-      building.install(Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['assets/'] }))),
-    ).toThrow(expect.objectContaining({ code: 'ERR_AUTHZ_FALLBACK_EXCEPT' }))
   })
 })
 
@@ -343,13 +260,15 @@ describe('an application whose scheme reads cookies', () => {
 
   it('parses the cookies of a request reaching a route registered before authentication', async () => {
     const app = createWebApplication()
-      .with(() =>
-        fp(
-          async (instance: FastifyInstance) => {
-            instance.get('/seen', request => ({ seen: request.httpContext.req.cookie('probe') ?? null }))
-          },
-          { name: 'early-route' },
-        ),
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            override readonly name = 'early-route'
+
+            register({ app }: HTTPSetupContext): void {
+              app.mount(new Router().get('/seen', ctx => ({ seen: ctx.req.cookie('probe') ?? null })))
+            }
+          })(),
       )
       .install(Authentication(auth => auth.addCookie(c => c.sessionSecret(secret))))
       .with(authentication())

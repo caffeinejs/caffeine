@@ -2,7 +2,7 @@ import { CaffeineIoC, ErrInvalidDecorator, type Ctor } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { IContext } from '../context.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 import { Keys } from '../symbols.js'
 import { Controller } from './controller.js'
 import { OnRequest, OnSend } from './hooks.js'

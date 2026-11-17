@@ -17,7 +17,7 @@ export interface IRequest<
 
   /**
    * The ID the server gave this request, the one its log lines carry: the value of the request header the server was
-   * told to read it from (Fastify's `requestIdHeader`, the engine's `requestIDHeader`), else one the server generates.
+   * told to read it from (`requestIDHeader`), else one the server generates.
    */
   get id(): string
 

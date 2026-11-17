@@ -920,6 +920,119 @@ describe('the request body on Node', () => {
     expect(answer).toMatch(/\r\nConnection: close\r\n/i)
   })
 
+  // A route that answers before its body has arrived, and reads on, as a server refusing a token does: the client is
+  // still sending, and closing under it would reset the connection before it read the answer.
+  function answeringEarly(limit = 1 * MiB): ReturnType<typeof newRouter> {
+    const routes = newRouter('/b')
+    routes
+      .post('/early')
+      .extend(bodyAsStream())
+      .bodyLimit(limit)
+      .handler(ctx => {
+        void new Response(ctx.req.body() as ReadableStream<Uint8Array>).arrayBuffer().catch(() => undefined)
+        return ctx.status(401).body('no')
+      })
+    routes.get('/next').handler(() => 'next')
+    return routes
+  }
+
+  it('keeps the connection of a route that answered while it reads the body, and serves the next request on it', async () => {
+    const { port } = await serve(answeringEarly())
+    const socket = await connected(port)
+    let received = ''
+    socket.setEncoding('utf8')
+    socket.on('data', chunk => (received += chunk))
+
+    socket.write('POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nping')
+    await vi.waitFor(() => expect(received).toMatch(/no$/))
+
+    expect(received.startsWith('HTTP/1.1 401')).toBe(true)
+    expect(received).toMatch(/\r\nConnection: keep-alive\r\n/i)
+
+    received = ''
+    socket.write('pong')
+    socket.write('GET /b/next HTTP/1.1\r\nHost: x\r\n\r\n')
+    await vi.waitFor(() => expect(received).toMatch(/next$/))
+    expect(received.startsWith('HTTP/1.1 200')).toBe(true)
+    socket.destroy()
+  })
+
+  it('closes the connection when the read of a route that answered early goes over its limit', async () => {
+    const { port } = await serve(answeringEarly(6 * Byte))
+    const socket = await connected(port)
+    let received = ''
+    socket.setEncoding('utf8')
+    socket.on('data', chunk => (received += chunk))
+    const closed = once(socket, 'close')
+
+    socket.write(
+      'POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nping\r\n',
+    )
+    await vi.waitFor(() => expect(received).toMatch(/no(\r\n0\r\n\r\n)?$/))
+    socket.write('6\r\npongpo\r\n0\r\n\r\n')
+
+    await closed
+    expect(received.startsWith('HTTP/1.1 401')).toBe(true)
+  })
+
+  // A route that takes the body and never reads it must not hold the connection until Node's `requestTimeout`: the
+  // body is larger than every buffer between the socket and the route.
+  it('serves the next request on the connection of a route that answered early and never read the body it took', async () => {
+    const routes = newRouter('/b')
+    routes
+      .post('/early')
+      .extend(bodyAsStream())
+      .bodyLimit(4 * MiB)
+      .handler(ctx => {
+        ;(ctx.req.body() as ReadableStream<Uint8Array>).getReader()
+        return ctx.status(401).body('no')
+      })
+    routes.get('/next').handler(() => 'next')
+    const { port } = await serve(routes)
+    const socket = await connected(port)
+    let received = ''
+    socket.setEncoding('utf8')
+    socket.on('data', chunk => (received += chunk))
+
+    const body = Buffer.alloc(2 * 1024 * 1024, 'x')
+    socket.write(
+      `POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: ${body.length}\r\n\r\n`,
+    )
+    await vi.waitFor(() => expect(received).toMatch(/no$/))
+    expect(received.startsWith('HTTP/1.1 401')).toBe(true)
+
+    received = ''
+    socket.write(body)
+    socket.write('GET /b/next HTTP/1.1\r\nHost: x\r\n\r\n')
+    await vi.waitFor(() => expect(received).toMatch(/next$/))
+    expect(received.startsWith('HTTP/1.1 200')).toBe(true)
+    socket.destroy()
+  })
+
+  it('closes the connection when a route that answered early cancels its read', async () => {
+    const routes = newRouter('/b')
+    routes
+      .post('/early')
+      .extend(bodyAsStream())
+      .handler(async ctx => {
+        const reader = (ctx.req.body() as ReadableStream<Uint8Array>).getReader()
+        await reader.read()
+        ctx.status(401).body('no')
+        await reader.cancel()
+      })
+    const { port } = await serve(routes)
+    const socket = await connected(port)
+    let received = ''
+    socket.setEncoding('utf8')
+    socket.on('data', chunk => (received += chunk))
+    const closed = once(socket, 'close')
+
+    socket.write('POST /b/early HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nping')
+
+    await closed
+    expect(received.startsWith('HTTP/1.1 401')).toBe(true)
+  })
+
   it('closes the connection after a Node middleware answered without reading the body', async () => {
     const port = await listen(
       createWebApplication()

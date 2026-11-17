@@ -28,6 +28,12 @@ describe('applySlotPolicy', () => {
 
     expect(applySlotPolicy(schema, slot)).toBe(schema)
   })
+
+  it('leaves a non-object slot alone', () => {
+    const schema = $t.Array($t.String())
+
+    expect(applySlotPolicy(schema, 'body')).toBe(schema)
+  })
 })
 
 describe('lowerCaseHeaders', () => {

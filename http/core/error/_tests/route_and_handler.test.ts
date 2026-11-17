@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { Catch, Controller, ErrConfiguration, ErrHTTPNotFound, Get, type ActionResult } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 // Isolated: a single method is both a route (@Get) and an error handler (@Catch). buildRouting
 // rejects at bootstrap(), poisoning every app build in the module — so it lives alone.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { Catch, type IContext, ErrConfiguration, ErrHTTPNotFound, ErrorHandler } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 // Two handlers for the same error type. Declaring both is fine — enrolling both is what the application
 // cannot mean, because nothing then decides which one renders an ErrHTTPNotFound.

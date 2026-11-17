@@ -13,7 +13,7 @@ import { $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { bindTo, type WebApplication } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../platform/node/index.js'
 import { listenersOf, type ListenerConfigurer } from './listener.js'
 
 /**
@@ -62,8 +62,8 @@ describe('listeners', () => {
 
   it('serves a router bound to a listener a feature added, on that listener alone', async () => {
     app = createWebApplication()
-      .server(() => ({ listener }))
-      .install(new Probe('probe', l => l.server(() => ({ listener }))))
+      .server(() => ({ listen: listener }))
+      .install(new Probe('probe', l => l.server(() => ({ listen: listener }))))
       .mount(
         newRouter('/probe')
           .extend(bindTo('probe'))
@@ -89,8 +89,8 @@ describe('listeners', () => {
       .source(new InlineConfigSource({ admin: { host: '127.0.0.1', port: free } }))
       .build().config
     app = createWebApplication({ config: conf })
-      .server(() => ({ listener }))
-      .listener('admin', (l, { config }) => l.server(() => ({ listener: config.admin }))) as WebApplication
+      .server(() => ({ listen: listener }))
+      .listener('admin', (l, { config }) => l.server(() => ({ listen: config.admin }))) as WebApplication
 
     await app.run()
 

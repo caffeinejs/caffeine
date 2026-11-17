@@ -1,10 +1,7 @@
-import { $t } from '@caffeinejs/application/schema'
 import { fc, it } from '@fast-check/vitest'
-import { afterAll, beforeAll, describe, expect } from 'vitest'
+import { describe, expect } from 'vitest'
 
-import { validationCode } from '../../../core/error/validation.js'
-import type { Problem, WebApplication } from '../../../index.js'
-import { createWebApplication, newRouter } from '../index.js'
+import { standardIssue, validationCode } from './validation.js'
 
 /**
  * Where an entry says a failure is, over keys no one wrote down, checked against RFC 6901 rather than against how the
@@ -32,12 +29,7 @@ function evaluate(document: unknown, pointer: string): { found: boolean; value?:
   return { found: true, value }
 }
 
-// Objects of integers, five levels deep, under any key: a value of the wrong kind fails at its own place.
-function level(depth: number): object {
-  return depth === 0 ? { type: 'integer' } : { type: ['integer', 'object'], additionalProperties: level(depth - 1) }
-}
-
-// Keys that stress the escaping, and any others. Fastify's JSON parser refuses `__proto__` and `constructor` before
+// Keys that stress the escaping, and any others. The JSON parser refuses `__proto__` and `constructor` before
 // validation, so they never reach an entry.
 const key = fc
   .oneof(
@@ -47,27 +39,12 @@ const key = fc
   )
   .filter(name => name !== '__proto__' && name !== 'constructor')
 
-// Letters, which Ajv can coerce neither to an integer nor to an object.
 const MARKER = 'not-a-number'
 
 describe('a body entry pointer (property)', () => {
-  let app: WebApplication<any, any, any, any>
-
-  beforeAll(async () => {
-    // A type list is what a nullable field compiles to; Ajv's strict mode only warns about it.
-    app = createWebApplication()
-      .server(() => ({ factory: { ajv: { customOptions: { allowUnionTypes: true } } } }))
-      .mount(newRouter('/deep').post('/', { body: $t.Unsafe(level(5)) }, () => ({ ok: true })))
-    await app.bootstrap()
-  })
-
-  afterAll(async () => {
-    await app.close()
-  })
-
   it.prop([fc.array(key, { minLength: 1, maxLength: 5 }), fc.dictionary(key, fc.integer(), { maxKeys: 4 })], {
     numRuns: 300,
-  })('locates the one wrong leaf, under any keys', async (path, siblings) => {
+  })('locates the one wrong leaf, under any keys', (path, siblings) => {
     const body: Record<string, unknown> = { ...siblings }
     let parent = body
     path.forEach((name, i) => {
@@ -80,23 +57,15 @@ describe('a body entry pointer (property)', () => {
       }
     })
 
-    const res = await app.request('/deep', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const problem = (await res.json()) as Problem
+    const { source, detail } = standardIssue('body', { code: 'type', message: 'Expected integer', path })
 
-    expect(res.status).toBe(422)
-    expect(problem.errors).toHaveLength(1)
-    const { source, detail } = problem.errors![0]!
     expect(source?.in).toBe('body')
     expect(evaluate(body, (source as { pointer: string }).pointer)).toEqual({ found: true, value: MARKER })
-    expect(detail.startsWith(`${path.at(-1)} must be `)).toBe(true)
+    expect(detail.startsWith(`${path.at(-1)} Expected integer`)).toBe(true)
   })
 })
 
-// Each keyword Fastify's Ajv reports, as the documentation lists them.
+// Each JSON Schema keyword, as the documentation lists them.
 const KEYWORDS = [
   'type',
   'required',

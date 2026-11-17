@@ -1,16 +1,15 @@
-import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, type WebApplication, type ActionResult } from '../index.js'
-import { createWebApplication, newRouter } from '../platform/fastify/index.js'
+import { Controller, Get, HTTPPlugin, type ActionResult, type HTTPSetupContext, type WebApplication } from '../index.js'
+import { createWebApplication, newRouter } from '../platform/node/index.js'
 
 /**
  * What a group's prefix and a route at `/` compose to.
  *
  * Load-bearing for every prefixed application, and it was asserted only in prose until this file: the
  * documentation claimed `newRouter('/app')` with a route at `/` produced `/app/` and therefore did not answer
- * `GET /app`. It produces `/app` — `joinPaths` trims the trailing slash — and since the adapter leaves
- * Fastify's `ignoreTrailingSlash` off, `/app/` is then a different URL that nothing registered.
+ * `GET /app`. It produces `/app` — `joinPaths` trims the trailing slash — and since the application leaves
+ * `ignoreTrailingSlash` off, `/app/` is then a different URL that nothing registered.
  *
  * The consequence that survives is the wildcard's: `/dash/*` does not match the bare `/dash`, which is why a
  * gated subtree still needs two routes.
@@ -19,19 +18,18 @@ import { createWebApplication, newRouter } from '../platform/fastify/index.js'
 /**
  * Collects every URL the application registers, from a plugin's `onRoute` hook.
  *
- * A plugin rather than `app.instance`: compiled routes register after every plugin, and the instance is not
- * reachable until `bootstrap()` — by which point the routes have already gone past.
+ * A plugin rather than `app.instance`: the instance is not reachable until `bootstrap()` — by which point the
+ * routes have already gone past.
  */
 function collectURLs(urls: string[]) {
   return () =>
-    fp(
-      async instance => {
-        instance.addHook('onRoute', route => {
-          urls.push(route.url)
-        })
-      },
-      { name: 'collect-urls' },
-    )
+    new (class extends HTTPPlugin {
+      override readonly name = 'collect-urls'
+
+      register({ app }: HTTPSetupContext): void {
+        app.hook('onRoute', r => void urls.push(r.url))
+      }
+    })()
 }
 
 describe('a group prefix and a route at "/"', () => {
@@ -56,7 +54,7 @@ describe('a group prefix and a route at "/"', () => {
 
     try {
       expect((await app.request('/app')).status).toBe(200)
-      // `ignoreTrailingSlash` is left at Fastify's default, so this is a different URL.
+      // `ignoreTrailingSlash` is left at its default, so this is a different URL.
       expect((await app.request('/app/')).status).toBe(404)
     } finally {
       await app.close()

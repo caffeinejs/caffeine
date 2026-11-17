@@ -14,13 +14,9 @@ import {
   Authentication,
   type AuthenticationGateBuilder,
 } from '../../../../index.js'
-import {
-  createWebApplication,
-  newRouter,
-  authentication,
-  type RouterTypes,
-} from '../../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../../platform/node/index.js'
 import type { HTTPPluginConfigurer } from '../../../../plugin.js'
+import { authentication } from '../../security.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 
@@ -41,7 +37,7 @@ function makeOIDCApp(
   }: {
     basePath?: string
     callbackURL?: string
-    gate?: HTTPPluginConfigurer<AuthenticationGateBuilder, unknown, RouterTypes>
+    gate?: HTTPPluginConfigurer<AuthenticationGateBuilder>
   } = {},
 ) {
   const builder = createWebApplication()

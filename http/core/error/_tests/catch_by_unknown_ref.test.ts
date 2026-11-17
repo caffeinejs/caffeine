@@ -9,7 +9,7 @@ import {
   Get,
   type ActionResult,
 } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 // Isolated: the unresolvable reference poisons every app build in its module, so it must be the only
 // error-handler concern in this file.

@@ -3,7 +3,6 @@ import { formatDuration, Second, type Duration } from '@caffeinejs/std/duration'
 import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer } from '../../plugin.js'
-import { kEngineOnly, type EngineOnly } from '../../plugin_marks.js'
 import { appendVary } from '../../vary.js'
 import { originProblem } from '../csrf/origin.js'
 import type { ErrConfiguration } from '../error/common.js'
@@ -88,8 +87,7 @@ export class CORSBuilder {
 }
 
 /**
- * Cross-origin resource sharing on the web-standards engine: `.with(corsPolicy(c => c.origins('https://app.example')))`.
- * A Fastify application registers `@fastify/cors` instead, and refuses this one at start-up.
+ * Cross-origin resource sharing: `.with(corsPolicy(c => c.origins('https://app.example')))`.
  *
  * It names the origins a browser may call this server from. An answer to one of them says so with
  * `Access-Control-Allow-Origin`; an answer to any other carries nothing, and the browser keeps it from the page. A
@@ -127,8 +125,7 @@ export function corsPolicy<C = unknown>(
 
 /**
  * Sets a route's CORS settings, or every route's of a group, over `corsPolicy()`'s, member by member; `false` turns
- * CORS off for the route and its preflight. The programmatic form of `@CORS(...)`. A Fastify application reads `cors`
- * from `@caffeinejs/http/fastify` instead, and refuses this one at start-up.
+ * CORS off for the route and its preflight. The programmatic form of `@CORS(...)`.
  */
 export function cors(options: CORSConfig | boolean): AnyRouteExtension {
   return (target: { config(key: string, value: unknown): unknown }) => {
@@ -156,7 +153,6 @@ interface ResolvedCORS {
 
 class CORSPolicy extends HTTPPlugin {
   override readonly name = 'caffeine-cors'
-  readonly [kEngineOnly]: EngineOnly = { factory: 'corsPolicy', instead: 'Register "@fastify/cors" with ".with(...)"' }
   readonly #config: CORSConfig
   readonly #own: ResolvedCORS
 

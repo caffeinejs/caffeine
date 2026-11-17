@@ -7,7 +7,7 @@ import { DEFAULT_ROUTER_FLAGS, type RouteMatcherFactory, type RouterFlags } from
 import { typeBoxSchemaCompiler } from '../validation/typebox.js'
 import type { SchemaCompiler } from '../validation/validation.js'
 import { DEFAULT_BODY_LIMIT, isBodyLimit } from './body.js'
-import { configurationError, USE_FASTIFY, USE_NODE } from './error.js'
+import { configurationError, USE_NODE } from './error.js'
 import { compileTrustProxy, type TrustProxy } from './trust.js'
 
 /** What `.server(...)` returns on the fetch application. */
@@ -88,7 +88,6 @@ const SETTINGS = [
   'bodyLimit',
   'schemaCompiler',
 ]
-const FASTIFY_SECTIONS = new Set(['factory', 'listener'])
 /** The settings sections only the Node application takes: what Node itself configures. */
 export const NODE_SECTIONS: ReadonlySet<string> = new Set(['listen', 'http', 'https', 'http2'])
 
@@ -112,7 +111,6 @@ export function resolveServerSettings(
     if (!SETTINGS.includes(key) && !application.sections.has(key)) {
       throw configurationError(
         `Cannot build the server: "${key}" is not a setting of the ${application.name}`,
-        ...(FASTIFY_SECTIONS.has(key) ? [`${USE_FASTIFY} to pass Fastify settings`] : []),
         ...(NODE_SECTIONS.has(key) ? [`${USE_NODE} to serve on a Node server`] : []),
         `Return only ${[...SETTINGS, ...application.sections].join(', ')} from ".server(...)"`,
       )

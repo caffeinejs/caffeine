@@ -39,8 +39,7 @@ export interface PendingCookie {
 }
 
 /**
- * One response's cookies: the engine's context, or a Fastify reply the cookie plugin decorated. Fastify checks that a
- * reply was decorated (`[kCookieFlush] !== undefined`) before using it as a jar.
+ * One response's cookies: the engine's context.
  */
 export interface CookieJar {
   [kPendingCookies]: Map<string, PendingCookie> | null

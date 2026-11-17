@@ -1,10 +1,10 @@
 import { newConfiguration } from '@caffeinejs/application'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { newNoopLogger, type LogFn, type Logger } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { HTTPSetupContext } from '../../../adapter.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -21,7 +21,6 @@ import {
   Principal,
   bindTo,
   csrfExempt,
-  csrfExemptConfig,
   type ActionResult,
   type IContext,
   type CSRFBuilder,
@@ -29,7 +28,20 @@ import {
   type OriginPredicate,
   type WebApplication,
 } from '../../../index.js'
-import { authentication, createWebApplication, csrf, newRouter } from '../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { HTTPPlugin } from '../../../plugin.js'
+import { authentication } from '../../security/security.js'
+import { csrf } from '../csrf.js'
+
+/** The application logger, recording each warning into `logged` as `{ ...fields, level: 40, msg }`. */
+function warnTo(logged: Array<Record<string, unknown>>): Logger {
+  const warn = ((obj: unknown, msg?: string) => {
+    const [fields, text] = typeof obj === 'string' ? [{}, obj] : [obj as Record<string, unknown>, msg ?? '']
+    logged.push({ ...fields, level: 40, msg: text })
+  }) as LogFn
+  const logger: Logger = { ...newNoopLogger(), warn, child: () => logger }
+  return logger
+}
 
 // What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
 const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
@@ -172,11 +184,10 @@ describe('csrf()', () => {
     // An environment variable can turn the check off; that is said once, as the server starts, not found out later.
     it('says once, as the server starts, that it is turned off', async () => {
       const logged: Array<Record<string, unknown>> = []
-      const logger = { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
 
       const app = await ready(
         createWebApplication()
-          .server(() => ({ factory: { logger } }))
+          .logger(b => b.use(warnTo(logged)))
           .with(csrf(c => c.enabled(false).name('api')))
           .mount(echo()),
       )
@@ -193,9 +204,7 @@ describe('csrf()', () => {
       const twice = createWebApplication().with(csrf()).with(csrf())
       close = () => twice.close().catch(() => undefined)
 
-      await expect(twice.bootstrap()).rejects.toThrow(
-        /Cannot register plugin "caffeine-csrf": it is already registered/,
-      )
+      await expect(twice.bootstrap()).rejects.toThrow(/Cannot register plugin "caffeine-csrf" twice/)
 
       const apart = await ready(
         createWebApplication()
@@ -344,7 +353,7 @@ describe('csrf()', () => {
 
       const trusting = await ready(
         createWebApplication()
-          .server(() => ({ factory: { trustProxy: true } }))
+          .server(() => ({ trustProxy: true }))
           .with(csrf())
           .mount(echo()),
       )
@@ -361,7 +370,7 @@ describe('csrf()', () => {
 
       const trusting = await ready(
         createWebApplication()
-          .server(() => ({ factory: { trustProxy: true } }))
+          .server(() => ({ trustProxy: true }))
           .with(csrf())
           .mount(echo()),
       )
@@ -373,7 +382,7 @@ describe('csrf()', () => {
       const proxied = (origin: string, host: string) => ({ origin, host, 'x-forwarded-proto': 'HTTPS' })
       const trusting = await ready(
         createWebApplication()
-          .server(() => ({ factory: { trustProxy: true } }))
+          .server(() => ({ trustProxy: true }))
           .with(csrf())
           .mount(echo()),
       )
@@ -524,22 +533,6 @@ describe('csrf()', () => {
       // Registered as `/catch/*`, which is not under `/catch/webhooks`.
       expect((await post(app, '/catch/webhooks', CROSS_SITE)).status).toBe(403)
     })
-
-    it('leaves a raw route registered with csrfExemptConfig() alone, and no other', async () => {
-      const raw = () =>
-        fp(
-          async (instance: FastifyInstance) => {
-            instance.post('/raw-hook', { config: csrfExemptConfig() }, async () => ok())
-            instance.post('/raw-guarded', async () => ok())
-          },
-          { name: 'raw-routes' },
-        )
-
-      const app = await ready(createWebApplication().with(csrf()).with(raw))
-
-      expect((await post(app, '/raw-hook', CROSS_SITE)).status).toBe(200)
-      expect((await post(app, '/raw-guarded', CROSS_SITE)).status).toBe(403)
-    })
   })
 
   describe('custom checks', () => {
@@ -596,7 +589,7 @@ describe('csrf()', () => {
       const asked: unknown[] = []
       const app = await ready(
         createWebApplication()
-          .server(() => ({ factory: { trustProxy: true } }))
+          .server(() => ({ trustProxy: true }))
           .with(
             csrf(c =>
               c.trustOrigin((_ctx, origin) => asked.push(origin.href) > 0).allowSecFetchSite(() => asked.push(1) > 0),
@@ -704,7 +697,7 @@ describe('csrf()', () => {
       }
     })
 
-    // A falsy failure handed to Fastify reads as "continue": the forged request would run, past every later hook.
+    // A falsy failure read as "continue" would let the forged request run, past every later hook.
     it('fails the request when a check fails, and runs nothing after it', async () => {
       const failures: Record<string, () => unknown> = {
         throws: () => {
@@ -719,15 +712,15 @@ describe('csrf()', () => {
       let later = 0
       let handled = 0
       const afterwards = () =>
-        fp(
-          async (instance: FastifyInstance) => {
-            instance.addHook('onRequest', (_request, _reply, done) => {
+        new (class extends HTTPPlugin {
+          override readonly name = 'afterwards'
+
+          register({ app }: HTTPSetupContext): void {
+            app.hook('onRequest', () => {
               later++
-              done()
             })
-          },
-          { name: 'afterwards' },
-        )
+          }
+        })()
 
       const app = await ready(
         createWebApplication()
@@ -801,10 +794,9 @@ describe('csrf()', () => {
 
     it('logs a refusal once, after the last check has declined', async () => {
       const logged: Array<Record<string, unknown>> = []
-      const logger = { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
       const app = await ready(
         createWebApplication()
-          .server(() => ({ factory: { logger } }))
+          .logger(b => b.use(warnTo(logged)))
           .with(csrf(c => c.trustOrigin(() => false).trustOrigin(async () => false)))
           .mount(echo()),
       )
@@ -855,11 +847,10 @@ describe('csrf()', () => {
     // The query can carry a token a webhook sender was handed, and the check never reads it: the log keeps the path.
     it('logs a refusal with what decided it, and the path without its query', async () => {
       const logged: Array<Record<string, unknown>> = []
-      const logger = { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
 
       const app = await ready(
         createWebApplication()
-          .server(() => ({ factory: { logger } }))
+          .logger(b => b.use(warnTo(logged)))
           .with(csrf())
           .mount(echo()),
       )
@@ -960,8 +951,8 @@ describe('csrf()', () => {
 
       const app = (await running(
         createWebApplication()
-          .listener('admin', l => l.server(() => ({ listener })).with(csrf()))
-          .server(() => ({ listener }))
+          .listener('admin', l => l.server(() => ({ listen: listener })).with(csrf()))
+          .server(() => ({ listen: listener }))
           .mount(metrics, api),
       )) as WebApplication
       const admin = app.listeners.get('admin')!.address!.origin
@@ -969,20 +960,6 @@ describe('csrf()', () => {
       expect((await fetch(`${admin}/metrics`, { method: 'POST', headers: CROSS_SITE })).status).toBe(403)
       expect((await fetch(`${admin}/metrics`, { method: 'POST', headers: SAME_ORIGIN })).status).toBe(200)
       expect((await fetch(`${app.address!.origin}/api`, { method: 'POST', headers: CROSS_SITE })).status).toBe(200)
-    })
-
-    // Hooks bind to every route of the server as it readies, so a route registered before the plugin is covered.
-    it('covers a route registered in .serverCallback()', async () => {
-      const app = await ready(
-        createWebApplication()
-          .serverCallback((_context, server) => {
-            server.post('/early', async () => ok())
-          })
-          .with(csrf()),
-      )
-
-      expect((await post(app, '/early', CROSS_SITE)).status).toBe(403)
-      expect((await post(app, '/early', SAME_ORIGIN)).status).toBe(200)
     })
   })
 })

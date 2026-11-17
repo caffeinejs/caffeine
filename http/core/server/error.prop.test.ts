@@ -2,8 +2,8 @@ import { $t, validateSchema } from '@caffeinejs/application/schema'
 import { fc, it } from '@fast-check/vitest'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
 
-import { ProblemSchema, type Problem, type ProblemIssue, type WebApplication } from '../../../index.js'
-import { createWebApplication, newRouter } from '../index.js'
+import { ProblemSchema, type Problem, type ProblemIssue, type WebApplication } from '../../index.js'
+import { createWebApplication, newRouter } from '../../platform/node/index.js'
 
 /**
  * The validation problem a client gets, over violations, keys and counts no one wrote down, checked against what was
@@ -14,10 +14,6 @@ type App = WebApplication<any, any, any, any>
 
 const JSON_BODY = { 'content-type': 'application/json' }
 const ACCEPTS = ['application/json', 'application/problem+json', 'text/markdown'] as const
-
-function allErrors(on: boolean) {
-  return { factory: { ajv: { customOptions: { allErrors: on } } } }
-}
 
 function post(app: App, path: string, body: unknown, accept?: string): Promise<Response> {
   return app.request(path, {
@@ -36,12 +32,12 @@ function escaped(key: string): string {
   return key.replaceAll('~', '~0').replaceAll('/', '~1')
 }
 
-// Five kinds of rule, each failed by a value Ajv can neither coerce nor strip, and the code its failure carries.
+// Five kinds of rule, each failed by a value the validator can neither coerce nor strip, and the code its failure carries.
 const KINDS = [
   { schema: $t.Integer(), bad: fc.stringMatching(/^[a-z]+$/), code: 'ERR_VALIDATION_TYPE' },
   { schema: $t.String({ minLength: 3 }), bad: fc.stringMatching(/^[a-z]{0,2}$/), code: 'ERR_VALIDATION_MIN_LENGTH' },
   { schema: $t.Integer({ maximum: 10 }), bad: fc.integer({ min: 11 }), code: 'ERR_VALIDATION_MAXIMUM' },
-  { schema: $t.UnionEnum(['a', 'b']), bad: fc.stringMatching(/^[c-z]{1,4}$/), code: 'ERR_VALIDATION_ENUM' },
+  { schema: $t.UnionEnum(['a', 'b']), bad: fc.stringMatching(/^[c-z]{1,4}$/), code: 'ERR_VALIDATION_ANY_OF' },
   { schema: $t.String({ pattern: '^a+$' }), bad: fc.stringMatching(/^[b-z]+$/), code: 'ERR_VALIDATION_PATTERN' },
 ] as const
 
@@ -57,88 +53,27 @@ const violations = fc
   .chain(fields => fc.tuple(...fields.map(i => kindOf(i).bad.map(value => [i, value] as const))))
 
 describe('entries name what was sent (property)', () => {
-  const apps = new Map<boolean, App>()
+  let app: App
 
   beforeAll(async () => {
-    for (const on of [false, true]) {
-      const app = createWebApplication()
-        .server(() => allErrors(on))
-        .mount(newRouter('/fields').post('/', { body: Fields }, () => ({ ok: true })))
-      await app.bootstrap()
-      apps.set(on, app)
-    }
+    app = createWebApplication().mount(newRouter('/fields').post('/', { body: Fields }, () => ({ ok: true })))
+    await app.bootstrap()
   })
 
   afterAll(async () => {
-    for (const app of apps.values()) {
-      await app.close()
-    }
+    await app.close()
   })
 
-  // A client must not rely on the order, so with every error reported the entries are compared as a set.
-  it.prop([violations, fc.boolean()])(
-    'lists only planted violations, and all of them with allErrors on',
-    async (planted, on) => {
-      const body = Object.fromEntries(planted.map(([i, value]) => [`f${i}`, value]))
-      const expected = planted.map(([i]) => `/f${i} ${kindOf(i).code}`).sort()
+  // The engine lists the first rule a request broke: one entry, and one of those planted.
+  it.prop([violations])('lists one of the planted violations', async planted => {
+    const body = Object.fromEntries(planted.map(([i, value]) => [`f${i}`, value]))
+    const expected = planted.map(([i]) => `/f${i} ${kindOf(i).code}`)
 
-      const problem = (await (await post(apps.get(on)!, '/fields', body)).json()) as Problem
-      const listed = (problem.errors ?? []).map(entry => `${pointerOf(entry)} ${entry.code}`)
+    const problem = (await (await post(app, '/fields', body)).json()) as Problem
+    const listed = (problem.errors ?? []).map(entry => `${pointerOf(entry)} ${entry.code}`)
 
-      if (on) {
-        expect(listed.sort()).toEqual(expected)
-      } else {
-        expect(listed).toHaveLength(1)
-        expect(expected).toContain(listed[0])
-      }
-    },
-  )
-})
-
-describe('the cap holds (property)', () => {
-  const CAPS = [1, 7, 25, 60] as const
-  const apps = new Map<number, App>()
-
-  beforeAll(async () => {
-    for (const maxErrors of CAPS) {
-      const app = createWebApplication()
-        .server(() => allErrors(true))
-        .errorHandling(e => e.validation({ maxErrors }))
-        .mount(
-          newRouter('/items').post('/', { body: $t.Object({ items: $t.Array($t.Integer()) }) }, () => ({ ok: true })),
-        )
-      await app.bootstrap()
-      apps.set(maxErrors, app)
-    }
-  })
-
-  afterAll(async () => {
-    for (const app of apps.values()) {
-      await app.close()
-    }
-  })
-
-  it.prop([
-    fc.array(fc.oneof(fc.integer(), fc.stringMatching(/^[a-z]+$/)), { maxLength: 200 }),
-    fc.constantFrom(...CAPS),
-  ])('sends at most maxErrors entries, and says when it cut the list', async (items, maxErrors) => {
-    const bad = items.flatMap((item, i) => (typeof item === 'string' ? [`/items/${i}`] : []))
-    const res = await post(apps.get(maxErrors)!, '/items', { items })
-
-    if (bad.length === 0) {
-      expect(res.status).toBe(200)
-      return
-    }
-
-    const problem = (await res.json()) as Problem
-    expect(res.status).toBe(422)
-    expect(problem.errors).toHaveLength(Math.min(bad.length, maxErrors))
-    expect(problem.errors?.every(entry => bad.includes(pointerOf(entry)!))).toBe(true)
-    expect(problem.detail).toBe(
-      bad.length > maxErrors
-        ? `Invalid request body: showing the first ${maxErrors} of ${bad.length} errors`
-        : 'Invalid request body',
-    )
+    expect(listed).toHaveLength(1)
+    expect(expected).toContain(listed[0])
   })
 })
 
@@ -146,23 +81,21 @@ describe('no rejected value comes back (property)', () => {
   let app: App
 
   beforeAll(async () => {
-    app = createWebApplication()
-      .server(() => allErrors(true))
-      .mount(
-        newRouter('/marked').post(
-          '/',
-          {
-            body: $t.Object({
-              count: $t.Optional($t.Integer()),
-              email: $t.Optional($t.String({ format: 'email' })),
-              digits: $t.Optional($t.String({ pattern: '^[0-9]+$' })),
-              choice: $t.Optional($t.UnionEnum(['x', 'y'])),
-              short: $t.Optional($t.String({ maxLength: 4 })),
-            }),
-          },
-          () => ({ ok: true }),
-        ),
-      )
+    app = createWebApplication().mount(
+      newRouter('/marked').post(
+        '/',
+        {
+          body: $t.Object({
+            count: $t.Optional($t.Integer()),
+            email: $t.Optional($t.String({ format: 'email' })),
+            digits: $t.Optional($t.String({ pattern: '^[0-9]+$' })),
+            choice: $t.Optional($t.UnionEnum(['x', 'y'])),
+            short: $t.Optional($t.String({ maxLength: 4 })),
+          }),
+        },
+        () => ({ ok: true }),
+      ),
+    )
     await app.bootstrap()
   })
 
@@ -192,20 +125,12 @@ describe('status and location follow the slot (property)', () => {
   beforeAll(async () => {
     app = createWebApplication().mount(
       newRouter('/slot')
-        .post('/body', { body: $t.Unsafe({ type: 'object', additionalProperties: { type: 'integer' } }) }, () => ({
+        .post('/body', { body: $t.Object({}, { additionalProperties: $t.Integer() }) }, () => ({
           ok: true,
         }))
-        .get(
-          '/query',
-          { querystring: $t.Unsafe({ type: 'object', additionalProperties: { type: 'integer' } }) },
-          () => ({ ok: true }),
-        )
+        .get('/query', { querystring: $t.Object({}, { additionalProperties: $t.Integer() }) }, () => ({ ok: true }))
         .get('/path/:id', { params: $t.Object({ id: $t.Integer() }) }, () => ({ ok: true }))
-        .get(
-          '/header',
-          { headers: $t.Unsafe({ type: 'object', patternProperties: { '^x-p-': { type: 'integer' } } }) },
-          () => ({ ok: true }),
-        ),
+        .get('/header', { headers: $t.Record($t.String({ pattern: '^x-p-' }), $t.Integer()) }, () => ({ ok: true })),
     )
     await app.bootstrap()
   })
@@ -256,17 +181,15 @@ describe('every problem is well formed (property)', () => {
   let app: App
 
   beforeAll(async () => {
-    app = createWebApplication()
-      .server(() => allErrors(true))
-      .mount(
-        newRouter('/any')
-          .post('/', { body: $t.Unsafe({ type: 'object', additionalProperties: { type: 'integer' } }) }, () => ({
-            ok: true,
-          }))
-          .get('/', { querystring: $t.Unsafe({ type: 'object', additionalProperties: { type: 'integer' } }) }, () => ({
-            ok: true,
-          })),
-      )
+    app = createWebApplication().mount(
+      newRouter('/any')
+        .post('/', { body: $t.Object({}, { additionalProperties: $t.Integer() }) }, () => ({
+          ok: true,
+        }))
+        .get('/', { querystring: $t.Object({}, { additionalProperties: $t.Integer() }) }, () => ({
+          ok: true,
+        })),
+    )
     await app.bootstrap()
   })
 
@@ -306,7 +229,7 @@ describe('every problem is well formed (property)', () => {
         const { timestamp, ...body } = JSON.parse(text) as Problem
         expect(new Date(timestamp!).toISOString()).toBe(timestamp)
         expect(validateSchema(ProblemSchema, body)).toEqual(expect.objectContaining({ ok: true }))
-        expect(body.errors).toHaveLength(names.length)
+        expect(body.errors).toHaveLength(1)
         return
       }
 
@@ -324,7 +247,7 @@ describe('every problem is well formed (property)', () => {
 
       const errors = rest.slice(rest.indexOf('## Errors') + 2)
       expect(errors.filter(line => line !== '').every(line => line.startsWith('- `'))).toBe(true)
-      expect(errors.filter(line => line !== '')).toHaveLength(names.length)
+      expect(errors.filter(line => line !== '')).toHaveLength(1)
     },
   )
 })

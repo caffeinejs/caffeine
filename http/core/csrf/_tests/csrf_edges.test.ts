@@ -2,13 +2,12 @@ import { readFileSync } from 'node:fs'
 import { connect as connectHTTP2 } from 'node:http2'
 import { connect } from 'node:net'
 
-import fastifyCors from '@fastify/cors'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { bindTo, csrfExempt, type OriginPredicate, type WebApplication } from '../../../index.js'
-import { createWebApplication, csrf, newRouter } from '../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../platform/node/index.js'
+import { corsPolicy } from '../../cors/cors.js'
+import { csrf } from '../csrf.js'
 
 /**
  * `csrf()` where a reviewer probes it: header shapes no browser sends, methods outside the safe set, the spellings a
@@ -105,7 +104,7 @@ describe('csrf() at the edges', () => {
     it('refuses a Sec-Fetch-Site or an Origin sent twice', async () => {
       const app = (await running(
         createWebApplication()
-          .server(() => ({ listener }))
+          .server(() => ({ listen: listener }))
           .with(csrf())
           .mount(echo()),
       )) as WebApplication
@@ -124,24 +123,6 @@ describe('csrf() at the edges', () => {
           ['Origin', 'http://localhost'],
         ]),
       ).toBe(403)
-    })
-
-    // Node never hands this header over as a list, but an earlier layer may. It is read as one value no browser writes.
-    it('refuses a Sec-Fetch-Site handed over as a list', async () => {
-      const listed = () =>
-        fp(
-          async (instance: FastifyInstance) => {
-            instance.addHook('onRequest', (request, _reply, done) => {
-              ;(request.headers as Record<string, string | string[]>)['sec-fetch-site'] = ['same-origin', 'same-origin']
-              done()
-            })
-          },
-          { name: 'listed-header' },
-        )
-
-      const app = await ready(createWebApplication().with(listed).with(csrf()).mount(echo()))
-
-      expect((await post(app, '/echo', { 'sec-fetch-site': 'same-origin' })).status).toBe(403)
     })
 
     it('refuses Sec-Fetch-Site from another site when the Origin is missing, and asks no check', async () => {
@@ -168,13 +149,7 @@ describe('csrf() at the edges', () => {
   describe('methods', () => {
     // `QUERY` is safe, like `GET`, even with a body: a cross-site one is a read.
     it('never refuses a QUERY', async () => {
-      const app = await ready(
-        createWebApplication()
-          .serverCallback((_context, server) => {
-            server.route({ method: 'QUERY', url: '/search', handler: async () => ok() })
-          })
-          .with(csrf()),
-      )
+      const app = await ready(createWebApplication().with(csrf()).mount(newRouter('/search').query('/', ok)))
       const res = await app.request('/search', {
         method: 'QUERY',
         headers: { ...CROSS_SITE, 'content-type': 'application/json' },
@@ -182,20 +157,6 @@ describe('csrf() at the edges', () => {
       })
 
       expect(res.status).toBe(200)
-    })
-
-    // Only the safe set is left alone: a method the application adds is checked like `POST`.
-    it('refuses a method the application added, as any outside the safe set', async () => {
-      const app = await ready(
-        createWebApplication()
-          .serverCallback((_context, server) => {
-            server.addHttpMethod('PROPFIND', { hasBody: true })
-            server.route({ method: 'PROPFIND', url: '/dav', handler: async () => ok() })
-          })
-          .with(csrf()),
-      )
-
-      expect((await app.request('/dav', { method: 'PROPFIND', headers: CROSS_SITE })).status).toBe(403)
     })
   })
 
@@ -206,9 +167,7 @@ describe('csrf() at the edges', () => {
       const app = await ready(
         createWebApplication()
           .server(() => ({
-            factory: {
-              routerOptions: { ignoreTrailingSlash: true, caseSensitive: false, ignoreDuplicateSlashes: true },
-            },
+            router: { ignoreTrailingSlash: true, caseSensitive: false, ignoreDuplicateSlashes: true },
           }))
           .with(csrf(c => c.exclude('/webhooks')))
           .mount(
@@ -260,7 +219,7 @@ describe('csrf() at the edges', () => {
     it('compares the Origin with :authority, and refuses the same host over plain HTTP', async () => {
       const app = (await running(
         createWebApplication()
-          .server(() => ({ factory: { http2: true, https: { key, cert } }, listener }))
+          .server(() => ({ http2: true, https: { key, cert }, listen: listener }))
           .with(csrf())
           .mount(echo()),
       )) as WebApplication
@@ -281,23 +240,10 @@ describe('csrf() at the edges', () => {
     }
     const downgrade = { origin: 'http://localhost', 'x-forwarded-proto': 'https' }
 
-    // Fastify 5.12 trusts no peer on a hop count: the forwarding headers are ignored, as if no proxy were trusted.
-    it('ignores the forwarding headers under a hop count', async () => {
-      const app = await ready(
-        createWebApplication()
-          .server(() => ({ factory: { trustProxy: 1 as never } }))
-          .with(csrf())
-          .mount(echo()),
-      )
-
-      expect((await post(app, '/echo', proxied)).status).toBe(403)
-      expect((await post(app, '/echo', downgrade)).status).toBe(200)
-    })
-
     it('follows the forwarding headers of a proxy trusted by address', async () => {
       const app = await ready(
         createWebApplication()
-          .server(() => ({ factory: { trustProxy: '127.0.0.1' } }))
+          .server(() => ({ trustProxy: '127.0.0.1' }))
           .with(csrf())
           .mount(echo()),
       )
@@ -310,7 +256,7 @@ describe('csrf() at the edges', () => {
     it('reads the last X-Forwarded-Proto entry, and never Forwarded', async () => {
       const app = await ready(
         createWebApplication()
-          .server(() => ({ factory: { trustProxy: true } }))
+          .server(() => ({ trustProxy: true }))
           .with(csrf())
           .mount(echo()),
       )
@@ -347,21 +293,23 @@ describe('csrf() at the edges', () => {
 
   describe('with CORS', () => {
     const fromFront = { origin: 'https://front.example', 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'cors' }
-    const cors = () => [fastifyCors, { origin: 'https://front.example', credentials: true }] as const
+    const cors = corsPolicy(c => void c.origins('https://front.example').credentials(true))
 
-    // An origin CORS allows is not trusted here. Registered ahead, CORS writes its headers before the refusal, so
-    // the front end reads the 403; behind, the browser sees a network error.
-    it('carries the CORS headers on a refusal only when CORS is registered ahead of it', async () => {
-      const ahead = await ready(createWebApplication().with(cors).with(csrf()).mount(echo()))
-      const refused = await post(ahead, '/echo', fromFront)
+    // An origin CORS allows is not trusted here. CORS writes its headers as the answer goes out, so the front end reads
+    // the 403 whichever of the two was registered first.
+    it.each([
+      ['CORS ahead', true],
+      ['CORS behind', false],
+    ])('carries the CORS headers on a refusal, with %s', async (_order, corsFirst) => {
+      const app = await ready(
+        corsFirst
+          ? createWebApplication().with(cors).with(csrf()).mount(echo())
+          : createWebApplication().with(csrf()).with(cors).mount(echo()),
+      )
+      const refused = await post(app, '/echo', fromFront)
+
       expect(refused.status).toBe(403)
       expect(refused.headers.get('access-control-allow-origin')).toBe('https://front.example')
-      await close?.()
-
-      const behind = await ready(createWebApplication().with(csrf()).with(cors).mount(echo()))
-      const bare = await post(behind, '/echo', fromFront)
-      expect(bare.status).toBe(403)
-      expect(bare.headers.get('access-control-allow-origin')).toBeNull()
     })
 
     it('never refuses a preflight', async () => {
@@ -394,8 +342,8 @@ describe('csrf() at the edges', () => {
     it("leaves the application server's paths to its own plugin, whatever a listener excludes", async () => {
       const app = (await running(
         createWebApplication()
-          .listener('admin', l => l.server(() => ({ listener })).with(csrf(c => c.exclude('/hooks'))))
-          .server(() => ({ listener }))
+          .listener('admin', l => l.server(() => ({ listen: listener })).with(csrf(c => c.exclude('/hooks'))))
+          .server(() => ({ listen: listener }))
           .with(csrf())
           .mount(newRouter('/hooks').extend(bindTo('admin')).post('/', ok), newRouter('/hooks').post('/', ok)),
       )) as WebApplication

@@ -54,9 +54,8 @@ export interface Routing<R> {
   unselected(): readonly DeclaredRouteGroup<R>[]
 
   /**
-   * The compiler every selected group goes through — reused by `$route` (`http/platform/fastify/adapter.ts`)
-   * to compile a group accumulated afterwards, so a guard shared between an ordinary route and a `$route` one resolves
-   * through the one cache, not a second one.
+   * The compiler every selected group goes through, reused to compile a group a plugin mounts afterwards, so a guard
+   * shared between an application's route and a plugin's resolves through the one cache, not a second one.
    */
   readonly compileRouteGroup: RouteGroupCompiler
 }

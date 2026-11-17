@@ -16,7 +16,7 @@ import {
   Responder,
   Router,
 } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 import { expectPatternedBody } from './bodies.js'
 import { patterned } from './patterned.js'
 
@@ -117,8 +117,8 @@ describe('a handler that returns a Blob, a File or an ArrayBuffer sends the byte
     await expectPatterned(await app.request('/bodies/resizable'), { type: OCTET })
   })
 
-  // What Fastify already sends right: these keep working once the adapter handles the types it does not.
-  describe('the bytes Fastify already sends', () => {
+  // The bytes every server sends as they are.
+  describe('the bytes sent as they are', () => {
     it('sends a Uint8Array as its bytes', async () => {
       await expectPatterned(await app.request('/bodies/uint8'), { type: OCTET })
     })
@@ -393,7 +393,7 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
   })
   routes.get('/gated').handler(() => 'never reached: the middleware answers')
   routes.get('/shared').handler(() => shared)
-  // Timed, so a request that is never answered fails as Fastify's 503 rather than as a hung test.
+  // Timed, so a request that is never answered fails as a 503 rather than as a hung test.
   routes
     .get('/silent')
     .timeout(1 * Second)

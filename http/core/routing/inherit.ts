@@ -91,7 +91,6 @@ export function inheritGroupSpec<R>(outer: RouteGroupSpec<R>, inner: RouteGroupS
     timeout: inner.timeout ?? outer.timeout,
     authz: mergeAuthz(outer.authz, inner.authz),
     config: mergeMap(outer.config, inner.config),
-    options: mergeMap(outer.options, inner.options),
     detail: mergeDetail(outer.detail, inner.detail),
     guards: concat(outer.guards, inner.guards),
     hooks: concatHooks(outer.hooks, inner.hooks),

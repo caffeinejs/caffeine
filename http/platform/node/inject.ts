@@ -14,7 +14,7 @@ const EXPECTS_PAYLOAD = new Set(['POST', 'PUT', 'PATCH', 'QUERY', 'PROPFIND', 'P
 
 const FIX_LENGTH = 'Set Content-Length to the length of the body in bytes, or leave it out for the call to measure it'
 
-/** How one in-process request is sent: `fastify.inject`, or `light-my-request` over a Node request listener. */
+/** How one in-process request is sent: `light-my-request` over a Node request listener. */
 export type Inject = (options: InjectOptions) => Promise<InjectedResponse>
 
 /**

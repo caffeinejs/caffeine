@@ -1,13 +1,12 @@
 import type { IAdapterTypes, HTTPSetupContext } from './adapter.js'
 
 /**
- * A server plugin written against Caffeine alone: what a `.with(...)` factory returns when the plugin needs nothing
- * from Fastify.
+ * A server plugin: what a `.with(...)` factory returns.
  *
- * {@link register} does the work a Fastify plugin function would, handed the same {@link HTTPSetupContext} the
- * factory got: `context.container` resolves, `context.hasFeature(name)` lets a plugin that depends on a feature
- * refuse a missing one with `ErrFeatureNotInstalled`, and `context.app` mounts routers, adds middleware and adds
- * hooks: `context.app.hook('onSend', ...)`. Never deduplicated: two factories register two plugins. A package
+ * {@link register} does the plugin's work, handed the same {@link HTTPSetupContext} the factory got:
+ * `context.container` resolves, `context.hasFeature(name)` lets a plugin that depends on a feature refuse a missing
+ * one with `ErrFeatureNotInstalled`, and `context.app` mounts routers, adds middleware and adds hooks:
+ * `context.app.hook('onSend', ...)`. Never deduplicated: two factories register two plugins. A package
  * exporting one types its factory `AdapterExtensionFactory<HTTPPlugin, C>`.
  *
  * Where it is registered decides what `context.app` reaches:
@@ -20,11 +19,8 @@ import type { IAdapterTypes, HTTPSetupContext } from './adapter.js'
  *   to the controller. It cannot mount: a class has no children to nest routers under.
  *
  * A plain `HTTPPlugin` is written for no adapter: it mounts only routers bound to none, `new Router(...)`, names no
- * Fastify hook, and runs on any adapter, except the engine's own built-ins (`authentication()` and `csrf()` from
- * `@caffeinejs/http`), which a Fastify application refuses. `HTTPPlugin<RouterTypes>` may mount `newRouter()`
- * routers and name Fastify hooks, and only Fastify applications and routers take it. A plugin that needs Fastify
- * itself returns a Fastify plugin from its factory, which may still mount and add middleware through the factory's
- * own context.
+ * middleware hook, and runs on any adapter. `HTTPPlugin<NodeAdapterTypes>` may mount `newRouter()` routers and name
+ * the Node application's hooks, and only the Node application and its routers take it.
  *
  * ```ts
  * class Metrics extends HTTPPlugin {
@@ -60,8 +56,8 @@ export abstract class HTTPPlugin<T extends IAdapterTypes = never> {
  * `container.bind(...)` is not. A feature's callback is `FeatureConfigurer` from `@caffeinejs/application` instead,
  * which runs earlier and binds rather than resolves.
  *
- * `T` is the adapter the plugin is written for: a Fastify plugin factory's callback names `RouterTypes`, so its
- * context mounts `newRouter()` routers.
+ * `T` is the adapter the plugin is written for: a callback naming `NodeAdapterTypes` has a context that mounts
+ * `newRouter()` routers.
  *
  * ```ts
  * .with(HTTPCaching((b, { container }) => b.store(container.get(RedisCache))))

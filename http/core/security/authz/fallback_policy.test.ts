@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { authentication } from '../../../core/security/security.js'
 import {
   AllowAnonymous,
   AuthenticateResult,
@@ -15,7 +16,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../index.js'
-import { createWebApplication, authentication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 /**
  * `fallbackPolicy` — the posture switch that makes an undecorated route protected rather than public.

@@ -78,13 +78,12 @@ describe('resolveServerSettings', () => {
     })
   })
 
-  // A Fastify section on the fetch application would otherwise be dropped without a word.
-  it('refuses factory and names the Fastify entry', () => {
+  // A section it does not know would otherwise be dropped without a word.
+  it('refuses a section it does not know', () => {
     const resolve = () => resolveServerSettings({ factory: { bodyLimit: 1 } })
 
     expect(resolve).toThrow(ErrConfiguration)
-    expect(resolve).toThrow('"factory"')
-    expect(resolve).toThrow('@caffeinejs/http/fastify')
+    expect(resolve).toThrow('Cannot build the server: "factory" is not a setting of the fetch application')
   })
 
   // No magic value: 0 does not mean "no limit", and a limit that cannot elapse is not one.

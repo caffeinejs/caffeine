@@ -1,26 +1,21 @@
 import type { ParameterPickOptions } from '@caffeinejs/application/framework'
-import type { FastifyReply, FastifyRequest } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
 import { $p } from '../core/routing/picker.js'
-import { compileArgs } from '../platform/fastify/routing/parameters.js'
-
-function asReq(partial: object): FastifyRequest {
-  return partial as FastifyRequest
-}
+import type { Context } from '../core/server/context.js'
+import { engineCompilers } from '../core/server/parameters.js'
 
 /**
  * Resolved the way a route resolves it, rather than by reaching for `pick.picker`. A built-in carries no
  * picker at all — the adapter reads it by `type` — so anything asserted against that field alone would be
  * blind to exactly the case `$p.map` was unable to handle.
  */
-async function argOf(pick: ParameterPickOptions<never>, req: object): Promise<unknown> {
-  const args = await compileArgs([pick] as never)(asReq(req), {} as FastifyReply)
-  return args[0]
+async function argOf(pick: ParameterPickOptions<never>, ctx: object): Promise<unknown> {
+  return (await engineCompilers.args([pick] as never)(ctx as Context, undefined))[0]
 }
 
-const id = $p.pick(req => (req as { params: { id: string } }).params.id)
-const queryQ = $p.pick(req => (req as { query: { q?: string } }).query.q)
+const id = $p.pick(ctx => (ctx as { req: { param: (name: string) => string } }).req.param('id'))
+const queryQ = $p.pick(ctx => (ctx as { req: { query: () => { q?: string } } }).req.query().q)
 
 describe('$p.map', () => {
   it('leaves an unmapped picker without a picker function', () => {
@@ -29,7 +24,7 @@ describe('$p.map', () => {
   })
 
   it('does not mutate the input pick', () => {
-    const source = $p.pick(req => (req as { params: { id: string } }).params.id)
+    const source = $p.pick(ctx => (ctx as { req: { param: (name: string) => string } }).req.param('id'))
     const mapped = $p.map(source, Number)
 
     expect(source.transform).toBeUndefined()
@@ -41,7 +36,7 @@ describe('$p.map', () => {
     const mapped = $p.map(id, Number)
 
     expect(mapped.async).toBeUndefined()
-    await expect(argOf(mapped, { params: { id: '42' } })).resolves.toBe(42)
+    await expect(argOf(mapped, { req: { param: () => '42' } })).resolves.toBe(42)
   })
 
   // The reported defect: a built-in has no picker to chain onto, so mapping one used to throw
@@ -49,11 +44,11 @@ describe('$p.map', () => {
   it('maps a built-in pick', async () => {
     const mapped = $p.map($p.param('id'), (value: string) => Number(value))
 
-    await expect(argOf(mapped, { params: { id: '7' } })).resolves.toBe(7)
+    await expect(argOf(mapped, { req: { param: () => '7' } })).resolves.toBe(7)
     await expect(
       argOf(
         $p.map($p.body(), (b: { n: number }) => b.n),
-        { body: { n: 3 } },
+        { req: { body: () => ({ n: 3 }) } },
       ),
     ).resolves.toBe(3)
   })
@@ -61,7 +56,7 @@ describe('$p.map', () => {
   it('maps the request context, which is how a handler reaches past what a built-in returns', async () => {
     const mapped = $p.map($p.context(), (ctx: { user: { name: string } }) => ctx.user.name)
 
-    await expect(argOf(mapped, { httpContext: { user: { name: 'ada' } } })).resolves.toBe('ada')
+    await expect(argOf(mapped, { user: { name: 'ada' } })).resolves.toBe('ada')
   })
 
   it('composes nested maps', async () => {
@@ -70,7 +65,7 @@ describe('$p.map', () => {
       (s: string) => s.trim(),
     )
 
-    await expect(argOf(mapped, { query: { q: '  hi  ' } })).resolves.toBe('hi')
+    await expect(argOf(mapped, { req: { query: () => ({ q: '  hi  ' }) } })).resolves.toBe('hi')
   })
 
   it('composes nested maps over a built-in', async () => {
@@ -79,16 +74,16 @@ describe('$p.map', () => {
       (s: string) => Number(s),
     )
 
-    await expect(argOf(mapped, { params: { id: ' 5 ' } })).resolves.toBe(5)
+    await expect(argOf(mapped, { req: { param: () => ' 5 ' } })).resolves.toBe(5)
   })
 
   it('maps a custom $p.pick', async () => {
     const mapped = $p.map(
-      $p.pick(req => (req as { url: string }).url),
+      $p.pick(ctx => (ctx as { req: { url: string } }).req.url),
       (url: string) => url.toUpperCase(),
     )
 
-    await expect(argOf(mapped, { url: '/pets' })).resolves.toBe('/PETS')
+    await expect(argOf(mapped, { req: { url: '/pets' } })).resolves.toBe('/PETS')
   })
 
   it('keeps async when mapping an async pick with a sync function', async () => {
@@ -106,16 +101,14 @@ describe('$p.map', () => {
     const mapped = $p.map($p.signedCookie('tok'), (value: unknown) => `[${String(value)}]`)
 
     expect(mapped.async).toBe(true)
-    await expect(argOf(mapped, { httpContext: { req: { signedCookie: async () => 'plain' } } })).resolves.toBe(
-      '[plain]',
-    )
+    await expect(argOf(mapped, { req: { signedCookie: async () => 'plain' } })).resolves.toBe('[plain]')
   })
 
   it('resolves $p.map(..., { async: true }) before returning', async () => {
     const mapped = $p.map(id, async (value: string) => `id:${value}`, { async: true })
 
     expect(mapped.async).toBe(true)
-    await expect(argOf(mapped, { params: { id: '7' } })).resolves.toBe('id:7')
+    await expect(argOf(mapped, { req: { param: () => '7' } })).resolves.toBe('id:7')
   })
 
   it('treats mapAsync as map with { async: true }', async () => {
@@ -124,7 +117,7 @@ describe('$p.map', () => {
 
     expect(viaMap.async).toBe(true)
     expect(viaAsyncMap.async).toBe(true)
-    await expect(argOf(viaAsyncMap, { params: { id: '9' } })).resolves.toBe(9)
+    await expect(argOf(viaAsyncMap, { req: { param: () => '9' } })).resolves.toBe(9)
   })
 
   it('composes mapAsync over a sync map', async () => {
@@ -133,7 +126,7 @@ describe('$p.map', () => {
       async (n: number) => n * 2,
     )
 
-    await expect(argOf(mapped, { params: { id: '4' } })).resolves.toBe(8)
+    await expect(argOf(mapped, { req: { param: () => '4' } })).resolves.toBe(8)
   })
 
   it('propagates a mapper throw', async () => {
@@ -141,7 +134,7 @@ describe('$p.map', () => {
       throw new Error('bad id')
     })
 
-    await expect(argOf(mapped, { params: { id: 'x' } })).rejects.toThrow('bad id')
+    await expect(argOf(mapped, { req: { param: () => 'x' } })).rejects.toThrow('bad id')
   })
 })
 
@@ -152,7 +145,7 @@ describe('$p.user', () => {
   }
 
   it('picks the authenticated principal off the context', async () => {
-    await expect(argOf($p.user(), { httpContext: { user: principal } })).resolves.toBe(principal)
+    await expect(argOf($p.user(), { user: principal })).resolves.toBe(principal)
   })
 
   // There is no `p.claim()`: the principal's own lookup API is richer than a picker would be, and mapping
@@ -160,6 +153,6 @@ describe('$p.user', () => {
   it('composes with map to read one claim', async () => {
     const claim = $p.map($p.user(), (u: typeof principal) => u.findFirst('sub')?.value)
 
-    await expect(argOf(claim, { httpContext: { user: principal } })).resolves.toBe('u-1')
+    await expect(argOf(claim, { user: principal })).resolves.toBe('u-1')
   })
 })

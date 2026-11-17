@@ -83,8 +83,7 @@ export class ScopedPlugins<T extends IAdapterTypes> {
         const { batch, extension } = await slot.run(factory, scoped, where)
 
         // The hooks it added keep its place among the scope's plugins.
-        // A batch of an engine-only plugin is kept even when empty: the adapter that refuses it must see it.
-        if (!batch.empty || batch.engineOnly !== undefined) {
+        if (!batch.empty) {
           this.extensions.add(batch, key)
         }
 

@@ -86,7 +86,7 @@ describe('authentication() on the engine', () => {
 
     expect(err).toBeInstanceOf(ErrAuthenticationGateRequired)
     expect((err as Error).message).toContain('"GET|HEAD /p"')
-    // The Fastify entry's exemptions do not exist here: the fix offered is one the engine can take.
+    // The fix offered is one the engine can take: no exemption under a name the package does not export.
     expect((err as Error).message).not.toContain('authenticationExempt')
     expect((err as Error).message).not.toContain('exemptFromAuthentication')
   })

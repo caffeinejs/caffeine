@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
+import { authentication } from '../../../../core/security/security.js'
 import {
   Authorize,
   Claim,
@@ -12,7 +13,7 @@ import {
   $p,
   Authentication,
 } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../../platform/node/index.js'
 
 function basicHeader(user: string, pass: string): string {
   return `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`

@@ -24,7 +24,7 @@ interface Entry {
   readonly factory: boolean
 }
 
-/** A middleware in both forms: Node's, which the Fastify adapter installs, and the context form the engine runs. */
+/** A middleware in both forms: Node's, which the Node platform runs, and the context form the engine runs. */
 interface Forms {
   readonly fn: NodeMiddleware
   readonly handle: MiddlewareFn | undefined
@@ -144,7 +144,7 @@ function fromFactory(produced: unknown): Forms {
   )
 }
 
-/** A context-form middleware with the Node form the Fastify adapter installs. */
+/** A context-form middleware with its Node form. */
 function caffeine(handle: MiddlewareFn): Forms {
   return { fn: adaptCaffeine(handle), handle }
 }

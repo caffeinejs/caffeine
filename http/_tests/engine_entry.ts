@@ -1,5 +1,2 @@
-// What the engine project hands the suites that run on both servers in place of the Fastify entry.
+// What the engine project hands the suites in place of the Node entry.
 export { createWebApplication } from '../application.js'
-export { authentication } from '../core/security/security.js'
-export { csrf } from '../core/csrf/csrf.js'
-export { constraints } from './constraints_entry.js'

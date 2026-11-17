@@ -1,11 +1,13 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import type { FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
+import { newNoopLogger, type LogFn, type Logger } from '@caffeinejs/application/logger'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { HTTPSetupContext } from '../../../../adapter.js'
 import { type IContext, Authentication } from '../../../../index.js'
-import { createWebApplication, newRouter, authentication } from '../../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../../platform/node/index.js'
+import { HTTPPlugin } from '../../../../plugin.js'
+import { authentication } from '../../security.js'
 import { ErrOAuthCallback } from '../internal/remote/errors.js'
 import { ErrOIDCDiscovery } from './errors.js'
 
@@ -23,19 +25,60 @@ const ISSUER = 'https://idp.internal.example.com'
 const UNREACHABLE = 'connect ECONNREFUSED 10.0.0.7:443'
 
 interface LogEntry {
-  level?: number
-  msg?: string
+  level: number
+  msg: string
   err?: { code?: string }
+  [field: string]: unknown
 }
 
-/** Fastify's own logger, writing every line into `logged`. Named in the factory settings, so it is the server's. */
-function pinoTo(logged: LogEntry[], level = 'warn') {
-  return { level, stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } }
+const LEVELS = { info: 30, warn: 40, error: 50 } as const
+
+/** The application logger, recording each line at `threshold` or above into `logged`. */
+function recordTo(logged: LogEntry[], threshold: keyof typeof LEVELS = 'warn'): Logger {
+  const at = (level: keyof typeof LEVELS): LogFn =>
+    ((obj: unknown, msg?: string) => {
+      if (LEVELS[level] < LEVELS[threshold]) {
+        return
+      }
+      const [fields, text] = typeof obj === 'string' ? [{}, obj] : [obj as Record<string, unknown>, msg ?? '']
+      logged.push({ ...fields, level: LEVELS[level], msg: text })
+    }) as LogFn
+  const logger: Logger = {
+    ...newNoopLogger(),
+    info: at('info'),
+    warn: at('warn'),
+    error: at('error'),
+    child: () => logger,
+  }
+  return logger
+}
+
+/** The engine's two warnings for an answer that came after the request was answered. */
+const ALREADY_ANSWERED = [
+  'Cannot answer a request already answered: dropping the late answer',
+  'Cannot change the response once it is sent: ignoring',
+]
+
+/** An `onSend` hook that awaits, counting its runs. */
+class SlowSend extends HTTPPlugin {
+  override readonly name = 'slow-send'
+
+  constructor(private readonly runs: { n: number }) {
+    super()
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onSend', async (_ctx, payload) => {
+      this.runs.n++
+      await sleep(20)
+      return payload
+    })
+  }
 }
 
 function application(onFail?: (ctx: IContext, error: Error) => void, logged: LogEntry[] = []) {
   return createWebApplication()
-    .server(() => ({ factory: { logger: pinoTo(logged) } }))
+    .logger(b => b.use(recordTo(logged)))
     .install(
       Authentication(auth =>
         auth.addOIDC('Provider', o => {
@@ -115,7 +158,7 @@ describe('a sign-in that cannot go ahead', () => {
     const logged: LogEntry[] = []
     const app = createWebApplication()
       // At `info`, since that is the level the record is expected at.
-      .server(() => ({ factory: { logger: pinoTo(logged, 'info') } }))
+      .logger(b => b.use(recordTo(logged, 'info')))
       .mount(
         newRouter('/finish').get('/', () => {
           throw new ErrOAuthCallback('state mismatch for subject jane@example.com')
@@ -130,7 +173,7 @@ describe('a sign-in that cannot go ahead', () => {
     expect(JSON.parse(text)).toMatchObject({ code: 'ERR_OAUTH_CALLBACK', detail: 'Authentication failed' })
     expect(text).not.toContain('jane')
 
-    // On record for whoever looks, at the level of a request and not of a fault (pino: 30 is info, 50 is error).
+    // On record for whoever looks, at the level of a request and not of a fault (30 is info, 50 is error).
     const entries = logged.filter(entry => entry.err?.code === 'ERR_OAUTH_CALLBACK')
     expect(entries.map(entry => entry.level)).toEqual([30])
     expect(entries[0].msg).toContain('jane@example.com')
@@ -176,33 +219,25 @@ describe('a callback that fails', () => {
     expect(seen[0].message).toContain('provider returned "access_denied"')
 
     // Nothing tried to answer a second time, and the failure itself is still on record.
-    expect(logged.filter(entry => entry.err?.code === 'FST_ERR_REP_ALREADY_SENT')).toEqual([])
+    expect(logged.filter(entry => ALREADY_ANSWERED.includes(entry.msg))).toEqual([])
     expect(logged.some(entry => entry.msg === 'OIDC callback failed')).toBe(true)
 
     await app.close()
   })
 
-  // `reply.sent` stays false while an `onSend` hook that awaits holds onFail's redirect open; asked of Fastify
-  // alone, the route would send its own answer over it.
+  // An `onSend` hook that awaits holds onFail's redirect open; the route must not send its own answer over it.
   it('leaves the response to onFail under an onSend hook that awaits', async () => {
-    let runs = 0
-    const slowSend: FastifyPluginAsync = async instance => {
-      instance.addHook('onSend', async (_request, _reply, payload) => {
-        runs++
-        await sleep(20)
-        return payload
-      })
-    }
+    const runs = { n: 0 }
     const app = application(ctx => {
       ctx.redirect('/sign-in?failed=1', 303)
-    }).with(() => fp(slowSend, { name: 'slow-send' }))
+    }).with(() => new SlowSend(runs))
     await app.bootstrap()
 
     const res = await app.request('/oidc/callback?error=access_denied&state=abc')
 
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/sign-in?failed=1')
-    expect(runs).toBe(1)
+    expect(runs.n).toBe(1)
 
     await app.close()
   })

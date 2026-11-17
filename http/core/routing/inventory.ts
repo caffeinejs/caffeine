@@ -91,7 +91,7 @@ export interface RouteSchemaRecord {
 export interface RouteSecurityRecord {
   readonly authentication: {
     /**
-     * Exempt from authentication: no principal is established (`authenticationExempt()`, or a route the framework
+     * Exempt from authentication: no principal is established (`accessControlExempt()`, or a route the framework
      * serves outside access control, such as a health probe).
      */
     readonly skipped: boolean

@@ -134,9 +134,6 @@ export function buildValidationProblem(
 /**
  * A request that failed its route's schema on one slot, with every issue the validator reported. It answers with the
  * validation problem the error handling settings describe, unless a `@Catch` handler takes it first.
- *
- * Only the Node and fetch applications throw it: the Fastify application answers its own validation error, which no
- * `@Catch(ErrRequestValidation)` sees.
  */
 export class ErrRequestValidation extends ErrCaffeineWebApplication {
   /** 422 for the body, 400 for the other slots. */

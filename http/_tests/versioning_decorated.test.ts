@@ -2,10 +2,10 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { Controller, Get, Version } from '../index.js'
-import { constraints, createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 /**
- * `@Version` on a decorated controller must compile to the same Fastify `version` constraint a programmatic
+ * `@Version` on a decorated controller must compile to the same `version` constraint a programmatic
  * `.version()` does. Kept in its own file: `@Controller` registers into a module-global registry that every
  * later `new CaffeineIoC()` snapshots, so a decorated `/pets` here would collide with a programmatic `/pets`
  * in a shared file.
@@ -31,7 +31,7 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container }).with(constraints())
+    const app = createWebApplication({ container })
     await app.bootstrap()
 
     expect(await (await app.request('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
@@ -58,7 +58,7 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container }).with(constraints())
+    const app = createWebApplication({ container })
     await app.bootstrap()
 
     expect(await (await app.request('/catalog/item', { headers: { 'accept-version': '1.x' } })).json()).toEqual({

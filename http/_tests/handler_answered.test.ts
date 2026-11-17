@@ -1,39 +1,66 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import type { FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
+import { newNoopLogger, type LogFn, type Logger } from '@caffeinejs/application/logger'
 import { describe, expect, it } from 'vitest'
 
-import { Responder, type IContext } from '../index.js'
-import { createWebApplication, newRouter } from '../platform/fastify/index.js'
+import { HTTPPlugin, Responder, type HTTPSetupContext, type IContext } from '../index.js'
+import { createWebApplication, newRouter } from '../platform/node/index.js'
 
 /**
  * A handler that answered the request itself and then returned — the shape of a sign-out: `ctx.redirect(...)`,
- * and nothing else to hand back. The adapter sends an empty response for a handler that returns `undefined`,
- * and doing that here answers twice: `FST_ERR_REP_ALREADY_SENT` in the log for a response already out, and
+ * and nothing else to hand back. The application sends an empty response for a handler that returns `undefined`,
+ * and doing that here answers twice: a warning in the log for a response already out, and
  * headers written over headers while an `onSend` hook that awaits still holds the first send open.
  */
 
 interface LogEntry {
-  level?: number
-  msg?: string
-  err?: { code?: string }
+  level: number
+  msg: string
+  [field: string]: unknown
 }
 
-/** Fastify's own logger, writing every line into `logged`. Named in the factory settings, so it is the server's. */
-function pinoTo(logged: LogEntry[], level = 'warn') {
-  return { level, stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } }
+const LEVELS = { info: 30, warn: 40, error: 50 } as const
+
+/** The application logger, recording each line at `threshold` or above into `logged`. */
+function recordTo(logged: LogEntry[], threshold: keyof typeof LEVELS = 'info'): Logger {
+  const at = (level: keyof typeof LEVELS): LogFn =>
+    ((obj: unknown, msg?: string) => {
+      if (LEVELS[level] < LEVELS[threshold]) {
+        return
+      }
+      const [fields, text] = typeof obj === 'string' ? [{}, obj] : [obj as Record<string, unknown>, msg ?? '']
+      logged.push({ ...fields, level: LEVELS[level], msg: text })
+    }) as LogFn
+  const logger: Logger = {
+    ...newNoopLogger(),
+    info: at('info'),
+    warn: at('warn'),
+    error: at('error'),
+    child: () => logger,
+  }
+  return logger
 }
+
+const ALREADY_SENT = [
+  'Cannot answer a request already answered: dropping the late answer',
+  'Cannot change the response once it is sent: ignoring',
+]
 
 function alreadySent(logged: LogEntry[]): LogEntry[] {
-  return logged.filter(entry => entry.err?.code === 'FST_ERR_REP_ALREADY_SENT')
+  return logged.filter(entry => ALREADY_SENT.some(text => entry.msg.startsWith(text)))
 }
 
-/** An `onSend` hook that awaits, the position `@Compress` and `@caffeinejs/caching` occupy. */
-function slowSend(runs: { n: number }): FastifyPluginAsync {
-  return async instance => {
-    instance.addHook('onSend', async (_request, _reply, payload) => {
-      runs.n++
+/** An `onSend` hook that awaits, the position `@caffeinejs/caching` occupies. */
+class SlowSend extends HTTPPlugin {
+  override readonly name = 'slow-send'
+
+  constructor(private readonly runs: { n: number }) {
+    super()
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onSend', async (_ctx, payload) => {
+      this.runs.n++
       await sleep(20)
       return payload
     })
@@ -62,7 +89,7 @@ describe('a handler that answered the request itself', () => {
   it('redirects once from a synchronous handler', async () => {
     const logged: LogEntry[] = []
     const app = createWebApplication()
-      .server(() => ({ factory: { logger: pinoTo(logged) } }))
+      .logger(b => b.use(recordTo(logged, 'warn')))
       .mount(newRouter('/sync').get('/', ctx => void ctx.redirect('/foo')))
     await app.bootstrap()
 
@@ -78,7 +105,7 @@ describe('a handler that answered the request itself', () => {
   it('redirects once from an asynchronous handler', async () => {
     const logged: LogEntry[] = []
     const app = createWebApplication()
-      .server(() => ({ factory: { logger: pinoTo(logged) } }))
+      .logger(b => b.use(recordTo(logged, 'warn')))
       .mount(
         newRouter('/async').get('/', async ctx => {
           await sleep(1)
@@ -100,7 +127,7 @@ describe('a handler that answered the request itself', () => {
   it('answers once with a status shorthand', async () => {
     const logged: LogEntry[] = []
     const app = createWebApplication()
-      .server(() => ({ factory: { logger: pinoTo(logged) } }))
+      .logger(b => b.use(recordTo(logged, 'warn')))
       .mount(
         newRouter('/gone').get('/', async ctx => {
           await sleep(1)
@@ -159,9 +186,8 @@ describe('a handler that answered the request itself', () => {
 })
 
 /**
- * `reply.sent` is `raw.writableEnded`, so it stays false for as long as a hook holds the first send open. A
- * second send started in that window is not the logged warning of a response already out: it runs the hook
- * chain again and writes headers over headers.
+ * A second send started while a hook holds the first one open is not the logged warning of a response already
+ * out: it would run the hook chain again and write headers over headers.
  */
 describe('under an onSend hook that awaits', () => {
   it('runs the send hook once for an asynchronous handler that answered itself', async () => {
@@ -169,7 +195,7 @@ describe('under an onSend hook that awaits', () => {
 
     await sendsOnce(async () => {
       const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .with(() => new SlowSend(runs))
         .mount(
           newRouter('/held').get('/', async ctx => {
             await sleep(1)
@@ -194,7 +220,7 @@ describe('under an onSend hook that awaits', () => {
 
     await sendsOnce(async () => {
       const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .with(() => new SlowSend(runs))
         .mount(newRouter('/held-sync').get('/', ctx => void ctx.body({ ok: true })))
       await app.bootstrap()
 
@@ -208,14 +234,14 @@ describe('under an onSend hook that awaits', () => {
     expect(runs.n).toBe(1)
   })
 
-  // The adapter's own send is the one in flight here: resolving the promise with `undefined` after starting it
-  // is what Fastify reads as a request to send, and both of its guards are still false inside the hook.
+  // The application's own send is the one in flight here: resolving the promise with `undefined` after starting it
+  // must not be read as a request to send.
   it('runs the send hook once for an asynchronous handler that answered nothing', async () => {
     const runs = { n: 0 }
 
     await sendsOnce(async () => {
       const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .with(() => new SlowSend(runs))
         .mount(
           newRouter('/held-empty').get('/', async () => {
             await sleep(1)
@@ -234,14 +260,13 @@ describe('under an onSend hook that awaits', () => {
     expect(runs.n).toBe(1)
   })
 
-  // A value handed back after the context answered is not a second answer: Fastify sends any value a promise
-  // resolves with, and any value a synchronous handler returns, with no check of its own.
+  // A value handed back after the context answered is not a second answer.
   it('runs the send hook once for an asynchronous handler that answered itself and then returned a value', async () => {
     const runs = { n: 0 }
 
     await sendsOnce(async () => {
       const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .with(() => new SlowSend(runs))
         .mount(
           newRouter('/held-value').get('/', async ctx => {
             await sleep(1)
@@ -268,7 +293,7 @@ describe('under an onSend hook that awaits', () => {
 
     await sendsOnce(async () => {
       const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .with(() => new SlowSend(runs))
         .mount(
           newRouter('/held-sync-value').get('/', ctx => {
             ctx.body('first')
@@ -300,7 +325,7 @@ describe('under an onSend hook that awaits', () => {
 
     await sendsOnce(async () => {
       const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .with(() => new SlowSend(runs))
         .mount(
           newRouter('/held-responder').get('/', async ctx => {
             await sleep(1)
@@ -333,7 +358,7 @@ describe('under an onSend hook that awaits', () => {
 
     await sendsOnce(async () => {
       const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .with(() => new SlowSend(runs))
         .mount(newRouter('/held-async-responder').get('/', () => new Rendered()))
       await app.bootstrap()
 
@@ -347,24 +372,24 @@ describe('under an onSend hook that awaits', () => {
     expect(runs.n).toBe(1)
   })
 
-  // What the flag adds, and why Fastify's own answer could not have been it.
+  // The flag is true the moment the context sent the answer, while a hook still holds the send open.
   it('has answered the request the moment the context sent it', async () => {
-    let seen: [boolean, boolean] | undefined
+    let seen: boolean | undefined
     const runs = { n: 0 }
 
     const app = createWebApplication()
-      .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+      .with(() => new SlowSend(runs))
       .mount(
         newRouter('/record').get('/', ctx => {
           ctx.body({ ok: true })
-          seen = [ctx.sent, ctx.platform.reply.sent]
+          seen = ctx.sent
         }),
       )
     await app.bootstrap()
 
     await app.request('/record')
 
-    expect(seen).toEqual([true, false])
+    expect(seen).toBe(true)
 
     await app.close()
   })

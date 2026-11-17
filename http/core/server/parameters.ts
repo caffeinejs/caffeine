@@ -3,13 +3,13 @@ import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 import { compileArgsWith, compileHandlerWith } from '../routing/parameters.js'
 import type { IRouteCompilers } from '../routing/route.js'
 import type { Context } from './context.js'
-import { configurationError, USE_FASTIFY } from './error.js'
+import { configurationError } from './error.js'
 
 type Picker = (ctx: Context) => unknown
 
 /**
- * The parameter compilers of the engine, routes compiled against its Context. `res` is opaque to a route source, as
- * it is under Fastify, so each compiled function is re-typed here.
+ * The parameter compilers of the engine, routes compiled against its Context. `res` is opaque to a route source, so
+ * each compiled function is re-typed here.
  */
 export const engineCompilers: IRouteCompilers<Context> = {
   handler: (parameters, fn) =>
@@ -35,8 +35,7 @@ export function portOf(host: string): number | null {
   return Number.isInteger(port) && host.length > colon + 1 ? port : null
 }
 
-// What each built-in pick reads off the engine's context. The Fastify request and reply are refused when the route
-// registers, so they never get here.
+// What each built-in pick reads off the engine's context.
 function basePicker(p: ParameterPickOptions<Context>): Picker {
   const field = p.name
 
@@ -75,8 +74,8 @@ function basePicker(p: ParameterPickOptions<Context>): Picker {
       return field ? ctx => ctx.req.signedCookie(field) : ctx => ctx.req.signedCookie()
     default:
       throw configurationError(
-        `Cannot compile a parameter of type "${String(p.type)}": the web-standards engine does not read it`,
-        USE_FASTIFY,
+        `Cannot compile a parameter of type "${String(p.type)}": no picker reads it`,
+        'Pick it with $p.pick(ctx => ...)',
       )
   }
 }

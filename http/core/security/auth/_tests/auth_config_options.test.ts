@@ -6,6 +6,7 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { Day, Hour, Minute } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { authentication } from '../../../../core/security/security.js'
 import {
   AuthenticationService,
   AuthenticationTicket,
@@ -25,7 +26,7 @@ import {
   UserProvider,
   Authentication,
 } from '../../../../index.js'
-import { createWebApplication, newRouter, authentication } from '../../../../platform/fastify/index.js'
+import { createWebApplication, newRouter } from '../../../../platform/node/index.js'
 import type { AuthConfig } from '../config.js'
 
 /**

@@ -1,11 +1,11 @@
-import { $t } from '@caffeinejs/application/schema'
+import { $t, toJSONSchema, type AnySchema } from '@caffeinejs/application/schema'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { compileRouteSchema } from '../schema.js'
+import { normalizeForAjv } from './normalize.js'
 
-const bodyOf = (schema: Parameters<typeof compileRouteSchema>[0]) =>
-  JSON.parse(JSON.stringify(compileRouteSchema(schema, 'POST /pets')?.body))
+const bodyOf = ({ body }: { body: AnySchema }) =>
+  JSON.parse(JSON.stringify(normalizeForAjv(toJSONSchema(body, 'input', 'POST /pets'))))
 
 describe('nullable union normalization', () => {
   it('collapses a nullable union into a type array', () => {
@@ -87,7 +87,7 @@ describe('nullable union normalization', () => {
     const Note = $t.Nullable($t.String())
     const Body = $t.Object({ note: Note })
 
-    compileRouteSchema({ body: Body }, 'POST /pets')
+    normalizeForAjv(toJSONSchema(Body, 'input', 'POST /pets'))
 
     expect(Note.anyOf).toHaveLength(2)
     expect(Body.properties.note).toBe(Note)

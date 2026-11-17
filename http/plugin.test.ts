@@ -13,7 +13,7 @@ import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
 import { ErrConfiguration, HTTPPlugin, Router } from './index.js'
-import { createWebApplication } from './platform/fastify/index.js'
+import { createWebApplication } from './platform/node/index.js'
 
 // A sentinel the feature's configurer binds into the container so a test can prove the feature rode
 // the same `bootstrap()` path as the built-in auth/authz services.
@@ -75,7 +75,7 @@ describe('WebApplication.install()', () => {
 
     const app = createWebApplication({ config: conf })
       .install(probe())
-      .server(({ config }) => ({ listener: config.app.server }))
+      .server(({ config }) => ({ listen: config.app.server }))
 
     expect(typeof app.bootstrap).toBe('function')
   })

@@ -4,7 +4,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 
 import type { DepsOf, PathParams, ResponsesOf, RoutesOf } from '../core/routing/programmatic/types.js'
 import { Router, blend } from '../index.js'
-import { createWebApplication, fst } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 class Greeter {}
 class Audit {}
@@ -555,29 +555,6 @@ describe('mount', () => {
     const app = createWebApplication().mount(list, add)
 
     expectTypeOf<RoutesOf<typeof app>['method']>().toEqualTypeOf<'GET' | 'POST'>()
-  })
-})
-
-describe('fst options', () => {
-  it('accepts what Fastify accepts', () => {
-    expectTypeOf(fst).toBeCallableWith({ attachValidation: true })
-    expectTypeOf(fst).toBeCallableWith({ logLevel: 'debug' })
-  })
-
-  it('rejects the keys the router owns', () => {
-    // `config` is the dangerous one: it carries what the handler reads to apply status, headers and auth.
-    // @ts-expect-error -- config belongs to the adapter
-    fst({ config: { $caffeine: undefined } })
-    // @ts-expect-error -- the verb and the path decide these
-    fst({ method: 'GET', url: '/nope' })
-    // @ts-expect-error -- declared with .schema()
-    fst({ schema: {} })
-    // @ts-expect-error -- declared with .handler()
-    fst({ handler: () => undefined })
-    // @ts-expect-error -- declared with .bodyLimit()
-    fst({ bodyLimit: 10 })
-    // @ts-expect-error -- declared with .timeout()
-    fst({ handlerTimeout: 10 })
   })
 })
 

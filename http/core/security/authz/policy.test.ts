@@ -40,7 +40,6 @@ function handlers(): Map<string, AuthzRequirementHandler<AuthzRequirement>> {
 function options(overrides: Partial<AuthorizationOptions> = {}): AuthorizationOptions {
   return {
     authorizeDecoratorDefaultPolicy: new PolicyBuilder().requireAuthenticated().build('default'),
-    fallbackExcept: [],
     ...overrides,
   }
 }

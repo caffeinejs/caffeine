@@ -44,7 +44,7 @@ export const REPRESENTATION_HEADERS: readonly string[] = [
   'last-modified',
 ]
 
-/** What answer shaping writes to: Fastify's reply and the engine's Context both fit. `header` replaces a value, except `set-cookie`, which gains one. */
+/** What answer shaping writes to: the engine's Context. `header` replaces a value, except `set-cookie`, which gains one. */
 export interface AnswerTarget extends VaryReply {
   status(code: number): unknown
   hasHeader(name: string): boolean
@@ -327,7 +327,7 @@ export class HeldStream {
   }
 }
 
-// What `reply.send` does with what `payloadOf` hands it (`fastify/lib/reply.js`, `send`).
+// What Fastify's `reply.send` does with what `payloadOf` hands it.
 function serialize(ctx: Context, payload: unknown, status: number): SendPayload | HeldStream {
   if (payload === undefined) {
     return null

@@ -36,6 +36,14 @@ interface BodyState {
   bytes?: Uint8Array
   /** Why the route's read failed part-way: what `ctx.req.raw` refuses its body with, rather than serve what is left. */
   failure?: Error
+  /** `ctx.req.raw`'s body, once built: locked once the route has taken it to read. */
+  stream?: ReadableStream<Uint8Array>
+  /** Whether that read stopped short of the end: refused, over its limit, or cancelled. */
+  stopped?: boolean
+  /** Reads what is left of the body into the route's stream, at the client's pace rather than the route's. */
+  drain?: () => Promise<void>
+  /** Starts that read now, unless it could not go ahead: what an answer calls before Node would discard the body. */
+  open?: () => void
 }
 
 const bodies = new WeakMap<NodeResponse, BodyState>()
@@ -57,6 +65,7 @@ export function createNodePlatform(logger: Logger): NodePlatform {
     remoteAddress: res => socketField(res, 'remoteAddress'),
     context: res => ({ name: 'node', incoming: res.req, outgoing: res }),
     respond: (res, head, payload, hooks) => {
+      keepWhileRead(res)
       writeHead(res, head.status, head.headers as OutgoingHttpHeaders)
 
       if (payload instanceof ReadableStream) {
@@ -71,6 +80,7 @@ export function createNodePlatform(logger: Logger): NodePlatform {
       }
     },
     respondStream: (res, head, stream, hooks) => {
+      keepWhileRead(res)
       writeHead(res, head.status, head.headers as OutgoingHttpHeaders)
       pipeTo(res, stream as NodeJS.ReadableStream, hooks, logger)
     },
@@ -302,63 +312,131 @@ function requestOf(res: NodeResponse, protocol: string, signal: AbortSignal, lim
 /**
  * The request body as a web stream that reads from `incoming` only once it is read, so building the `Request` takes no
  * byte from it. Once {@link readBody} has read the body, it serves those bytes instead. It fails with a 413 when the
- * body declares or brings more than `limit` bytes; `incoming` is left as it is, its connection closed after the answer.
+ * body declares or brings more than `limit` bytes; `incoming` is left as it is, its connection closed after the answer
+ * ({@link stop}).
  */
 function lazyBody(res: NodeResponse, limit: ByteSize): ReadableStream<Uint8Array> {
   const incoming = res.req
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let controller!: ReadableStreamDefaultController<Uint8Array>
   let received = 0
+  // Closed, failed or cancelled: nothing more goes into the stream.
+  let ended = false
+  // Set once the platform reads the rest itself: the route's reads then take what it queued.
+  let draining = false
+  let inFlight: Promise<boolean> | undefined
 
-  return new ReadableStream<Uint8Array>(
+  // Moves one chunk from `incoming` into the stream: whether the stream is over.
+  const step = async (): Promise<boolean> => {
+    const { done, value } = await reader!.read()
+    if (ended) {
+      return true
+    }
+
+    if (done) {
+      ended = true
+      restoreKeepAlive(res)
+      controller.close()
+      return true
+    }
+
+    received += value.byteLength
+    if (received > limit) {
+      ended = true
+      stop(res)
+      controller.error(contentTooLarge(limit))
+      return true
+    }
+
+    controller.enqueue(value)
+    return false
+  }
+
+  const stream = new ReadableStream<Uint8Array>(
     {
-      async pull(controller) {
+      start: c => {
+        controller = c
+      },
+      async pull() {
+        if (draining) {
+          return
+        }
+
         if (reader === undefined) {
           const state = bodies.get(res)
           if (state?.bytes !== undefined) {
             if (state.bytes.byteLength > 0) {
               controller.enqueue(state.bytes)
             }
+            ended = true
             controller.close()
             return
           }
 
           // A body the route failed to read, or something else started reading: what is left is not the body.
           if (state?.failure !== undefined) {
+            ended = true
             controller.error(state.failure)
             return
           }
           if (consumed(incoming)) {
+            ended = true
             controller.error(new ErrRequestBodyConsumed(`${incoming.method ?? 'GET'} ${pathOf(incoming.url)}`))
             return
           }
 
           if (declaredOver(headerOf(res, 'content-length'), limit)) {
+            ended = true
+            stop(res)
             controller.error(contentTooLarge(limit))
             return
           }
           reader = (Readable.toWeb(incoming as Readable) as ReadableStream<Uint8Array>).getReader()
         }
 
-        const { done, value } = await reader.read()
-
-        if (done) {
-          restoreKeepAlive(res)
-          controller.close()
-          return
-        }
-
-        received += value.byteLength
-        if (received > limit) {
-          controller.error(contentTooLarge(limit))
-          return
-        }
-
-        controller.enqueue(value)
+        inFlight = step()
+        await inFlight
       },
-      cancel: reason => reader?.cancel(reason),
+      cancel: reason => {
+        ended = true
+        stop(res)
+        return reader?.cancel(reason)
+      },
     },
     { highWaterMark: 0 },
   )
+
+  const state = bodies.get(res)
+  if (state !== undefined) {
+    state.stream = stream
+    state.open = () => {
+      if (reader === undefined && !consumed(incoming) && !declaredOver(headerOf(res, 'content-length'), limit)) {
+        reader = (Readable.toWeb(incoming as Readable) as ReadableStream<Uint8Array>).getReader()
+        // A request Node sees being read is left to its reader: unread, Node would discard it as the answer finishes.
+        ;(incoming as Readable).read(0)
+      }
+    }
+    state.drain = async () => {
+      if (reader === undefined || ended || draining) {
+        return
+      }
+
+      draining = true
+      try {
+        // The route's own read, if one is waiting on a chunk, lands first.
+        let over = inFlight !== undefined && (await inFlight)
+        while (!over) {
+          over = await step()
+        }
+      } catch (err) {
+        if (!ended) {
+          ended = true
+          controller.error(err)
+        }
+      }
+    }
+  }
+  return stream
 }
 
 /**
@@ -459,6 +537,58 @@ function declaresBody(incoming: IncomingMessage | Http2ServerRequest): boolean {
 /** Whether something read, or started reading, the body: even one chunk, then `pause()`. A client gone is not one. */
 function consumed(incoming: IncomingMessage | Http2ServerRequest): boolean {
   return incoming.readableDidRead || incoming.readableFlowing !== null || incoming.readableEnded
+}
+
+/**
+ * Keeps the connection of an answer that goes out while the route is still reading the body, as a route refusing a
+ * token before the upload has arrived does: closing under a client still sending would reset the connection before it
+ * read the answer. The route's own read, held to its limit, takes the rest; {@link stop} cuts the connection if that
+ * read goes over its limit or is cancelled. Once the answer has gone, what is left of the body is read into the route's
+ * stream at the client's pace, held to the same limit, whether or not the route reads on: a route that took the body
+ * and never reads it holds the connection no longer than the client takes to send it.
+ */
+function keepWhileRead(res: NodeResponse): void {
+  const state = bodies.get(res)
+  if (
+    state?.keepAlive === undefined ||
+    state.bytes !== undefined ||
+    state.failure !== undefined ||
+    state.stopped === true
+  ) {
+    return
+  }
+
+  // A route that took the body reads it from here on: Node, seeing it read, leaves it to the route.
+  if (state.stream?.locked === true) {
+    state.open?.()
+    res.once('finish', () => void state.drain?.())
+  }
+  if (consumed(res.req)) {
+    restoreKeepAlive(res)
+  }
+}
+
+/**
+ * The route's read stopped short of the end. Before the answer, the answer closes the connection; after an answer
+ * {@link keepWhileRead} kept it for, what is left of the body goes with the connection once the answer has left.
+ */
+function stop(res: NodeResponse): void {
+  const state = bodies.get(res)
+  if (state !== undefined) {
+    state.stopped = true
+  }
+
+  if (res instanceof Http2ServerResponse || !res.headersSent || !res.shouldKeepAlive) {
+    return
+  }
+
+  // The request's socket: the response lets go of its own once it finishes.
+  const socket = res.req.socket
+  if (res.writableFinished) {
+    socket.destroy()
+  } else {
+    res.once('finish', () => socket.destroy())
+  }
 }
 
 // The body has been read whole: the connection may be kept as Node would have kept it.

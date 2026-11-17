@@ -1,6 +1,8 @@
+import { Readable } from 'node:stream'
+
 import { newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
-import { CaffeineIoC, Injectable, Scopes } from '@caffeinejs/di'
+import { CaffeineIoC, Injectable, Lifetime, Scopes } from '@caffeinejs/di'
 import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -9,17 +11,13 @@ import { createWebApplication, type WebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { bindTo } from '../../decorators/bind_to.js'
 import { Catch, Controller, Get, Prefix } from '../../decorators/index.js'
-import { registerRouteGroup } from '../../decorators/registrar/index.js'
-import { $fst } from '../../platform/fastify/routing/picker.js'
 import { HTTPPlugin } from '../../plugin.js'
-import { Keys } from '../../symbols.js'
 import { kRouteConstraints } from '../constraints/keys.js'
 import { ErrConfiguration } from '../error/common.js'
 import type { ErrorHandler } from '../error/handler.js'
 import { ErrHTTPServiceUnavailable } from '../error/http.js'
 import type { Guard } from '../guards/guard.js'
 import { ErrRouteConflict } from '../matcher/matcher.js'
-import { RouteBuilder } from '../routing/builder.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import type { FetchAdapterTypes } from './adapter.js'
 import { Context } from './context.js'
@@ -53,6 +51,26 @@ class Catching {
   }
 }
 void [PrefixedRoot, Catching]
+
+let serviceCounter = 0
+
+@Lifetime(Scopes.REQUEST)
+@Injectable()
+class RequestScopedService {
+  readonly id = ++serviceCounter
+}
+
+@Lifetime(Scopes.TRANSIENT)
+@Controller('/transient-ctrl', [RequestScopedService])
+class TransientController {
+  constructor(private readonly svc: RequestScopedService) {}
+
+  @Get('/svc-id')
+  get(): object {
+    return { id: this.svc.id }
+  }
+}
+void [TransientController]
 
 @Injectable()
 class DenyGuard implements Guard {
@@ -129,6 +147,63 @@ describe('HTTPServer', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('content-length')).toBe('6')
     expect(await res.text()).toBe('')
+  })
+
+  // A cache updates the response it stored with the headers of a 304, so a length there would tell it the
+  // representation is now empty; a 204 has no content to measure.
+  it.each([304, 204])('answers HEAD with %i and no body with no Content-Length', async status => {
+    const served = await serve(
+      new Router('/s').get('/bodyless').handler(ctx => {
+        ctx.status(status)
+        return undefined
+      }),
+    )
+
+    const res = await fetchOn(served, '/s/bodyless', { method: 'HEAD' })
+
+    expect(res.status).toBe(status)
+    expect(res.headers.get('content-length')).toBe(null)
+    expect(res.headers.get('content-type')).toBe(null)
+  })
+
+  // The length a HEAD reports is that of the GET's body: an empty one is 0.
+  it('answers HEAD with 200 and an empty body with Content-Length 0', async () => {
+    const served = await serve(new Router('/s').get('/empty').handler(() => undefined))
+
+    const res = await fetchOn(served, '/s/empty', { method: 'HEAD' })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-length')).toBe('0')
+  })
+
+  // A Node stream an answer carries reaches onSend as a web stream, and a web stream onSend returns goes out.
+  it('hands onSend a web stream for a streamed answer and sends the stream it returns', async () => {
+    let handed: unknown
+    const served = await serve(
+      new Router('/stream').get('/').handler(() => Readable.from(['a', 'b'])),
+      a =>
+        a.hook('onSend', (_ctx, payload) => {
+          handed = payload
+          return new Response('replaced').body
+        }),
+    )
+
+    const res = await fetchOn(served, '/stream')
+
+    expect(await res.text()).toBe('replaced')
+    expect(handed).toBeInstanceOf(ReadableStream)
+  })
+
+  it('gives a transient controller a fresh request-scoped service per request', async () => {
+    app = createWebApplication()
+    await app.bootstrap()
+
+    const r1 = await fetchOn(app, '/transient-ctrl/svc-id')
+    const r2 = await fetchOn(app, '/transient-ctrl/svc-id')
+
+    expect(r1.status).toBe(200)
+    expect(r2.status).toBe(200)
+    expect((await r2.json()) as { id: number }).toEqual({ id: ((await r1.json()) as { id: number }).id + 1 })
   })
 
   it("keeps an explicit HEAD route over the GET's twin, in either order", async () => {
@@ -466,14 +541,6 @@ describe('HTTPServer', () => {
           .handler(() => 'x'),
     ],
     [
-      'route options',
-      r =>
-        void r
-          .get('/x')
-          .extend(route => void route.options('logLevel', 'warn'))
-          .handler(() => 'x'),
-    ],
-    [
       'a constraint',
       r =>
         void r
@@ -498,52 +565,10 @@ describe('HTTPServer', () => {
           .timeout(30 * Day)
           .handler(() => 'x'),
     ],
-    [
-      'a route config it does not serve',
-      r =>
-        void r
-          .get('/x')
-          .config('cors', { origin: '*' })
-          .handler(() => 'x'),
-    ],
   ])('refuses %s at start-up', async (_feature, declare) => {
     const router = new Router('/refused')
     declare(router)
     app = createWebApplication().mount(router)
-
-    const booting = app.bootstrap()
-
-    await expect(booting).rejects.toThrow(ErrConfiguration)
-    await expect(booting).rejects.toThrow('/refused/x')
-  })
-
-  // Fastify's `cors()` writes @fastify/cors's options, which the engine's `corsPolicy()` does not read.
-  it("refuses Fastify's cors() and names the engine's", async () => {
-    app = createWebApplication().mount(
-      new Router('/refused')
-        .get('/x')
-        .config('cors', { origin: '*' })
-        .handler(() => 'x'),
-    )
-
-    const booting = app.bootstrap()
-
-    await expect(booting).rejects.toThrow('its cors(...) or @CORS(...) is the one from "@caffeinejs/http/fastify"')
-    await expect(booting).rejects.toThrow('Import "cors" and "CORS" from "@caffeinejs/http"')
-  })
-
-  // A programmatic route always picks the context: picks are a controller's, bound here to this application alone.
-  it.each([['$fst.request()', $fst.request()]])('refuses %s at start-up', async (_pick, pick) => {
-    const endpoints = class Picking {
-      x(): string {
-        return 'x'
-      }
-    }
-    app = createWebApplication()
-    app.container.bind(endpoints, t => t.toValue(new endpoints()).labels(Keys.CONTROLLER))
-    registerRouteGroup(endpoints, group =>
-      group.path('/refused').routes([new RouteBuilder().path('/x').method('GET').name('x').parameters([pick])]),
-    )
 
     const booting = app.bootstrap()
 

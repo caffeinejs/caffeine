@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Get, Prefix } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 describe('Prefix', () => {
   it('prepends prefix to all routes in the controller', async () => {

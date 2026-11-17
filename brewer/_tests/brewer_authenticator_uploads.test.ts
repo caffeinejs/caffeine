@@ -4,12 +4,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { formData, multipart } from '@caffeinejs/multipart'
+import { createWebApplication } from '@caffeinejs/http/node'
+import { MiB } from '@caffeinejs/std/bytes'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { brewer, ErrBrewFollowUpNotSent, type Authenticator, type BrewClient, type BrewOptions } from '../index.js'
 import { bodies, profileForm } from './_bodies.js'
+import { formOf } from './_forms.js'
 import { Tokens } from './_tokens.js'
 
 /**
@@ -20,7 +22,7 @@ import { Tokens } from './_tokens.js'
  * very bytes the first send did.
  */
 
-const LARGE = 8 * 1024 * 1024
+const LARGE = 8 * MiB
 const ACCESS = 'Bearer fresh'
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
@@ -86,9 +88,11 @@ const files = new Router('/files')
     return refused(ctx) ? { error: 'invalid_token' } : { stored: bytes.byteLength }
   })
   .post('/form')
+  .extend(bodyAsBuffer())
+  .bodyLimit(LARGE)
   .handler(async ctx => {
     const parts: Part[] = []
-    for (const [field, value] of await formData(ctx).form()) {
+    for (const [field, value] of await formOf(ctx)) {
       parts.push(
         typeof value === 'string'
           ? { field, value }
@@ -140,9 +144,10 @@ const files = new Router('/files')
     return { done: true }
   })
 
+// A client that stops part-way can leave a connection holding a partial request, which a graceful close would wait
+// out (caffeinejs/caffeine#131): the close cuts it after a second.
 const app = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 } }))
-  .with(multipart(() => ({ limits: { fileSize: LARGE } })))
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(files)
 
 let origin: string

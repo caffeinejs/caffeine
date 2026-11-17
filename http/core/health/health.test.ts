@@ -13,7 +13,7 @@ import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Health, WebApplication } from '../../index.js'
-import { createWebApplication } from '../../platform/fastify/index.js'
+import { createWebApplication } from '../../platform/node/index.js'
 import { ErrHealthConfiguration } from './errors.js'
 import type { HealthConfig } from './options.js'
 import { healthProbes } from './plugin.js'

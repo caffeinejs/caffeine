@@ -50,12 +50,12 @@ export class ListenerBuilder<C = unknown> {
   }
 
   /**
-   * Configures the server, the way `.server(...)` configures the application's own: `factory` for Fastify's
-   * constructor options, `listener` for `listen()`. Resolved once, at start-up, against the same context a plugin
-   * factory gets; several calls shallow-merge section by section, in call order.
+   * Configures the server, the way `.server(...)` configures the application's own: on the Node application, `listen`
+   * for where it listens and `http`, `https` or `http2` for Node's own options. Resolved once, at start-up, against
+   * the same context a plugin factory gets; several calls shallow-merge section by section, in call order.
    *
    * ```ts
-   * .listener('admin', (l, { config }) => l.server(() => ({ listener: config.app.admin })))
+   * .listener('admin', (l, { config }) => l.server(() => ({ listen: config.app.admin })))
    * ```
    */
   server(configure: ServerConfigurer<AnyAdapterTypes, C>): this {
@@ -214,7 +214,7 @@ export interface HTTPFeatureConfigureKit<C = unknown> extends FeatureConfigureKi
  *
  * ```ts
  * protected configure(kit: FeatureConfigureKit<C>): void {
- *   listenersOf(kit).add('metrics', l => l.server(() => ({ listener: { port: this.#port } })).with(metrics()))
+ *   listenersOf(kit).add('metrics', l => l.server(() => ({ listen: { port: this.#port } })).with(metrics()))
  * }
  * ```
  *

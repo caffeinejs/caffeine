@@ -12,8 +12,7 @@ import type { SchemaIO } from './json_schema.js'
  * types, and (later) documents. Standard Schema libraries are fully supported wherever Caffeine runs the
  * validator itself: configuration, and the request of an HTTP route on the Node and fetch applications. They are
  * supported to the extent they convert to JSON Schema where a JSON Schema is all that is read: a route's response,
- * which is serialized from it on every application, a route on the Fastify application, which Fastify's Ajv validates,
- * and the OpenAPI document.
+ * which is serialized from it on every application, and the OpenAPI document.
  */
 export type AnySchema = TSchema | StandardSchemaV1
 
@@ -66,8 +65,8 @@ export function isStandardSchema(schema: unknown): schema is StandardSchemaV1 {
 
 /**
  * Narrows to a Standard Schema that also implements the spec's JSON Schema conversion, which is how a foreign
- * library becomes usable on an HTTP route. zod v4 implements it; libraries that do not cannot be compiled for
- * Fastify.
+ * library becomes usable on an HTTP route. zod v4 implements it; libraries that do not cannot describe a response or
+ * the OpenAPI document.
  */
 export function isStandardJSONSchema(schema: unknown): schema is StandardJSONSchemaV1 {
   return isStandardSchema(schema) && 'jsonSchema' in schema['~standard']

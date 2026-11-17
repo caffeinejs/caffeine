@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { Catch, type ActionResult, type IContext, Controller, ErrorHandler, Get } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { createWebApplication } from '../../../platform/node/index.js'
 
 // Error handlers, like controller handlers, may RETURN a value the framework finalizes: a plain object
 // serializes as JSON, and a handler that responds via ctx (returning void) is unchanged.

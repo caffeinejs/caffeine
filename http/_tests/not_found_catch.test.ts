@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { type ActionResult, Catch, IContext, ErrHTTPNotFound, ErrorHandler } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../platform/node/index.js'
 
 @Catch(ErrHTTPNotFound)
 class GlobalNotFound implements ErrorHandler<ErrHTTPNotFound> {

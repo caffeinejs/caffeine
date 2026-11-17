@@ -64,9 +64,10 @@ export interface WebRunInfo extends RunInfo {
 export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfig>
 
 /**
- * The HTTP application: an {@link Application} whose lifecycle steps drive an {@link IAdapter}: Fastify's, through
- * `createWebApplication()` from `@caffeinejs/http/fastify`, or the one given to the constructor. `setup()` builds
- * routing and sets the adapter up; `start()` runs it; `stop()` tears it down. `Application` handles the container, features, and lifecycle hooks.
+ * The HTTP application: an {@link Application} whose lifecycle steps drive an {@link IAdapter}: the Node application's,
+ * through `createWebApplication()` from `@caffeinejs/http/node`, the fetch application's, through the one from
+ * `@caffeinejs/http`, or the one given to the constructor. `setup()` builds routing and sets the adapter up; `start()`
+ * runs it; `stop()` tears it down. `Application` handles the container, features, and lifecycle hooks.
  *
  * Configures fluently, and is itself the running instance — there is no separate builder. Features (container
  * binders) are installed with `.install(...)`, in any order; server plugins are registered with `.with(...)`,
@@ -77,7 +78,7 @@ export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfi
  *   .install(Authentication(auth => auth.addJWTBearer(b => b.secret(SECRET))))
  *   .with(authentication())
  *   .with(staticFiles(s => s.serve('public')))
- *   .server(() => ({ listener: { port: 3000 } }))
+ *   .server(() => ({ listen: { port: 3000 } }))
  * ```
  */
 export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = never, DEPS = never, C = unknown>
@@ -207,12 +208,12 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * be a Node `(req, res, next)` function, a Caffeine `(ctx, next)` function, an instance, a class, or a
    * container key.
    *
-   * Which hooks exist is the adapter's: under Fastify, a `MiddlewareHook`; on the fetch and Node applications, a
-   * request hook point (`onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`); `onRequest` by default. A
+   * Which hooks exist is the adapter's: on the fetch and Node applications, a request hook point (`onRequest`,
+   * `preHandler`, `onSend`, `onResponse`, `onError`); `onRequest` by default. A
    * Caffeine middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call
    * overrides that hint. Answer the request with `ctx.body()` and do not call `next`. A Node `(req, res, next)`
-   * middleware runs on the Fastify and Node applications; the fetch application, which has no Node request, refuses
-   * one at start-up.
+   * middleware runs on the Node application; the fetch application, which has no Node request, refuses one at
+   * start-up.
    *
    * ```ts
    * app.use(RequestLogger)
@@ -283,30 +284,23 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   }
 
   /**
-   * Registers a server plugin from a factory — under Fastify, one producing a plugin or a `[plugin, options]`
-   * pair. Plugins install on the application's own server, in the order these calls are written, after the
-   * framework's own head slots (error handling, cookies):
+   * Registers a server plugin from a factory that returns an `HTTPPlugin`. Plugins install on the application's own
+   * server, in the order these calls are written, after the framework's own head slots (error handling, cookies):
    *
    * ```ts
    * createWebApplication()
    *   .with(staticFiles(s => s.serve('public')))
-   *   .with(({ config }) => [fastifyCors, config.app.cors.options])
+   *   .with(corsPolicy(c => c.origins('https://app.example')))
    *   .with(HTTPCaching(cache => cache.statusHeader('X-Edge')))
    * ```
    *
    * A listener installs none of them. It has its own: `.listener(name, l => l.with(...))`.
    *
-   * A factory needing to configure its plugin hands the plugin back together with its options, rather than
-   * wrapping it in one that closes over them: an official plugin already wraps itself in `fastify-plugin`, so
-   * registering it directly is what puts its hooks on every route, while a wrapper would take an encapsulation
-   * context of its own and cover nothing.
+   * A factory is never deduplicated — two calls register two plugins. A plugin `name` already on that server is
+   * refused at start-up. A factory producing another adapter's extension does not compile.
    *
-   * A factory is never deduplicated — two calls register two plugins. A `fastify-plugin` name already on that
-   * instance is refused at register time. A factory producing another adapter's extension does not compile.
-   *
-   * A factory may return an `HTTPPlugin` instead of a plugin, when it needs nothing from Fastify: its `register`
-   * runs in this slot. Either kind of factory may mount routers on this server and add middleware to its pipeline
-   * with `context.app`, which takes this application's adapter.
+   * The plugin's `register` runs in this slot. A factory may mount routers on this server and add middleware to its
+   * pipeline with `context.app`, which takes this application's adapter.
    *
    * A feature is not a plugin: install it with {@link Application.install}, at any position in the chain — a
    * feature binds into the container before any factory here runs, so only `.with(...)` order matters.
@@ -354,7 +348,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    *
    * ```ts
    * createWebApplication({ config })
-   *   .listener('admin', (l, { config }) => l.server(() => ({ listener: config.app.admin })).with(healthProbes()))
+   *   .listener('admin', (l, { config }) => l.server(() => ({ listen: config.app.admin })).with(healthProbes()))
    *   .mount(newRouter('/jobs').extend(bindTo('admin')).get('/', () => listJobs()))
    * ```
    *
@@ -389,15 +383,15 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * Configures the server the adapter builds at {@link ready}: the application's own. A listener takes its
    * settings from `.listener(name, l => l.server(...))`.
    *
-   * `configure` resolves against the same context a plugin factory gets and returns the adapter's own settings —
-   * under Fastify `{ factory, listener }`, the constructor options and the listen options. To reach the server
-   * itself, use {@link serverCallback}.
+   * `configure` resolves against the same context a plugin factory gets and returns the adapter's own settings — on
+   * the Node application `listen` and Node's `http`, `https` or `http2` options beside the server settings. To reach
+   * the server itself, use {@link serverCallback}.
    *
    * Calls accumulate: the settings shallow-merge section by section in call order. A configuration node handed
    * over as a section is copied, never mutated.
    *
    * ```ts
-   * .server(({ config }) => ({ listener: config.app.server }))
+   * .server(({ config }) => ({ listen: config.app.server }))
    * ```
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
@@ -612,8 +606,8 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   }
 
   /**
-   * Readies the application if needed and starts the server with what the adapter's `run` takes — under Fastify,
-   * listen options merged over the `listener` that `.server(...)` returned, these winning key by key. Each
+   * Readies the application if needed and starts the server with what the adapter's `run` takes — on the Node
+   * application, listen options merged over the `listen` that `.server(...)` returned, these winning key by key. Each
    * listener starts after it, on its own settings alone.
    *
    * Runs once: a second call is refused rather than joined, since it would otherwise lose its listen options.
@@ -680,9 +674,9 @@ type DepsOfRouter<T> = T extends Router<any, any, infer D, any, any, any> ? (D e
  * export default { fetch: app.fetch }
  * ```
  *
- * What the engine cannot serve yet is refused at start-up, pointing at `createWebApplication()` from
- * `@caffeinejs/http/fastify`. A handler typed with a plain `IContext` sees Fastify's `raw` and `platform` types; read
- * them through `ctx.platform.name === 'fetch'`.
+ * What the fetch application cannot serve, such as a Node middleware, is refused at start-up, pointing at
+ * `createWebApplication()` from `@caffeinejs/http/node`. A handler typed with a plain `IContext` sees the `raw` and
+ * `platform` types of every engine application the program loads; read them through `ctx.platform.name === 'fetch'`.
  */
 export function createWebApplication<TConfig = unknown>(
   options?: WebApplicationOptions<TConfig>,
