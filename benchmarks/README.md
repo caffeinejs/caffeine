@@ -20,7 +20,7 @@ Close everything else on the machine before a timing run, and do not run two ben
 | ------------------------------ | ----------------------------------------------------------------------------------- |
 | `helloworld`                   | Routing and serialization floor: one `GET` returning a small object                 |
 | `request`                      | A validated `POST`: params, query, body, headers, a hook, a response schema         |
-| `request:bun`                  | The `request` fixtures on Bun                                                       |
+| `request:bun`                  | `request` on Bun, through each framework's Bun server where it has one              |
 | `mixedscopes`                  | `request` plus one request-scoped dependency                                        |
 | `authn`                        | JWT bearer verification and a role check                                            |
 | `caching`                      | A 16 KB JSON `GET` served from each framework's response cache, and uncached        |
