@@ -81,6 +81,7 @@
     "@swc/core": "^1.16.21",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.0",
+    "esbuild": "0.28.2",
     "fast-check": "^4.10.2",
     "git-cliff": "^2.14.2",
     "globby": "^16.2.4",
@@ -94,6 +95,7 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "unplugin-swc": "^2.0.0",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "workerd": "1.20261118.1"
   }
 }
