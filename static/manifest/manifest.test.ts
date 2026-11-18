@@ -214,4 +214,17 @@ describe('portable manifest grammar', () => {
     const text = JSON.stringify({ version: 1, files: { [MANIFEST_FILE]: file } })
     expect(() => parseManifest(text, 'release', 1)).toThrow('reserved for the release manifest')
   })
+
+  it.each([
+    ['the files inventory', { version: 1 }],
+    ['an identity timestamp', { version: 1, files: { 'a.txt': { ...file, lastModified: undefined } } }],
+    [
+      'a stored variant path',
+      { version: 1, files: { 'a.txt': { ...file, variants: { gzip: { size: 0, hash: file.hash } } } } },
+    ],
+  ])('rejects a portable manifest missing %s', (_field, manifest) => {
+    expect(() => parseManifest(JSON.stringify(manifest), 'release', 1)).toThrow(
+      expect.objectContaining({ code: 'ERR_STATIC_MANIFEST' }),
+    )
+  })
 })

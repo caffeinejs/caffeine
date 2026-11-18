@@ -78,7 +78,11 @@ export async function verifyAssets(
 
   for (const [option, limit] of Object.entries({ maxManifestSize, maxEntries })) {
     if (!Number.isSafeInteger(limit) || limit < 0) {
-      throw new ErrStaticManifest(SOURCE, `"${option}" must be a non-negative safe integer`)
+      throw new ErrStaticManifest(
+        SOURCE,
+        `"${option}" must be a non-negative safe integer`,
+        `Set "${option}" to a non-negative safe integer`,
+      )
     }
   }
 
@@ -102,6 +106,7 @@ export async function verifyAssets(
             throw new ErrStaticManifest(
               SOURCE,
               `"${MANIFEST_FILE}" exceeds "maxManifestSize" of ${maxManifestSize} bytes`,
+              'Raise "maxManifestSize" if you trust the manifest',
             )
           }
         }
@@ -109,7 +114,11 @@ export async function verifyAssets(
         try {
           text += chunk.done ? decoder.decode() : decoder.decode(chunk.value, { stream: true })
         } catch {
-          throw new ErrStaticManifest(SOURCE, `"${MANIFEST_FILE}" is not valid UTF-8`)
+          throw new ErrStaticManifest(
+            SOURCE,
+            `"${MANIFEST_FILE}" is not valid UTF-8`,
+            `Regenerate "${MANIFEST_FILE}" as UTF-8`,
+          )
         }
 
         if (chunk.done) {
@@ -174,7 +183,11 @@ async function verifyObject(
           size += chunk.value.byteLength
 
           if (size > expected.size) {
-            throw new ErrStaticManifest(SOURCE, `"${key}" exceeds its declared size of ${expected.size} bytes`)
+            throw new ErrStaticManifest(
+              SOURCE,
+              `"${key}" exceeds its declared size of ${expected.size} bytes`,
+              `Restore "${key}" from the build output`,
+            )
           }
 
           hash.update(chunk.value)
@@ -185,6 +198,7 @@ async function verifyObject(
           throw new ErrStaticManifest(
             SOURCE,
             `"${key}" has ${size} bytes, the manifest declares ${expected.size} bytes`,
+            `Restore "${key}" from the build output`,
           )
         }
 
@@ -201,7 +215,7 @@ async function verifyObject(
       }
 
       if (!verified) {
-        throw new ErrStaticManifest(SOURCE, `"${key}" was not consumed to its end`)
+        throw new ErrStaticManifest(SOURCE, `"${key}" was not consumed to its end`, 'Read the variant stream to EOF')
       }
     },
   )
@@ -264,7 +278,7 @@ async function readSource(
     if (err instanceof ErrStaticManifest) {
       throw err
     }
-    throw new ErrStaticManifest(SOURCE, `"${key}" cannot be read`)
+    throw new ErrStaticManifest(SOURCE, `"${key}" cannot be read`, `Make "${key}" readable in the source`)
   } finally {
     signal?.removeEventListener('abort', onAbort)
   }

@@ -1,11 +1,16 @@
-import { mkdir, mkdtemp, rm, symlink, truncate, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, open, rm, symlink, truncate, unlink, writeFile, type FileHandle } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { MANIFEST_FILE } from '../manifest/manifest.js'
 import { directorySource } from './directory.js'
+
+vi.mock(import('node:fs/promises'), async importOriginal => {
+  const actual = await importOriginal()
+  return { ...actual, open: vi.fn(actual.open) }
+})
 
 describe('directorySource', () => {
   let workspace: string
@@ -115,6 +120,12 @@ describe('directorySource', () => {
     expect(() => directorySource(join(root, 'asset'))).toThrow('the root is not a directory')
   })
 
+  it('refuses to bind a release that has not been staged', () => {
+    expect(() => directorySource(join(workspace, 'missing'))).toThrow(
+      expect.objectContaining({ code: 'ERR_STATIC_MANIFEST' }),
+    )
+  })
+
   it('resolves parent aliases inside the bound release and refuses file symlinks for assets and the manifest', async () => {
     await mkdir(join(root, 'inside'))
     await writeFile(join(root, 'inside', 'asset'), 'inside')
@@ -166,5 +177,39 @@ describe('directorySource', () => {
     expect((await again.read()).done).toBe(false)
     await again.cancel()
     expect(await again.read()).toEqual({ done: true, value: undefined })
+  })
+
+  it('completes pending reads without delivering more bytes once the caller cancels', async () => {
+    await writeFile(join(root, 'asset'), 'u')
+    const reading = Promise.withResolvers<void>()
+    const finishRead = Promise.withResolvers<void>()
+    const close = vi.fn(() => finishRead.promise)
+    vi.mocked(open).mockResolvedValueOnce({
+      stat: async () => ({ size: 1, isFile: () => true }),
+      async read(buffer: Uint8Array) {
+        reading.resolve()
+        await finishRead.promise
+        buffer[0] = 0x75
+        return { bytesRead: 1, buffer }
+      },
+      close,
+    } as unknown as FileHandle)
+
+    const reader = (await directorySource(root).open('asset', {})).getReader()
+    const pending = reader.read()
+    await reading.promise
+    const settled = vi.fn()
+    const cancelled = reader.cancel().then(settled)
+    try {
+      expect(await pending).toEqual({ done: true, value: undefined })
+      await new Promise<void>(resolve => setImmediate(resolve))
+      expect(settled).not.toHaveBeenCalled()
+    } finally {
+      finishRead.resolve()
+      await cancelled
+      reader.releaseLock()
+    }
+    expect(settled).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledTimes(1)
   })
 })

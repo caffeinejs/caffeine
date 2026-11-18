@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { MANIFEST_FILE, variantPath, type ManifestFile } from '../manifest/manifest.js'
 import { ErrStaticManifest, verifyStaticAssets, type StaticAssetSource } from './index.js'
+import { verifyAssets } from './web.js'
 
 const encoder = new TextEncoder()
 const abc = encoder.encode('abc')
@@ -197,6 +198,33 @@ describe('verifyStaticAssets', () => {
       ),
     ).catch((cause: unknown) => cause)
     expect(err).toMatchObject({ code: 'ERR_STATIC_MANIFEST', message: expect.stringContaining(variant.path) })
+  })
+
+  it('rejects a release when the variant check returns before reading all stored bytes', async () => {
+    const cancel = vi.fn()
+    const firstByte = xyz.subarray(0, 1)
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(firstByte)
+        controller.enqueue(xyz.subarray(1))
+        controller.close()
+      },
+      cancel,
+    })
+    const release = {
+      readManifest: async () => stream(manifest({ first: { ...file, variants: { gzip: variant } } })),
+      open: async (key: string) => (key === variant.path ? body : stream(abc)),
+    }
+
+    let first: IteratorResult<Uint8Array> | undefined
+    const result = verifyAssets(release, {}, async chunks => {
+      first = await chunks[Symbol.asyncIterator]().next()
+    })
+
+    await expect(result).rejects.toMatchObject({ code: 'ERR_STATIC_MANIFEST' })
+    expect(first).toEqual({ done: false, value: firstByte })
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(body.locked).toBe(false)
   })
 
   it('stops the representation read at the first excess chunk and cancels it once', async () => {
