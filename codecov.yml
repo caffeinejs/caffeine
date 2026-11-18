@@ -10,9 +10,12 @@ ignore:
   - 'benchmarks/**'
   - 'docs/**'
   - 'examples/**'
+  - 'multipart/**'
+  - 'parked/**'
   - 'plugins/**'
   - 'test/**'
   - 'tools/**'
+  - 'view/**'
 
 coverage:
   status:

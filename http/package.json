@@ -1,7 +1,7 @@
 {
   "name": "@caffeinejs/http",
   "version": "0.0.0",
-  "description": "Caffeine http fastify adapter package",
+  "description": "Caffeine HTTP: a web-standards server for Node and fetch runtimes",
   "license": "MIT",
   "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
   "homepage": "https://github.com/caffeinejs/caffeine/tree/main/http#readme",
@@ -28,6 +28,14 @@
       "types": "./dist/core/bff/index.d.ts",
       "default": "./dist/core/bff/index.js"
     },
+    "./bun": {
+      "types": "./dist/platform/bun/index.d.ts",
+      "default": "./dist/platform/bun/index.js"
+    },
+    "./compress": {
+      "types": "./dist/core/compress/index.d.ts",
+      "default": "./dist/core/compress/index.js"
+    },
     "./conditional": {
       "types": "./dist/core/conditional/index.d.ts",
       "default": "./dist/core/conditional/index.js"
@@ -39,6 +47,10 @@
     "./cookie": {
       "types": "./dist/core/cookie/index.d.ts",
       "default": "./dist/core/cookie/index.js"
+    },
+    "./cors": {
+      "types": "./dist/core/cors/index.d.ts",
+      "default": "./dist/core/cors/index.js"
     },
     "./csrf": {
       "types": "./dist/core/csrf/index.d.ts",
@@ -56,10 +68,6 @@
       "types": "./dist/core/error/index.d.ts",
       "default": "./dist/core/error/index.js"
     },
-    "./fastify": {
-      "types": "./dist/platform/fastify/index.d.ts",
-      "default": "./dist/platform/fastify/index.js"
-    },
     "./guards": {
       "types": "./dist/core/guards/index.d.ts",
       "default": "./dist/core/guards/index.js"
@@ -75,6 +83,10 @@
     "./middleware": {
       "types": "./dist/core/middleware/index.d.ts",
       "default": "./dist/core/middleware/index.js"
+    },
+    "./node": {
+      "types": "./dist/platform/node/index.d.ts",
+      "default": "./dist/platform/node/index.js"
     },
     "./range": {
       "types": "./dist/core/range/index.d.ts",
@@ -97,7 +109,7 @@
     "!dist/**/_spectypes"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "^24.22.0 || >=26.10.0"
   },
   "publishConfig": {
     "access": "public"
@@ -105,17 +117,22 @@
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
-    "test": "vitest run",
+    "test": "vitest run && vitest run --config vitest.engine.config.ts",
     "test:memory": "vitest run --config vitest.leak.config.ts"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.52",
+    "@standard-schema/spec": "^1.1.0",
+    "ajv-formats": "^3.0.1",
     "cookie": "^2.0.1",
-    "fastify": "^5.12.8",
-    "fastify-plugin": "^6.0.0",
+    "fast-json-stringify": "^7.3.6",
+    "find-my-way": "^9.10.0",
+    "ipaddr.js": "^2.5.0",
     "jose": "^6.2.10",
+    "light-my-request": "^6.6.0",
     "negotiator": "^1.1.0",
-    "path-to-regexp": "^8.4.2"
+    "path-to-regexp": "^8.4.2",
+    "secure-json-parse": "^4.1.1"
   },
   "peerDependencies": {
     "@caffeinejs/application": "0.0.0",
@@ -125,9 +142,6 @@
   "devDependencies": {
     "@caffeinejs/resilience": "0.0.0",
     "@caffeinejs/testing": "0.0.0",
-    "@fastify/compress": "^9.2.0",
-    "@fastify/cookie": "^11.1.2",
-    "@fastify/cors": "^11.3.0",
     "@types/cors": "^2.8.19",
     "@types/negotiator": "^0.6.5",
     "cors": "^2.8.6",

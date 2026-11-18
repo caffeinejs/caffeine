@@ -6,11 +6,11 @@ How to change **this** monorepo. Agent behavior is in [`AGENTS.md`](AGENTS.md); 
 
 In this repository these names mean **this project**, not a third-party library:
 
-| You say                                  | It means                                                           |
-| ---------------------------------------- | ------------------------------------------------------------------ |
-| Caffeine Framework, Caffeine, CaffeineJS | This monorepo (`caffeinejs/caffeine`). npm scope `@caffeinejs/*`.  |
-| CaffeineIoC                              | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`. |
-| Caffeine HTTP, the HTTP package          | `@caffeinejs/http` (Fastify adapter).                              |
+| You say                                  | It means                                                                                                                                                                                                          |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Caffeine Framework, Caffeine, CaffeineJS | This monorepo (`caffeinejs/caffeine`). npm scope `@caffeinejs/*`.                                                                                                                                                 |
+| CaffeineIoC                              | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`.                                                                                                                                                |
+| Caffeine HTTP, the HTTP package          | `@caffeinejs/http`, its own web-standards server, run on a runtime by a server adapter: one per runtime, from `@caffeinejs/http/<runtime>` (`node()` from `@caffeinejs/http/node`), and none for a fetch runtime. |
 
 This is not NestJS, Express, or Spring Boot.
 
@@ -94,7 +94,7 @@ A module is a directory of source files in a library package (not `benchmarks/`,
 - It has a main file named after it (`logger/logger.ts`, `circuitbreaker/circuitbreaker.ts`) and an `index.ts` barrel that only re-exports.
 - A directory of independent files with no main one (`decorators/`, `internal/`, `provider/`) has the barrel alone.
 - A barrel publishes what the package offers. A helper only the package's own code uses stays out of it and is imported by its path.
-- One capability's code and public types live in one module, and other modules call into it rather than hold parts of it, so the capability is found and changed in one place. A package that splits a capability across layers keeps each layer's half whole, as `http/` does between `core/` and `platform/fastify/`.
+- One capability's code and public types live in one module, and other modules call into it rather than hold parts of it, so the capability is found and changed in one place. A package that splits a capability across layers keeps each layer's half whole, as `http/` does between `core/` and `platform/node/`.
 - Exempt: a package root, whose `index.ts` is the entry (`std/` has none); a directory holding only subdirectories; `_`-prefixed directories (`_tests/`, `_testdata/`, `_spectypes/`, `_spec/`).
 - A new or moved module follows these rules. An existing one keeps its layout until a change asks to move it.
 
@@ -110,7 +110,7 @@ A span of time in a public API (an option, a builder method, an SPI parameter, a
 - **Code writes it with the constants**: `5 * Second`, `100 * Millisecond`, `30 * Day`, `512 * KiB`, `10 * MiB`. A default is written the same way, never as a bare count (`1048576`, `1024 * 1024`). A test's payload length (`'x'.repeat(n)`, `Buffer.alloc(n)`) is data, not a size an API takes, and this rule does not reach it.
 - **Text is read in two places only**: `$t.Duration()` or `$t.Bytes()` in a configuration schema, and `parseDuration` / `duration(...)` or `parseBytes` / `bytes(...)` in code. No option takes `Duration | string` or `ByteSize | string`.
 - **A message prints it with `formatDuration(d)` or `formatBytes(n)`**, or as `${d}ms` or `${n} bytes`; a solution names code: `such as 30 * Second`, `such as 1 * MiB`. A log line keeps its key and the unit the key names (`ttlMs`, `ageSeconds`, `bytes`), with the value converted.
-- **A library's own option shape keeps the library's type and unit** (Fastify, jose, undici, `@fastify/static`, `@fastify/multipart`'s `limits`, `lru-cache`). An application fills it with the constants, or with `duration('7d')` or `bytes('10mb')` for text.
+- **A library's own option shape keeps the library's type and unit** (Node's `node:net`, `node:http`, `node:https` and `node:http2` options, jose, undici, `lru-cache`). An application fills it with the constants, or with `duration('7d')` or `bytes('10mb')` for text.
 - `kafka/` and `messaging/` still take bare-number durations (`nackDelay`, `idleTimeout`). Do not copy them.
 
 ### Durations
@@ -118,7 +118,7 @@ A span of time in a public API (an option, a builder method, an SPI parameter, a
 - The grammar is Go's plus `d` for a day (`'90s'`, `'1h30m'`, `'7d'`); configuration refuses a sign and a bare number.
 - **Seconds exist only on the wire**, converted where they are written: `Math.floor(d / Second)` for `Max-Age`, `Cache-Control`, a token's `exp` and OIDC `max_age`, and `d / Second` for an OpenTelemetry histogram in seconds. A value read off the wire in seconds, such as `expires_in`, becomes a `Duration` at once.
 - **A lifetime written in whole seconds is at least one**: a scheme truncates its own (`truncate(ttl, Second)`), and refuses one under a second when it is built, where it would go out as `Max-Age=0` or an `exp` already past. `ctx.cookie(...)` refuses a `maxAge` that is not whole seconds. A tolerance on time claims is floored, `Math.floor(d / Second)`, everywhere it is checked.
-- **A sink that takes whole milliseconds gets `Math.ceil(d)`**: `AbortSignal.timeout`, Fastify's `handlerTimeout`, Redis `PX`, undici's headers and body timeouts.
+- **A sink that takes whole milliseconds gets `Math.ceil(d)`**: `AbortSignal.timeout`, Redis `PX`, undici's headers and body timeouts.
 
 ### Byte sizes
 
@@ -172,8 +172,8 @@ TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write fo
 
 - Write it when behavior surprises, sibling APIs look alike, callers must handle a specific `Err*` (`@throws`), a parameter's meaning is not its name, or a generic or overload is not obvious. Do not document every export.
 - Do not restate the type, narrate the implementation or add internal details. Do not document tests, obvious getters or private `_` modules.
-- No design history in hover ("we rejected Nest"). Do document an observable why when it **is** the contract (headers stay open because Ajv `removeAdditional` would strip `host`).
-- Do not analogize to Nest, Spring, ASP.NET, or Express in docs or TSDoc. Naming this package's real peer (Fastify in `@caffeinejs/http`) is allowed when the reader must know it.
+- No design history in hover ("we rejected Nest"). Do document an observable why when it **is** the contract (headers stay open because a closed schema would strip `host`).
+- Do not analogize to Nest, Spring, ASP.NET, or Express in docs or TSDoc. Naming this package's real peer (`@platformatic/kafka` in `@caffeinejs/kafka`) is allowed when the reader must know it.
 - Every API an `@example`, a README or a doc page shows exists today, with the signature shown: TC39 decorators have no parameter form, and a token an example injects is one a package exports.
 - Tags: `{@link Symbol}`; `@param name -` only when the name is insufficient; `@throws`; `@example` only for call shapes types hide. Skip `@returns` unless the meaning is not the type. No `@class`, `@function`, or `@type`.
 - Voice: sentence case; complete sentences; same acronym rules as identifiers. No `NOTE:`, `IMPORTANT:`, or changelogs.
@@ -181,14 +181,14 @@ TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write fo
 ```ts
 // correct — contract + why it surprises
 /**
- * Compiles an authored schema to Fastify JSON Schema.
+ * Compiles an authored schema to JSON Schema.
  *
- * `headers` stays open: Ajv `removeAdditional` would strip `host`.
+ * `headers` stays open: a closed schema would strip `host`.
  * @param context - Route id in failures, e.g. `POST /pets`
  */
 
 // wrong — restates types / ADR / Nest
-/** Takes a schema and returns FastifySchema like Nest ValidationPipe. */
+/** Takes a schema and returns a JSON Schema like Nest ValidationPipe. */
 ```
 
 ## Third-party library docs

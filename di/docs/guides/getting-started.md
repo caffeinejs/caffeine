@@ -6,7 +6,7 @@
 npm install -E @caffeinejs/di
 ```
 
-CaffeineIoC requires Node.js 24 or later and ships as ES modules only.
+CaffeineIoC requires Node.js 24.22 or later on 24, or 26.10 or later, and ships as ES modules only.
 
 ## Your first container
 

@@ -4,18 +4,16 @@ import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../adapter.js'
+import { createWebApplication } from '../application.js'
 import { ErrHTTPBadRequest } from '../core/error/http.js'
+import { healthProbes } from '../core/health/index.js'
 import { Router } from '../core/routing/programmatic/programmatic.js'
 import { Controller, Get, Use } from '../decorators/index.js'
-import { type WebApplication } from '../index.js'
-import { createWebApplication, healthProbes } from '../platform/fastify/index.js'
-import type { HTTPPluginFactory } from '../platform/fastify/plugin.js'
-import { newRouter } from '../platform/fastify/routing/new_router.js'
+import { HTTPPlugin, type WebApplication } from '../index.js'
+import { node } from '../platform/node/index.js'
+import type { HTTPSetupContext } from '../plugin.js'
 
 /**
  * What an application installs on its server: the plugins its `.with(...)` factories produce.
@@ -26,22 +24,37 @@ import { newRouter } from '../platform/fastify/routing/new_router.js'
  */
 
 /**
- * One `fastify-plugin`-wrapped plugin that stamps a response header.
+ * A plugin named `name` that stamps a response header.
  *
- * Wrapped, so the hook lands on whatever context the plugin was registered in — the root server when the
- * application registered it, one route group when a router or a controller did.
+ * Registered on the root server, it covers every route; registered by a router or a controller, only that group's.
  */
-function stamping(name: string, header: string, log?: string[]): HTTPPluginFactory {
-  return () => {
-    const plugin: FastifyPluginAsync = async instance => {
-      log?.push(name)
-      instance.addHook('onRequest', (_request, reply, done) => {
-        reply.header(header, 'yes')
-        done()
-      })
-    }
+function stamping(name: string, header: string, log?: string[]) {
+  return () =>
+    new (class extends HTTPPlugin {
+      override readonly name = name
 
-    return fp(plugin, { name })
+      register({ app }: HTTPSetupContext): void {
+        log?.push(name)
+        app.hook('onRequest', ctx => void ctx.header(header, 'yes'))
+      }
+    })()
+}
+
+/** A plugin stamping `header` on every response it covers. */
+class Marking extends HTTPPlugin {
+  override readonly name: string
+  readonly #header: string
+  readonly #value: string
+
+  constructor(header: string, value = 'yes') {
+    super()
+    this.#header = header
+    this.#value = value
+    this.name = `marking:${header}`
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.hook('onRequest', ctx => void ctx.header(this.#header, this.#value))
   }
 }
 
@@ -58,7 +71,7 @@ describe('plugin registration', () => {
   it('registers plugins in the order .with() was written', async () => {
     const log: string[] = []
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .with(stamping('third', 'x-third', log))
       .with(stamping('first', 'x-first', log))
       .with(stamping('second', 'x-second', log))
@@ -80,20 +93,10 @@ describe('plugin registration', () => {
         kit.container.bind(kGreeting, t => t.toValue('hello'))
       },
     })
-    const reading: HTTPPluginFactory = ({ container }) => {
-      const value = container.get(kGreeting)
-      const plugin: FastifyPluginAsync = async instance => {
-        instance.addHook('onRequest', (_request, reply, done) => {
-          reply.header('x-greeting', value)
-          done()
-        })
-      }
+    const reading = ({ container }: HTTPSetupContext) => new Marking('x-greeting', container.get(kGreeting))
 
-      return fp(plugin, { name: 'greeting-reader' })
-    }
-
-    const before = createWebApplication().install(greeting()).with(reading)
-    const after = createWebApplication().with(reading).install(greeting())
+    const before = createWebApplication({ adapter: node() }).install(greeting()).with(reading)
+    const after = createWebApplication({ adapter: node() }).with(reading).install(greeting())
 
     try {
       await before.bootstrap()
@@ -107,88 +110,18 @@ describe('plugin registration', () => {
     }
   })
 
-  // The decoration a dependent plugin fails loudly with: it answers for user installs and for the framework's
-  // own built-ins alike, since their names enter the same set.
-  it('answers $hasFeature on the instance for installed features and built-ins', async () => {
-    const idle: Feature = {
-      [kFeatureName]: 'idle',
-      [kFeatureConfigure](): void {
-        // Nothing to bind.
-      },
-    }
-
-    app = createWebApplication().install(idle)
-
-    await app.bootstrap()
-
-    expect(app.instance.$hasFeature('idle')).toBe(true)
-    expect(app.instance.$hasFeature('cookie')).toBe(true)
-    expect(app.instance.$hasFeature('error-handling')).toBe(true)
-    expect(app.instance.$hasFeature('shutdown')).toBe(true)
-    expect(app.instance.$hasFeature('nope')).toBe(false)
-  })
-
   // A factory runs before the server exists, so the same answer sits on its context.
   it('answers hasFeature on the setup context handed to factories', async () => {
     let seen: boolean[] = []
 
-    app = createWebApplication().with(context => {
+    app = createWebApplication({ adapter: node() }).with(context => {
       seen = [context.hasFeature('cookie'), context.hasFeature('nope')]
-      return fp(async () => undefined, { name: 'has-feature-probe' })
+      return new Marking('x-has-feature-probe')
     })
 
     await app.bootstrap()
 
     expect(seen).toEqual([true, false])
-  })
-
-  // The plugin body loads in its slot, which is what makes a forgotten `await` harmless: what it registered
-  // loads as part of its slot, before the next one starts.
-  it('loads what a plugin registered without awaiting before the next slot', async () => {
-    const log: string[] = []
-
-    const forgetful: HTTPPluginFactory = () => {
-      const plugin = (instance: FastifyInstance, _opts: unknown, done: () => void): void => {
-        void instance.register(
-          fp(
-            async () => {
-              log.push('nested')
-            },
-            { name: 'nested' },
-          ),
-        )
-        done()
-      }
-
-      return fp(plugin, { name: 'forgetful' })
-    }
-
-    app = createWebApplication()
-      .with(forgetful)
-      .with(stamping('after', 'x-after', log))
-
-    await app.bootstrap()
-
-    expect(log).toEqual(['nested', 'after'])
-  })
-
-  // The plugin body runs on the application's own server, with what the framework decorates already there.
-  it('hands a plugin the application server, already decorated', async () => {
-    let decorated = false
-
-    const probe: HTTPPluginFactory = () =>
-      fp(
-        async (instance: FastifyInstance) => {
-          decorated = instance.hasDecorator('$container')
-        },
-        { name: 'decoration-probe' },
-      )
-
-    app = createWebApplication().with(probe)
-
-    await app.bootstrap()
-
-    expect(decorated).toBe(true)
   })
 
   // The logger feature configures alongside every other feature, so the logger is only final once they all have.
@@ -198,15 +131,15 @@ describe('plugin registration', () => {
     const custom: Logger = { ...newNoopLogger() }
     const seen: { first?: HTTPSetupContext; second?: HTTPSetupContext } = {}
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .logger(b => b.use(custom))
       .with(context => {
         seen.first = context
-        return fp(async () => undefined, { name: 'context-probe' })
+        return new Marking('x-context-probe')
       })
       .with(context => {
         seen.second = context
-        return fp(async () => undefined, { name: 'context-probe-2' })
+        return new Marking('x-context-probe-2')
       })
 
     await app.bootstrap()
@@ -224,20 +157,9 @@ describe('plugin registration', () => {
     const container = new CaffeineIoC()
     container.bind(kGreeting, t => t.toValue('hello'))
 
-    const factory: HTTPPluginFactory = ({ container }) => {
-      const greeting = container.get(kGreeting)
+    const factory = ({ container }: HTTPSetupContext) => new Marking('x-greeting', container.get(kGreeting))
 
-      const plugin: FastifyPluginAsync = async instance => {
-        instance.addHook('onRequest', (_request, reply, done) => {
-          reply.header('x-greeting', greeting)
-          done()
-        })
-      }
-
-      return fp(plugin, { name: 'greeting' })
-    }
-
-    app = createWebApplication({ container }).with(factory)
+    app = createWebApplication({ adapter: node(), container }).with(factory)
 
     await expect(app.bootstrap()).resolves.not.toThrow()
 
@@ -250,21 +172,13 @@ describe('plugin registration', () => {
   it('keeps an awaiting app-level factory at its written position', async () => {
     const log: string[] = []
 
-    const awaiting: HTTPPluginFactory = async () => {
+    const awaiting = async () => {
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const plugin: FastifyPluginAsync = async instance => {
-        log.push('awaiting')
-        instance.addHook('onRequest', (_request, reply, done) => {
-          reply.header('x-awaiting', 'yes')
-          done()
-        })
-      }
-
-      return fp(plugin, { name: 'awaiting' })
+      return stamping('awaiting', 'x-awaiting', log)()
     }
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .with(stamping('before', 'x-before', log))
       .with(awaiting)
       .with(stamping('after', 'x-after', log))
@@ -275,7 +189,7 @@ describe('plugin registration', () => {
   })
 
   // The head slot: error handling is installed ahead of everything the application installed, so a route that
-  // throws is answered by the framework handler rather than by Fastify's default.
+  // throws is answered by the framework handler rather than by a bare default.
   it('covers a route with the framework error handler whatever a plugin registered', async () => {
     @Controller('/head-slot')
     class HeadSlotController {
@@ -286,7 +200,7 @@ describe('plugin registration', () => {
     }
     void [HeadSlotController]
 
-    app = createWebApplication().with(stamping('stamp', 'x-stamp'))
+    app = createWebApplication({ adapter: node() }).with(stamping('stamp', 'x-stamp'))
 
     await app.bootstrap()
 
@@ -297,10 +211,10 @@ describe('plugin registration', () => {
     expect(await res.json()).toMatchObject({ detail: 'nope' })
   })
 
-  // The tail slot: the not-found handler is contributed last, so it sees whatever the plugins decorated the
+  // The tail slot: the not-found answer is contributed last, so it sees whatever the plugins decorated the
   // server with and still answers a URL no route matched.
   it('answers an unmatched URL from the not-found handler registered after every plugin', async () => {
-    app = createWebApplication().with(stamping('stamp', 'x-stamp'))
+    app = createWebApplication({ adapter: node() }).with(stamping('stamp', 'x-stamp'))
 
     await app.bootstrap()
 
@@ -313,24 +227,22 @@ describe('plugin registration', () => {
 
 describe('scoped plugin registration', () => {
   // Widened: `mount()` re-types the application with the routes it took, and the holder outlives the call.
-  let app: WebApplication<any, any, any, any> | undefined
+  let app: WebApplication<any, any, any> | undefined
 
   afterEach(async () => {
     await app?.close()
     app = undefined
   })
 
-  // The capability the extension mechanism did not have. A route group is its own Fastify plugin context, so
-  // the same wrapped plugin covers that group's routes and no others when it is registered there.
+  // The capability the extension mechanism did not have. A route group has a plugin scope of its own, so
+  // the same plugin covers that group's routes and no others when it is registered there.
   it('keeps a router-installed plugin inside that router', async () => {
-    const pets = newRouter('/scoped-pets')
-      .with(stamping('pets-stamp', 'x-pets'))
-      .get('/', () => ({ ok: true }))
+    const pets = new Router('/scoped-pets').with(stamping('pets-stamp', 'x-pets')).get('/', () => ({ ok: true }))
 
-    // Bound to no adapter, and mounted next to a Fastify-bound router all the same.
+    // Mounted next to a plugin-scoped router all the same.
     const orders = new Router('/scoped-orders').get('/', () => ({ ok: true }))
 
-    app = createWebApplication().mount(pets, orders)
+    app = createWebApplication({ adapter: node() }).mount(pets, orders)
 
     await app.bootstrap()
 
@@ -341,13 +253,11 @@ describe('scoped plugin registration', () => {
   // A nested group is flattened into its own context, so inheritance is carried rather than encapsulated —
   // `router.with(...)` reaches the groups below it the way `router.extend(...)` configuration does.
   it('reaches a nested group from the router that installed the plugin', async () => {
-    const shop = newRouter('/scoped-shop')
-      .with(stamping('shop-stamp', 'x-shop'))
-      .get('/', () => ({ ok: true }))
+    const shop = new Router('/scoped-shop').with(stamping('shop-stamp', 'x-shop')).get('/', () => ({ ok: true }))
 
     shop.group('/items', items => items.get('/', () => ({ ok: true })))
 
-    app = createWebApplication().mount(shop)
+    app = createWebApplication({ adapter: node() }).mount(shop)
 
     await app.bootstrap()
 
@@ -374,7 +284,7 @@ describe('scoped plugin registration', () => {
     }
     void [AdminController, PublicController]
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
 
     await app.bootstrap()
 
@@ -398,7 +308,7 @@ describe('scoped plugin registration', () => {
     }
     void StackedController
 
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
 
     await app.bootstrap()
 
@@ -409,106 +319,43 @@ describe('scoped plugin registration', () => {
     expect(log).toEqual(['stacked-above', 'stacked-below'])
   })
 
-  // A plugin has no name a caller chose, so registering the same factory twice registers the plugin twice —
-  // nothing dedupes on the factory's identity the way a feature dedupes on `kFeatureName`. Deliberately not
-  // `fastify-plugin`-wrapped: with no name, there is nothing for the guard below to collide on.
+  // A plugin with no name a caller chose is registered once per call, even from the same factory —
+  // nothing dedupes on the factory's identity the way a feature dedupes on `kFeatureName`: with no name, there is
+  // nothing for the guard below to collide on.
   it('registers an unnamed plugin once per call, even for the same factory', async () => {
     const log: string[] = []
-    const twice: HTTPPluginFactory = () => {
-      const plugin: FastifyPluginAsync = async () => {
-        log.push('twice')
-      }
-      return plugin
-    }
+    const twice = () =>
+      new (class extends HTTPPlugin {
+        register(): void {
+          log.push('twice')
+        }
+      })()
 
-    app = createWebApplication().with(twice).with(twice)
+    app = createWebApplication({ adapter: node() }).with(twice).with(twice)
 
     await app.bootstrap()
 
     expect(log).toEqual(['twice', 'twice'])
   })
 
-  // A first-party plugin wraps a fixed `fastify-plugin` name, so two `.with()` calls that each produce one
-  // would otherwise fail deep inside whatever it decorates — tens of seconds later, once avvio's own boot
-  // timeout gives up waiting on it. Refused immediately instead, with a Caffeine error naming the plugin.
-  it('refuses a second plugin registered under the same fastify-plugin name', async () => {
-    const twice = stamping('twice', 'x-twice')
-
-    app = createWebApplication().with(twice).with(twice)
-
-    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "twice": it is already registered/)
-  })
-
-  // What a factory produced is only checked by the adapter, at start-up: a factory handing back the options
-  // object instead of the plugin fails there, naming the problem, rather than inside Fastify.
-  it('refuses an application factory that produced something other than a plugin', async () => {
-    // Cast: the factory's result is deliberately not a Fastify extension.
-    app = createWebApplication().with((() => ({ origin: '*' })) as never)
-
-    await expect(app.bootstrap()).rejects.toMatchObject({
-      code: 'ERR_HTTP_INVALID_PLUGIN',
-      message: expect.stringMatching(/expected a Fastify plugin, got object/),
-    })
-  })
-
-  // A server that fails while its plugins install is closed before start-up fails. That close may fail as well, and
-  // start-up still reports what broke it, not what went wrong cleaning up after it.
-  it("fails start-up with the plugin's error when closing the half-built server fails too", async () => {
-    let closing = false
-
-    app = createWebApplication()
-      .with(() =>
-        fp(async (instance: FastifyInstance) => {
-          instance.addHook('onClose', (_instance, done) => {
-            closing = true
-            done(new Error('cannot close'))
-          })
-        }),
-      )
-      .with(() => async () => {
-        throw new Error('boom')
-      })
-
-    await expect(app.bootstrap()).rejects.toThrow('boom')
-    expect(closing).toBe(true)
-  })
-
-  // A group installs its plugins through the same checks as the root server. A controller's `@Use(...)` takes
-  // this path too, and never meets the application's type, so this check is all that stands in its way.
-  it('refuses a router factory that produced something other than a plugin', async () => {
-    // Cast: the factory's result is deliberately not a Fastify extension.
-    const bad = newRouter('/bad-plugin')
-      .with((() => ({ origin: '*' })) as never)
-      .get('/', () => ({ ok: true }))
-
-    app = createWebApplication().mount(bad)
-
-    await expect(app.bootstrap()).rejects.toMatchObject({
-      code: 'ERR_HTTP_INVALID_PLUGIN',
-      message: expect.stringMatching(/expected a Fastify plugin, got object/),
-    })
-  })
-
-  it('refuses a second plugin a router installs under the same fastify-plugin name', async () => {
-    const twice = newRouter('/twice-group')
+  it('refuses a second plugin a router installs under the same name', async () => {
+    const twice = new Router('/twice-group')
       .with(stamping('twice-group', 'x-twice'))
       .with(stamping('twice-group', 'x-twice'))
       .get('/', () => ({ ok: true }))
 
-    app = createWebApplication().mount(twice)
+    app = createWebApplication({ adapter: node() }).mount(twice)
 
-    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "twice-group": it is already registered/)
+    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "twice-group" twice on router/)
   })
 
   it('keeps the plugins of two routers apart, one per group', async () => {
-    const pets = newRouter('/inst-pets')
-      .with(stamping('inst', 'x-inst'))
-      .get('/', () => ({ ok: true }))
-    const orders = newRouter('/inst-orders')
+    const pets = new Router('/inst-pets').with(stamping('inst', 'x-inst')).get('/', () => ({ ok: true }))
+    const orders = new Router('/inst-orders')
       .with(stamping('inst-orders', 'x-inst-orders'))
       .get('/', () => ({ ok: true }))
 
-    app = createWebApplication().mount(pets, orders)
+    app = createWebApplication({ adapter: node() }).mount(pets, orders)
 
     await app.bootstrap()
 
@@ -522,96 +369,19 @@ describe('scoped plugin registration', () => {
   })
 })
 
-/**
- * A plugin taking options, as a third-party one does: the header it stamps is named by what it was registered
- * with rather than by what it closed over.
- */
-function configurable(name: string): FastifyPluginAsync<{ header: string }> {
-  return async (instance, options) => {
-    instance.addHook('onRequest', (_request, reply, done) => {
-      reply.header(options.header, 'yes')
-      done()
-    })
-  }
-}
-
-/**
- * A factory handing back a plugin together with the options to register it with.
- *
- * This is what removes the wrapper an application would otherwise write only to close over the options — and
- * with it the `fastify-plugin` that wrapper needed. `@fastify/cors` and every other official plugin already
- * wraps itself, so registering one directly is what puts its hooks on every route.
- */
-describe('a plugin registered with its options', () => {
+describe('a plugin factory typed against the application configuration', () => {
   // Mounting a router gives the application its route types back, which a bare `WebApplication` cannot hold.
-  let app: WebApplication<any, any, any, any> | undefined
+  let app: WebApplication<any, any, any> | undefined
 
   afterEach(async () => {
     await app?.close()
     app = undefined
   })
 
-  it('hands the options the factory built to the plugin', async () => {
-    const seen: string[] = []
-    const recording: FastifyPluginAsync<{ header: string }> = async (_instance, options) => {
-      seen.push(options.header)
-    }
-
-    app = createWebApplication().with(() => [fp(recording, { name: 'recording' }), { header: 'x-from-options' }])
-
-    await app.bootstrap()
-
-    expect(seen).toEqual(['x-from-options'])
-  })
-
-  // The reason the pair form exists. A wrapper written to carry the options is itself unwrapped, so it takes an
-  // encapsulation context of its own; the plugin inside it lands there, and the route groups — registered on the
-  // root, as siblings of that context — never see its hooks. Registering the plugin itself keeps its own
-  // `fastify-plugin` doing the job it was wrapped for.
-  it('covers a compiled route, with no wrapper left to encapsulate it', async () => {
-    const pets = newRouter('/pair-pets').get('/', () => ({ ok: true }))
-
-    app = createWebApplication()
-      .with(() => [fp(configurable('pair'), { name: 'pair' }), { header: 'x-pair' }])
-      .mount(pets)
-
-    await app.bootstrap()
-
-    expect((await app.request('/pair-pets')).headers.get('x-pair')).toBe('yes')
-  })
-
-  // Encapsulation stays the plugin author's call: the pair form changes where the options come from, never
-  // whether the plugin is wrapped. An unwrapped one keeps its hooks to itself exactly as it does alone.
-  it('leaves an unwrapped plugin covering nothing', async () => {
-    const pets = newRouter('/pair-unwrapped').get('/', () => ({ ok: true }))
-
-    app = createWebApplication()
-      .with(() => [configurable('loose'), { header: 'x-loose' }])
-      .mount(pets)
-
-    await app.bootstrap()
-
-    expect((await app.request('/pair-unwrapped')).headers.get('x-loose')).toBeNull()
-  })
-
-  it('reaches only its own group when a router installed the pair', async () => {
-    const pets = newRouter('/pair-scoped-pets')
-      .with(() => [fp(configurable('scoped'), { name: 'scoped' }), { header: 'x-scoped' }])
-      .get('/', () => ({ ok: true }))
-    const orders = newRouter('/pair-scoped-orders').get('/', () => ({ ok: true }))
-
-    app = createWebApplication().mount(pets, orders)
-
-    await app.bootstrap()
-
-    expect((await app.request('/pair-scoped-pets')).headers.get('x-scoped')).toBe('yes')
-    expect((await app.request('/pair-scoped-orders')).headers.get('x-scoped')).toBeNull()
-  })
-
-  // The one test that has to keep compiling: a plugin configurer and a bare factory returning a pair both take
-  // their `config` type from the application, so if `C` ever regresses, `config.health` and `config.security`
-  // stop type-checking and `npm run test:typecheck` fails.
-  it('types both a plugin configurer and a pair against the application configuration', async () => {
+  // The one test that has to keep compiling: a plugin configurer and a bare factory both take their `config`
+  // type from the application, so if `C` ever regresses, `config.health` and `config.security` stop
+  // type-checking and `npm run test:typecheck` fails.
+  it('types both a plugin configurer and a bare factory against the application configuration', async () => {
     const schema = $t.Object({
       security: $t.Object({ header: $t.String() }),
       health: $t.Object({ enabled: $t.Optional($t.Boolean()) }),
@@ -620,16 +390,16 @@ describe('a plugin registered with its options', () => {
       .source(new InlineConfigSource({ security: { header: 'x-from-config' } }))
       .build().config
 
-    const pets = newRouter('/pair-typed').get('/', () => ({ ok: true }))
+    const pets = new Router('/typed').get('/', () => ({ ok: true }))
 
-    app = createWebApplication({ config: conf })
+    app = createWebApplication({ adapter: node(), config: conf })
       .with(healthProbes((h, { config }) => h.config(config.health)))
-      .with(({ config }) => [fp(configurable('typed'), { name: 'typed' }), { header: config.security.header }])
+      .with(({ config }) => new Marking(config.security.header))
       .mount(pets)
 
     await app.bootstrap()
 
-    expect((await app.request('/pair-typed')).headers.get('x-from-config')).toBe('yes')
+    expect((await app.request('/typed')).headers.get('x-from-config')).toBe('yes')
     // Mounted rather than absent, so the feature really installed. What it then reports is health's own test.
     expect((await app.request('/readyz')).status).not.toBe(404)
   })

@@ -1,4 +1,5 @@
 import {
+  authentication,
   AuthenticateResult,
   AuthenticationService,
   AuthenticationTicket,
@@ -8,8 +9,8 @@ import {
   Identity,
   Principal,
   Authentication,
+  Router,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -80,17 +81,9 @@ describe('routes that name their authentication schemes', () => {
           ),
         )
         .with(authentication())
-        .mount(newRouter('/default').authorize().get('/', identities))
-        .mount(
-          newRouter('/either-header')
-            .authorize({ schemes: ['Basic', 'Bearer'] })
-            .get('/', identities),
-        )
-        .mount(
-          newRouter('/reports')
-            .authorize({ schemes: ['Basic', 'APIKey'] })
-            .get('/', identities),
-        ),
+        .mount(new Router('/default').authorize().get('/', identities))
+        .mount(new Router('/either-header').authorize({ schemes: ['Basic', 'Bearer'] }).get('/', identities))
+        .mount(new Router('/reports').authorize({ schemes: ['Basic', 'APIKey'] }).get('/', identities)),
     )
   })
 
@@ -196,9 +189,9 @@ describe('a default scheme that forwards to the one a request calls for', () => 
           ),
         )
         .with(authentication())
-        .mount(newRouter('/default').authorize().get('/', subject))
+        .mount(new Router('/default').authorize().get('/', subject))
         .mount(
-          newRouter('/asks-again')
+          new Router('/asks-again')
             .authorize()
             .inject({ auth: AuthenticationService })
             .get('/', async (ctx, { auth }) => ({
@@ -251,11 +244,7 @@ describe('a forwarding scheme told to forward to itself', () => {
           ),
         )
         .with(authentication())
-        .mount(
-          newRouter('/default')
-            .authorize()
-            .get('/', () => ({ ok: true })),
-        ),
+        .mount(new Router('/default').authorize().get('/', () => ({ ok: true }))),
     )
 
     try {

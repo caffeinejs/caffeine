@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 
-import { ErrHTTPNotAcceptable, ErrHTTPPreconditionFailed, type WebApplication } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { ErrHTTPPreconditionFailed, Router, createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest'
 
 import { buildStatic } from './build/build.js'
@@ -74,8 +74,8 @@ describe('serveFile', () => {
       'content-encoding': 'br',
       vary: 'Accept-Encoding',
     })
-    // Without a variant, Accept-Encoding still decides between the file and a 406, so a shared cache must key on it,
-    // on the 304 that refreshes its copy too.
+    // Without a variant, a plugin that compresses may still code the file, so a shared cache must key on
+    // Accept-Encoding, on the 304 that refreshes its copy too.
     expect(icon.identity.headers.vary).toBe('Accept-Encoding')
     expect(icon.identity.notModified.vary).toBe('Accept-Encoding')
   })
@@ -156,11 +156,18 @@ describe('serveFile', () => {
     })
   })
 
-  it('refuses a failed If-Match, and a client that accepts no representation', async () => {
+  it('refuses a failed If-Match', async () => {
     await expect(serveFile(page, request({ 'if-match': '"other"' }), ROUTE)).rejects.toThrow(ErrHTTPPreconditionFailed)
-    await expect(serveFile(icon, request({ 'accept-encoding': 'identity;q=0' }), ROUTE)).rejects.toThrow(
-      ErrHTTPNotAcceptable,
-    )
+  })
+
+  // RFC 9110 §12.1: nothing on disk is acceptable, so the identity goes out, for a plugin that compresses to code.
+  it('answers a client that accepts no representation on disk with the identity', async () => {
+    const decision = await serveFile(icon, request({ 'accept-encoding': 'identity;q=0' }), ROUTE)
+
+    expect(decision.status).toBe(200)
+    expect(decision.headers).toEqual(icon.identity.headers)
+    expect(decision.headers['content-encoding']).toBe(undefined)
+    decision.body?.destroy()
   })
 
   it('applies neither preconditions nor ranges to an answer that is not in place of a 200', async () => {
@@ -245,15 +252,20 @@ describe('prepareFile', () => {
 
 describe('a file served by a route and by sendFile', () => {
   let site: string
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   beforeEach(async () => {
     site = await mkdtemp(join(tmpdir(), 'caffeine-serve-app-'))
     await cp(spa, site, { recursive: true })
     await buildStatic({ root: site })
-    app = createWebApplication({})
+    app = createWebApplication({ adapter: node() })
       .with(staticFiles(s => s.serve(site, { anonymous: true })))
-      .mount(newRouter().get('/sent', ctx => sendFile(ctx, 'index.html'))) as WebApplication
+      .mount(new Router().get('/sent', ctx => sendFile(ctx, 'index.html'))) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.bootstrap()
   })
 

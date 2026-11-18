@@ -1,6 +1,6 @@
+import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 import { $t } from '@caffeinejs/application/schema'
 import { $p, kRouteConstraints, type IRoute } from '@caffeinejs/http'
-import { $multipart } from '@caffeinejs/multipart'
 import { describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIOperationConflict } from '../errors.js'
@@ -15,6 +15,13 @@ const errorSchema = $t.Object({ message: $t.String(), statusCode: $t.Integer() }
 
 function operationAt(document: ReturnType<typeof generateDocument>, path: string, method = 'get') {
   return (document.paths?.[path] as Record<string, OperationObject> | undefined)?.[method]
+}
+
+// The pickers a multipart package hands a route, by the type the generator reads them by.
+const picks = {
+  file: (name: string): ParameterPickOptions<unknown> => ({ type: 'multipart:file', name }),
+  files: (): ParameterPickOptions<unknown> => ({ type: 'multipart:files' }),
+  formData: (): ParameterPickOptions<unknown> => ({ type: 'multipart:formdata' }),
 }
 
 describe('generateDocument', () => {
@@ -156,7 +163,7 @@ describe('generateDocument', () => {
 
   it('synthesizes a multipart body from file pickers', () => {
     const router = fixtureRouter('/pets', r =>
-      r.routes([fixtureRoute('POST', '/:id/images', 'upload').parameters([$p.param('id'), $multipart.file('file')])]),
+      r.routes([fixtureRoute('POST', '/:id/images', 'upload').parameters([$p.param('id'), picks.file('file')])]),
     )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
@@ -1005,12 +1012,11 @@ describe('request bodies', () => {
 
   // An unnamed picker reads whatever was sent, so no field name is knowable.
   it('documents an open object for unnamed multipart pickers, and adds it beside named files', () => {
-    expect(bodyOf(fixtureRoute('POST', '/', 'create').parameters([$multipart.files()]))?.content).toEqual({
+    expect(bodyOf(fixtureRoute('POST', '/', 'create').parameters([picks.files()]))?.content).toEqual({
       'multipart/form-data': { schema: { type: 'object', additionalProperties: true } },
     })
     expect(
-      bodyOf(fixtureRoute('POST', '/', 'create').parameters([$multipart.file('avatar'), $multipart.formData()]))
-        ?.content,
+      bodyOf(fixtureRoute('POST', '/', 'create').parameters([picks.file('avatar'), picks.formData()]))?.content,
     ).toEqual({
       'multipart/form-data': {
         schema: {

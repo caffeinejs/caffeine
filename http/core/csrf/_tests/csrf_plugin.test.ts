@@ -1,10 +1,10 @@
 import { newConfiguration } from '@caffeinejs/application'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { newNoopLogger, type LogFn, type Logger } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -21,15 +21,28 @@ import {
   Principal,
   bindTo,
   csrfExempt,
-  csrfExemptConfig,
   type ActionResult,
   type IContext,
   type CSRFBuilder,
   type ErrorHandler,
   type OriginPredicate,
   type WebApplication,
+  Router,
 } from '../../../index.js'
-import { authentication, createWebApplication, csrf, newRouter } from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
+import { authentication } from '../../security/security.js'
+import { csrf } from '../csrf.js'
+
+/** The application logger, recording each warning into `logged` as `{ ...fields, level: 40, msg }`. */
+function warnTo(logged: Array<Record<string, unknown>>): Logger {
+  const warn = ((obj: unknown, msg?: string) => {
+    const [fields, text] = typeof obj === 'string' ? [{}, obj] : [obj as Record<string, unknown>, msg ?? '']
+    logged.push({ ...fields, level: 40, msg: text })
+  }) as LogFn
+  const logger: Logger = { ...newNoopLogger(), warn, child: () => logger }
+  return logger
+}
 
 // What the framework adds to every problem it sends. The values are pinned where they are what a test is about.
 const STAMPED = { correlation_id: expect.stringMatching(/^req-/), timestamp: expect.any(String) }
@@ -76,7 +89,7 @@ const listener = { host: '127.0.0.1', port: 0 }
 const ok = () => ({ ok: true })
 
 /** `GET` and `POST /echo`. */
-const echo = () => newRouter('/echo').get('/', ok).post('/', ok)
+const echo = () => new Router('/echo').get('/', ok).post('/', ok)
 
 interface Requesting {
   request(url: string, init?: RequestInit): Promise<Response>
@@ -124,7 +137,9 @@ describe('csrf()', () => {
 
   describe('at start-up', () => {
     it('refuses a trusted origin that is not one, naming it', async () => {
-      const app = createWebApplication().with(csrf(c => c.trustedOrigins('https://admin.example/app')))
+      const app = createWebApplication({ adapter: node() }).with(
+        csrf(c => c.trustedOrigins('https://admin.example/app')),
+      )
       close = () => app.close().catch(() => undefined)
 
       await expect(app.bootstrap()).rejects.toMatchObject({
@@ -134,7 +149,7 @@ describe('csrf()', () => {
     })
 
     it('refuses an excluded path that does not start with a slash', async () => {
-      const app = createWebApplication().with(csrf(c => c.exclude('webhooks')))
+      const app = createWebApplication({ adapter: node() }).with(csrf(c => c.exclude('webhooks')))
       close = () => app.close().catch(() => undefined)
 
       await expect(app.bootstrap()).rejects.toMatchObject({
@@ -145,7 +160,7 @@ describe('csrf()', () => {
 
     // A path is matched after the base path is taken off, so one written from the base path would match nothing.
     it('refuses an excluded path written from the base path, naming the path to write instead', async () => {
-      const app = createWebApplication().with(csrf(c => c.exclude('~/webhooks')))
+      const app = createWebApplication({ adapter: node() }).with(csrf(c => c.exclude('~/webhooks')))
       close = () => app.close().catch(() => undefined)
 
       await expect(app.bootstrap()).rejects.toMatchObject({
@@ -160,7 +175,7 @@ describe('csrf()', () => {
       ['written in code', (c: CSRFBuilder) => c.exclude('/')],
       ['read from the configuration', (c: CSRFBuilder) => c.config({ exclude: ['/'] })],
     ])('refuses to exclude "/", %s, which would leave every route unprotected', async (_label, configure) => {
-      const app = createWebApplication().with(csrf(configure))
+      const app = createWebApplication({ adapter: node() }).with(csrf(configure))
       close = () => app.close().catch(() => undefined)
 
       await expect(app.bootstrap()).rejects.toMatchObject({
@@ -172,11 +187,10 @@ describe('csrf()', () => {
     // An environment variable can turn the check off; that is said once, as the server starts, not found out later.
     it('says once, as the server starts, that it is turned off', async () => {
       const logged: Array<Record<string, unknown>> = []
-      const logger = { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
 
       const app = await ready(
-        createWebApplication()
-          .server(() => ({ factory: { logger } }))
+        createWebApplication({ adapter: node() })
+          .logger(b => b.use(warnTo(logged)))
           .with(csrf(c => c.enabled(false).name('api')))
           .mount(echo()),
       )
@@ -190,15 +204,13 @@ describe('csrf()', () => {
 
     // Two plugins on one chain would check every request twice; refused at once by name, and admitted apart.
     it('refuses a second plugin under the same name, and admits one named apart', async () => {
-      const twice = createWebApplication().with(csrf()).with(csrf())
+      const twice = createWebApplication({ adapter: node() }).with(csrf()).with(csrf())
       close = () => twice.close().catch(() => undefined)
 
-      await expect(twice.bootstrap()).rejects.toThrow(
-        /Cannot register plugin "caffeine-csrf": it is already registered/,
-      )
+      await expect(twice.bootstrap()).rejects.toThrow(/Cannot register plugin "caffeine-csrf" twice/)
 
       const apart = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf())
           .with(csrf(c => c.name('api'))),
       )
@@ -209,7 +221,7 @@ describe('csrf()', () => {
 
   describe('on the application server', () => {
     it('lets a same-origin request through, and sets no cookie doing so', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
       const res = await post(app, '/echo', SAME_ORIGIN)
 
       expect(res.status).toBe(200)
@@ -217,28 +229,28 @@ describe('csrf()', () => {
     })
 
     it('refuses a cross-site request with a 403 that names no origin', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
 
       await expectRefused(await post(app, '/echo', CROSS_SITE))
     })
 
     // A sibling subdomain is where a cookie-tossing or a compromised blog lives.
     it('refuses a same-site request', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
 
       expect((await post(app, '/echo', SAME_SITE)).status).toBe(403)
     })
 
     // Neither header is a client that is no browser, carrying no cookies of a victim: let through, as Go does.
     it('lets a request through that carries neither Sec-Fetch-Site nor Origin', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
 
       expect((await post(app, '/echo', CURL)).status).toBe(200)
       expect((await post(app, '/echo')).status).toBe(200)
     })
 
     it('judges a browser without Fetch Metadata by its Origin against the host', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
 
       expect((await post(app, '/echo', oldBrowser('http://localhost'))).status).toBe(200)
       expect((await post(app, '/echo', oldBrowser('https://evil.example'))).status).toBe(403)
@@ -248,7 +260,7 @@ describe('csrf()', () => {
     // A safe method changes nothing, so a cross-site GET is a link, and HEAD and OPTIONS are what a browser sends
     // before a request, not the request.
     it('never refuses a safe method', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
 
       expect((await app.request('/echo', { headers: CROSS_SITE })).status).toBe(200)
       expect((await app.request('/echo', { method: 'HEAD', headers: CROSS_SITE })).status).toBe(200)
@@ -257,7 +269,7 @@ describe('csrf()', () => {
 
     // A URL nothing matched is not a route: there is nothing to protect, and it answers as it always did.
     it('leaves a URL no route matched to the not-found handler', async () => {
-      const app = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
       const res = await post(app, '/nothing-here', CROSS_SITE)
 
       expect(res.status).toBe(404)
@@ -266,7 +278,7 @@ describe('csrf()', () => {
 
     it('lets a cross-site request through from a trusted origin, on an exact match', async () => {
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.trustedOrigins('https://admin.example')))
           .mount(echo()),
       )
@@ -278,7 +290,7 @@ describe('csrf()', () => {
 
     it('registers nothing when turned off', async () => {
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.enabled(false)))
           .mount(echo()),
       )
@@ -301,7 +313,7 @@ describe('csrf()', () => {
         .build().config
 
       const configured = await ready(
-        createWebApplication({ config: conf })
+        createWebApplication({ adapter: node(), config: conf })
           .with(csrf((c, { config }) => c.config(config.app.csrf)))
           .mount(echo()),
       )
@@ -309,7 +321,7 @@ describe('csrf()', () => {
       await close?.()
 
       const overridden = await ready(
-        createWebApplication({ config: conf })
+        createWebApplication({ adapter: node(), config: conf })
           .with(csrf((c, { config }) => c.config(config.app.csrf).trustedOrigins('https://other.example')))
           .mount(echo()),
       )
@@ -319,7 +331,7 @@ describe('csrf()', () => {
 
       // A check is code, never configuration: the block's list and the check both stand.
       const checked = await ready(
-        createWebApplication({ config: conf })
+        createWebApplication({ adapter: node(), config: conf })
           .with(
             csrf((c, { config }) =>
               c.config(config.app.csrf).trustOrigin((_ctx, { hostname }) => hostname === 'partner.example'),
@@ -338,13 +350,13 @@ describe('csrf()', () => {
     // The host an Origin is compared with is the one the server trusts: a forwarding header counts only under
     // `trustProxy`, or a client could name the host it would like to be compared with.
     it('compares the Origin with the forwarded host only under trustProxy', async () => {
-      const bare = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const bare = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
       expect((await post(bare, '/echo', forwarded('https://proxied.example', 'proxied.example'))).status).toBe(403)
       await close?.()
 
       const trusting = await ready(
-        createWebApplication()
-          .server(() => ({ factory: { trustProxy: true } }))
+        createWebApplication({ adapter: node() })
+          .server(() => ({ trustProxy: true }))
           .with(csrf())
           .mount(echo()),
       )
@@ -355,13 +367,13 @@ describe('csrf()', () => {
     it('refuses an http: Origin on a request a trusted proxy says came over HTTPS', async () => {
       const downgrade = { origin: 'http://localhost', 'x-forwarded-proto': 'https' }
 
-      const bare = await ready(createWebApplication().with(csrf()).mount(echo()))
+      const bare = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(echo()))
       expect((await post(bare, '/echo', downgrade)).status).toBe(200)
       await close?.()
 
       const trusting = await ready(
-        createWebApplication()
-          .server(() => ({ factory: { trustProxy: true } }))
+        createWebApplication({ adapter: node() })
+          .server(() => ({ trustProxy: true }))
           .with(csrf())
           .mount(echo()),
       )
@@ -372,8 +384,8 @@ describe('csrf()', () => {
     it('reads the scheme a trusted proxy wrote, in any case', async () => {
       const proxied = (origin: string, host: string) => ({ origin, host, 'x-forwarded-proto': 'HTTPS' })
       const trusting = await ready(
-        createWebApplication()
-          .server(() => ({ factory: { trustProxy: true } }))
+        createWebApplication({ adapter: node() })
+          .server(() => ({ trustProxy: true }))
           .with(csrf())
           .mount(echo()),
       )
@@ -400,7 +412,7 @@ describe('csrf()', () => {
       }
       void [HooksController]
 
-      const app = await ready(createWebApplication().with(csrf()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()))
 
       expect((await post(app, '/csrf-exempt-method/hook', CROSS_SITE)).status).toBe(200)
       expect((await post(app, '/csrf-exempt-method/guarded', CROSS_SITE)).status).toBe(403)
@@ -422,7 +434,7 @@ describe('csrf()', () => {
       }
       void [WebhooksController]
 
-      const app = await ready(createWebApplication().with(csrf()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()))
 
       expect((await post(app, '/csrf-exempt-class/stripe', CROSS_SITE)).status).toBe(200)
       expect((await post(app, '/csrf-exempt-class/github', CROSS_SITE)).status).toBe(200)
@@ -447,7 +459,7 @@ describe('csrf()', () => {
       }
       void [ReceiverController]
 
-      const app = await ready(createWebApplication().with(csrf()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()))
 
       expect((await post(app, '/csrf-exempt-but-one/deliveries', CROSS_SITE)).status).toBe(200)
       expect((await post(app, '/csrf-exempt-but-one/secret', CROSS_SITE)).status).toBe(403)
@@ -469,7 +481,9 @@ describe('csrf()', () => {
       }
       void [SettingsController]
 
-      const app = await ready(createWebApplication().with(csrf(c => c.exclude('/csrf-excluded-but-one'))))
+      const app = await ready(
+        createWebApplication({ adapter: node() }).with(csrf(c => c.exclude('/csrf-excluded-but-one'))),
+      )
 
       expect((await post(app, '/csrf-excluded-but-one/provider', CROSS_SITE)).status).toBe(200)
       expect((await post(app, '/csrf-excluded-but-one/settings', CROSS_SITE)).status).toBe(403)
@@ -478,10 +492,10 @@ describe('csrf()', () => {
     // A route's own mark is the more specific word: an application route under a prefix excluded for somebody
     // else's routes stays protected when it says so.
     it('keeps a route marked csrfExempt(false) protected under an excluded prefix', async () => {
-      const hooks = newRouter('/hooks').post('/provider', ok).post('/settings').extend(csrfExempt(false)).handler(ok)
+      const hooks = new Router('/hooks').post('/provider', ok).post('/settings').extend(csrfExempt(false)).handler(ok)
 
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.exclude('/hooks')))
           .mount(hooks),
       )
@@ -491,14 +505,14 @@ describe('csrf()', () => {
     })
 
     it('takes csrfExempt() on a router, and csrfExempt(false) on one of its routes', async () => {
-      const hooks = newRouter('/hooks')
+      const hooks = new Router('/hooks')
         .extend(csrfExempt())
         .post('/open', ok)
         .post('/closed')
         .extend(csrfExempt(false))
         .handler(ok)
 
-      const app = await ready(createWebApplication().with(csrf()).mount(hooks, echo()))
+      const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(hooks, echo()))
 
       expect((await post(app, '/hooks/open', CROSS_SITE)).status).toBe(200)
       expect((await post(app, '/hooks/closed', CROSS_SITE)).status).toBe(403)
@@ -508,12 +522,12 @@ describe('csrf()', () => {
     // A prefix is a run of whole segments, judged by the path a route was registered under: no spelling of a URL
     // borrows the exemption of a route it did not match.
     it('leaves the registered paths under an excluded prefix alone, and no other', async () => {
-      const hooks = newRouter('/webhooks').post('/', ok).post('/:id', ok)
-      const near = newRouter('/webhooksx').post('/', ok)
-      const wild = newRouter('/catch').post('/*', ok)
+      const hooks = new Router('/webhooks').post('/', ok).post('/:id', ok)
+      const near = new Router('/webhooksx').post('/', ok)
+      const wild = new Router('/catch').post('/*', ok)
 
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.exclude('/webhooks', '/catch/webhooks')))
           .mount(hooks, near, wild),
       )
@@ -523,22 +537,6 @@ describe('csrf()', () => {
       expect((await post(app, '/webhooksx', CROSS_SITE)).status).toBe(403)
       // Registered as `/catch/*`, which is not under `/catch/webhooks`.
       expect((await post(app, '/catch/webhooks', CROSS_SITE)).status).toBe(403)
-    })
-
-    it('leaves a raw route registered with csrfExemptConfig() alone, and no other', async () => {
-      const raw = () =>
-        fp(
-          async (instance: FastifyInstance) => {
-            instance.post('/raw-hook', { config: csrfExemptConfig() }, async () => ok())
-            instance.post('/raw-guarded', async () => ok())
-          },
-          { name: 'raw-routes' },
-        )
-
-      const app = await ready(createWebApplication().with(csrf()).with(raw))
-
-      expect((await post(app, '/raw-hook', CROSS_SITE)).status).toBe(200)
-      expect((await post(app, '/raw-guarded', CROSS_SITE)).status).toBe(403)
     })
   })
 
@@ -552,7 +550,7 @@ describe('csrf()', () => {
 
     it('lets through what a check trusts, from a browser with or without Fetch Metadata', async () => {
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.trustedOrigins('https://admin.example').trustOrigin(subdomains)))
           .mount(echo()),
       )
@@ -567,7 +565,7 @@ describe('csrf()', () => {
     it('asks nothing about a request the rules let through', async () => {
       const asked: unknown[] = []
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(
             csrf(c =>
               c
@@ -577,7 +575,11 @@ describe('csrf()', () => {
                 .allowSecFetchSite((_ctx, site) => asked.push(site) < 0),
             ),
           )
-          .mount(echo(), newRouter('/hooks').extend(csrfExempt()).post('/', ok), newRouter('/excluded').post('/', ok)),
+          .mount(
+            echo(),
+            new Router('/hooks').extend(csrfExempt()).post('/', ok),
+            new Router('/excluded').post('/', ok),
+          ),
       )
 
       expect((await post(app, '/echo', SAME_ORIGIN)).status).toBe(200)
@@ -595,8 +597,8 @@ describe('csrf()', () => {
     it('never lets through Origin: null, a malformed origin or a downgrade, whatever a check answers', async () => {
       const asked: unknown[] = []
       const app = await ready(
-        createWebApplication()
-          .server(() => ({ factory: { trustProxy: true } }))
+        createWebApplication({ adapter: node() })
+          .server(() => ({ trustProxy: true }))
           .with(
             csrf(c =>
               c.trustOrigin((_ctx, origin) => asked.push(origin.href) > 0).allowSecFetchSite(() => asked.push(1) > 0),
@@ -622,7 +624,7 @@ describe('csrf()', () => {
     it('asks the Sec-Fetch-Site check about same-site and cross-site, and nothing else', async () => {
       const sites: string[] = []
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.allowSecFetchSite((_ctx, site) => sites.push(site) > 0 && site === 'same-site')))
           .mount(echo()),
       )
@@ -644,7 +646,7 @@ describe('csrf()', () => {
         return false
       }
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.trustOrigin(look).trustOrigin(look)))
           .mount(echo()),
       )
@@ -666,7 +668,7 @@ describe('csrf()', () => {
         'b.localhost': 'https://b-app.example',
       }
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.trustOrigin((ctx, origin) => frontEnds[ctx.req.host] === origin.origin)))
           .mount(echo()),
       )
@@ -689,7 +691,7 @@ describe('csrf()', () => {
         'promise of text': () => Promise.resolve('true'),
       }
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.trustOrigin(ctx => answers[ctx.req.header('x-answer')!]!() as boolean)))
           .mount(echo()),
       )
@@ -704,7 +706,7 @@ describe('csrf()', () => {
       }
     })
 
-    // A falsy failure handed to Fastify reads as "continue": the forged request would run, past every later hook.
+    // A falsy failure read as "continue" would let the forged request run, past every later hook.
     it('fails the request when a check fails, and runs nothing after it', async () => {
       const failures: Record<string, () => unknown> = {
         throws: () => {
@@ -719,21 +721,21 @@ describe('csrf()', () => {
       let later = 0
       let handled = 0
       const afterwards = () =>
-        fp(
-          async (instance: FastifyInstance) => {
-            instance.addHook('onRequest', (_request, _reply, done) => {
+        new (class extends HTTPPlugin {
+          override readonly name = 'afterwards'
+
+          register({ app }: HTTPSetupContext): void {
+            app.hook('onRequest', () => {
               later++
-              done()
             })
-          },
-          { name: 'afterwards' },
-        )
+          }
+        })()
 
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.trustOrigin(ctx => failures[ctx.req.header('x-failure')!]!() as boolean)))
           .with(afterwards)
-          .mount(newRouter('/echo').post('/', () => (handled++, ok()))),
+          .mount(new Router('/echo').post('/', () => (handled++, ok()))),
       )
 
       for (const failure of Object.keys(failures)) {
@@ -749,7 +751,7 @@ describe('csrf()', () => {
       const asked: string[] = []
       const answer = (name: string, yes: boolean) => () => asked.push(name) > 0 && yes
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(
             csrf(c =>
               c
@@ -774,7 +776,7 @@ describe('csrf()', () => {
     it('answers concurrent requests each by its own check', async () => {
       const pending = new Map<string, () => void>()
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(
             csrf(c =>
               c.trustOrigin(
@@ -801,10 +803,9 @@ describe('csrf()', () => {
 
     it('logs a refusal once, after the last check has declined', async () => {
       const logged: Array<Record<string, unknown>> = []
-      const logger = { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
       const app = await ready(
-        createWebApplication()
-          .server(() => ({ factory: { logger } }))
+        createWebApplication({ adapter: node() })
+          .logger(b => b.use(warnTo(logged)))
           .with(csrf(c => c.trustOrigin(() => false).trustOrigin(async () => false)))
           .mount(echo()),
       )
@@ -816,12 +817,10 @@ describe('csrf()', () => {
 
     // A check widens the plugin it was given to, and no other: a route group's own plugin decides for itself.
     it('does not widen a route group plugin of its own', async () => {
-      const admin = newRouter('/admin')
-        .with(csrf(c => c.name('admin')))
-        .post('/', ok)
+      const admin = new Router('/admin').with(csrf(c => c.name('admin'))).post('/', ok)
 
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .with(csrf(c => c.trustOrigin(() => true)))
           .mount(admin, echo()),
       )
@@ -841,7 +840,7 @@ describe('csrf()', () => {
       }
 
       const app = await ready(
-        createWebApplication()
+        createWebApplication({ adapter: node() })
           .errorHandling(e => e.globalHandlers(CrossOriginHandler))
           .with(csrf())
           .mount(echo()),
@@ -855,11 +854,10 @@ describe('csrf()', () => {
     // The query can carry a token a webhook sender was handed, and the check never reads it: the log keeps the path.
     it('logs a refusal with what decided it, and the path without its query', async () => {
       const logged: Array<Record<string, unknown>> = []
-      const logger = { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
 
       const app = await ready(
-        createWebApplication()
-          .server(() => ({ factory: { logger } }))
+        createWebApplication({ adapter: node() })
+          .logger(b => b.use(warnTo(logged)))
           .with(csrf())
           .mount(echo()),
       )
@@ -898,7 +896,7 @@ describe('csrf()', () => {
     }
 
     const gated = () =>
-      createWebApplication()
+      createWebApplication({ adapter: node() })
         .install(Authentication(a => a.addStrategy('Header', new HeaderScheme()).default('Header')))
         .install(Authorization(z => z.requireAuthenticatedByDefault()))
 
@@ -942,12 +940,10 @@ describe('csrf()', () => {
     })
 
     it('covers one route group when registered with router.with(...)', async () => {
-      const admin = newRouter('/admin')
-        .with(csrf(c => c.name('admin')))
-        .post('/', ok)
-      const open = newRouter('/open').post('/', ok)
+      const admin = new Router('/admin').with(csrf(c => c.name('admin'))).post('/', ok)
+      const open = new Router('/open').post('/', ok)
 
-      const app = await ready(createWebApplication().mount(admin, open))
+      const app = await ready(createWebApplication({ adapter: node() }).mount(admin, open))
 
       expect((await post(app, '/admin', CROSS_SITE)).status).toBe(403)
       expect((await post(app, '/open', CROSS_SITE)).status).toBe(200)
@@ -955,13 +951,13 @@ describe('csrf()', () => {
 
     // A plugin covers the server it was registered on, and only that one.
     it('covers a listener through its own l.with(csrf()), and no other server', async () => {
-      const metrics = newRouter('/metrics').extend(bindTo('admin')).post('/', ok)
-      const api = newRouter('/api').post('/', ok)
+      const metrics = new Router('/metrics').extend(bindTo('admin')).post('/', ok)
+      const api = new Router('/api').post('/', ok)
 
       const app = (await running(
-        createWebApplication()
-          .listener('admin', l => l.server(() => ({ listener })).with(csrf()))
-          .server(() => ({ listener }))
+        createWebApplication({ adapter: node() })
+          .listener('admin', l => l.server(() => ({ listen: listener })).with(csrf()))
+          .server(() => ({ listen: listener }))
           .mount(metrics, api),
       )) as WebApplication
       const admin = app.listeners.get('admin')!.address!.origin
@@ -969,20 +965,6 @@ describe('csrf()', () => {
       expect((await fetch(`${admin}/metrics`, { method: 'POST', headers: CROSS_SITE })).status).toBe(403)
       expect((await fetch(`${admin}/metrics`, { method: 'POST', headers: SAME_ORIGIN })).status).toBe(200)
       expect((await fetch(`${app.address!.origin}/api`, { method: 'POST', headers: CROSS_SITE })).status).toBe(200)
-    })
-
-    // Hooks bind to every route of the server as it readies, so a route registered before the plugin is covered.
-    it('covers a route registered in .serverCallback()', async () => {
-      const app = await ready(
-        createWebApplication()
-          .serverCallback((_context, server) => {
-            server.post('/early', async () => ok())
-          })
-          .with(csrf()),
-      )
-
-      expect((await post(app, '/early', CROSS_SITE)).status).toBe(403)
-      expect((await post(app, '/early', SAME_ORIGIN)).status).toBe(200)
     })
   })
 })

@@ -21,7 +21,7 @@ import { resolveOIDCOptions } from './options.js'
 import type { OIDCAuthenticationOptions, OIDCTokens, ResolvedOIDCAuthenticationOptions } from './options.js'
 
 /**
- * The callback surface the adapter needs, satisfied by every OAuth-family handler.
+ * The callback surface the server needs, satisfied by every OAuth-family handler.
  *
  * Structural rather than a concrete class so the OpenID Connect and plain OAuth 2.0 handlers
  * register their callback routes and pass startup uniqueness checks through one path.

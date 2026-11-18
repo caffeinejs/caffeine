@@ -1,5 +1,5 @@
-import { type WebApplication } from '@caffeinejs/http'
-import { newRouter } from '@caffeinejs/http/fastify'
+import { Router, type WebApplication } from '@caffeinejs/http'
+import { type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
@@ -8,13 +8,15 @@ import { clientRouteOf, dist, expectNotFoundJSON, fixtures, isolated, NAVIGATION
 /**
  * Server-rendered pages at the root, a plain file mount at `/static`, and the application under `/app`.
  *
- * The client routes are written on a prefixed router: `newRouter('/app')` with a route at `/` composes to
+ * The client routes are written on a prefixed router: `new Router('/app')` with a route at `/` composes to
  * `/app`, so the bare path is covered by the pair every subtree needs anyway. `/app/` needs no route of its
  * own — `/app/*` matches it with an empty wildcard. See `http/_tests/group_root_path.test.ts`.
  */
-function site(routerOptions: { ignoreTrailingSlash?: boolean } = {}): WebApplication {
+function site(
+  routerOptions: { ignoreTrailingSlash?: boolean } = {},
+): WebApplication<never, never, unknown, NodeAdapter> {
   return isolated()
-    .server(() => ({ factory: { routerOptions } }))
+    .server(() => ({ router: routerOptions }))
     .with(
       staticFiles(s =>
         s
@@ -23,18 +25,18 @@ function site(routerOptions: { ignoreTrailingSlash?: boolean } = {}): WebApplica
       ),
     )
     .mount(
-      newRouter().get('/', ctx => ctx.header('content-type', 'text/html').body('<h1>home</h1>')),
-      newRouter('/app')
+      new Router().get('/', ctx => ctx.header('content-type', 'text/html').body('<h1>home</h1>')),
+      new Router('/app')
         .detail('http', { internal: true })
         .authorize({ allowAnonymous: true })
         .get('/', shellOf(dist))
         .get('/index.html', shellOf(dist))
         .get('/*', clientRouteOf(dist)),
-    ) as WebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 }
 
 describe('an application mounted under a prefix', () => {
-  let app: WebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
 
   afterEach(async () => {
     await app?.close()

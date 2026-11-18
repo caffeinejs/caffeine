@@ -6,7 +6,7 @@ import { CURL, NAVIGATION, XHR, expectNotFoundJSON, newApp, signIn, type Session
 /**
  * The API, from both route sources.
  *
- * `/api/profile` and `/api/admin` are `@Controller` classes; `/api/projects` is a programmatic `newRouter`.
+ * `/api/profile` and `/api/admin` are `@Controller` classes; `/api/projects` is a programmatic `new Router`.
  * They are asserted side by side on purpose: both compile through `compileRouteGroup`, so authorization,
  * validation and error handling must be indistinguishable — and one `/api/*` catch-all has to cover all three.
  */
@@ -100,7 +100,7 @@ describe('the API', () => {
       expect(await res.text()).toBe('ok')
     })
 
-    // The probes are raw routes marked exempt, so the gate returns before authenticating at all — which is the
+    // The probes are exempt from access control, so the gate returns before authenticating at all — which is the
     // point for something polled every second. They are never challenged, whatever they answer.
     it('never challenges a probe', async () => {
       for (const path of ['/livez', '/readyz', '/startupz']) {

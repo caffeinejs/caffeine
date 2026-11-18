@@ -21,7 +21,7 @@ const RANGES: Record<string, string> = {
  * `@Schema({ response })` is the source of truth for which statuses a route answers and what each returns.
  * That is deliberate and it is the whole rule: error *classes* are never consulted. `@CatchWith` says which
  * handler renders a failure, not which statuses the route emits, and a route that answers 404 says so in its
- * schema — where the declaration also drives Fastify's serialization, so it earns its keep twice.
+ * schema — where the declaration also drives the response's serialization, so it earns its keep twice.
  *
  * Two additions come from route metadata that is unambiguous rather than from a schema, and both are opt-out:
  * the validation failure the error handler answers whenever a request slot has a schema, one status for the body
@@ -205,7 +205,7 @@ function reasonOf(status: string): string | undefined {
   return /^\d+$/.test(status) ? statusPhrase(Number(status)) : RANGES[status]
 }
 
-/** Fastify accepts `4xx`; the specification writes it `4XX`. */
+/** A route schema accepts `4xx`; the specification writes it `4XX`. */
 function normalizeStatus(status: string): string {
   return /^[1-5]xx$/i.test(status) ? status.toUpperCase() : status
 }

@@ -1,25 +1,33 @@
 import type { Logger } from '@caffeinejs/application/logger'
-import type { AdapterRouteOptions } from '@caffeinejs/http/fastify'
+import type { IContext, RouteDefinition } from '@caffeinejs/http'
 
 import { routeMethods } from './_util.js'
 import { observerMethods, type CacheObserver, type CacheOperation, type CacheRoute } from './observer.js'
 
-// Read while `onRoute` runs and frozen: Fastify has prefixed `url` by then and may rewrite it afterwards for a
-// trailing-slash twin, and the same object reaches every observer on every request to the route.
-export function cacheRouteOf(routeDef: AdapterRouteOptions): CacheRoute {
-  const method = routeMethods(routeDef)
-  const url = routeDef.url
+// Read once per route and frozen: the same object reaches every observer on every request to the route. `head`
+// names the HEAD route a GET is also served as, which shares the GET's hooks.
+export function cacheRouteOf(route: RouteDefinition, head?: 'HEAD'): CacheRoute {
+  const method = head ?? routeMethods(route)
+  const url = route.url
 
-  // Absent on a route registered straight on Fastify. A programmatic group or route may be unnamed.
-  const caffeine = routeDef.config?.$caffeine?.compiled
-  const group = caffeine?.group.name
-  const name = caffeine?.route.name
+  // A programmatic group or route may be unnamed.
+  const group = route.group.name
+  const name = route.route.name
 
   if (group && typeof name === 'string' && name !== '') {
     return Object.freeze({ method, url, handler: `${group}.${name}` })
   }
 
   return Object.freeze({ method, url })
+}
+
+// The route each request of `route` reports under: the HEAD route the server adds to a GET shares its hooks, and
+// reports under its own method.
+export function cacheRouteResolver(route: RouteDefinition): (ctx: IContext) => CacheRoute {
+  const own = cacheRouteOf(route)
+  const head = route.methods.includes('HEAD') ? own : cacheRouteOf(route, 'HEAD')
+
+  return ctx => (ctx.req.method === 'HEAD' ? head : own)
 }
 
 // A throw from an observer never reaches the response: the first from each method is logged, the rest are

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get, HTTPPlugin, type HTTPSetupContext, Router, Use } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * Scenario: a controller's plugin trying to mount. A class has no children to nest routers under, so the start is
@@ -27,7 +28,7 @@ void MountingController
 
 describe('HTTPPlugin on a controller, mounting', () => {
   it("refuses app.mount from a controller's plugin", async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
 
     await expect(app.bootstrap()).rejects.toThrow(/^Cannot call "app\.mount" from a controller's plugin/)
   })

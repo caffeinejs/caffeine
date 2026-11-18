@@ -1,7 +1,14 @@
 import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
-import { Authentication, Authorization } from '@caffeinejs/http'
-import { createWebApplication, authentication, csrf, healthProbes } from '@caffeinejs/http/fastify'
+import {
+  Authentication,
+  Authorization,
+  authentication,
+  csrf,
+  healthProbes,
+  createWebApplication,
+} from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { OpenAPI, openapi } from '@caffeinejs/openapi'
 import { Second } from '@caffeinejs/std/duration'
 
@@ -9,7 +16,7 @@ import { SESSION_COOKIE, configuration } from './app.config.js'
 import { createLogger } from './app.log.js'
 import { authRouter } from './auth/index.js'
 import { projectsRouter } from './projects/index.js'
-import { adminPages, apiMisses, memberPages, publicPages, securityHeaders, site } from './spa/index.js'
+import { adminPages, apiMisses, memberPages, publicPages, SecurityHeaders, site } from './spa/index.js'
 
 export interface BuildAppOptions {
   /** The application logger, or `false` for a silent one. Tests pass `false`. */
@@ -26,13 +33,14 @@ export interface BuildAppOptions {
 export function buildApp(container: Container, options: BuildAppOptions = {}) {
   return (
     createWebApplication({
+      adapter: node(),
       container,
       config: configuration,
       logger: options.logger ?? createLogger(),
     })
       // --- Settings. These configure builders the constructor already registered, so where they are written
       // makes no difference to install order.
-      .server(({ config }) => ({ listener: config.server }))
+      .server(({ config }) => ({ listen: config.server }))
       .logger((b, { config }) => b.level(config.log.level))
       .shutdown(s => {
         if (process.env.VITEST !== undefined) {
@@ -74,11 +82,12 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
 
       // --- Plugins, in the order they register.
       //
-      // Both plugins go ahead of the authentication gate on purpose: a hook registered after it never runs for
-      // a request the gate rejected, so this is what puts the security headers on a 401 and refuses a
-      // cross-origin request before it reaches the auth path at all. `csrf()` is the framework's: every unsafe
-      // request is judged by its Fetch Metadata, and the client sends no token.
-      .with(securityHeaders)
+      // Both plugins go ahead of the authentication gate on purpose: plugin hooks run in the order the plugins
+      // are installed, and one after the gate never runs for a request the gate rejected, so this is what puts the
+      // security headers on a 401 and refuses a cross-origin request before it reaches the auth path at all.
+      // `csrf()` is the framework's: every unsafe request is judged by its Fetch Metadata, and the client sends no
+      // token.
+      .with(() => new SecurityHeaders())
       .with(csrf())
 
       .with(authentication())

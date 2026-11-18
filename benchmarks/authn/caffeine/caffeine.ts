@@ -1,5 +1,15 @@
-import { Authorize, Controller, Get, JWTService, Post, Status, Authentication } from '@caffeinejs/http'
-import { createWebApplication, authentication } from '@caffeinejs/http/fastify'
+import {
+  Authorize,
+  Controller,
+  Get,
+  JWTService,
+  Post,
+  Status,
+  Authentication,
+  authentication,
+  createWebApplication,
+} from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Hour } from '@caffeinejs/std/duration'
 
 import { AUDIENCE, ISSUER, ROLE, SECRET } from '../shared.js'
@@ -25,7 +35,7 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   .install(
     Authentication(auth =>
       auth.addJWTBearer(b =>

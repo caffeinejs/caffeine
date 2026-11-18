@@ -1,5 +1,10 @@
-import { ErrConfiguration, kRouteConstraints } from '@caffeinejs/http'
-import { type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http/fastify'
+import {
+  ErrConfiguration,
+  kRouteConstraints,
+  type IContext,
+  type IRequest,
+  type RouteDefinition,
+} from '@caffeinejs/http'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
@@ -15,7 +20,8 @@ import {
   storedHeadersOf,
 } from './_util.js'
 
-const request = (headers: Record<string, string>): AdapterRequest => ({ headers }) as unknown as AdapterRequest
+const request = (headers: Record<string, string>) =>
+  ({ header: (name: string) => headers[name] }) as unknown as Pick<IRequest, 'header'>
 
 describe('parseRequestCacheControl', () => {
   it('reads a quoted max-age, and tolerates spaces around the list', () => {
@@ -117,14 +123,16 @@ describe('the headers kept with an entry', () => {
         header: (name: string, value: unknown) => {
           set[name] = value
         },
-      } as unknown as AdapterReply,
+        appendHeader: (name: string, value: unknown) => {
+          const current = set[name]
+          set[name] = current === undefined ? value : [current, value].flat()
+        },
+      } as unknown as Pick<IContext, 'getHeaders' | 'getHeader' | 'hasHeader' | 'header' | 'appendHeader'>,
     }
   }
 
-  // A handler may set a header from a number. An entry travels to stores that serialize it, and is replayed
-  // through an API that takes text: it is kept the way it would have gone out on the wire.
-  it('keeps a numeric header as the text it goes out as, and leaves out what belongs to one response', () => {
-    const { reply } = replyWith({ 'x-total-count': 42, 'content-length': 10, 'x-cache': 'MISS', link: ['a', 'b'] })
+  it('leaves out what belongs to one response', () => {
+    const { reply } = replyWith({ 'x-total-count': '42', 'content-length': '10', 'x-cache': 'MISS', link: ['a', 'b'] })
 
     expect(storedHeadersOf(reply, 'x-cache')).toEqual({ 'x-total-count': '42', link: ['a', 'b'] })
   })
@@ -150,24 +158,36 @@ describe('the headers kept with an entry', () => {
 
     expect(set.vary).toBe('Origin, Accept-Language, Accept')
   })
+
+  // A header stored from a list goes out again as one field line per value, as the response it was stored from did.
+  it('replays a header stored as a list as each of its values', () => {
+    const { reply, set } = replyWith({})
+
+    applyStoredHeaders(reply, { link: ['</a>; rel=next', '</b>; rel=prev'] }, 'hit')
+
+    expect(set.link).toEqual(['</a>; rel=next', '</b>; rel=prev'])
+  })
 })
 
 describe('assertConstraintsKeyed', () => {
-  const route = (extra: Partial<AdapterRouteOptions>) =>
-    ({ method: 'GET', url: '/pets', ...extra }) as unknown as AdapterRouteOptions
+  const route = (constraints: Record<string, { value: string; header?: string }> = {}) =>
+    ({
+      methods: ['GET'],
+      url: '/pets',
+      config: new Map([[kRouteConstraints, new Map(Object.entries(constraints))]]),
+    }) as unknown as RouteDefinition
 
   // A host constraint is two sites on one URL: without `Host` in the key, one is served the other's pages.
   it('wants a host-constrained route to vary on Host', () => {
-    const constrained = route({ constraints: { host: 'a.example' } })
+    const constrained = route({ host: { value: 'a.example', header: 'Host' } })
 
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second })).toThrow(ErrConfiguration)
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second })).toThrow('constrained on "Host"')
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['host'] })).not.toThrow()
   })
 
-  // Fastify's own version constraint, written on the route with no declaration, reads `Accept-Version`.
-  it('wants a route under the version constraint Fastify ships to vary on Accept-Version', () => {
-    const constrained = route({ constraints: { version: '1.x' } })
+  it('wants a route constrained on Accept-Version to vary on it', () => {
+    const constrained = route({ version: { value: '1.x', header: 'Accept-Version' } })
 
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second })).toThrow('constrained on "Accept-Version"')
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['accept-version'] })).not.toThrow()
@@ -176,7 +196,7 @@ describe('assertConstraintsKeyed', () => {
   // A custom constraint may read anything, a header or not. Nothing in `vary` can stand for it, so only a key
   // function of the route's own tells it apart.
   it('wants a key from a route under a constraint it does not know', () => {
-    const constrained = route({ constraints: { tenant: 'a' } })
+    const constrained = route({ tenant: { value: 'a' } })
 
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['tenant'] })).toThrow(
       'constraint "tenant" reads no header the cache key can vary on',
@@ -185,14 +205,8 @@ describe('assertConstraintsKeyed', () => {
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, key: () => 'a:pets' })).not.toThrow()
   })
 
-  // The constraints plugin copies a declared constraint onto the route as well. The declaration knows the header
-  // it reads, a custom one included, and is the one believed.
-  it('reads a constraint declared with its header once, from the declaration', () => {
-    const declared = new Map([['version', { header: 'X-API-Version' }]])
-    const constrained = route({
-      constraints: { version: '1.x' },
-      config: { [kRouteConstraints]: declared } as never,
-    })
+  it('reads the header a declared constraint names', () => {
+    const constrained = route({ version: { value: '1.x', header: 'X-API-Version' } })
 
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['X-API-Version'] })).not.toThrow()
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['Accept-Version'] })).toThrow(

@@ -1,7 +1,8 @@
 import type { ConfigDefinition } from '@caffeinejs/application/config'
 import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
-import { createWebApplication, healthProbes } from '@caffeinejs/http/fastify'
+import { healthProbes, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Resilience } from '@caffeinejs/resilience/aop'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 
@@ -25,11 +26,12 @@ export interface BuildAppOptions {
 export function buildApp(container: Container, options: BuildAppOptions = {}) {
   return (
     createWebApplication({
+      adapter: node(),
       container,
       config: options.config ?? configuration,
       logger: options.logger ?? createLogger(),
     })
-      .server(({ config }) => ({ listener: config.server }))
+      .server(({ config }) => ({ listen: config.server }))
       .logger((b, { config }) => b.level(config.log.level))
       // The drain delay covers the routing-table lag while requests keep being served; tests need none.
       .shutdown(s => {

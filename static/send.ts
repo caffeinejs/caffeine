@@ -1,22 +1,17 @@
-import { Readable } from 'node:stream'
-
-import { ErrHTTPNotFound, Responder, type ActionResult, type IContext } from '@caffeinejs/http'
-import type { FastifyReply } from 'fastify'
+import { ErrHTTPNotFound, type Responder, type RouteDefinition } from '@caffeinejs/http'
 
 import { resolveRoot } from './builder.js'
 import type { StaticRoot } from './config.js'
 import { ErrSendFileUnavailable } from './errors.js'
-import { serveFile, writeHeaders, type FileLog, type PreparedFile } from './serve.js'
-import { kStaticMounts, type ServedMount } from './static.js'
+import { FileResponder } from './serve.js'
+import { mountsByRoute } from './static.js'
 
 /**
- * The slice of an `IContext` {@link sendFile} reaches through.
- *
- * A structural slice rather than `Context` from `@caffeinejs/http/fastify`: every instantiation of that class
- * fits without variance trouble, and a context built by another adapter does not compile.
+ * The slice of an `IContext` {@link sendFile} reads: the route, whose server's mounts it sends from. A structural
+ * slice, so every context fits.
  */
 export interface StaticContext {
-  readonly platform: { readonly reply: FastifyReply }
+  readonly route: RouteDefinition | undefined
 }
 
 /**
@@ -27,15 +22,14 @@ export interface StaticContext {
  * the router is sent all the same. Preconditions and ranges apply to a `GET` or a `HEAD` the handler left at `200`; a
  * status it set is kept, with the whole file.
  *
- * When using `@fastify/compress`, apply `compress(false)` or `@Compress(false)` to routes that return this
- * responder. It selects the encoding itself, and its validators describe those bytes.
- *
  * `path` is the manifest's key as written, such as `'100%.txt'`, or, with a leading `/`, a URL path: the slash is
  * dropped and each segment percent-decoded, so `'/100%25.txt'` names the same file. A decoded segment holding a `/`
  * names nothing. A path the manifest does not list, `..` included, is a `404`. `root` picks the mount by the root its
- * `.serve(...)` was given; without it, the first mount.
+ * `.serve(...)` was given; without it, the first mount. On a request no route matched, such as one an error handler
+ * answers, there is no route to find the mounts by.
  *
- * @throws {@link ErrSendFileUnavailable} when no `staticFiles(...)` is installed, or no mount serves `root`
+ * @throws {@link ErrSendFileUnavailable} when no `staticFiles(...)` is installed, no mount serves `root`, or on a
+ *   request no route matched
  * @throws `ErrHTTPNotFound` when the mount lists no such file
  * @example
  * ```ts
@@ -43,10 +37,13 @@ export interface StaticContext {
  * ```
  */
 export function sendFile(ctx: StaticContext, path: string, root?: StaticRoot): Responder {
-  const reply = ctx.platform.reply
-  const served = (reply.server as unknown as Record<symbol, { mounts: readonly ServedMount[] } | undefined>)[
-    kStaticMounts
-  ]
+  const route = ctx.route
+
+  if (route === undefined) {
+    throw new ErrSendFileUnavailable(undefined, false, false)
+  }
+
+  const served = mountsByRoute.get(route)
 
   if (served === undefined) {
     throw new ErrSendFileUnavailable()
@@ -66,49 +63,7 @@ export function sendFile(ctx: StaticContext, path: string, root?: StaticRoot): R
     throw new ErrHTTPNotFound()
   }
 
-  return new FileResponder(file, reply.log)
-}
-
-class FileResponder extends Responder {
-  constructor(
-    readonly file: PreparedFile,
-    readonly log: FileLog,
-  ) {
-    super()
-  }
-
-  async respond(ctx: IContext): Promise<ActionResult> {
-    const method = ctx.req.method
-    const conditional = (method === 'GET' || method === 'HEAD') && ctx.statusCode === 200
-    // Read before the open: it aborts when the handler times out or the client leaves while the file opens.
-    const signal = ctx.signal
-    const decision = await serveFile(
-      this.file,
-      { method, header: name => ctx.req.header(name) },
-      { via: 'sendFile', conditional, log: this.log },
-    )
-
-    // Nothing will send the file, so nothing would close it.
-    if (signal.aborted) {
-      decision.body?.destroy()
-
-      return undefined
-    }
-
-    writeHeaders(ctx.status(conditional ? decision.status : ctx.statusCode), decision.headers)
-
-    if (decision.cacheControl !== undefined) {
-      ctx.header('cache-control', decision.cacheControl)
-    }
-
-    // Fastify answers a `HEAD` of a compiled route through the `GET`, and writes `Content-Length: 0` for an empty
-    // payload: an empty stream keeps the length the file has. A `304` has no length to keep, and a stream would have
-    // the adapter label it `application/octet-stream`.
-    return (
-      decision.body ??
-      (method === 'HEAD' && decision.headers['content-length'] !== undefined ? Readable.from([]) : undefined)
-    )
-  }
+  return new FileResponder(file, 'sendFile', served.log)
 }
 
 /** The manifest key `path` names: itself, or for a URL path, the path without its leading `/`, each segment decoded. */

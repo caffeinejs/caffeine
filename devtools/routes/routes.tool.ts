@@ -34,7 +34,6 @@ export class RoutesTool {
       },
       authorization: {
         fallbackPolicy: authz?.fallbackPolicy?.name,
-        fallbackExcept: [...(authz?.fallbackExcept ?? [])],
         defaultPolicy: authz?.authorizeDecoratorDefaultPolicy.name,
       },
       gates: this.#servers().map(entry => ({

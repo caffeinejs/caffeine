@@ -9,14 +9,17 @@ import {
   Args,
   Catch,
   Controller,
+  ErrHTTPNotFound,
   ErrHTTPPreconditionFailed,
   Get,
   Responder,
+  type ErrorHandler,
   type IContext,
-  type Router,
+  Router,
+  createWebApplication,
   type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, inject, it, vi } from 'vitest'
 
@@ -44,10 +47,15 @@ class GuardedFilesController {
 void GuardedFilesController
 
 describe('sendFile', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
-  const start = async (configure: StaticConfigurer, routes?: Router<any, any, any, any, any, any>) => {
-    app = createWebApplication({}).with(staticFiles(configure)) as WebApplication
+  const start = async (configure: StaticConfigurer, routes?: Router<any, any, any, any, any>) => {
+    app = createWebApplication({ adapter: node() }).with(staticFiles(configure)) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     if (routes !== undefined) {
       app.mount(routes)
     }
@@ -64,7 +72,7 @@ describe('sendFile', () => {
   it('serves a file from a handler', async () => {
     const started = await start(
       s => s.serve(fixtures, { prefix: '/files' }),
-      newRouter().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
+      new Router().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
     )
 
     const res = await started.request('/pick')
@@ -79,7 +87,7 @@ describe('sendFile', () => {
     let returned: unknown
     const started = await start(
       s => s.serve(fixtures),
-      newRouter().get('/pick', ctx => (returned = sendFile(ctx, 'hello.txt'))),
+      new Router().get('/pick', ctx => (returned = sendFile(ctx, 'hello.txt'))),
     )
 
     await started.request('/pick')
@@ -91,7 +99,7 @@ describe('sendFile', () => {
   it('marks what it sends private, whatever the mount writes on its own routes', async () => {
     const started = await start(
       s => s.serve(fixtures, { anonymous: true }),
-      newRouter().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
+      new Router().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
     )
 
     expect((await started.request('/hello.txt')).headers.get('cache-control')).toBe('public, no-cache')
@@ -101,7 +109,7 @@ describe('sendFile', () => {
   it('finds the mount by the root it is given, and takes the first without one', async () => {
     const started = await start(
       s => s.serve(fixtures, { prefix: '/a' }).serve(pathToFileURL(`${other}/`), { prefix: '/b' }),
-      newRouter()
+      new Router()
         .get('/first', ctx => sendFile(ctx, 'hello.txt'))
         .get('/second', ctx => sendFile(ctx, 'other.txt', other))
         .get('/url', ctx => sendFile(ctx, 'other.txt', pathToFileURL(other)))
@@ -118,7 +126,7 @@ describe('sendFile', () => {
   it('sends a file unrouted keeps off the router', async () => {
     const started = await start(
       s => s.serve(fixtures, { unrouted: ['**'] }),
-      newRouter().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
+      new Router().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
     )
 
     expect((await started.request('/hello.txt')).status).toBe(404)
@@ -134,7 +142,7 @@ describe('sendFile', () => {
       await buildStatic({ root })
       const started = await start(
         s => s.serve(root, { unrouted: ['**'] }),
-        newRouter().get('/pick', ctx => sendFile(ctx, '.well-known/index.html')),
+        new Router().get('/pick', ctx => sendFile(ctx, '.well-known/index.html')),
       )
 
       expect((await started.request('/.well-known/index.html')).status).toBe(404)
@@ -156,7 +164,7 @@ describe('sendFile', () => {
   ])('reads %s as a request path, answering %i', async (path, status) => {
     const started = await start(
       s => s.serve(fixtures),
-      newRouter().get('/pick', ctx => sendFile(ctx, path)),
+      new Router().get('/pick', ctx => sendFile(ctx, path)),
     )
 
     expect((await started.request('/pick')).status).toBe(status)
@@ -165,7 +173,7 @@ describe('sendFile', () => {
   it('negotiates the encoding and answers preconditions as a mount route does', async () => {
     const started = await start(
       s => s.serve(spa, { unrouted: ['index.html'] }),
-      newRouter().get('/', ctx => sendFile(ctx, 'index.html')),
+      new Router().get('/', ctx => sendFile(ctx, 'index.html')),
     )
 
     const first = await started.request('/', { headers: { 'accept-encoding': 'br' } })
@@ -185,7 +193,7 @@ describe('sendFile', () => {
     }
     const started = await start(
       s => s.serve(fixtures, { headers: () => headers, cacheControl: '' }),
-      newRouter().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
+      new Router().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
     )
 
     for (const path of ['/hello.txt', '/pick']) {
@@ -204,7 +212,7 @@ describe('sendFile', () => {
   it('keeps a Vary the handler wrote, adding Accept-Encoding', async () => {
     const started = await start(
       s => s.serve(spa, { unrouted: ['index.html'] }),
-      newRouter().get('/', ctx => {
+      new Router().get('/', ctx => {
         ctx.header('vary', 'Cookie')
         return sendFile(ctx, 'index.html')
       }),
@@ -216,7 +224,7 @@ describe('sendFile', () => {
   it('keeps a status the handler set, with the whole file', async () => {
     const started = await start(
       s => s.serve(fixtures),
-      newRouter().get('/gone', ctx => {
+      new Router().get('/gone', ctx => {
         ctx.status(410)
         return sendFile(ctx, 'hello.txt')
       }),
@@ -231,7 +239,7 @@ describe('sendFile', () => {
   it('answers HEAD with the headers of the GET and no body', async () => {
     const started = await start(
       s => s.serve(fixtures),
-      newRouter().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
+      new Router().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
     )
 
     const res = await started.request('/pick', { method: 'HEAD' })
@@ -246,7 +254,7 @@ describe('sendFile', () => {
   it('answers a conditional HEAD with 304 and no stand-in Content-Type or Content-Length', async () => {
     const started = await start(
       s => s.serve(fixtures),
-      newRouter().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
+      new Router().get('/pick', ctx => sendFile(ctx, 'hello.txt')),
     )
     const etag = (await started.request('/pick')).headers.get('etag')!
 
@@ -269,7 +277,7 @@ describe('sendFile', () => {
       await buildStatic({ root })
       const started = await start(
         s => s.serve(root),
-        newRouter().get('/pick/*', ctx => sendFile(ctx, ctx.req.param('*')!)),
+        new Router().get('/pick/*', ctx => sendFile(ctx, ctx.req.param('*')!)),
       )
       const text = async (path: string) => {
         const res = await started.request(`/pick/${encodeURIComponent(path)}`)
@@ -295,10 +303,15 @@ describe('sendFile', () => {
     try {
       await writeFile(join(root, 'slow.txt'), 'slow')
       await buildStatic({ root })
-      app = createWebApplication({})
-        .server(() => ({ factory: { handlerTimeout: 30 * Millisecond } }))
-        .with(staticFiles(s => s.serve(root, { unrouted: ['**'] }))) as WebApplication
-      app.mount(newRouter().get('/pick', ctx => sendFile(ctx, 'slow.txt')))
+      app = createWebApplication({ adapter: node() })
+        .server(() => ({ handlerTimeout: 30 * Millisecond }))
+        .with(staticFiles(s => s.serve(root, { unrouted: ['**'] }))) as WebApplication<
+        never,
+        never,
+        unknown,
+        NodeAdapter
+      >
+      app.mount(new Router().get('/pick', ctx => sendFile(ctx, 'slow.txt')))
       await app.bootstrap()
       const fifo = join(await realpath(root), 'slow.txt')
       await rm(fifo)
@@ -330,8 +343,8 @@ describe('sendFile', () => {
 
   it('names the cause when staticFiles(...) is not installed', async () => {
     let thrown: unknown
-    app = createWebApplication({}).mount(
-      newRouter().get('/pick', ctx => {
+    app = createWebApplication({ adapter: node() }).mount(
+      new Router().get('/pick', ctx => {
         try {
           return sendFile(ctx, 'hello.txt')
         } catch (err) {
@@ -339,7 +352,7 @@ describe('sendFile', () => {
           throw err
         }
       }),
-    ) as WebApplication
+    ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await app.request('/pick')).status).toBe(500)
@@ -347,12 +360,42 @@ describe('sendFile', () => {
     expect((thrown as Error).message.split('\n')[0]).toBe('Cannot send a file: staticFiles(...) is not installed')
   })
 
+  it('refuses sendFile on a request no route matched', async () => {
+    let thrown: unknown
+
+    @Catch(ErrHTTPNotFound)
+    class MissHandler implements ErrorHandler<ErrHTTPNotFound> {
+      handle(ctx: IContext) {
+        try {
+          return sendFile(ctx, 'index.html')
+        } catch (err) {
+          thrown = err
+          throw err
+        }
+      }
+    }
+
+    app = createWebApplication({ adapter: node() })
+      .with(staticFiles(s => s.serve(fixtures)))
+      .errorHandling(e => e.globalHandlers(MissHandler)) as WebApplication<never, never, unknown, NodeAdapter>
+    await app.bootstrap()
+
+    const res = await app.request('/nothing')
+
+    expect(thrown).toBeInstanceOf(ErrSendFileUnavailable)
+    expect((thrown as Error).message.split('\n')[0]).toBe(
+      'Cannot send a file: the request matched no route, so no mount can be found',
+    )
+    expect(res.status).toBe(500)
+    expect(((await res.json()) as { code: string }).code).toBe('ERR_INTERNAL')
+  })
+
   // Installed, so "not installed" would send the reader to the wrong fix.
   it('names a staticFiles(...) that serves no root', async () => {
     let thrown: unknown
     await start(
       s => s,
-      newRouter().get('/pick', ctx => {
+      new Router().get('/pick', ctx => {
         try {
           return sendFile(ctx, 'hello.txt')
         } catch (err) {
@@ -371,7 +414,7 @@ describe('sendFile', () => {
     let thrown: unknown
     const started = await start(
       s => s.serve(fixtures),
-      newRouter().get('/pick', ctx => {
+      new Router().get('/pick', ctx => {
         try {
           return sendFile(ctx, 'other.txt', other)
         } catch (err) {

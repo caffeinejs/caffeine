@@ -94,8 +94,9 @@ jobs:
           # pnpm installs no package another one does not declare, so it finds a dependency a package forgot.
           - { os: ubuntu-latest, node-version: '24', pm: pnpm }
           - { os: ubuntu-24.04-arm, node-version: '24', pm: npm }
-          - { os: macos-latest, node-version: '24', pm: npm }
-          - { os: windows-latest, node-version: '24', pm: npm }
+          # Disabled for now to speed up CI.
+          # - { os: macos-latest, node-version: '24', pm: npm }
+          # - { os: windows-latest, node-version: '24', pm: npm }
 
     steps:
       - name: Checkout

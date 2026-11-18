@@ -9,10 +9,12 @@ import {
 import { Scopes, type Ctor } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
-import type { WebApplication } from '../application.js'
+import { createWebApplication, type WebApplication } from '../application.js'
+import { healthProbes } from '../core/health/index.js'
 import type { HealthProbesBuilder } from '../core/health/probes_builder.js'
+import { authentication } from '../core/security/security.js'
 import { Authentication, Authorize, Controller, Get, Health } from '../index.js'
-import { authentication, createWebApplication, healthProbes } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 class DownIndicator extends HealthIndicator {
   get name(): string {
@@ -98,7 +100,7 @@ async function start(
   configure?: (health: HealthProbesBuilder) => void,
   ...indicators: Array<Ctor<HealthIndicator> | HealthIndicator>
 ): Promise<WebApplication> {
-  const app = createWebApplication().with(healthProbes(configure ?? (() => {})))
+  const app = createWebApplication({ adapter: node() }).with(healthProbes(configure ?? (() => {})))
 
   bindIndicators(app, ...indicators)
   await app.run()
@@ -132,7 +134,7 @@ describe('health probes', () => {
   })
 
   it('does not mount them when health was never configured and Kubernetes is absent', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.run()
 
     try {
@@ -206,7 +208,7 @@ describe('health probes', () => {
     ['mounted', true],
     ['switched off', false],
   ] as const)('rejects a non-singleton indicator at ready with the probes %s', async (_label, enabled) => {
-    const app = createWebApplication().with(healthProbes(h => h.enabled(enabled)))
+    const app = createWebApplication({ adapter: node() }).with(healthProbes(h => h.enabled(enabled)))
     app.container.bind(DownIndicator, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator))
 
     try {
@@ -237,7 +239,7 @@ describe('health probes', () => {
   })
 
   it('applies its budgets to every caller of the application health', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Health(h => h.indicatorTimeout(20)))
       .with(healthProbes())
     bindIndicators(app, SlowIndicator)
@@ -255,7 +257,7 @@ describe('health probes', () => {
 
   // An application polled by something other than HTTP still tunes the evaluation here.
   it('applies its budgets with the probes switched off', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(Health(h => h.indicatorTimeout(20)))
       .with(healthProbes(p => p.enabled(false)))
     bindIndicators(app, SlowIndicator)
@@ -362,7 +364,7 @@ describe('health probes', () => {
 
     void [SecuredController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .install(
         Authentication(auth =>
           auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()),

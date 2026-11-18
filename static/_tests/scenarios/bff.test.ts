@@ -1,11 +1,13 @@
 import {
   AuthenticationService,
   AuthenticationTicket,
-  type WebApplication,
   Authentication,
   Authorization,
+  authentication,
+  Router,
+  type WebApplication,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
@@ -32,8 +34,8 @@ const SECRET = 'bff-session-secret-that-is-at-least-32-bytes!'
  * `gatedPages` is the whole difference between the two postures, and it is one `authorize` on the
  * application's own router — not a setting the static plugin knows about.
  */
-function bff(gatedPages: boolean): WebApplication {
-  const auth = newRouter('/auth')
+function bff(gatedPages: boolean): WebApplication<never, never, unknown, NodeAdapter> {
+  const auth = new Router('/auth')
     .authorize({ allowAnonymous: true })
     .inject({ service: AuthenticationService })
     .post('/login', async (ctx, { service }) => {
@@ -43,16 +45,12 @@ function bff(gatedPages: boolean): WebApplication {
       return { ok: true }
     })
 
-  const api = newRouter('/api')
+  const api = new Router('/api')
     .get('/me', ctx => ({ sub: ctx.user.findFirst('sub')?.value }))
-    .mount(
-      newRouter('/orders')
-        .authorize({ roles: ['admin'] })
-        .get('/', () => []),
-    )
+    .mount(new Router('/orders').authorize({ roles: ['admin'] }).get('/', () => []))
     .get('/*', notFound)
 
-  const pages = newRouter()
+  const pages = new Router()
     .detail('http', { internal: true })
     .authorize(gatedPages ? {} : { allowAnonymous: true })
     .get('/', shellOf(dist))
@@ -60,12 +58,12 @@ function bff(gatedPages: boolean): WebApplication {
 
   // The sign-in page is a client route, so it stays anonymous whichever posture the rest takes: a gated
   // login page redirects to itself.
-  const signIn = newRouter()
+  const signIn = new Router()
     .detail('http', { internal: true })
     .authorize({ allowAnonymous: true })
     .get('/login', shellOf(dist))
 
-  const rest = newRouter()
+  const rest = new Router()
     .detail('http', { internal: true })
     .authorize(gatedPages ? {} : { allowAnonymous: true })
     .get('/*', clientRouteOf(dist))
@@ -75,10 +73,10 @@ function bff(gatedPages: boolean): WebApplication {
     .with(authentication())
     .install(Authorization(z => z.requireAuthenticatedByDefault()))
     .with(staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
-    .mount(auth, api, signIn, pages, rest) as WebApplication
+    .mount(auth, api, signIn, pages, rest) as WebApplication<never, never, unknown, NodeAdapter>
 }
 
-async function signIn(app: WebApplication, roles = ''): Promise<string> {
+async function signIn(app: WebApplication<never, never, unknown, NodeAdapter>, roles = ''): Promise<string> {
   const res = await app.request('/auth/login', { method: 'POST', headers: { 'x-roles': roles } })
   expect(res.status).toBe(200)
 
@@ -86,7 +84,7 @@ async function signIn(app: WebApplication, roles = ''): Promise<string> {
 }
 
 describe('backend-for-frontend: same-origin page and /api, cookie session, authenticate by default', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()

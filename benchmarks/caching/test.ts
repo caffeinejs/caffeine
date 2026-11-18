@@ -26,7 +26,13 @@ const built = (dir: string, file: string): Pick<ServerConfig, 'args' | 'builtPat
 }
 
 const servers: ServerConfig[] = [
-  { name: 'caffeine', cmd: 'node', port: 3050, cacheStatus: ['MISS', 'HIT'], ...built('caffeine', 'caffeine.js') },
+  {
+    name: 'caffeine',
+    cmd: 'node',
+    port: 3050,
+    cacheStatus: ['MISS', 'HIT'],
+    ...built('caffeine', 'caffeine.js'),
+  },
   {
     name: 'caffeine (no cache)',
     cmd: 'node',

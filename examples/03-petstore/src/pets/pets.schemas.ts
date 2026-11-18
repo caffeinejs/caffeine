@@ -3,7 +3,7 @@ import { $t, type InferSchema } from '@caffeinejs/application/schema'
 /**
  * Every schema this feature declares, and the types inferred from them.
  *
- * A `$t` schema is a JSON Schema, so each of these compiles straight into a Fastify Ajv validator when the
+ * A `$t` schema is a JSON Schema, so each of these compiles straight into the server's validator when the
  * route registers. The same declaration carries the TypeScript type, which is why nothing here is written
  * twice: `InferSchema<typeof PetSchema>` *is* the DTO, and a field added to the schema reaches the request
  * contract, the response contract, the OpenAPI document and the types together.
@@ -83,7 +83,7 @@ export const SearchPetsSchema = $t.Object({
 
 // --- Response schemas ---
 //
-// Composed from `CreatePetSchema` rather than restated. Declaring them also switches on Fastify's
+// Composed from `CreatePetSchema` rather than restated. Declaring them also switches on schema-compiled
 // fast-json-stringify serialization for the routes that use them, so they earn their keep twice. The `$id` is
 // what lands each one in components.schemas and turns every reference into a $ref.
 
@@ -111,15 +111,6 @@ export const PetListSchema = $t.Object(
     }),
   },
   { $id: 'PetList' },
-)
-
-export const PetPhotoSchema = $t.Object(
-  {
-    message: $t.String(),
-    success: $t.Boolean(),
-    photo: $t.String({ format: 'uri' }),
-  },
-  { $id: 'PetPhotoUploaded' },
 )
 
 export type Species = InferSchema<typeof SpeciesSchema>

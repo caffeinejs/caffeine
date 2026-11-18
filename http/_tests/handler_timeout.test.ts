@@ -1,41 +1,47 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import { Millisecond, Second } from '@caffeinejs/std/duration'
-import type { FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Controller, Get, Responder, Router } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { createWebApplication } from '../application.js'
+import { Controller, Get, HTTPPlugin, Responder, Router, type HTTPSetupContext } from '../index.js'
+import { node } from '../platform/node/index.js'
 
 /**
- * Fastify answers a handler that outlives its timeout with a 503. An `onSend` hook that is asynchronous — a
+ * A handler that outlives its timeout is answered with a 503. An `onSend` hook that is asynchronous — a
  * compressor — holds that send open a while, and the handler resolving meanwhile must not be taken as a request
  * to send again: the second send wrote headers over headers already out, an unhandled rejection that ends the
  * process.
  */
 describe('a handler that outlives its timeout', () => {
-  let close: (() => Promise<unknown>) | undefined
+  /**
+   * Long enough that the slow handler, at 50ms, resolves while the 503 sent at 30ms is still held open here. Only
+   * there: held open past the timeout, a fast route's own response would be answered 503 over by the timer.
+   */
+  class SlowSend extends HTTPPlugin {
+    override readonly name = 'slow-send'
 
-  afterEach(async () => {
-    await close?.()
-    close = undefined
-  })
+    constructor(private readonly runs: { n: number }) {
+      super()
+    }
 
-  function slowSend(runs: { n: number }): FastifyPluginAsync {
-    return async instance => {
-      // Long enough that the slow handler, at 50ms, resolves while the 503 sent at 30ms is still held open here.
-      // Only there: held open past the timeout, a fast route's own response would be answered 503 over by the
-      // timer, which is the side of this Fastify has to fix.
-      instance.addHook('onSend', async (request, _reply, payload) => {
-        runs.n++
-        if (request.url.endsWith('/slow')) {
+    register({ app }: HTTPSetupContext): void {
+      app.hook('onSend', async (ctx, payload) => {
+        this.runs.n++
+        if (ctx.req.url.endsWith('/slow')) {
           await sleep(60)
         }
         return payload
       })
     }
   }
+
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    await close?.()
+    close = undefined
+  })
 
   async function sendsOnce(run: () => Promise<void>): Promise<void> {
     const unhandled: unknown[] = []
@@ -72,9 +78,9 @@ describe('a handler that outlives its timeout', () => {
 
     const runs = { n: 0 }
     await sendsOnce(async () => {
-      const app = createWebApplication()
-        .server(() => ({ factory: { handlerTimeout: 30 } }))
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+      const app = createWebApplication({ adapter: node() })
+        .server(() => ({ handlerTimeout: 30 * Millisecond }))
+        .with(() => new SlowSend(runs))
       close = () => app.close()
       await app.bootstrap()
 
@@ -102,8 +108,8 @@ describe('a handler that outlives its timeout', () => {
 
     const runs = { n: 0 }
     await sendsOnce(async () => {
-      const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+      const app = createWebApplication({ adapter: node() })
+        .with(() => new SlowSend(runs))
         .mount(timed)
       close = () => app.close()
       await app.bootstrap()
@@ -132,8 +138,8 @@ describe('a handler that outlives its timeout', () => {
 
     const runs = { n: 0 }
     await sendsOnce(async () => {
-      const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+      const app = createWebApplication({ adapter: node() })
+        .with(() => new SlowSend(runs))
         .mount(timed)
       close = () => app.close()
       await app.bootstrap()
@@ -159,8 +165,8 @@ describe('a handler that outlives its timeout', () => {
 
     const runs = { n: 0 }
     await sendsOnce(async () => {
-      const app = createWebApplication()
-        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+      const app = createWebApplication({ adapter: node() })
+        .with(() => new SlowSend(runs))
         .mount(timed)
       close = () => app.close()
       await app.bootstrap()
@@ -173,7 +179,7 @@ describe('a handler that outlives its timeout', () => {
   })
 })
 
-// Fastify refuses a handler timeout that is not a whole number of milliseconds when the route is added.
+// A handler timeout that is not a whole number of milliseconds is accepted when the route is added.
 describe('a route timeout that is not a whole number of milliseconds', () => {
   it('starts, and the route answers', async () => {
     const timed = new Router('/fractional')
@@ -182,7 +188,7 @@ describe('a route timeout that is not a whole number of milliseconds', () => {
       .timeout(1 * Second + 0.5 * Millisecond)
       .handler(() => 'ok')
 
-    const app = createWebApplication().mount(timed)
+    const app = createWebApplication({ adapter: node() }).mount(timed)
     try {
       await app.bootstrap()
 
@@ -205,16 +211,20 @@ describe('a Responder that rejects after its handler timed out', () => {
     const holding = Promise.withResolvers<void>()
     const held = Promise.withResolvers<void>()
     const statuses: number[] = []
-    const plugin: FastifyPluginAsync = async instance => {
-      instance.addHook('onSend', async (_request, reply, payload) => {
-        statuses.push(reply.statusCode)
-        if (reply.statusCode === 503) {
-          holding.resolve()
-          await held.promise
-        }
-        return payload
-      })
-    }
+    const plugin = new (class extends HTTPPlugin {
+      override readonly name = 'holding'
+
+      register({ app }: HTTPSetupContext): void {
+        app.hook('onSend', async (ctx, payload) => {
+          statuses.push(ctx.statusCode)
+          if (ctx.statusCode === 503) {
+            holding.resolve()
+            await held.promise
+          }
+          return payload
+        })
+      }
+    })()
 
     class Failing extends Responder {
       async respond(): Promise<never> {
@@ -231,8 +241,8 @@ describe('a Responder that rejects after its handler timed out', () => {
         const failing = new Failing()
         return resolved ? Promise.resolve(failing) : failing
       })
-    const app = createWebApplication()
-      .with(() => fp(plugin, { name: 'holding' }))
+    const app = createWebApplication({ adapter: node() })
+      .with(() => plugin)
       .mount(timed)
 
     try {

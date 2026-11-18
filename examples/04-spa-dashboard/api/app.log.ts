@@ -4,9 +4,8 @@ import { PinoLogger } from '@caffeinejs/application/logger/pino'
 /**
  * The application logger.
  *
- * Built eagerly and handed to `createWebApplication` as `ApplicationOptions.logger`, which is the only path
- * that reaches the Fastify server: Fastify reads its logger while it constructs and exposes no setter
- * afterwards. That is why `.logger(...)` in `app.ts` adjusts the level and nothing else.
+ * Built eagerly and handed to `createWebApplication` as `ApplicationOptions.logger`. `.logger(...)` in `app.ts`
+ * adjusts its level once configuration has resolved, and nothing else.
  */
 export function createLogger(): Logger {
   return new PinoLogger({

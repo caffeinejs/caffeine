@@ -6,6 +6,7 @@ import type { Duration } from '@caffeinejs/std/duration'
 import type { IContext } from '../../context.js'
 import type { ErrorHandler } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
+import type { SendPayload } from '../lifecycle/lifecycle.js'
 import { AuthzRouteService } from '../security/authz/index.js'
 import type {
   BodyMode,
@@ -23,7 +24,7 @@ export type CatchByMap = Map<Ctor<Error>, Provider<ErrorHandler<Error>>>
  * A group of routes, compiled and ready to register.
  *
  * Nothing here says where the routes came from. A controller class, a programmatic registration and — later — a
- * functional route definition all produce this same shape, and the adapter cannot tell them apart.
+ * functional route definition all produce this same shape, and the engine cannot tell them apart.
  */
 export interface IRouteGroup<R = unknown> {
   path: string
@@ -37,7 +38,7 @@ export interface IRouteGroup<R = unknown> {
   target?: Function
   routes: IRoute<R>[]
   /**
-   * A hook covering every route of the group, registered by the adapter exactly as given.
+   * A hook covering every route of the group, registered by the engine exactly as given.
    *
    * Set by a source that needs per-request preparation — resolving the instance a `@Catch` method will be
    * invoked on, for one — and left undefined by every source that does not.
@@ -107,7 +108,6 @@ export interface IRoute<R = unknown> {
   /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
   bodyAs?: BodyMode
   config: Map<string, unknown>
-  options: Map<string, unknown>
   /**
    * What packages annotated this route with.
    *
@@ -119,6 +119,27 @@ export interface IRoute<R = unknown> {
   catchBy?: CatchByMap
   guards?: readonly CompiledGuard<Guard>[]
   authorization: RouteAuthorization
+  /**
+   * The route's hooks: its groups', outermost first, then a controller's hook methods, then its own. `undefined` when
+   * none declared one.
+   */
+  hooks?: CompiledHooks<R>
+}
+
+/**
+ * Hooks as a route carries them: handed the request the route is compiled against and the context, as
+ * {@link RouteGroupErrorHandler} is, so a source that keeps per-request state on the request reaches it.
+ */
+export interface CompiledHooks<R = unknown> {
+  readonly onRequest: readonly ((req: R, ctx: IContext) => void | PromiseLike<void>)[]
+  readonly preHandler: readonly ((req: R, ctx: IContext) => void | PromiseLike<void>)[]
+  readonly onSend: readonly ((
+    req: R,
+    ctx: IContext,
+    payload: SendPayload,
+  ) => SendPayload | void | PromiseLike<SendPayload | void>)[]
+  readonly onResponse: readonly ((req: R, ctx: IContext) => void | PromiseLike<void>)[]
+  readonly onError: readonly ((req: R, ctx: IContext, err: Error) => void | PromiseLike<void>)[]
 }
 
 export interface RouteAuthorization {
@@ -140,11 +161,11 @@ export interface RouteAuthorization {
 }
 
 /**
- * The parameter compilers the adapter owns, handed to a route source so it can build its own dispatch without
+ * The parameter compilers the engine owns, handed to a route source so it can build its own dispatch without
  * knowing how arguments are picked out of a request.
  */
 export interface IRouteCompilers<REQ = unknown, RES = unknown> {
-  /** Compiles the pickers around `fn`, returning the function the adapter installs as the route handler. */
+  /** Compiles the pickers around `fn`, returning the function the engine installs as the route handler. */
   handler(parameters: ParameterPickOptions<REQ>[], fn: RouteInvoker): (req: REQ, res: RES) => unknown
 
   /** Compiles the pickers alone, for a source that resolves its target per request and invokes it itself. */
@@ -165,6 +186,6 @@ export type RouteDispatch<REQ = unknown, RES = unknown> = (
 /**
  * A request hook covering every route of one group, supplied by the source that built it.
  *
- * Registered by the adapter exactly as given, so it costs what the equivalent hand-written hook costs.
+ * Registered by the engine exactly as given, so it costs what the equivalent hand-written hook costs.
  */
 export type RouteGroupHook<REQ = unknown, RES = unknown> = (req: REQ, res: RES, done: (err?: Error) => void) => void

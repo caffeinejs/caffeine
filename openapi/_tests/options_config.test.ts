@@ -2,8 +2,8 @@ import { newConfiguration } from '@caffeinejs/application'
 import type { InferConfig } from '@caffeinejs/application/config'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
-import { type WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'
@@ -76,7 +76,7 @@ describe('openapi() configured from the tree', () => {
     ),
   })
 
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -92,9 +92,11 @@ describe('openapi() configured from the tree', () => {
       )
       .build().config
 
-    app = createWebApplication({ config: conf })
+    app = createWebApplication({ adapter: node(), config: conf })
       .install(OpenAPI())
-      .with(openapi<InferConfig<typeof schema>>((o, { config }) => o.config(config.openapi).public())) as WebApplication
+      .with(
+        openapi<InferConfig<typeof schema>>((o, { config }) => o.config(config.openapi).public()),
+      ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const document = (await (await app.request('/spec.json')).json()) as OpenAPIDocument

@@ -1,10 +1,12 @@
 import { Readable } from 'node:stream'
 
+import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Router } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 /**
  * The request scope has to live as long as the response, not as long as the handler's promise. Everything here
@@ -35,7 +37,7 @@ describe('request scope lifetime', () => {
             notify()
           }),
       )
-      return createWebApplication({ container })
+      return createWebApplication({ adapter: node(), container })
     }
 
     /** Resolves on the next teardown. Call it before the request that should trigger one. */
@@ -177,8 +179,7 @@ describe('request scope lifetime', () => {
   // The scope ends once the response is out, so a teardown that fails can no longer touch it: it is logged as an
   // error, with every failure in it, and the client still has its answer.
   it('logs a request scope that cannot be torn down, and still answers', async () => {
-    const logged: Array<Record<string, unknown>> = []
-    const logger = { level: 'error', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
+    const error = vi.fn()
 
     class Session {
       readonly id = 1
@@ -199,8 +200,8 @@ describe('request scope lifetime', () => {
       .inject(i => ({ session: i.provide(Session) }))
       .handler((_ctx, deps) => ({ id: deps.session.get().id }))
 
-    const app = createWebApplication({ container })
-      .server(() => ({ factory: { logger } }))
+    const app = createWebApplication({ adapter: node(), container })
+      .logger(b => b.use({ ...newNoopLogger(), error }))
       .mount(router)
     await app.bootstrap()
 
@@ -209,15 +210,9 @@ describe('request scope lifetime', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ id: 1 })
     await vi.waitFor(() =>
-      expect(logged).toContainEqual(
-        expect.objectContaining({
-          level: 50,
-          msg: 'Cannot tear down the request scope',
-          err: expect.objectContaining({
-            type: 'AggregateError',
-            aggregateErrors: [expect.objectContaining({ message: 'cannot close the session' })],
-          }),
-        }),
+      expect(error).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(AggregateError) }),
+        'Cannot tear down the request scope',
       ),
     )
 

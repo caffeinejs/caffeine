@@ -3,8 +3,8 @@ import { connect as dial } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 /**
  * `RedisHTTPCacheStore` against real servers: Redis and Valkey, each as one server and as a cluster. The cluster rows are
  * what prove the store never names keys from two slots — a one-node cluster still answers CROSSSLOT.
@@ -238,7 +238,7 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
         .extend(cacheInvalidate({ tags: ['pets'] }))
         .handler(() => ({ created: true }))
 
-      const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
         .with(HTTPCaching(b => b.store(store)))
         .mount(pets)
       await app.bootstrap()

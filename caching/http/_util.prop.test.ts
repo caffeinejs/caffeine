@@ -1,4 +1,4 @@
-import type { AdapterRequest } from '@caffeinejs/http/fastify'
+import type { IRequest } from '@caffeinejs/http'
 import { it, fc } from '@fast-check/vitest'
 import { describe, expect } from 'vitest'
 
@@ -113,7 +113,11 @@ function withQuery(path: string, params: [string, string][]): string {
 }
 
 describe('defaultCacheKey (property)', () => {
-  const asRequest = (method: string, url: string) => ({ method, url, headers: {} }) as unknown as AdapterRequest
+  const asRequest = (method: string, url: string) =>
+    ({ method, url, basePath: '', header: () => undefined }) as unknown as Pick<
+      IRequest,
+      'method' | 'url' | 'basePath' | 'header'
+    >
 
   it.prop([pathWithQuery, fc.constantFrom('GET', 'HEAD')])(
     'gives a GET and a HEAD one key, whatever order the query arrived in',

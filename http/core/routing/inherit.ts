@@ -1,3 +1,5 @@
+import { REQUEST_HOOK_NAMES } from '../lifecycle/lifecycle.js'
+import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 import { mergeValue } from './_merge.js'
 import type { RouteAuthz, RouteAuthzOptions, RouteGroupDetail, RouteGroupSpec } from './spec.js'
 
@@ -89,9 +91,9 @@ export function inheritGroupSpec<R>(outer: RouteGroupSpec<R>, inner: RouteGroupS
     timeout: inner.timeout ?? outer.timeout,
     authz: mergeAuthz(outer.authz, inner.authz),
     config: mergeMap(outer.config, inner.config),
-    options: mergeMap(outer.options, inner.options),
     detail: mergeDetail(outer.detail, inner.detail),
     guards: concat(outer.guards, inner.guards),
+    hooks: concatHooks(outer.hooks, inner.hooks),
     catchBy: inner.catchBy?.length ? inner.catchBy : outer.catchBy,
     labels: mergeMap(inner.labels, outer.labels),
   }
@@ -142,4 +144,25 @@ function concat<T>(outer: T[] | undefined, inner: T[] | undefined): T[] | undefi
   }
 
   return [...outer, ...inner]
+}
+
+/** Two levels' hooks, point by point, the outer level's first, as their guards are. */
+function concatHooks(outer: AuthoredHooks | undefined, inner: AuthoredHooks | undefined): AuthoredHooks | undefined {
+  if (outer === undefined) {
+    return inner
+  }
+
+  if (inner === undefined) {
+    return outer
+  }
+
+  const merged: Record<string, readonly unknown[]> = {}
+  for (const name of REQUEST_HOOK_NAMES) {
+    const both = [...(outer[name] ?? []), ...(inner[name] ?? [])]
+    if (both.length > 0) {
+      merged[name] = both
+    }
+  }
+
+  return merged as AuthoredHooks
 }

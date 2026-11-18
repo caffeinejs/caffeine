@@ -12,8 +12,9 @@ import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { bindTo, type WebApplication } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
+import { createWebApplication } from '../../application.js'
+import { bindTo, type WebApplication, Router } from '../../index.js'
+import { type NodeServerSettings, node } from '../../platform/node/index.js'
 import { listenersOf, type ListenerConfigurer } from './listener.js'
 
 /**
@@ -29,16 +30,16 @@ class Probe<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'probe'
 
   readonly #name: string
-  readonly #listener: ListenerConfigurer<C> | undefined
+  readonly #listener: ListenerConfigurer<C, NodeServerSettings> | undefined
 
-  constructor(name: string, listener?: ListenerConfigurer<C>) {
+  constructor(name: string, listener?: ListenerConfigurer<C, NodeServerSettings>) {
     super()
     this.#name = name
     this.#listener = listener
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    listenersOf(kit).add(this.#name, this.#listener)
+    listenersOf<C, NodeServerSettings>(kit).add(this.#name, this.#listener)
   }
 }
 
@@ -61,14 +62,10 @@ describe('listeners', () => {
   })
 
   it('serves a router bound to a listener a feature added, on that listener alone', async () => {
-    app = createWebApplication()
-      .server(() => ({ listener }))
-      .install(new Probe('probe', l => l.server(() => ({ listener }))))
-      .mount(
-        newRouter('/probe')
-          .extend(bindTo('probe'))
-          .get('/', () => ({ up: true })),
-      ) as WebApplication
+    app = createWebApplication({ adapter: node() })
+      .server(() => ({ listen: listener }))
+      .install(new Probe('probe', l => l.server(() => ({ listen: listener }))))
+      .mount(new Router('/probe').extend(bindTo('probe')).get('/', () => ({ up: true }))) as WebApplication
 
     await app.run()
 
@@ -88,9 +85,9 @@ describe('listeners', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ admin: { host: '127.0.0.1', port: free } }))
       .build().config
-    app = createWebApplication({ config: conf })
-      .server(() => ({ listener }))
-      .listener('admin', (l, { config }) => l.server(() => ({ listener: config.admin }))) as WebApplication
+    app = createWebApplication({ adapter: node(), config: conf })
+      .server(() => ({ listen: listener }))
+      .listener('admin', (l, { config }) => l.server(() => ({ listen: config.admin }))) as WebApplication
 
     await app.run()
 
@@ -98,7 +95,10 @@ describe('listeners', () => {
   })
 
   it('keeps the order listeners were added in, the application before the features it configures', async () => {
-    app = createWebApplication().install(new Probe('probe')).listener('admin').listener('metrics') as WebApplication
+    app = createWebApplication({ adapter: node() })
+      .install(new Probe('probe'))
+      .listener('admin')
+      .listener('metrics') as WebApplication
 
     await app.bootstrap()
 
@@ -106,7 +106,7 @@ describe('listeners', () => {
   })
 
   it('refuses a name a feature takes after the application took it, when the application starts', async () => {
-    app = createWebApplication().listener('admin').install(new Probe('admin')) as WebApplication
+    app = createWebApplication({ adapter: node() }).listener('admin').install(new Probe('admin')) as WebApplication
 
     await expect(app.bootstrap()).rejects.toMatchObject({
       code: 'ERR_CONFIGURATION',
@@ -115,7 +115,7 @@ describe('listeners', () => {
   })
 
   it('refuses a listener added once the application has started: nothing would build it', async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     expect(() => app!.listener('late')).toThrow(ErrApplicationStarted)
@@ -123,7 +123,7 @@ describe('listeners', () => {
 
   it('refuses a listener a feature adds through a kit it kept past start-up', async () => {
     const keeper = new Keeper()
-    app = createWebApplication().install(keeper) as WebApplication
+    app = createWebApplication({ adapter: node() }).install(keeper) as WebApplication
     await app.bootstrap()
 
     expect(() => listenersOf(keeper.kit!).add('late')).toThrow(ErrApplicationStarted)
@@ -137,5 +137,24 @@ describe('listeners', () => {
       message: expect.stringMatching(/^Cannot add a listener: the application is not a web application/),
     })
     await headless.close().catch(() => undefined)
+  })
+})
+
+describe('ListenerBuilder.hook', () => {
+  // A listener's hooks are its own: the application's server never runs them.
+  it('runs a listener hook on that listener alone', async () => {
+    const app = createWebApplication({ adapter: node() })
+      .listener('admin', l => l.hook('onSend', ctx => void ctx.header('x-listener', 'admin')))
+      .mount(new Router('/jobs').extend(bindTo('admin')).get('/', () => 'jobs'))
+      .mount(new Router('/own').get('/', () => 'own'))
+
+    try {
+      await app.bootstrap()
+
+      expect((await app.listeners.get('admin')!.request('/jobs')).headers.get('x-listener')).toBe('admin')
+      expect((await app.request('/own')).headers.get('x-listener')).toBe(null)
+    } finally {
+      await app.close()
+    }
   })
 })

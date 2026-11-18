@@ -4,7 +4,7 @@
 # Secrets are never written here: each is read from the environment variable its placeholder names, and falls back
 # to a demo value so the example runs with nothing set. Quote a value that holds a placeholder.
 
-# What the server listens on. Handed to `.server(...)` as the listen options, so the keys are Fastify's.
+# What the server listens on. Handed to `.server(...)` as `listen`, so the keys are node:net's listen options.
 server:
   host: 0.0.0.0
   port: 9999

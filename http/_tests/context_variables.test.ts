@@ -1,8 +1,9 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Args, Catch, type IContext, Controller, ContextState, Get, type MiddlewareFn, Router, $p } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 // Controllers are registered globally at decoration time and a container snapshots them when it is
 // constructed, so every controller in this file is declared up front rather than inside the test that uses
@@ -63,7 +64,7 @@ const tenancy: MiddlewareFn<Vars> = (ctx, next) => {
 }
 
 function newApp() {
-  const app = createWebApplication({ container: new CaffeineIoC() })
+  const app = createWebApplication({ adapter: node(), container: new CaffeineIoC() })
   app.use(tenancy, { hook: 'onRequest' })
   return app
 }

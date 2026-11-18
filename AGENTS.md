@@ -17,12 +17,12 @@ A change is **small** when every line below holds, and **standard** otherwise:
 - It creates, moves or renames no source file, except a test beside the module it tests.
 - It touches nothing the `security-audit` row under Skills names.
 
-| Step   | Small                                                                                                                                     | Standard                                                                     |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Plan   | A few lines in chat: the files, the test, the rule lines that decide it                                                                   | Load `plan-change` and write the plan it asks for                            |
-| Checks | `CONVENTIONS.md` § Checks, for the scope of the change                                                                                    | The same                                                                     |
-| Review | Read your own diff against the Rule map sections and the Working rules, and for anything left behind (debug output, a TODO, a stray file) | Run `review-change`: a sub-agent with a fresh context reviews the whole diff |
-| Report | What changed, what you ran and its result                                                                                                 | The same, and what each review round found                                   |
+| Step   | Small                                                                                                                                     | Standard                                                                                                                                   |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Plan   | A few lines in chat: the files, the test, the rule lines that decide it                                                                   | Load `plan-change` and write the plan it asks for                                                                                          |
+| Checks | `CONVENTIONS.md` § Checks, for the scope of the change                                                                                    | The same                                                                                                                                   |
+| Review | Read your own diff against the Rule map sections and the Working rules, and for anything left behind (debug output, a TODO, a stray file) | Run `review-change`: a sub-agent with a fresh context, and any extra reviewer your `Agent coordination` setup names, review the whole diff |
+| Report | What changed, what you ran and its result                                                                                                 | The same, and what each reviewer found in each round                                                                                       |
 
 - A small change that stops fitting a line above is standard from there: stop and plan before the next edit.
 - When unsure, it is standard.
@@ -61,6 +61,15 @@ Work goes to the first of these that does it right:
 - When you are handed a finished plan to carry out, as a sub-agent or when the user asks you to carry out only named steps of a plan, carry it out as written, take no design decision it does not make, and stop and report where it leaves one open. Sizing, planning and `review-change` stay with the agent or the user that handed it to you.
 - Where your tool cannot choose a sub-agent's model, end a standard plan by telling the user which steps a cheaper model can carry out, so they can switch for those and switch back for the review.
 
+## Agent coordination
+
+Which tools and models do the work is each contributor's own setup, not a rule. It lives under an `Agent coordination` heading in the personal instruction file your tool reads and you never commit (`CLAUDE.local.md` in Claude Code), and names:
+
+- for each tier of § Use the cheapest thing that gets it right, the model, the effort where the tool sets one, and the sub-agent type where the tool has them;
+- extra reviewers: other tools that `review-change` starts beside its reviewer sub-agent, each with its model, its effort, and the command that runs it read-only and without prompts, with `<model>`, `<effort>`, `<prompt file>` and `<report file>` where the agent fills them in.
+
+An extra reviewer adds to the review: the reviewer sub-agent still runs on your own model. Read that local file, never the template it is copied from, [`docs/agent-coordination.md`](docs/agent-coordination.md). Without one, pick each tier from the models your tool offers and start no extra reviewer. The setup chooses who does the work and how each tool is started, never how to review: where it conflicts with these files, these files win.
+
 ## Rule map
 
 Before the first file of a kind below that you create or edit in a task, re-read its section, even if it is already in your context: a rule read at the start of a task fades by the time it applies.
@@ -82,17 +91,16 @@ Before the first file of a kind below that you create or edit in a task, re-read
 
 [`.agents/skills/`](.agents/skills/README.md) holds skills for every agent (`.claude/skills` links to it). Load the one the table names before that work. Where a skill disagrees with these files, these files win: Vitest, not `node:test`; `.js` imports built with `tsc --build`, not type stripping; the package's check project, not `tsc --noEmit`; oxlint and oxfmt, not ESLint; checks run in the order of "Checks" in `CONVENTIONS.md`.
 
-| Before you…                                                                                   | Load                     |
-| --------------------------------------------------------------------------------------------- | ------------------------ |
-| plan a standard change                                                                        | `plan-change`            |
-| hand over a standard change, or a change to an agent doc or a skill; review a diff when asked | `review-change`          |
-| design or change a public API: an option, a default, a method, a callback, a type users write | `sharp-edges`            |
-| write a generic, conditional or mapped type, or fight a type error                            | `typescript-magician`    |
-| use a Node.js runtime API: streams, `process`, `node:*` modules, signals, workers             | `node`                   |
-| write a Fastify plugin, hook or route                                                         | `fastify-best-practices` |
-| touch authentication, cookies, CSRF, crypto or request parsing, or review for vulnerabilities | `security-audit`         |
-| write a docs page or a README                                                                 | `documentation`          |
-| change an agent doc, a skill or this table                                                    | `skill-optimizer`        |
+| Before you…                                                                                   | Load                  |
+| --------------------------------------------------------------------------------------------- | --------------------- |
+| plan a standard change                                                                        | `plan-change`         |
+| hand over a standard change, or a change to an agent doc or a skill; review a diff when asked | `review-change`       |
+| design or change a public API: an option, a default, a method, a callback, a type users write | `sharp-edges`         |
+| write a generic, conditional or mapped type, or fight a type error                            | `typescript-magician` |
+| use a Node.js runtime API: streams, `process`, `node:*` modules, signals, workers             | `node`                |
+| touch authentication, cookies, CSRF, crypto or request parsing, or review for vulnerabilities | `security-audit`      |
+| write a docs page or a README                                                                 | `documentation`       |
+| change an agent doc, a skill or this table                                                    | `skill-optimizer`     |
 
 `plan-change` and `review-change` are written here; the others are vendored. Do not edit a vendored skill. Record an unavoidable patch in [`.agents/skills/README.md`](.agents/skills/README.md). The skills shipped to applications live in [`ai/skills/`](ai/skills/), not here.
 

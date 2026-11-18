@@ -2,7 +2,7 @@
 # one, application-<profile>.yaml, is layered over it when CAFFEINE_PROFILES names the profile. A list, such as
 # `dsps`, is replaced whole by a profile that sets it.
 
-# What the server listens on. Handed to `.server(...)` as the listen options, so the keys are Fastify's.
+# What the server listens on. Handed to `.server(...)` as `listen`, so the keys are node:net's listen options.
 server:
   host: 127.0.0.1
   port: 9500

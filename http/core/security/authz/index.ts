@@ -1,8 +1,7 @@
-export type { AuthorizationOptions, FallbackPolicyOptions } from './authz.js'
+export type { AuthorizationOptions } from './authz.js'
 export { assertAuthorizationConfigured, Authorization, AuthorizationBuilder } from './authz.js'
 export {
   ErrAuthorizationRequired,
-  ErrAuthzFallbackExcept,
   ErrAuthzPolicyEmpty,
   ErrAuthzPolicyNotFound,
   ErrAuthzRequirementHandlerDuplicate,

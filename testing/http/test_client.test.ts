@@ -1,9 +1,9 @@
 import { $t } from '@caffeinejs/application/schema'
 import { ErrBrewTooManyFollowUps, type Authenticator, type Interceptor } from '@caffeinejs/brewer'
 import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
-import { Controller, Get, Router, Guards } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Controller, Get, Router, Guards, createWebApplication } from '@caffeinejs/http'
 import { Guard, type GuardReturn } from '@caffeinejs/http/guards'
+import { node } from '@caffeinejs/http/node'
 import { describe, expect, it, vi } from 'vitest'
 
 import { newTestContainer } from '../test_container.js'
@@ -136,7 +136,7 @@ describe('testClient()', () => {
 
   describe('given an application', () => {
     it('should ready it, so a test does not have to', async () => {
-      const app = createWebApplication().mount(newPets())
+      const app = createWebApplication({ adapter: node() }).mount(newPets())
 
       // Deliberately not readied: an un-readied application has registered no routes and answers 404.
       await using client = testClient(app)
@@ -145,7 +145,7 @@ describe('testClient()', () => {
     })
 
     it('should expose the application and its container', async () => {
-      const app = createWebApplication().mount(newPets())
+      const app = createWebApplication({ adapter: node() }).mount(newPets())
       await using client = testClient(app)
 
       expect(client.$app).toBe(app)
@@ -206,7 +206,7 @@ describe('testClient()', () => {
     })
 
     it('should replace a dependency of an application that has not been readied', async () => {
-      const app = createWebApplication().mount(newGreet())
+      const app = createWebApplication({ adapter: node() }).mount(newGreet())
 
       await using client = testClient(app, {
         inject: { greeter: { greet: (name: string) => `MOCK ${name}` } },
@@ -219,7 +219,7 @@ describe('testClient()', () => {
       const container = new CaffeineIoC({ decorators: false })
       container.bind(Greeter, t => t.toSelf())
 
-      const app = createWebApplication({ container }).mount(newGreet())
+      const app = createWebApplication({ adapter: node(), container }).mount(newGreet())
       await app.bootstrap()
 
       try {
@@ -361,7 +361,9 @@ describe('testClient()', () => {
 
     // The readying happens in the transport, under the interceptors: what they hand on finds the application ready.
     it('should ready an application given unready before the first request they hand on', async () => {
-      await using client = testClient(createWebApplication().mount(newPets()), { interceptors: [stamp] })
+      await using client = testClient(createWebApplication({ adapter: node() }).mount(newPets()), {
+        interceptors: [stamp],
+      })
 
       expect(await (await client.pets.search.get()).json()).toMatchObject({ tenant: 'from-interceptor' })
     })
@@ -401,7 +403,7 @@ describe('testClient()', () => {
     // An application is driven with the same options as the routers it would mount.
     it('should answer for an application target too', async () => {
       const seen: Array<string | null> = []
-      await using client = testClient(createWebApplication().mount(newVault(seen)), {
+      await using client = testClient(createWebApplication({ adapter: node() }).mount(newVault(seen)), {
         headers: { authorization: 'Bearer expired' },
         authenticator: refresh,
       })
@@ -447,7 +449,7 @@ describe('testClient()', () => {
     })
 
     it('should close an application it was given', async () => {
-      const app = createWebApplication().mount(newPets())
+      const app = createWebApplication({ adapter: node() }).mount(newPets())
       const client = testClient(app)
       await client.pets.get()
 

@@ -2,6 +2,8 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
+import { authentication } from '../../../../core/security/security.js'
 import {
   Authorize,
   AuthenticationService,
@@ -24,8 +26,9 @@ import {
   UserProvider,
   $p,
   Authentication,
+  Router,
 } from '../../../../index.js'
-import { createWebApplication, newRouter, authentication } from '../../../../platform/fastify/index.js'
+import { node } from '../../../../platform/node/index.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
 let ALICE_HASH = ''
@@ -142,7 +145,7 @@ async function buildApp(cookies?: (k: CookieBuilder) => void) {
   container.bind(TestUserProvider, t => t.toSelf().extends())
   // Fast hasher keeps the test snappy; overrides the default ScryptPasswordHasher from addCredentials.
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
-  const builder = createWebApplication({ container })
+  const builder = createWebApplication({ adapter: node(), container })
   if (cookies !== undefined) {
     builder.cookie(cookies)
   }
@@ -270,7 +273,7 @@ async function buildDurableApp(graceSeconds?: number) {
   const store = new InMemoryRememberStore()
   container.bind(RememberMeTokenStore, t => t.toValue(store))
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
-  const builder = createWebApplication({ container })
+  const builder = createWebApplication({ adapter: node(), container })
   builder
     .install(
       Authentication(auth =>
@@ -502,7 +505,7 @@ describe('cookie sign-in under a base path', () => {
     const container = new CaffeineIoC()
     container.bind(TestUserProvider, t => t.toSelf().extends())
     container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ adapter: node(), container })
       .basePath('/api')
       .install(
         Authentication(auth =>
@@ -516,13 +519,9 @@ describe('cookie sign-in under a base path', () => {
       )
       .with(authentication())
       .mount(
-        newRouter('/audit')
-          .authorize({ roles: ['auditor'] })
-          .get('/', () => ({ audited: true })),
+        new Router('/audit').authorize({ roles: ['auditor'] }).get('/', () => ({ audited: true })),
         // A catch-all, as a single-page application's shell is: it is what `/api//evil.example` reaches.
-        newRouter()
-          .authorize()
-          .get('/*', () => ({ shell: true })),
+        new Router().authorize().get('/*', () => ({ shell: true })),
       )
     await app.bootstrap()
     return app

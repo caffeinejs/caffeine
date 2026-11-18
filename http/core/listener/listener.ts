@@ -1,17 +1,13 @@
 import { ErrApplicationStarted, type FeatureConfigureKit } from '@caffeinejs/application'
 import { errMessage } from '@caffeinejs/std/err'
 
-import type {
-  AdapterExtensionFactory,
-  AnyAdapterExtension,
-  AnyAdapterTypes,
-  HTTPSetupContext,
-  ServerConfigurer,
-} from '../../adapter.js'
-import type { HTTPPlugin } from '../../plugin.js'
+import type { HTTPPluginFactory, HTTPSetupContext } from '../../plugin.js'
 import { assertPluginFactory } from '../../plugin_factory.js'
+import type { ServerConfigurer } from '../../server.js'
 import { ServerDefinition } from '../../server_definition.js'
 import { ErrConfiguration } from '../error/common.js'
+import { HookRegistration } from '../lifecycle/batch.js'
+import { assertHookName, HOOK_NAMES, type HookFn, type HookName } from '../lifecycle/lifecycle.js'
 import {
   parseUse,
   type MiddlewareFactory,
@@ -23,6 +19,7 @@ import {
   type Next,
   type NodeMiddleware,
 } from '../middleware/middleware.js'
+import type { ServerSettings } from '../server/settings.js'
 
 /**
  * Fluently builds one listener: a server of its own, on its own port, serving the routers bound to it with
@@ -40,40 +37,52 @@ import {
  * `@Authorize(...)`, exactly as on the application's own server. Authenticating takes a gate registered here,
  * `with(authentication())`.
  */
-export class ListenerBuilder<C = unknown> {
-  readonly #definition: ServerDefinition<AnyAdapterTypes, C>
+export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
+  readonly #definition: ServerDefinition<C>
 
-  constructor(definition: ServerDefinition<AnyAdapterTypes, C>) {
+  constructor(definition: ServerDefinition<C>) {
     this.#definition = definition
   }
 
   /**
-   * Configures the server, the way `.server(...)` configures the application's own: `factory` for Fastify's
-   * constructor options, `listener` for `listen()`. Resolved once, at start-up, against the same context a plugin
-   * factory gets; several calls shallow-merge section by section, in call order.
+   * Configures the server, the way `.server(...)` configures the application's own. The settings are what the
+   * application's adapter takes: `ServerSettings` under none, `NodeServerSettings` under `node()`, with `listen` for
+   * where it listens and `http`, `https` or `http2` for Node's own options. Resolved once, at start-up, against the
+   * same context a plugin factory gets; several calls shallow-merge section by section, in call order. Under `node()`:
    *
    * ```ts
-   * .listener('admin', (l, { config }) => l.server(() => ({ listener: config.app.admin })))
+   * .listener('admin', (l, { config }) => l.server(() => ({ listen: config.app.admin })))
    * ```
    */
-  server(configure: ServerConfigurer<AnyAdapterTypes, C>): this {
+  server(configure: ServerConfigurer<S, C>): this {
     this.#definition.server.push(configure)
     return this
   }
 
   /**
    * Registers a server plugin on this server from a factory, the way the application's `.with(...)` registers one on
-   * its own: after the framework's head slots (error handling, cookies), in the order these calls are written. A
-   * factory may return an `HTTPPlugin`, and what either kind of factory mounts or adds with `context.app` lands on
-   * this server.
+   * its own: after the framework's head slots (error handling, cookies), in the order these calls are written. What
+   * its plugin mounts or adds with `context.app` lands on this server.
    *
    * ```ts
    * .listener('admin', l => l.with(authentication()).with(healthProbes()))
    * ```
    */
-  with(factory: AdapterExtensionFactory<AnyAdapterExtension | HTTPPlugin<AnyAdapterTypes>, C, AnyAdapterTypes>): this {
+  with(factory: HTTPPluginFactory<C>): this {
     assertPluginFactory(factory)
     this.#definition.plugins.push(factory)
+    return this
+  }
+
+  /**
+   * Adds a hook to this server, in its place among its `.with(...)` plugins, as the application's `.hook(...)` adds one
+   * to its own: nothing the application adds there reaches this server.
+   *
+   * @throws ErrConfiguration for a point that is not a hook.
+   */
+  hook<K extends HookName>(name: K, fn: HookFn<K, C>): this {
+    assertHookName(name, HOOK_NAMES, 'with listener.hook')
+    this.#definition.plugins.push(() => new HookRegistration(name, fn as HookFn<HookName>))
     return this
   }
 
@@ -88,32 +97,25 @@ export class ListenerBuilder<C = unknown> {
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,
-    options?: MiddlewareOptions<AnyAdapterTypes['hook']>,
+    options?: MiddlewareOptions,
   ): this
-  use(target: NodeMiddleware, options?: MiddlewareOptions<AnyAdapterTypes['hook']>): this
-  use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions<AnyAdapterTypes['hook']>): this
-  use(target: MiddlewareResolvable, options?: MiddlewareOptions<AnyAdapterTypes['hook']>): this
+  use(target: NodeMiddleware, options?: MiddlewareOptions): this
+  use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
+  use(target: MiddlewareResolvable, options?: MiddlewareOptions): this
   use<V = Record<never, never>, Conf = Record<never, never>>(
     path: MiddlewarePath,
     target: MiddlewareFn<V, Conf>,
-    options?: MiddlewareOptions<AnyAdapterTypes['hook']>,
+    options?: MiddlewareOptions,
   ): this
-  use(path: MiddlewarePath, target: NodeMiddleware, options?: MiddlewareOptions<AnyAdapterTypes['hook']>): this
-  use(
-    path: MiddlewarePath,
-    target: (req: never, res: never, next: Next) => void,
-    options?: MiddlewareOptions<AnyAdapterTypes['hook']>,
-  ): this
-  use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions<AnyAdapterTypes['hook']>): this
+  use(path: MiddlewarePath, target: NodeMiddleware, options?: MiddlewareOptions): this
+  use(path: MiddlewarePath, target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
+  use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions): this
   use(
     pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
-    targetOrOptions?:
-      | MiddlewareTarget<C>
-      | MiddlewareOptions<AnyAdapterTypes['hook']>
-      | ((req: never, res: never, next: Next) => void),
-    options?: MiddlewareOptions<AnyAdapterTypes['hook']>,
+    targetOrOptions?: MiddlewareTarget<C> | MiddlewareOptions | ((req: never, res: never, next: Next) => void),
+    options?: MiddlewareOptions,
   ): this {
-    const parsed = parseUse<C, AnyAdapterTypes['hook']>(pathOrTarget, targetOrOptions, options, arguments.length)
+    const parsed = parseUse<C>(pathOrTarget, targetOrOptions, options, arguments.length)
     this.#definition.middlewares.add(parsed.path, parsed.target, parsed.hook)
     return this
   }
@@ -126,14 +128,14 @@ export class ListenerBuilder<C = unknown> {
    * .listener('admin', l => l.useFn(({ config }) => rateLimit(config.app.adminLimits)))
    * ```
    */
-  useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions<AnyAdapterTypes['hook']>): this
-  useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions<AnyAdapterTypes['hook']>): this
+  useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
+  useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
   useFn(
     pathOrTarget: MiddlewarePath | MiddlewareFactory<C>,
-    targetOrOptions?: MiddlewareFactory<C> | MiddlewareOptions<AnyAdapterTypes['hook']>,
-    options?: MiddlewareOptions<AnyAdapterTypes['hook']>,
+    targetOrOptions?: MiddlewareFactory<C> | MiddlewareOptions,
+    options?: MiddlewareOptions,
   ): this {
-    const parsed = parseUse<C, AnyAdapterTypes['hook']>(pathOrTarget, targetOrOptions, options, arguments.length)
+    const parsed = parseUse<C>(pathOrTarget, targetOrOptions, options, arguments.length)
     this.#definition.middlewares.addFactory(parsed.path, parsed.target, parsed.hook)
     return this
   }
@@ -143,10 +145,16 @@ export class ListenerBuilder<C = unknown> {
  * Fills a listener's builder. Runs at start-up, once the container has initialized, with the context a plugin
  * factory gets: `config`, `store`, `logger`, a container that resolves, and `hasFeature`.
  */
-export type ListenerConfigurer<C = unknown> = (listener: ListenerBuilder<C>, context: HTTPSetupContext<C>) => void
+export type ListenerConfigurer<C = unknown, S extends object = ServerSettings> = (
+  listener: ListenerBuilder<C, S>,
+  context: HTTPSetupContext<C>,
+) => void
 
-/** What can add a listener: `app.listener(...)` on the application, `listenersOf(kit)` in a feature. */
-export interface ListenerAdder<C = unknown> {
+/**
+ * What can add a listener: `app.listener(...)` on the application, `listenersOf(kit)` in a feature. `S` is the
+ * settings type the listener's `.server(...)` writes.
+ */
+export interface ListenerAdder<C = unknown, S extends object = ServerSettings> {
   /**
    * Adds a listener named `name`, serving the routers bound to it. The name is taken at once; `configure` runs at
    * start-up.
@@ -154,15 +162,15 @@ export interface ListenerAdder<C = unknown> {
    * @throws ErrConfiguration when a listener of that name is already added.
    * @throws ErrApplicationStarted once the application has built its servers.
    */
-  add(name: string, configure?: ListenerConfigurer<C>): void
+  add(name: string, configure?: ListenerConfigurer<C, S>): void
 }
 
 /** The listeners an application runs besides its own server, in the order they were added. */
-export class Listeners<C = unknown> implements ListenerAdder<C> {
-  readonly #added: { definition: ServerDefinition<AnyAdapterTypes, C>; configure?: ListenerConfigurer<C> }[] = []
+export class Listeners<C = unknown> implements ListenerAdder<C, object> {
+  readonly #added: { definition: ServerDefinition<C>; configure?: ListenerConfigurer<C, object> }[] = []
   #built = false
 
-  add(name: string, configure?: ListenerConfigurer<C>): void {
+  add(name: string, configure?: ListenerConfigurer<C, object>): void {
     if (this.#built) {
       throw new ErrApplicationStarted()
     }
@@ -176,11 +184,11 @@ export class Listeners<C = unknown> implements ListenerAdder<C> {
       )
     }
 
-    this.#added.push({ definition: new ServerDefinition<AnyAdapterTypes, C>(name), configure })
+    this.#added.push({ definition: new ServerDefinition<C>(name), configure })
   }
 
   /** Runs every listener's callback, in add order, and hands back what each server is built from. */
-  build(context: HTTPSetupContext<C>): ServerDefinition<AnyAdapterTypes, C>[] {
+  build(context: HTTPSetupContext<C>): ServerDefinition<C>[] {
     this.#built = true
 
     return this.#added.map(({ definition, configure }) => {
@@ -192,21 +200,26 @@ export class Listeners<C = unknown> implements ListenerAdder<C> {
 
 /** The configure kit a web application hands its features: the usual one, and a way to add a listener. */
 export interface HTTPFeatureConfigureKit<C = unknown> extends FeatureConfigureKit<C> {
-  readonly listeners: ListenerAdder<C>
+  readonly listeners: ListenerAdder<C, object>
 }
 
 /**
  * Lets a feature add a listener from its configure step, when the application installing it is a web application.
  *
+ * `S` is the settings type the feature writes: `NodeServerSettings` for a `listen` section, which an adapter that
+ * listens takes; an application under no adapter refuses it at start-up.
+ *
  * ```ts
  * protected configure(kit: FeatureConfigureKit<C>): void {
- *   listenersOf(kit).add('metrics', l => l.server(() => ({ listener: { port: this.#port } })).with(metrics()))
+ *   listenersOf<C, NodeServerSettings>(kit).add('metrics', l =>
+ *     l.server(() => ({ listen: { port: this.#port } })).with(metrics()),
+ *   )
  * }
  * ```
  *
  * @throws ErrConfiguration when the application is not a web application.
  */
-export function listenersOf<C>(kit: FeatureConfigureKit<C>): ListenerAdder<C> {
+export function listenersOf<C, S extends object = ServerSettings>(kit: FeatureConfigureKit<C>): ListenerAdder<C, S> {
   const listeners = (kit as Partial<HTTPFeatureConfigureKit<C>>).listeners
 
   if (listeners === undefined) {
@@ -218,5 +231,5 @@ export function listenersOf<C>(kit: FeatureConfigureKit<C>): ListenerAdder<C> {
     )
   }
 
-  return listeners
+  return listeners as ListenerAdder<C, S>
 }

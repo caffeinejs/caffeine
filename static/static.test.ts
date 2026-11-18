@@ -1,16 +1,27 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, open, readdir, readlink, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, open, readdir, readFile, readlink, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-import { Writable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Authentication, Authorization, ErrConfiguration, RouteInventory, type WebApplication } from '@caffeinejs/http'
-import { authentication, createWebApplication, newRouter, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
+import {
+  Authentication,
+  authentication,
+  Authorization,
+  ErrConfiguration,
+  findMyWayMatcher,
+  Guards,
+  HTTPPlugin,
+  Router,
+  type HTTPPluginFactory,
+  type Guard,
+  type HTTPSetupContext,
+  createWebApplication,
+  type WebApplication,
+} from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
-import type { FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, beforeEach, describe, expect, inject, it, vi } from 'vitest'
 
 import { buildStatic } from './build/build.js'
@@ -22,7 +33,7 @@ import { staticFiles, type StaticConfigurer } from './static.js'
 const { spa, fixtures } = inject('fixtures')
 
 describe('staticFiles', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
   let dir: string
 
   beforeEach(async () => {
@@ -52,20 +63,30 @@ describe('staticFiles', () => {
     return root
   }
 
+  /** A plugin whose `register` runs `setup` on the application's own registrar. */
+  function plugin(setup: (app: HTTPSetupContext['app']) => void): HTTPPluginFactory {
+    return () =>
+      new (class extends HTTPPlugin {
+        register({ app }: HTTPSetupContext) {
+          setup(app)
+        }
+      })()
+  }
+
   /** An application that routes nothing but what it is given, so a `@Controller` elsewhere stays out. */
-  function start(configure: StaticConfigurer, before: HTTPPluginFactory[] = []) {
-    let builder = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+  function start(configure: StaticConfigurer, before: Array<HTTPPluginFactory> = []) {
+    let builder = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
 
     for (const plugin of before) {
       builder = builder.with(plugin)
     }
 
-    app = builder.with(staticFiles(configure)) as WebApplication
+    app = builder.with(staticFiles(configure)) as WebApplication<never, never, unknown, NodeAdapter>
 
     return app
   }
 
-  async function refusal(configure: StaticConfigurer, before: HTTPPluginFactory[] = []): Promise<Error> {
+  async function refusal(configure: StaticConfigurer, before: Array<HTTPPluginFactory> = []): Promise<Error> {
     const err = await start(configure, before)
       .bootstrap()
       .catch((err: unknown) => err)
@@ -79,15 +100,22 @@ describe('staticFiles', () => {
 
   // Thousands of files must not mean thousands of routes: start-up and router memory grow with directories instead.
   it('registers a route per file at the root, per directory under it, and per index URL', async () => {
-    await start(s => s.serve(spa, { prefix: '/app' })).bootstrap()
+    const urls: string[] = []
+    const collecting = plugin(app => {
+      app.hook('onRoute', route => {
+        urls.push(route.url)
+      })
+    })
+    await start(s => s.serve(spa, { prefix: '/app' }), [collecting]).bootstrap()
+    const index = await readFile(join(spa, 'index.html'), 'utf8')
 
-    const urls = app!.container
-      .get(RouteInventory)
-      .servers[0]!.routes.filter(route => route.kind === 'raw')
-      .map(route => route.url)
-      .toSorted()
-
-    expect(urls).toEqual(['/app', '/app/', '/app/assets/*', '/app/favicon.svg', '/app/index.html'])
+    expect(urls.toSorted()).toEqual(['/app', '/app/assets/*', '/app/favicon.svg', '/app/index.html'])
+    const slashed = await app!.request('/app/')
+    const bare = await app!.request('/app')
+    expect(slashed.status).toBe(200)
+    expect(await slashed.text()).toBe(index)
+    expect(bare.status).toBe(200)
+    expect(await bare.text()).toBe(index)
   })
 
   it('keeps off the router what unrouted names, index URLs included', async () => {
@@ -100,7 +128,12 @@ describe('staticFiles', () => {
 
   // A file a directory route does not list is a 404 there, not a page of the application's catch-all.
   it('answers 404 for a miss under a directory, and leaves a miss at the root to the application', async () => {
-    app = start(s => s.serve(spa)).mount(newRouter().get('/*', () => 'client route')) as WebApplication
+    app = start(s => s.serve(spa)).mount(new Router().get('/*', () => 'client route')) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.bootstrap()
 
     expect((await app.request('/assets/missing.js')).status).toBe(404)
@@ -120,9 +153,9 @@ describe('staticFiles', () => {
   // A router that folds case folds a per-file route's URL; a directory route must answer the same URLs.
   it('finds a file under a directory by any case, when the router folds it', async () => {
     const root = await tree('folded', ['assets/App.js'])
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
-      .with(staticFiles(s => s.serve(root))) as WebApplication
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ router: { caseSensitive: false } }))
+      .with(staticFiles(s => s.serve(root))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect(await (await app.request('/ASSETS/app.JS')).text()).toBe('assets/App.js')
@@ -132,12 +165,12 @@ describe('staticFiles', () => {
   // must read the same path, or a folded name would miss.
   it('finds a file under a directory from an absolute-form request target, when the router folds case', async () => {
     const root = await tree('absolute', ['assets/App.js'])
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({
-        factory: { routerOptions: { caseSensitive: false } },
-        listener: { host: '127.0.0.1', port: 0 },
+        router: { caseSensitive: false },
+        listen: { host: '127.0.0.1', port: 0 },
       }))
-      .with(staticFiles(s => s.serve(root))) as WebApplication
+      .with(staticFiles(s => s.serve(root))) as WebApplication<never, never, unknown, NodeAdapter>
     const { address } = await app.run()
 
     const res = await absoluteFormGet(address.origin, '/ASSETS/app.JS?v=1')
@@ -149,9 +182,9 @@ describe('staticFiles', () => {
     'keeps the full file name when folding %s changes the directory length',
     async directory => {
       const root = await tree('folded', [`${directory}/report.txt`, `${directory}/xreport.txt`])
-      app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
-        .with(staticFiles(s => s.serve(root))) as WebApplication
+      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+        .server(() => ({ router: { caseSensitive: false } }))
+        .with(staticFiles(s => s.serve(root))) as WebApplication<never, never, unknown, NodeAdapter>
       await app.bootstrap()
 
       const res = await app.request('/%C4%B0/xreport.txt')
@@ -163,9 +196,9 @@ describe('staticFiles', () => {
   // Two directories that differ by case are one route to a router that folds case, and each file still its own URL.
   it('serves files under directories that differ by case as one route, when the router folds it', async () => {
     const root = await tree('dirs', ['Assets/a.js', 'assets/b.js'])
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
-      .with(staticFiles(s => s.serve(root))) as WebApplication
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ router: { caseSensitive: false } }))
+      .with(staticFiles(s => s.serve(root))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect(await (await app.request('/assets/a.js')).text()).toBe('Assets/a.js')
@@ -175,11 +208,11 @@ describe('staticFiles', () => {
   it('serves disjoint files from mounts whose directory URLs differ by duplicate slashes', async () => {
     const one = await tree('one', ['assets/a.txt'])
     const two = await tree('two', ['assets/b.txt'])
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { routerOptions: { ignoreDuplicateSlashes: true } } }))
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
       .with(
         staticFiles(s => s.serve(one, { prefix: '/web//public' }).serve(two, { prefix: '/web/public' })),
-      ) as WebApplication
+      ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect(await (await app.request('/web/public/assets/a.txt')).text()).toBe('assets/a.txt')
@@ -215,9 +248,9 @@ describe('staticFiles', () => {
   // out request would hold one until the process exits. A FIFO keeps the open waiting until a writer comes.
   it.skipIf(process.platform !== 'linux')('closes a file it opened after the handler timed out', async () => {
     const root = await tree('slow', ['slow.txt'])
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { handlerTimeout: 30 * Millisecond } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ handlerTimeout: 30 * Millisecond }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
     const fifo = join(await realpath(root), 'slow.txt')
     await rm(fifo)
@@ -234,28 +267,26 @@ describe('staticFiles', () => {
     }
   })
 
-  // Fastify aborts the timeout signal before it starts the 503, and the reply is not sent while a hook holds it: a
-  // file opened then must not rewrite that response, nor go out over it.
+  // The engine aborts the timeout signal before it answers 503, and a hook may hold the answer: a file opened then
+  // must not rewrite that response, nor go out over it.
   it.skipIf(process.platform !== 'linux')("leaves a timeout's 503 alone while a hook still holds it", async () => {
     const root = await tree('slow', ['slow.txt'])
     let holding!: () => void
     const started = new Promise<void>(resolve => (holding = resolve))
     let release!: () => void
     const held = new Promise<void>(resolve => (release = resolve))
-    const plugin: FastifyPluginAsync = async instance => {
-      instance.addHook('onSend', async (_request, reply, payload) => {
-        if (reply.statusCode === 503) {
+    const holder = plugin(app => {
+      app.hook('onSend', async ctx => {
+        if (ctx.statusCode === 503) {
           holding()
           await held
         }
-
-        return payload
       })
-    }
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { handlerTimeout: 30 * Millisecond } }))
-      .with(() => fp(plugin, { name: 'holding' }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    })
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ handlerTimeout: 30 * Millisecond }))
+      .with(holder)
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
     const fifo = join(await realpath(root), 'slow.txt')
     await rm(fifo)
@@ -277,106 +308,12 @@ describe('staticFiles', () => {
     expect(res.headers.get('etag')).toBe(null)
   })
 
-  // Fastify's timer starts before the request hooks: a hook still running when it fires lets the handler start while
-  // the 503 waits in `onSend`. A file removed after start-up then fails to open, and that failure is as late as the
-  // file would have been.
-  it("leaves a timeout's 503 alone when the file fails to open after it", async () => {
-    const root = await tree('removed', ['gone.txt'])
-    const holding = Promise.withResolvers<void>()
-    const held = Promise.withResolvers<void>()
-    const failed = Promise.withResolvers<void>()
-    const statuses: number[] = []
-    const plugin: FastifyPluginAsync = async instance => {
-      instance.addHook('onRequest', async () => {
-        await holding.promise
-      })
-      instance.addHook('onSend', async (_request, reply, payload) => {
-        statuses.push(reply.statusCode)
-        if (reply.statusCode === 503) {
-          holding.resolve()
-          await held.promise
-        }
-        return payload
-      })
-    }
-    const logs = new Writable({
-      write(line: Buffer, _encoding, done) {
-        if (line.toString().includes('Cannot open a static file the manifest lists')) {
-          failed.resolve()
-        }
-        done()
-      },
-    })
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { handlerTimeout: 30 * Millisecond, logger: { level: 'error', stream: logs } } }))
-      .with(() => fp(plugin, { name: 'holding' }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
-    await app.bootstrap()
-    await rm(join(root, 'gone.txt'))
-
-    try {
-      const response = app.request('/gone.txt')
-      await failed.promise
-      // The rejection and anything the server does with it run on microtasks, which drain before an immediate.
-      await new Promise(resolve => setImmediate(resolve))
-      held.resolve()
-
-      expect((await response).status).toBe(503)
-      expect(statuses).toEqual([503])
-    } finally {
-      held.resolve()
-    }
-  })
-
-  // A miss under a directory is the handler's answer too, and as late as a file would have been.
-  it("leaves a timeout's 503 alone when a directory finds no file after it", async () => {
-    const root = await tree('nested', ['assets/app.js'])
-    const holding = Promise.withResolvers<void>()
-    const held = Promise.withResolvers<void>()
-    const handling = Promise.withResolvers<void>()
-    const statuses: number[] = []
-    const plugin: FastifyPluginAsync = async instance => {
-      instance.addHook('onRequest', async () => {
-        await holding.promise
-      })
-      instance.addHook('preHandler', async () => {
-        handling.resolve()
-      })
-      instance.addHook('onSend', async (_request, reply, payload) => {
-        statuses.push(reply.statusCode)
-        if (reply.statusCode === 503) {
-          holding.resolve()
-          await held.promise
-        }
-        return payload
-      })
-    }
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { handlerTimeout: 30 * Millisecond } }))
-      .with(() => fp(plugin, { name: 'holding' }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
-    await app.bootstrap()
-
-    try {
-      const response = app.request('/assets/missing.txt')
-      await handling.promise
-      // The handler runs right after the hook, and what the server does with its answer runs on microtasks.
-      await new Promise(resolve => setImmediate(resolve))
-      held.resolve()
-
-      expect((await response).status).toBe(503)
-      expect(statuses).toEqual([503])
-    } finally {
-      held.resolve()
-    }
-  })
-
   // A timed route's signal exists before its handler runs: only a timeout that fired keeps the file from going out.
   it('serves the file on a timed route', async () => {
     const root = await tree('timed', ['report.txt'])
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { handlerTimeout: 30 * Second } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ handlerTimeout: 30 * Second }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const res = await app.request('/report.txt')
@@ -388,20 +325,20 @@ describe('staticFiles', () => {
   // With the router reading ";" as the start of the query, an escape after it is the query's, not the path's.
   it('reads the path where the router does, when ";" starts the query', async () => {
     const root = await tree('nested', ['assets/app.js'])
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { useSemicolonDelimiter: true } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ router: { useSemicolonDelimiter: true } }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await app.request('/assets/app.js;tag=a%2Bb')).status).toBe(200)
   })
 
-  // Fastify's router reads a top-level flag that `routerOptions` leaves out, where `initialConfig` reports the default.
+  // Each flag is read where the router reads it, whichever others are set beside it.
   it('reads the path where the router does, with ";" set apart from the other router options', async () => {
     const root = await tree('nested', ['assets/app.js'])
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { useSemicolonDelimiter: true, routerOptions: { caseSensitive: false } } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ router: { useSemicolonDelimiter: true, caseSensitive: false } }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await app.request('/assets/app.js;tag=a%2Bb')).status).toBe(200)
@@ -411,9 +348,9 @@ describe('staticFiles', () => {
   it('fails start-up on a routed file with ";" in its name, when ";" starts the query', async () => {
     const root = await tree('nested', ['assets/report;final.txt'])
 
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { useSemicolonDelimiter: true } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ router: { useSemicolonDelimiter: true } }))
+      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<never, never, unknown, NodeAdapter>
     const err = await app.bootstrap().catch((err: unknown) => err)
 
     expect(err).toBeInstanceOf(ErrConfiguration)
@@ -426,9 +363,14 @@ describe('staticFiles', () => {
   it('fails start-up on a prefix with ";" in it, when ";" starts the query', async () => {
     const root = await tree('nested', ['report.txt'])
 
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ factory: { useSemicolonDelimiter: true } }))
-      .with(staticFiles(s => s.serve(root, { prefix: '/site;v1', anonymous: true }))) as WebApplication
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ router: { useSemicolonDelimiter: true } }))
+      .with(staticFiles(s => s.serve(root, { prefix: '/site;v1', anonymous: true }))) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     const err = await app.bootstrap().catch((err: unknown) => err)
 
     expect(err).toBeInstanceOf(ErrConfiguration)
@@ -472,7 +414,12 @@ describe('staticFiles', () => {
       app = start(s => s.serve(spa, options))
         .install(Authentication(a => a.addCookie(o => o.sessionSecret('s'.repeat(32)).secure(false))))
         .with(authentication())
-        .install(Authorization(z => z.requireAuthenticatedByDefault())) as WebApplication
+        .install(Authorization(z => z.requireAuthenticatedByDefault())) as WebApplication<
+        never,
+        never,
+        unknown,
+        NodeAdapter
+      >
 
       return app
     }
@@ -484,6 +431,24 @@ describe('staticFiles', () => {
 
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toBe('public, no-cache')
+    })
+
+    it('serves an anonymous mount past a global guard that denies', async () => {
+      class DenyAll implements Guard {
+        guard() {
+          return false
+        }
+      }
+      app = start(s => s.serve(spa, { anonymous: true }).serve(fixtures, { prefix: '/private' }))
+        .install(Authentication(a => a.addCookie(o => o.sessionSecret('s'.repeat(32)).secure(false))))
+        .with(authentication())
+        .install(Authorization(z => z.requireAuthenticatedByDefault()))
+        .install(Guards(g => g.global(DenyAll))) as WebApplication<never, never, unknown, NodeAdapter>
+      app.container.bind(DenyAll, t => t.toSelf())
+      await app.bootstrap()
+
+      expect((await app.request('/favicon.svg')).status).toBe(200)
+      expect((await app.request('/private/hello.txt')).status).toBe(401)
     })
 
     // A mount that does not say so sits under the application's policy, which may be a cookie.
@@ -555,15 +520,14 @@ describe('staticFiles', () => {
     expect(firstLine(err)).toContain(header)
   })
 
-  // A plugin such as @fastify/cors writes Vary: Origin first; replacing it lets a shared cache hand one origin's
+  // A plugin such as corsPolicy() writes Vary: Origin first; replacing it lets a shared cache hand one origin's
   // Access-Control-Allow-Origin to another.
   it('keeps a Vary written before it, adding Accept-Encoding', async () => {
-    const plugin: FastifyPluginAsync = async instance => {
-      instance.addHook('onRequest', async (_request, reply) => {
-        reply.header('vary', 'Origin')
+    const varying = plugin(app => {
+      app.hook('onRequest', ctx => {
+        ctx.header('vary', 'Origin')
       })
-    }
-    const varying: HTTPPluginFactory = () => fp(plugin, { name: 'varying' })
+    })
 
     await start(s => s.serve(spa, { anonymous: true }), [varying]).bootstrap()
 
@@ -706,11 +670,11 @@ describe('staticFiles', () => {
       const prefix = `/${'İ'.repeat(24)}`
       const outer = await tree('outer', ['assets/inner/a.txt'])
       const inner = await tree('inner', ['inner/b.txt'])
-      app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
+      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+        .server(() => ({ router: { caseSensitive: false } }))
         .with(
           staticFiles(s => s.serve(outer, { prefix }).serve(inner, { prefix: `${prefix}/assets` })),
-        ) as WebApplication
+        ) as WebApplication<never, never, unknown, NodeAdapter>
 
       await expect(app.bootstrap()).rejects.toThrow(ErrStaticRouteConflict)
     })
@@ -732,9 +696,9 @@ describe('staticFiles', () => {
     it('from two files that differ by case, when the router folds it', async () => {
       const upper = await tree('upper', ['A.txt'])
       const lower = await tree('lower', ['a.txt'])
-      app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ factory: { routerOptions: { caseSensitive: false } } }))
-        .with(staticFiles(s => s.serve(upper).serve(lower))) as WebApplication
+      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+        .server(() => ({ router: { caseSensitive: false } }))
+        .with(staticFiles(s => s.serve(upper).serve(lower))) as WebApplication<never, never, unknown, NodeAdapter>
 
       const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -744,10 +708,9 @@ describe('staticFiles', () => {
     // The mount's wildcard would otherwise answer the file by another spelling, under the mount's gate, not the route's.
     it('from a route registered before the mount at the URL of a file under a directory', async () => {
       const root = await tree('nested', ['assets/private/report.txt', 'assets/app.js'])
-      const plugin: FastifyPluginAsync = async instance => {
-        instance.get('/assets/private/report.txt', async () => 'protected')
-      }
-      const earlier: HTTPPluginFactory = () => plugin
+      const earlier = plugin(app => {
+        app.mount(new Router().get('/assets/private/report.txt').handler(() => 'protected'))
+      })
 
       const err = await refusal(s => s.serve(root, { anonymous: true }), [earlier])
 
@@ -762,7 +725,7 @@ describe('staticFiles', () => {
     it('from a route registered after the mount at the URL of a file under a directory', async () => {
       const root = await tree('nested', ['assets/private/report.txt', 'assets/app.js'])
       start(s => s.serve(root, { anonymous: true })).mount(
-        newRouter().get('/assets/private/report.txt', () => 'protected'),
+        new Router().get('/assets/private/report.txt', () => 'protected'),
       )
 
       const err = await app!.bootstrap().catch((err: unknown) => err)
@@ -777,7 +740,7 @@ describe('staticFiles', () => {
     it('but not from a POST registered after the mount at the URL of a file under a directory', async () => {
       const root = await tree('nested', ['assets/private/report.txt'])
       start(s => s.serve(root, { anonymous: true })).mount(
-        newRouter().post('/assets/private/report.txt', () => 'posted'),
+        new Router().post('/assets/private/report.txt', () => 'posted'),
       )
       await app!.bootstrap()
 
@@ -788,10 +751,9 @@ describe('staticFiles', () => {
     // A HEAD of its own answers the file's URL as a GET would: the mount's HEAD would answer every other spelling.
     it('from a HEAD registered before the mount at the URL of a file under a directory', async () => {
       const root = await tree('nested', ['assets/report.txt'])
-      const plugin: FastifyPluginAsync = async instance => {
-        instance.head('/assets/report.txt', async (_request, reply) => reply.send())
-      }
-      const earlier: HTTPPluginFactory = () => plugin
+      const earlier = plugin(app => {
+        app.mount(new Router().head('/assets/report.txt').handler(() => ''))
+      })
 
       const err = await refusal(s => s.serve(root, { anonymous: true }), [earlier])
 
@@ -804,13 +766,13 @@ describe('staticFiles', () => {
     // The router collapses the slashes when it registers the route, so it answers the file's own URL.
     it('from a route registered after the mount at a spelling of the URL the router folds', async () => {
       const root = await tree('nested', ['assets/report.txt'])
-      const plugin: FastifyPluginAsync = async instance => {
-        instance.get('/assets//report.txt', async () => 'later')
-      }
-      app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ factory: { routerOptions: { ignoreDuplicateSlashes: true } } }))
+      const later = plugin(app => {
+        app.mount(new Router().get('/assets//report.txt').handler(() => 'later'))
+      })
+      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+        .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
         .with(staticFiles(s => s.serve(root, { anonymous: true })))
-        .with(() => fp(plugin, { name: 'later' })) as WebApplication
+        .with(later) as WebApplication<never, never, unknown, NodeAdapter>
 
       const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -825,15 +787,14 @@ describe('staticFiles', () => {
       'from a route registered %s the mount at the folded URL of a file under a prefix the router folds',
       async (_case, before) => {
         const root = await tree('nested', ['assets/report.txt'])
-        const plugin: FastifyPluginAsync = async instance => {
-          instance.get('/web/public/assets/report.txt', async () => 'protected')
-        }
-        const other = () => fp(plugin, { name: 'other' })
+        const other = plugin(app => {
+          app.mount(new Router().get('/web/public/assets/report.txt').handler(() => 'protected'))
+        })
         const mount = staticFiles(s => s.serve(root, { prefix: '/web//public', anonymous: true }))
-        app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-          .server(() => ({ factory: { routerOptions: { ignoreDuplicateSlashes: true } } }))
+        app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+          .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
           .with(before ? other : mount)
-          .with(before ? mount : other) as WebApplication
+          .with(before ? mount : other) as WebApplication<never, never, unknown, NodeAdapter>
 
         const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -847,10 +808,9 @@ describe('staticFiles', () => {
     // find-my-way registers the URL without the optional segment too: that route answers the file's own URL.
     it('from a route with an optional segment registered before the mount, which also answers the URL of a file', async () => {
       const root = await tree('nested', ['assets/report.txt'])
-      const plugin: FastifyPluginAsync = async instance => {
-        instance.get('/assets/report.txt/:lang?', async () => 'protected')
-      }
-      const earlier: HTTPPluginFactory = () => plugin
+      const earlier = plugin(app => {
+        app.mount(new Router().get('/assets/report.txt/:lang?').handler(() => 'protected'))
+      })
 
       const err = await refusal(s => s.serve(root, { anonymous: true }), [earlier])
 
@@ -863,7 +823,7 @@ describe('staticFiles', () => {
     // A parameter ranks above a wildcard: the route would answer every file directly under the directory.
     it('from a parametric route registered after the mount over a directory of files', async () => {
       const root = await tree('nested', ['assets/report.txt'])
-      start(s => s.serve(root, { anonymous: true })).mount(newRouter().get('/assets/:name', () => 'protected'))
+      start(s => s.serve(root, { anonymous: true })).mount(new Router().get('/assets/:name', () => 'protected'))
 
       const err = await app!.bootstrap().catch((err: unknown) => err)
 
@@ -876,7 +836,7 @@ describe('staticFiles', () => {
     // find-my-way reports a parameter named "*" as the wildcard's value: the check could not tell the two apart.
     it('from a route with a parameter named * over a directory of files', async () => {
       const root = await tree('nested', ['assets/report.txt'])
-      start(s => s.serve(root, { anonymous: true })).mount(newRouter().get('/assets/:*', () => 'protected'))
+      start(s => s.serve(root, { anonymous: true })).mount(new Router().get('/assets/:*', () => 'protected'))
 
       const err = await app!.bootstrap().catch((err: unknown) => err)
 
@@ -890,11 +850,11 @@ describe('staticFiles', () => {
     it('from a mount nested in another under a prefix the router folds', async () => {
       const outer = await tree('outer', ['assets/private/report.txt'])
       const inner = await tree('inner', ['private/other.txt'])
-      app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ factory: { routerOptions: { ignoreDuplicateSlashes: true } } }))
+      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+        .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
         .with(
           staticFiles(s => s.serve(outer, { prefix: '/web//public' }).serve(inner, { prefix: '/web/public/assets' })),
-        ) as WebApplication
+        ) as WebApplication<never, never, unknown, NodeAdapter>
 
       const err = await app.bootstrap().catch((err: unknown) => err)
 
@@ -905,10 +865,9 @@ describe('staticFiles', () => {
     })
 
     it('from a route registered before the mount', async () => {
-      const plugin: FastifyPluginAsync = async instance => {
-        instance.get('/hello.txt', async () => 'earlier')
-      }
-      const earlier: HTTPPluginFactory = () => plugin
+      const earlier = plugin(app => {
+        app.mount(new Router().get('/hello.txt').handler(() => 'earlier'))
+      })
 
       const err = await refusal(s => s.serve(fixtures), [earlier])
 
@@ -918,26 +877,89 @@ describe('staticFiles', () => {
       )
     })
 
+    // A prefixed root route also answers its URL with a slash, which the nested index claims.
+    it('refuses a prefixed root route at a nested index URL', async () => {
+      const root = await tree('nested', ['docs/index.html'])
+      const earlier = plugin(app => {
+        app.mount(
+          new Router()
+            .extend((g: { prefix(p: string): unknown }) => {
+              g.prefix('/docs')
+            })
+            .get('/')
+            .handler(() => 'x'),
+        )
+      })
+
+      const err = await refusal(s => s.serve(root), [earlier])
+
+      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
+      expect(firstLine(err)).toBe(
+        `Cannot register "/docs/": "${name(root, 'docs/index.html')}" answers another route at that URL`,
+      )
+    })
+
     // Only the router's duplicate is a conflict: another plugin's refusal of the route must reach the reader as written.
     it('but lets another error from registering a route through as it was thrown', async () => {
       const refused = new Error('refused by policy')
-      const plugin: FastifyPluginAsync = async instance => {
-        instance.addHook('onRoute', () => {
+      const earlier = plugin(app => {
+        app.hook('onRoute', () => {
           throw refused
         })
-      }
-      const earlier: HTTPPluginFactory = () => fp(plugin, { name: 'policy' })
+      })
 
       expect(await refusal(s => s.serve(fixtures), [earlier])).toBe(refused)
     })
   })
 
   it('refuses a second staticFiles(...) on one server', async () => {
-    app = start(s => s.serve(fixtures)).with(staticFiles(s => s.serve(spa, { prefix: '/app' }))) as WebApplication
+    app = start(s => s.serve(fixtures)).with(staticFiles(s => s.serve(spa, { prefix: '/app' }))) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
 
     const err = await app.bootstrap().catch((err: unknown) => err)
 
-    expect(firstLine(err as Error)).toBe('Cannot register plugin "@caffeinejs/static": it is already registered')
+    expect(firstLine(err as Error)).toBe(
+      'Cannot register plugin "@caffeinejs/static" twice on the application\'s own server',
+    )
+  })
+
+  it('refuses staticFiles() on a router', async () => {
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) }).mount(
+      new Router().with(staticFiles(s => s.serve(fixtures))),
+    ) as WebApplication<never, never, unknown, NodeAdapter>
+
+    const err = await app.bootstrap().catch((err: unknown) => err)
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(firstLine(err as Error)).toBe(
+      "Cannot install staticFiles() on a router or a controller: it serves files at the server's own paths",
+    )
+  })
+
+  it('refuses staticFiles() on a server with a matcher of its own', async () => {
+    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
+      .with(staticFiles(s => s.serve(fixtures))) as WebApplication<never, never, unknown, NodeAdapter>
+
+    const err = await app.bootstrap().catch((err: unknown) => err)
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(firstLine(err as Error)).toBe(
+      'Cannot install staticFiles(): the server matches routes with a matcher of its own, and static routes are matched by find-my-way',
+    )
+  })
+
+  it('refuses a prefix with an empty segment', async () => {
+    const err = await refusal(s => s.serve(fixtures, { prefix: '/a//b' }))
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(firstLine(err)).toBe(
+      `Cannot serve "${fixtures}": the prefix "/a//b/" holds an empty segment, which a route path cannot keep`,
+    )
   })
 })
 

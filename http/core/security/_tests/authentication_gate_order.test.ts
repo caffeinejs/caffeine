@@ -1,7 +1,6 @@
-import { type FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -11,7 +10,9 @@ import {
   Get,
   type IContext,
 } from '../../../index.js'
-import { authentication, createWebApplication, type HTTPPluginFactory } from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
+import { HTTPPlugin, type HTTPPluginFactory, type HTTPSetupContext } from '../../../plugin.js'
+import { authentication } from '../security.js'
 
 /**
  * Where the authentication gate sits among the plugins, which is wherever `.with(authentication())` was
@@ -39,17 +40,17 @@ class NeverAuthenticates extends BaseAuthenticationHandler<object> {
 
 /** Stands in for `@caffeinejs/cors`: stamps a header from an `onRequest` hook, and records that it ran. */
 function stamping(name: string, ran: string[]): HTTPPluginFactory {
-  return () => {
-    const plugin: FastifyPluginAsync = async server => {
-      server.addHook('onRequest', (_request, reply, done) => {
-        ran.push(name)
-        reply.header(`x-${name}`, 'yes')
-        done()
-      })
-    }
+  return () =>
+    new (class extends HTTPPlugin {
+      override readonly name = name
 
-    return fp(plugin, { name })
-  }
+      register({ app }: HTTPSetupContext): void {
+        app.hook('onRequest', ctx => {
+          ran.push(name)
+          ctx.header(`x-${name}`, 'yes')
+        })
+      }
+    })()
 }
 
 @Authorize()
@@ -63,7 +64,7 @@ class GuardedController {
 void [GuardedController]
 
 function guardedApp(ran: string[]) {
-  return createWebApplication()
+  return createWebApplication({ adapter: node() })
     .install(Authentication(auth => auth.addStrategy('Never', new NeverAuthenticates()).default('Never')))
     .with(stamping('before', ran))
     .with(authentication())

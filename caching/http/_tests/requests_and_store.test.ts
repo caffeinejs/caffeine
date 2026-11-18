@@ -1,7 +1,17 @@
 import { Readable } from 'node:stream'
+import { brotliCompressSync, gzipSync } from 'node:zlib'
 
-import { Controller, ErrConfiguration, Get, Header, Post, Status } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import {
+  Controller,
+  ErrConfiguration,
+  Get,
+  Header,
+  Post,
+  Status,
+  corsPolicy,
+  createWebApplication,
+} from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -46,7 +56,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [NoStoreRequestController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -70,7 +80,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [CaseController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -93,7 +103,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [PragmaController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -119,7 +129,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [OnlyIfCachedController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -176,7 +186,7 @@ describe('what of the query the key carries', () => {
     (await app.request(url)).headers.get('x-cache')
 
   it('keeps the parameters a route lists and drops the rest, in any order', async () => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -187,7 +197,9 @@ describe('what of the query the key carries', () => {
   })
 
   it('falls back to the install list, and a route may leave the whole query out', async () => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).varyByQuery(['q'])))
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).varyByQuery(['q'])),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -201,7 +213,7 @@ describe('what of the query the key carries', () => {
   })
 
   it('counts the whole query when nobody lists anything', async () => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.bootstrap()
 
@@ -250,12 +262,33 @@ describe('a response left out of the store', () => {
     @CacheControl({ ttl: 60 * Second })
     @Get('/empty')
     empty() {}
+
+    @CacheControl({ ttl: 60 * Second })
+    @Header('Content-Encoding', 'gzip')
+    @Get('/coded')
+    coded() {
+      return gzipSync('coded')
+    }
+
+    @CacheControl({ ttl: 60 * Second, vary: ['Accept-Encoding'] })
+    @Header('Content-Encoding', 'gzip')
+    @Get('/declared')
+    declared() {
+      return gzipSync('coded')
+    }
+
+    @CacheControl({ ttl: 60 * Second, key: req => `keyed:${req.header('accept-encoding') ?? ''}` })
+    @Header('Content-Encoding', 'gzip')
+    @Get('/keyed')
+    keyed() {
+      return gzipSync('coded')
+    }
   }
   void [SkipController]
 
   it('is larger than maxEntrySize: it goes out, is not stored, and is reported', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(new MemoryHTTPCacheStore())
@@ -283,7 +316,7 @@ describe('a response left out of the store', () => {
 
   it('sets a cookie: it is reported the same way', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
     )
     close = () => app.close()
@@ -294,11 +327,80 @@ describe('a response left out of the store', () => {
     expect(skips).toMatchObject([{ route: { url: '/skip/cookie' }, reason: 'set-cookie', size: 11 }])
   })
 
+  // RFC 9111 §4.1: coded bytes answer only the requests that accept the coding, such as gzip a compressor wrote, and
+  // a key without Accept-Encoding would hand them to a client asking for identity.
+  it('carries a content coding the key does not vary on: it goes out, is not stored, and is reported', async () => {
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    const first = await app.request('/skip/coded')
+    const second = await app.request('/skip/coded')
+    const size = gzipSync('coded').byteLength
+
+    expect(first.headers.get('content-encoding')).toBe('gzip')
+    expect(second.headers.get('x-cache')).toBe('MISS')
+    expect(skips).toMatchObject([
+      { route: { url: '/skip/coded' }, reason: 'uncovered-vary', size },
+      { route: { url: '/skip/coded' }, reason: 'uncovered-vary', size },
+    ])
+  })
+
+  it('carries a content coding the key varies on, by vary or by a key function: it is stored', async () => {
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    const gzip = { headers: { 'accept-encoding': 'gzip' } }
+    await app.request('/skip/declared', gzip)
+    const declared = await app.request('/skip/declared', gzip)
+    await app.request('/skip/keyed', gzip)
+    const keyed = await app.request('/skip/keyed', gzip)
+
+    expect(declared.headers.get('x-cache')).toBe('HIT')
+    expect(keyed.headers.get('x-cache')).toBe('HIT')
+    expect(skips).toEqual([])
+  })
+
+  // CORS sets its headers, Vary: Origin among them, on every answer, a hit included: the stored body fits every origin.
+  it('varies on Origin through corsPolicy(): it is stored, and each hit answers its own origin', async () => {
+    @Controller('/skip-cors')
+    class CorsController {
+      @CacheControl({ ttl: 60 * Second })
+      @Get('/')
+      list() {
+        return [1, 2, 3]
+      }
+    }
+    void [CorsController]
+
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication({ adapter: node() })
+      .with(corsPolicy(c => c.origins('https://a.example', 'https://b.example')))
+      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })))
+    close = () => app.close()
+    await app.bootstrap()
+
+    await app.request('/skip-cors', { headers: { origin: 'https://a.example' } })
+    const hit = await app.request('/skip-cors', { headers: { origin: 'https://b.example' } })
+
+    expect(hit.headers.get('x-cache')).toBe('HIT')
+    expect(hit.headers.get('vary')).toBe('Origin')
+    expect(hit.headers.get('access-control-allow-origin')).toBe('https://b.example')
+    expect(skips).toEqual([])
+  })
+
   // A compressor installed ahead of the cache hands it a stream on every response: without a report the cache
   // is silently empty.
   it('is a stream: it goes out, is not stored, and is reported without a size', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
     )
     close = () => app.close()
@@ -325,7 +427,7 @@ describe('a response left out of the store', () => {
   it('has no body: it goes out, is not stored, and is reported with a size of zero', async () => {
     const skips: CacheSkipEvent[] = []
     const stores: unknown[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e), onStore: e => stores.push(e) }),
       ),
@@ -351,7 +453,7 @@ describe('a response left out of the store', () => {
   // response is still one the store would have kept, and is reported under the key it would have been kept by.
   it('is reported under its key when the request bypassed the read', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
     )
     close = () => app.close()
@@ -370,7 +472,7 @@ describe('a response left out of the store', () => {
 
   // A size is a count of bytes. Text such as '1MB' was one before sizes were counts; one left behind fails loudly.
   it.each([1.5, -1, Number.NaN, '1MB'])('refuses the maxEntrySize %o at start-up', async size => {
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).maxEntrySize(size as number)),
     )
     close = () => app.close()
@@ -385,7 +487,7 @@ describe('a response left out of the store', () => {
 
   it('stores a payload of exactly maxEntrySize and leaves out one a byte larger', async () => {
     const skips: CacheSkipEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(new MemoryHTTPCacheStore())
@@ -402,7 +504,7 @@ describe('a response left out of the store', () => {
     expect(skips).toEqual([])
 
     await app.close()
-    const tighter = createWebApplication().with(
+    const tighter = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(new MemoryHTTPCacheStore())
@@ -487,7 +589,7 @@ describe('a store that rejects', () => {
       onInvalidate: event => invalidated.push(event),
     }
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(observer)))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(store).observer(observer)))
     close = () => app.close()
     await app.bootstrap()
 
@@ -519,7 +621,9 @@ describe('a store that rejects', () => {
     store.failGet = true
     const log = new RecordingLogger()
 
-    const app = createWebApplication({ logger: log }).with(HTTPCaching(b => b.store(store).observer({ onHit() {} })))
+    const app = createWebApplication({ adapter: node(), logger: log }).with(
+      HTTPCaching(b => b.store(store).observer({ onHit() {} })),
+    )
     close = () => app.close()
     await app.bootstrap()
 
@@ -538,7 +642,7 @@ describe('a store that rejects', () => {
     const log = new RecordingLogger()
     const errors: CacheErrorEvent[] = []
 
-    const app = createWebApplication({ logger: log }).with(
+    const app = createWebApplication({ adapter: node(), logger: log }).with(
       HTTPCaching(b => b.store(store).observer({ onError: event => errors.push(event) })),
     )
     close = () => app.close()
@@ -595,7 +699,7 @@ describe('a store that never answers', () => {
 
   it('gives up on each store call after storeTimeout, and reports it like a failure', async () => {
     const errors: CacheErrorEvent[] = []
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b =>
         b
           .store(new HungStore())
@@ -623,7 +727,7 @@ describe('a store that never answers', () => {
   })
 
   it.each([0, -1, 'soon', Number.NaN])('refuses a storeTimeout of %s', async value => {
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).storeTimeout(value as number)),
     )
     close = () => app.close()
@@ -665,7 +769,7 @@ describe('an entry the application put in the store itself', () => {
       { ttl: 60 * Second },
     )
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(store)))
     close = () => app.close()
     await app.bootstrap()
     const res = await app.request('/store-warm/data')
@@ -674,6 +778,190 @@ describe('an entry the application put in the store itself', () => {
     expect(res.headers.get('age')).toBe('0')
     expect(await res.json()).toEqual({ warm: true })
     expect(calls).toBe(0)
+  })
+
+  // An entry written before the route stored only what its key covers, or under a key that leaves the coding out.
+  it('is served only in a content coding the request accepts, under the default key or a key function', async () => {
+    let calls = 0
+    const misses: CacheMissEvent[] = []
+    const store = new MemoryHTTPCacheStore()
+    const coded = {
+      payload: gzipSync('{"warm":true}'),
+      statusCode: 200,
+      headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+    }
+
+    @Controller('/store-coded')
+    class CodedStoreController {
+      @CacheControl({ ttl: 60 * Second })
+      @Get('/default')
+      byDefault() {
+        return { n: ++calls }
+      }
+
+      @CacheControl({ ttl: 60 * Second, key: () => 'store-coded' })
+      @Get('/keyed')
+      keyed() {
+        return { n: ++calls }
+      }
+    }
+    void [CodedStoreController]
+
+    // Header names as the application wrote them.
+    await store.put(
+      'store-coded',
+      { ...coded, headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' } },
+      { ttl: 60 * Second },
+    )
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer({ onMiss: event => misses.push(event) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    await app.request('/store-coded/default')
+    await store.put(misses[0]!.key, coded, { ttl: 60 * Second })
+    const gzip = await app.request('/store-coded/default', { headers: { 'accept-encoding': 'gzip' } })
+    const lowered = await app.request('/store-coded/default', {
+      headers: { 'accept-encoding': 'gzip;q=0.5, identity' },
+    })
+    const identity = await app.request('/store-coded/default', { headers: { 'accept-encoding': 'identity' } })
+    const keyed = await app.request('/store-coded/keyed', { headers: { 'accept-encoding': 'identity' } })
+
+    expect(gzip.headers.get('x-cache')).toBe('HIT')
+    expect(gzip.headers.get('content-encoding')).toBe('gzip')
+    expect(lowered.headers.get('x-cache')).toBe('HIT')
+    expect(identity.headers.get('x-cache')).toBe('MISS')
+    expect(identity.headers.get('content-encoding')).toBe(null)
+    expect(await identity.json()).toEqual({ n: 2 })
+    expect(keyed.headers.get('x-cache')).toBe('MISS')
+    expect(await keyed.json()).toEqual({ n: 3 })
+    expect(misses.map(event => event.reason)).toEqual(['absent', 'unacceptable-coding', 'unacceptable-coding'])
+  })
+  // A key that varies on Accept-Encoding records the header, not the coding of what was stored under it.
+  it('is served only in a content coding the request accepts, under a default key that varies on it', async () => {
+    let calls = 0
+    const misses: CacheMissEvent[] = []
+    const store = new MemoryHTTPCacheStore()
+
+    @Controller('/store-varied')
+    class VariedStoreController {
+      @CacheControl({ ttl: 60 * Second, vary: ['Accept-Encoding'] })
+      @Get('/data')
+      data() {
+        return { n: ++calls }
+      }
+    }
+    void [VariedStoreController]
+
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer({ onMiss: event => misses.push(event) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    const headers = { 'accept-encoding': 'identity' }
+    await app.request('/store-varied/data', { headers })
+    await store.put(
+      misses[0]!.key,
+      {
+        payload: gzipSync('{"warm":true}'),
+        statusCode: 200,
+        headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+      },
+      { ttl: 60 * Second },
+    )
+    const cacheOnly = await app.request('/store-varied/data', {
+      headers: { ...headers, 'cache-control': 'only-if-cached' },
+    })
+    const identity = await app.request('/store-varied/data', { headers })
+
+    expect(cacheOnly.status).toBe(504)
+    expect(cacheOnly.headers.get('content-encoding')).toBe(null)
+    expect(identity.headers.get('x-cache')).toBe('MISS')
+    expect(identity.headers.get('content-encoding')).toBe(null)
+    expect(await identity.json()).toEqual({ n: 2 })
+    expect(misses.map(event => event.reason)).toEqual(['absent', 'only-if-cached', 'unacceptable-coding'])
+  })
+  // The longest header the compressor reads is read whole here too: the entry the compressor would code is a hit.
+  it('is served to a request of 32 Accept-Encoding entries that takes its coding, for the store alone', async () => {
+    const store = new MemoryHTTPCacheStore()
+
+    @Controller('/store-wide')
+    class WideStoreController {
+      @CacheControl({ ttl: 60 * Second, key: () => 'store-wide' })
+      @Get('/data')
+      data() {
+        return { fresh: true }
+      }
+    }
+    void [WideStoreController]
+
+    await store.put(
+      'store-wide',
+      {
+        payload: gzipSync('{"warm":true}'),
+        statusCode: 200,
+        headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+      },
+      { ttl: 60 * Second },
+    )
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(store)))
+    close = () => app.close()
+    await app.bootstrap()
+
+    const header = [...Array.from({ length: 31 }, (_, i) => `x-${i}`), 'gzip'].join(', ')
+    const res = await app.request('/store-wide/data', {
+      headers: { 'accept-encoding': header, 'cache-control': 'only-if-cached' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-cache')).toBe('HIT')
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+  })
+
+  @Controller('/store-lines')
+  class LinesStoreController {
+    @CacheControl({ ttl: 60 * Second, key: () => 'store-lines' })
+    @Get('/data')
+    data() {
+      return { fresh: true }
+    }
+  }
+  void [LinesStoreController]
+
+  // A coding stored as several field lines is read as their list, and each one must be accepted: a request that names
+  // no coding takes identity alone. Each case gets its own store, so a miss cannot replace the entry for the next.
+  it.each([
+    ['gzip, br', 'HIT'],
+    ['gzip', 'MISS'],
+    ['br', 'MISS'],
+    [undefined, 'MISS'],
+  ] as const)('stored in gzip then br, answers Accept-Encoding %j with %s', async (acceptEncoding, cache) => {
+    const store = new MemoryHTTPCacheStore()
+
+    await store.put(
+      'store-lines',
+      {
+        payload: brotliCompressSync(gzipSync('{"warm":true}')),
+        statusCode: 200,
+        headers: { 'content-type': 'application/json', 'content-encoding': ['gzip', 'br'] },
+      },
+      { ttl: 60 * Second },
+    )
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(store)))
+    close = () => app.close()
+    await app.bootstrap()
+
+    const res = await app.request(
+      '/store-lines/data',
+      acceptEncoding === undefined ? {} : { headers: { 'accept-encoding': acceptEncoding } },
+    )
+
+    expect(res.headers.get('x-cache')).toBe(cache)
+    if (cache === 'MISS') {
+      expect(await res.json()).toEqual({ fresh: true })
+    }
   })
 })
 
@@ -703,7 +991,7 @@ describe('a store that hands back an entry past the route ttl', () => {
     }
     void [StaleStoreController]
 
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore(lru)).observer({ onMiss: event => misses.push(event) })),
     )
     close = () => app.close()

@@ -1,6 +1,6 @@
 import { token } from '@caffeinejs/di'
-import { Controller, ErrConfiguration, Get } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Controller, ErrConfiguration, Get, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -27,7 +27,7 @@ describe('caching is opt-in', () => {
     }
     void [PlainController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     close = () => app.close()
     await app.bootstrap()
 
@@ -46,7 +46,7 @@ describe('caching is opt-in', () => {
     }
     void [MissingController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     close = () => app.close()
 
     await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
@@ -54,7 +54,7 @@ describe('caching is opt-in', () => {
 
   // A generator someone named and forgot to bind is a mistake, not a request for the default one.
   it('throws ErrConfiguration when the etagGenerator token resolves to nothing', async () => {
-    const app = createWebApplication().with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).etagGenerator(kETagGenerator)),
     )
     close = () => app.close()
@@ -67,7 +67,7 @@ describe('caching is opt-in', () => {
   // A token someone named and bound nothing to is a mistake to surface, not a reason to run without a store.
   it('throws ErrConfiguration when the store token resolves to nothing', async () => {
     const kStore = token<HTTPCacheStore>(Symbol('optin.unbound-store'))
-    const app = createWebApplication().with(HTTPCaching(b => b.store(kStore)))
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(kStore)))
     close = () => app.close()
 
     await expect(app.bootstrap()).rejects.toThrow(
@@ -80,7 +80,7 @@ describe('caching is opt-in', () => {
     ['no options', () => HTTPCaching()],
     ['a builder that names no store', () => HTTPCaching(b => b.statusHeader('X-Cache'))],
   ])('throws ErrConfiguration when installed with %s', async (_form, install) => {
-    const app = createWebApplication({}).with(install())
+    const app = createWebApplication({ adapter: node() }).with(install())
     close = () => app.close()
 
     const booting = app.bootstrap()
@@ -100,7 +100,7 @@ describe('caching is opt-in', () => {
     }
     void [HeaderController]
 
-    const app = createWebApplication({}).with(
+    const app = createWebApplication({ adapter: node() }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-Edge')),
     )
     close = () => app.close()

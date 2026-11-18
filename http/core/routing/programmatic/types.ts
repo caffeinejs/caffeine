@@ -1,6 +1,5 @@
-import type { AnySchema, InferSchema } from '@caffeinejs/application/schema'
+import type { AnySchema, InferWire } from '@caffeinejs/application/schema'
 
-import type { IAdapterTypes, AnyAdapterTypes } from '../../../adapter.js'
 import type { IContext } from '../../../context.js'
 import type { InferBody, InferHeaders, InferParams, InferQuery } from '../../../request.js'
 import type { RouteValidationSchema } from '../spec.js'
@@ -93,22 +92,29 @@ export type ParamsOf<S extends RouteValidationSchema, P extends string> = S exte
   ? InferParams<S>
   : Simplify<PathParams<P>>
 
+// As `ParamsOf`, for a client: what it sends, where a codec such as `$t.Duration()` is still text.
+type WireParamsOf<S extends RouteValidationSchema, P extends string> = S extends { params: AnySchema }
+  ? WireSlot<S, 'params', never>
+  : Simplify<PathParams<P>>
+
+// What a client sends in a request slot: the slot schema's wire side, or `Fallback` when the route declares none.
+type WireSlot<S, Slot extends keyof RouteValidationSchema, Fallback> =
+  S extends Record<Slot, infer Schema extends AnySchema> ? InferWire<Schema, 'input'> : Fallback
+
 /**
  * The context a programmatic handler receives, typed by the route's schema and path.
  *
  * The same object a decorated handler gets from `$p.context()`, with the request slots narrowed to what this route
- * declared. `T` is the adapter the router is bound to; a router bound to none types it as a plain `IContext` would.
+ * declared.
  */
-export type RouteContext<
-  S extends RouteValidationSchema,
-  P extends string,
+export type RouteContext<S extends RouteValidationSchema, P extends string, V, C> = IContext<
   V,
   C,
-  T extends IAdapterTypes = never,
-> = IContext<V, C, ContextTypesOf<T>, ParamsOf<S, P>, InferQuery<S>, InferHeaders<S>, InferBody<S>>
-
-/** The adapter types a context is typed with: the router's own, or any registered adapter's when it has none. */
-type ContextTypesOf<T extends IAdapterTypes> = [T] extends [never] ? AnyAdapterTypes : T
+  ParamsOf<S, P>,
+  InferQuery<S>,
+  InferHeaders<S>,
+  InferBody<S>
+>
 
 /**
  * What a route's handler is called with: the context, then the dependencies the route and its enclosing groups
@@ -118,15 +124,10 @@ type ContextTypesOf<T extends IAdapterTypes> = [T] extends [never] ? AnyAdapterT
  * `Response`, a `Responder`, or nothing at all when the handler answered through the context. It is a type parameter
  * so that a route can carry what its handler answers with — see {@link DeclaredRoute}.
  */
-export type RouteHandler<
-  S extends RouteValidationSchema,
-  P extends string,
-  V,
-  C,
-  D,
-  O = unknown,
-  T extends IAdapterTypes = never,
-> = (ctx: RouteContext<S, P, V, C, T>, deps: D) => O
+export type RouteHandler<S extends RouteValidationSchema, P extends string, V, C, D, O = unknown> = (
+  ctx: RouteContext<S, P, V, C>,
+  deps: D,
+) => O
 
 /**
  * The dependencies visible to a route: what its groups injected, with anything the route injected under the same
@@ -171,14 +172,17 @@ export interface RouteDef<
 /**
  * The descriptor a router accumulates for one route it declared: everything {@link RouteDef} holds, worked out
  * from the route's method, its full path, the schema it validates against and what its handler returns.
+ *
+ * It describes the route as a client sees it, on the wire: a codec such as `$t.Duration()` is the text sent and
+ * received, not the value the handler works with.
  */
 export type DeclaredRoute<M extends string, P extends string, S extends RouteValidationSchema, O> = RouteDef<
   M,
   P,
-  ParamsOf<S, P>,
-  InferQuery<S>,
-  InferHeaders<S>,
-  InferBody<S>,
+  WireParamsOf<S, P>,
+  WireSlot<S, 'querystring', Record<string, string>>,
+  WireSlot<S, 'headers', Record<string, string>>,
+  WireSlot<S, 'body', unknown>,
   OutputOf<S, O>,
   ResponsesOf<S>
 >
@@ -197,9 +201,9 @@ export type OutputOf<S extends RouteValidationSchema, O> = S extends { response:
   : HandlerOutput<O>
 
 type SuccessBody<R> = R extends { 200: infer S extends AnySchema }
-  ? InferSchema<S>
+  ? InferWire<S, 'output'>
   : R extends { 201: infer S extends AnySchema }
-    ? InferSchema<S>
+    ? InferWire<S, 'output'>
     : never
 
 type HandlerOutput<O> =
@@ -213,7 +217,7 @@ type HandlerOutput<O> =
  * `number` stops `res.status === 200` narrowing to the 200 body. {@link OutputOf} still reads what it always read.
  */
 export type ResponsesOf<S extends RouteValidationSchema> = S extends { response: infer R }
-  ? { [K in Extract<keyof R, number> as K]: R[K] extends AnySchema ? InferSchema<R[K]> : never }
+  ? { [K in Extract<keyof R, number> as K]: R[K] extends AnySchema ? InferWire<R[K], 'output'> : never }
   : unknown
 
 /** Re-bases a set of route descriptors under a prefix, for a router mounted inside another. */
@@ -243,12 +247,6 @@ export type PrefixRoutePaths<R, Prefix extends string> =
  * value per statement; `blend` unions them. The variable the routes were opened from carries none of them.
  */
 export type RoutesOf<T> = T extends { readonly __routes?: infer R } ? NonNullable<R> : never
-
-/**
- * The adapter a `Router` is bound to, read back the same way {@link RoutesOf} reads routes: `never` for a router
- * bound to none.
- */
-export type AdapterOf<T> = T extends { readonly __adapter?: infer A } ? Extract<NonNullable<A>, IAdapterTypes> : never
 
 /**
  * What `ctx.state` carries under a `Router`, as the router declared it.

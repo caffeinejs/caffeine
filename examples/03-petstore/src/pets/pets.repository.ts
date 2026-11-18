@@ -188,17 +188,6 @@ export class PetsRepository {
     return toPetDTO(row)
   }
 
-  async addPhoto(id: string, url: string) {
-    if (!(await this.exists(id))) {
-      return undefined
-    }
-    const row = await this.prisma.pet.update({
-      where: { id },
-      data: { photos: { push: url } },
-    })
-    return toPetDTO(row)
-  }
-
   async remove(id: string): Promise<boolean> {
     if (!(await this.exists(id))) {
       return false

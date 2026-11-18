@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Router, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
@@ -65,7 +65,7 @@ const items = new Router('/items')
     store.delete(ctx.req.param().id)
   })
 
-const app = createWebApplication().mount(items)
+const app = createWebApplication({ adapter: node() }).mount(items)
 
 let origin: string
 

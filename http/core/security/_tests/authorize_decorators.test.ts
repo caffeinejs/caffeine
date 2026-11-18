@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
+import { authentication } from '../../../core/security/security.js'
 import {
   AllowAnonymous,
   Authorize,
@@ -18,7 +20,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../index.js'
-import { createWebApplication, authentication } from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,7 +67,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = AuthenticateResult.none()
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -90,7 +92,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'sub', value: 'u1' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -115,7 +117,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = AuthenticateResult.fail(new Error('bad token'))
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -146,7 +148,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = AuthenticateResult.none()
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -176,7 +178,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = AuthenticateResult.none()
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -206,7 +208,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = AuthenticateResult.none()
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -236,7 +238,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'roles', value: 'admin' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -261,7 +263,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -286,7 +288,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'roles', value: 'admin' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -311,7 +313,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -347,7 +349,7 @@ describe('auth configurer (fake handler)', () => {
     }
     void [CustomChallengeController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', new CustomChallengeHandler()).default('default')))
       .with(authentication())
@@ -384,7 +386,7 @@ describe('auth configurer (fake handler)', () => {
     }
     void [CustomForbidController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', new CustomForbidHandler()).default('default')))
       .with(authentication())
@@ -411,7 +413,7 @@ describe('auth configurer (fake handler)', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'sub', value: 'alice' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -447,7 +449,7 @@ describe('authorization policies', () => {
     const handler = new FakeAuthHandler()
     handler.result = AuthenticateResult.none()
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -472,7 +474,7 @@ describe('authorization policies', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -497,7 +499,7 @@ describe('authorization policies', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'roles', value: 'admin' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -523,7 +525,7 @@ describe('authorization policies', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -554,7 +556,7 @@ describe('authorization policies', () => {
     const handler = new FakeAuthHandler()
     handler.result = AuthenticateResult.none()
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())
@@ -586,7 +588,7 @@ describe('authorization policies', () => {
     const handler = new FakeAuthHandler()
     handler.result = successTicket([{ type: 'permission', value: 'orders:read' }])
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
       .with(authentication())

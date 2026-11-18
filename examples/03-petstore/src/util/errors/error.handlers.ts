@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
 import { HTML } from '@caffeinejs/html'
-import { Catch, type ActionResult, type IContext, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
+import { Catch, type ActionResult, type IContext, ErrHTTP, ErrorHandler, ErrRequestValidation } from '@caffeinejs/http'
 
 import { ErrorPage } from './html/ErrorPage.js'
 
@@ -66,25 +66,12 @@ function respond(ctx: IContext, status: number, body: ErrorBody): ErrorBody | Re
   return wantsHTML(ctx) ? HTML(ErrorPage({ ...body, status })) : body
 }
 
-// Shape of a Fastify schema-validation failure. Fastify attaches `validation` (the Ajv errors) and
-// `validationContext` (which part of the request failed) to the thrown error.
-interface ValidationError extends Error {
-  validation: Array<{
-    instancePath?: string
-    message?: string
-    params?: { missingProperty?: string }
-  }>
-  validationContext?: 'body' | 'params' | 'querystring' | 'headers'
-}
-
-function isValidationError(err: Error): err is ValidationError {
-  return Array.isArray((err as Partial<ValidationError>).validation)
-}
-
-function fieldErrors(err: ValidationError): FieldError[] {
-  return err.validation.map(v => ({
-    field: v.instancePath ? v.instancePath.replace(/^\//, '').replace(/\//g, '.') : (v.params?.missingProperty ?? ''),
-    message: v.message ?? 'Invalid value',
+// A schema-validation failure names the part of the request that failed (`slot`) and each issue, with the path to
+// the offending field.
+function fieldErrors(err: ErrRequestValidation): FieldError[] {
+  return err.issues.map(issue => ({
+    field: (issue.path ?? []).map(segment => String(typeof segment === 'object' ? segment.key : segment)).join('.'),
+    message: issue.message,
   }))
 }
 
@@ -105,8 +92,8 @@ export class HTTPErrorHandler implements ErrorHandler<ErrHTTP> {
 @Catch(Error)
 export class FallbackErrorHandler implements ErrorHandler<Error> {
   async handle(ctx: IContext, err: Error): Promise<ActionResult> {
-    if (isValidationError(err)) {
-      if (err.validationContext === 'body') {
+    if (err instanceof ErrRequestValidation) {
+      if (err.slot === 'body') {
         return respond(ctx, 422, {
           code: 'VALIDATION_ERROR',
           message: 'The request body is invalid',

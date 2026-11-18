@@ -1,13 +1,15 @@
 import { createHash, createHmac } from 'node:crypto'
 
 import { $t } from '@caffeinejs/application/schema'
-import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { formData, multipart } from '@caffeinejs/multipart'
+import { Router, bodyAsBuffer, bodyAsStream, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
+import { KiB } from '@caffeinejs/std/bytes'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { brewer, type BrewOptions, type Interceptor } from '../index.js'
 import { bodies, profileForm } from './_bodies.js'
+import { formOf } from './_forms.js'
 import { etagCache, idempotency, logging, mapErrors, retry, signing, timeout } from './_interceptors.js'
 
 /**
@@ -166,25 +168,28 @@ type Part = { field: string; value: string } | { field: string; name: string; ty
 // What each form that reached the server carried, part by part, in the order they arrived.
 const forms: Part[][] = []
 
-const uploads = new Router('/uploads').post('/form').handler(async ctx => {
-  const parts: Part[] = []
-  for (const [field, value] of await formData(ctx).form()) {
-    parts.push(
-      typeof value === 'string'
-        ? { field, value }
-        : { field, name: value.name, type: value.type, sha256: sha256(await value.bytes()) },
-    )
-  }
-  forms.push(parts)
-  ctx.status(script.shift() ?? 200)
-  return { parts }
-})
+const uploads = new Router('/uploads')
+  .post('/form')
+  .extend(bodyAsBuffer())
+  .bodyLimit(64 * KiB)
+  .handler(async ctx => {
+    const parts: Part[] = []
+    for (const [field, value] of await formOf(ctx)) {
+      parts.push(
+        typeof value === 'string'
+          ? { field, value }
+          : { field, name: value.name, type: value.type, sha256: sha256(await value.bytes()) },
+      )
+    }
+    forms.push(parts)
+    ctx.status(script.shift() ?? 200)
+    return { parts }
+  })
 
-// An abort can leave the client a connection it opened and never finished a request on, which the server's graceful
-// close would otherwise wait out: a connection quiet for a second is dropped instead.
-const app = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 } }))
-  .with(multipart(() => ({ limits: { fileSize: 64 * 1024 } })))
+// A client that stops part-way can leave a connection holding a partial request, which a graceful close would wait
+// out (caffeinejs/caffeine#131): the close cuts it after a second.
+const app = createWebApplication({ adapter: node() })
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(api, uploads)
 
 let origin: string
@@ -607,7 +612,7 @@ describe('brewer through interceptors over a socket', () => {
 
   // A primary that refuses connections is the case failover exists for; the write must reach the secondary whole.
   it('should fail over to a second origin when the first refuses the connection, the body whole', async () => {
-    const gone = createWebApplication().mount(api)
+    const gone = createWebApplication({ adapter: node() }).mount(api)
     await gone.run()
     const primary = gone.address!.origin
     await gone.close()
@@ -685,7 +690,7 @@ describe('brewer through interceptors over a socket', () => {
 describe('brewer through interceptors in process, with the application not ready', () => {
   // A failure of the transport reaches `next`, so an interceptor can answer in its place.
   it('should reject next with the failure, which an interceptor can answer', async () => {
-    const unready = createWebApplication().mount(api)
+    const unready = createWebApplication({ adapter: node() }).mount(api)
     const client = brewer(unready, {
       interceptors: [
         async (request, next) => {

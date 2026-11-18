@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -7,8 +8,11 @@ import {
   BaseAuthenticationHandler,
   bindTo,
   type WebApplication,
+  Router,
 } from '../../../index.js'
-import { authentication, createWebApplication, healthProbes, newRouter } from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
+import { healthProbes } from '../../health/index.js'
+import { authentication } from '../../security/security.js'
 
 /**
  * Health probes on a listener. The probes know nothing about servers: registered on one with `l.with(...)`, they
@@ -41,9 +45,9 @@ describe('health probes on a listener', () => {
   }
 
   it("serves the three probes on the server that registered them, and not on the application's own", async () => {
-    app = createWebApplication()
-      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
-      .server(() => ({ listener })) as WebApplication
+    app = createWebApplication({ adapter: node() })
+      .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
+      .server(() => ({ listen: listener })) as WebApplication
 
     await app.run()
     const admin = app.listeners.get('admin')!.address!.origin
@@ -58,10 +62,10 @@ describe('health probes on a listener', () => {
   it('serves them on both servers when both registered them', async () => {
     const probes = healthProbes()
 
-    app = createWebApplication()
-      .listener('admin', l => l.server(() => ({ listener })).with(probes))
+    app = createWebApplication({ adapter: node() })
+      .listener('admin', l => l.server(() => ({ listen: listener })).with(probes))
       .with(probes)
-      .server(() => ({ listener })) as WebApplication
+      .server(() => ({ listen: listener })) as WebApplication
 
     await app.run()
 
@@ -70,20 +74,16 @@ describe('health probes on a listener', () => {
   })
 
   it('stays exempt from the fallback policy on the server serving it', async () => {
-    app = createWebApplication()
+    app = createWebApplication({ adapter: node() })
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme()).default('Nobody')))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .listener('admin', l =>
         l
-          .server(() => ({ listener }))
+          .server(() => ({ listen: listener }))
           .with(authentication())
           .with(healthProbes()),
       )
-      .mount(
-        newRouter('/jobs')
-          .extend(bindTo('admin'))
-          .get('/', () => ({})),
-      ) as WebApplication
+      .mount(new Router('/jobs').extend(bindTo('admin')).get('/', () => ({}))) as WebApplication
 
     await app.run()
     const admin = app.listeners.get('admin')!.address!.origin
@@ -93,10 +93,10 @@ describe('health probes on a listener', () => {
   })
 
   it('checks probe paths only against the routes of the server serving them', async () => {
-    app = createWebApplication()
-      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
-      .server(() => ({ listener }))
-      .mount(newRouter().get('/livez', () => ({ mine: true }))) as WebApplication
+    app = createWebApplication({ adapter: node() })
+      .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
+      .server(() => ({ listen: listener }))
+      .mount(new Router().get('/livez', () => ({ mine: true }))) as WebApplication
 
     await app.run()
 
@@ -105,13 +105,9 @@ describe('health probes on a listener', () => {
   })
 
   it('refuses a route of the server serving the probes that takes a probe path', async () => {
-    app = createWebApplication()
-      .listener('admin', l => l.server(() => ({ listener })).with(healthProbes()))
-      .mount(
-        newRouter()
-          .extend(bindTo('admin'))
-          .get('/readyz', () => ({})),
-      ) as WebApplication
+    app = createWebApplication({ adapter: node() })
+      .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
+      .mount(new Router().extend(bindTo('admin')).get('/readyz', () => ({}))) as WebApplication
 
     await expect(app.bootstrap()).rejects.toThrow(/already registered at "\/readyz"/)
   })

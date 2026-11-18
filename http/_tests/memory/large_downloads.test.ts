@@ -3,10 +3,12 @@ import { mkdtemp, open, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../../application.js'
 import { Attachment, Router } from '../../index.js'
-import { createWebApplication } from '../../platform/fastify/index.js'
+import { node } from '../../platform/node/index.js'
 
 /**
  * That a large download is streamed rather than held: the server's memory stays far below the size of what it
@@ -62,8 +64,9 @@ routes.get('/abandoned').handler(async () => openAsBlob(abandonedPath))
 
 // A client that stops a download part-way can leave the server a connection with no request on it, which its
 // graceful close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
-const app = createWebApplication()
-  .server(() => ({ factory: { forceCloseConnections: true }, listener: { host: '127.0.0.1', port: 0 } }))
+const app = createWebApplication({ adapter: node() })
+  .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(routes)
 
 beforeAll(async () => {

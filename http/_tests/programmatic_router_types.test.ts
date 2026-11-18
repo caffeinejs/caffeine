@@ -2,9 +2,10 @@ import { $t } from '@caffeinejs/application/schema'
 import { $i, type Provider } from '@caffeinejs/di'
 import { describe, expectTypeOf, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import type { DepsOf, PathParams, ResponsesOf, RoutesOf } from '../core/routing/programmatic/types.js'
 import { Router, blend } from '../index.js'
-import { createWebApplication, fst } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 class Greeter {}
 class Audit {}
@@ -387,7 +388,7 @@ describe('route accumulation', () => {
     const pets = new Router('/pets').get('/').handler(() => [])
     const orders = new Router('/orders').post('/').handler(() => ({ id: 1 }))
 
-    const app = createWebApplication().mount(pets, orders)
+    const app = createWebApplication({ adapter: node() }).mount(pets, orders)
 
     type Routes = RoutesOf<typeof app>
 
@@ -531,7 +532,7 @@ describe('blend', () => {
     const list = pets.get('/').handler(() => [])
     const add = pets.post('/').handler(() => ({ id: 1 }))
 
-    const app = createWebApplication().mount(blend(list, add))
+    const app = createWebApplication({ adapter: node() }).mount(blend(list, add))
 
     expectTypeOf<RoutesOf<typeof app>['method']>().toEqualTypeOf<'GET' | 'POST'>()
   })
@@ -552,32 +553,9 @@ describe('mount', () => {
     const list = pets.get('/').handler(() => [])
     const add = pets.post('/').handler(() => ({ id: 1 }))
 
-    const app = createWebApplication().mount(list, add)
+    const app = createWebApplication({ adapter: node() }).mount(list, add)
 
     expectTypeOf<RoutesOf<typeof app>['method']>().toEqualTypeOf<'GET' | 'POST'>()
-  })
-})
-
-describe('fst options', () => {
-  it('accepts what Fastify accepts', () => {
-    expectTypeOf(fst).toBeCallableWith({ attachValidation: true })
-    expectTypeOf(fst).toBeCallableWith({ logLevel: 'debug' })
-  })
-
-  it('rejects the keys the router owns', () => {
-    // `config` is the dangerous one: it carries what the handler reads to apply status, headers and auth.
-    // @ts-expect-error -- config belongs to the adapter
-    fst({ config: { $caffeine: undefined } })
-    // @ts-expect-error -- the verb and the path decide these
-    fst({ method: 'GET', url: '/nope' })
-    // @ts-expect-error -- declared with .schema()
-    fst({ schema: {} })
-    // @ts-expect-error -- declared with .handler()
-    fst({ handler: () => undefined })
-    // @ts-expect-error -- declared with .bodyLimit()
-    fst({ bodyLimit: 10 })
-    // @ts-expect-error -- declared with .timeout()
-    fst({ handlerTimeout: 10 })
   })
 })
 
@@ -724,7 +702,7 @@ describe('declared dependencies', () => {
   it('is accumulated by what an application mounted', () => {
     const greet = new Router('/greet').inject({ greeter: Greeter })
     const ticks = new Router('/ticks').inject({ clock: Clock })
-    const app = createWebApplication().mount(greet, ticks)
+    const app = createWebApplication({ adapter: node() }).mount(greet, ticks)
 
     expectTypeOf<DepsOf<typeof app>>().toEqualTypeOf<{ greeter: Greeter; clock: Clock }>()
   })

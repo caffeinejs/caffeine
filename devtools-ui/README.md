@@ -10,7 +10,7 @@ it reads.
 Install the devtools in the application:
 
 ```ts
-createWebApplication().install(DevTools())
+createWebApplication({ adapter: node() }).install(DevTools())
 ```
 
 Then start the UI. It listens on `127.0.0.1:9091` and reads `http://127.0.0.1:9090/devtools`, which is where

@@ -1,6 +1,6 @@
 import { Injectable } from '@caffeinejs/di'
-import { WebApplication, Controller, Delete, Get, Post, Args, $p } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Controller, Delete, Get, Post, Args, $p, createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { ErrNoRoutesForController, newURL, controllerClient } from './index.js'
@@ -67,13 +67,13 @@ void [TaskStore, TaskController]
 class NoRouteController {}
 
 describe('controllerClient()', () => {
-  let app: WebApplication<any, any, any>
+  let app: WebApplication<never, never, unknown, NodeAdapter>
   let baseURL: string
 
   beforeAll(async () => {
-    app = createWebApplication()
-    await app.bootstrap()
-    baseURL = await app.instance.listen({ port: 0, host: '127.0.0.1' })
+    app = createWebApplication({ adapter: node() })
+    const { address } = await app.run({ port: 0, host: '127.0.0.1' })
+    baseURL = address.origin
   })
 
   afterAll(async () => {

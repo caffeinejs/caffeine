@@ -1,42 +1,67 @@
-import { createHash } from 'node:crypto'
-import { gunzipSync } from 'node:zlib'
-
-import { type WebApplication } from '@caffeinejs/http'
-import { authenticationExempt, compress, newRouter, healthProbes } from '@caffeinejs/http/fastify'
-import fastifyCompress from '@fastify/compress'
-import fastifyCors from '@fastify/cors'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
+import {
+  Catch,
+  corsPolicy,
+  ErrHTTPNotFound,
+  healthProbes,
+  HTTPPlugin,
+  Router,
+  type ActionResult,
+  type HTTPPluginFactory,
+  type ErrorHandler,
+  type HTTPSetupContext,
+  type IContext,
+  type AnyRouter,
+  createWebApplication,
+  type WebApplication,
+} from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
 import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, notFound, PROBE, shellOf } from './_headers.js'
 
-const api = () =>
-  newRouter('/api')
-    .get('/pets', () => ({ pets: [] }))
-    .get('/*', notFound)
+const api = () => new Router('/api').get('/pets', () => ({ pets: [] })).get('/*', notFound)
 
 const pages = () =>
-  newRouter()
-    .extend(compress(false))
+  new Router()
     .detail('http', { internal: true })
     .authorize({ allowAnonymous: true })
     .get('/', shellOf(dist))
     .get('/index.html', shellOf(dist))
     .get('/*', clientRouteOf(dist))
 
+function mounting(router: AnyRouter): HTTPPluginFactory {
+  return () =>
+    new (class extends HTTPPlugin {
+      register({ app }: HTTPSetupContext) {
+        app.mount(router)
+      }
+    })()
+}
+
+@Catch(ErrHTTPNotFound)
+class MissHandler implements ErrorHandler<ErrHTTPNotFound> {
+  handle(ctx: IContext): ActionResult {
+    return ctx.status(418).body({ mine: true })
+  }
+}
+
 const files = () => staticFiles(s => s.serve(dist, { unrouted: ['index.html'], anonymous: true }))
 
 describe('a single-page application next to the plugins an application runs in production', () => {
-  let app: WebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
 
   afterEach(async () => {
     await app?.close()
   })
 
   it('leaves the health probes to the health plugin', async () => {
-    app = isolated().with(healthProbes()).with(files()).mount(api(), pages()) as WebApplication
+    app = isolated().with(healthProbes()).with(files()).mount(api(), pages()) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.bootstrap()
 
     const live = await app.request('/livez', { headers: PROBE })
@@ -53,7 +78,7 @@ describe('a single-page application next to the plugins an application runs in p
     app = isolated()
       .with(healthProbes(h => h.enabled(false)))
       .with(files())
-      .mount(api(), pages()) as WebApplication
+      .mount(api(), pages()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     await expectNotFoundJSON(await app.request('/livez', { headers: PROBE }))
@@ -61,13 +86,9 @@ describe('a single-page application next to the plugins an application runs in p
 
   it('coexists with a CORS plugin', async () => {
     app = isolated()
-      .with(() =>
-        fp(async (instance: FastifyInstance) => instance.register(fastifyCors, { origin: 'https://app.example' }), {
-          name: 'cors',
-        }),
-      )
+      .with(corsPolicy(c => c.origins('https://app.example')))
       .with(files())
-      .mount(api(), pages()) as WebApplication
+      .mount(api(), pages()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const preflight = await app.request('/api/pets', {
@@ -82,67 +103,13 @@ describe('a single-page application next to the plugins an application runs in p
     expect(await page.text()).toContain('<div id="root">')
   })
 
-  it.each(['manifest', 'scan'] as const)(
-    'keeps the selected file representation with a global compression plugin in %s mode',
-    async mode => {
-      app = isolated()
-        .with(() =>
-          fp(
-            async (instance: FastifyInstance) =>
-              instance.register(fastifyCompress, {
-                threshold: 0,
-                onUnsupportedEncoding: (_encoding, _request, reply) => {
-                  reply.code(406)
-                  return 'Unsupported response encoding'
-                },
-              }),
-            { name: 'compress' },
-          ),
-        )
-        .with(staticFiles(s => s.serve(dist, { mode, unrouted: ['index.html'], anonymous: true })))
-        .mount(api(), pages()) as WebApplication
-      await app.bootstrap()
-
-      const headers = { ...NAVIGATION, 'accept-encoding': 'gzip' }
-      for (const path of ['/assets/app-eZr2sdaR.js', '/dashboard']) {
-        const res = await app.request(path, { headers })
-        const head = await app.request(path, { method: 'HEAD', headers })
-        const bytes = Buffer.from(await res.arrayBuffer())
-
-        expect(res.status).toBe(200)
-        expect(res.headers.get('etag')).toBe(`"${createHash('sha256').update(bytes).digest('base64')}"`)
-        expect(res.headers.get('content-encoding')).toBe(mode === 'manifest' ? 'gzip' : null)
-        expect(head.status).toBe(200)
-        expect(head.headers.get('content-encoding')).toBe(res.headers.get('content-encoding'))
-        expect(head.headers.get('content-length')).toBe(String(bytes.length))
-        expect(head.headers.get('etag')).toBe(res.headers.get('etag'))
-
-        if (mode === 'manifest') {
-          const resumed = await app.request(path, {
-            headers: { ...headers, range: 'bytes=6-10', 'if-range': res.headers.get('etag')! },
-          })
-          expect(resumed.status).toBe(200)
-          expect(Buffer.from(await resumed.arrayBuffer())).toEqual(gunzipSync(bytes))
-        }
-      }
-
-      const pets = await app.request('/api/pets', { headers: { 'accept-encoding': 'gzip' } })
-      expect(pets.headers.get('content-encoding')).toBe('gzip')
-      expect(gunzipSync(Buffer.from(await pets.arrayBuffer())).toString()).toBe('{"pets":[]}')
-    },
-  )
-
-  // The client routes are ordinary routes, so the one not-found handler a Fastify context allows stays the
-  // application's own.
-  it('leaves a not-found handler the application set on the server itself', async () => {
-    app = isolated()
-      .serverCallback((_context, server) => {
-        server.setNotFoundHandler((_req, reply) => {
-          void reply.code(418).send({ mine: true })
-        })
-      })
+  // The client routes are ordinary routes, so a miss still reaches the application's own not-found handler.
+  it("leaves a miss to the application's not-found handler", async () => {
+    // Decorators on, so `@Catch` registers the handler; this module declares no controller to route.
+    app = createWebApplication({ adapter: node() })
+      .errorHandling(e => e.globalHandlers(MissHandler))
       .with(files())
-      .mount(api(), pages()) as WebApplication
+      .mount(api(), pages()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     expect((await app.request('/nope', { method: 'POST' })).status).toBe(418)
@@ -153,18 +120,11 @@ describe('a single-page application next to the plugins an application runs in p
   })
 
   // Installed before the static plugin on purpose: a raw route needs to declare nothing to be respected.
-  it('respects a raw Fastify route a plugin registered before it', async () => {
+  it('respects a route a plugin mounted before it', async () => {
     app = isolated()
-      .with(() =>
-        fp(
-          async (instance: FastifyInstance) => {
-            instance.get('/metrics', { config: authenticationExempt() }, async () => 'up 1')
-          },
-          { name: 'metrics' },
-        ),
-      )
+      .with(mounting(new Router().get('/metrics').handler(() => 'up 1')))
       .with(files())
-      .mount(api(), pages()) as WebApplication
+      .mount(api(), pages()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const metrics = await app.request('/metrics', { headers: PROBE })

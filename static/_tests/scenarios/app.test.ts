@@ -8,12 +8,16 @@ import {
   Post,
   $p,
   type IContext,
-  type WebApplication,
   Authentication,
   Authorization,
   type ActionResult,
+  healthProbes,
+  authentication,
+  Router,
+  createWebApplication,
+  type WebApplication,
 } from '@caffeinejs/http'
-import { createWebApplication, newRouter, authentication, healthProbes } from '@caffeinejs/http/fastify'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { isDocumentRequest, sendFile, staticFiles } from '../../index.js'
@@ -74,7 +78,7 @@ const notFound = (ctx: IContext): never => {
 const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
 
 const publicPages = () =>
-  newRouter()
+  new Router()
     .detail('http', { internal: true })
     .authorize({ allowAnonymous: true })
     .get('/', shellDocument)
@@ -84,7 +88,7 @@ const publicPages = () =>
     .get('/*', clientRoute)
 
 const memberPages = () =>
-  newRouter()
+  new Router()
     .detail('http', { internal: true })
     .authorize()
     .get('/dashboard', shellDocument)
@@ -95,17 +99,17 @@ const memberPages = () =>
     .get('/orders/*', clientRoute)
 
 const adminPages = () =>
-  newRouter()
+  new Router()
     .detail('http', { internal: true })
     .authorize({ roles: ['admin'] })
     .get('/admin', shellDocument)
     .get('/admin/*', clientRoute)
 
 // One catch-all, whatever the controller count: three controllers share the base `/api`.
-const apiMisses = () => newRouter('/api').get('/*', notFound)
+const apiMisses = () => new Router('/api').get('/*', notFound)
 
 const auth = () =>
-  newRouter('/auth')
+  new Router('/auth')
     .authorize({ allowAnonymous: true })
     .inject({ service: AuthenticationService })
     .post('/login', async (ctx, { service }) => {
@@ -115,18 +119,23 @@ const auth = () =>
       return { ok: true }
     })
 
-function application(): WebApplication {
-  return createWebApplication({})
+function application(): WebApplication<never, never, unknown, NodeAdapter> {
+  return createWebApplication({ adapter: node() })
     .with(healthProbes())
     .with(staticFiles(s => s.serve(DIST, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
     .install(Authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login'))))
     .with(authentication())
     .install(Authorization(z => z.requireAuthenticatedByDefault()))
-    .mount(auth(), apiMisses(), publicPages(), memberPages(), adminPages()) as WebApplication
+    .mount(auth(), apiMisses(), publicPages(), memberPages(), adminPages()) as WebApplication<
+    never,
+    never,
+    unknown,
+    NodeAdapter
+  >
 }
 
 describe('a realistic application: controllers, a router, health and a single-page application', () => {
-  let app: WebApplication
+  let app: WebApplication<never, never, unknown, NodeAdapter>
   let member: string
   let admin: string
 

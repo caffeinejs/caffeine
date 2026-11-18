@@ -4,11 +4,11 @@ Three Caffeine applications in one [Platformatic Watt](https://docs.platformatic
 the way that suits it, and all of them answer Watt's health probes from their `ApplicationHealth`. The
 walkthrough is [`docs/watt.md`](../../docs/watt.md).
 
-| Application | Kind            | Start mode                                                                  |
-| ----------- | --------------- | --------------------------------------------------------------------------- |
-| `web`       | HTTP entrypoint | script — `main.ts` calls `run()`, and Watt takes over its `listen()`        |
-| `orders`    | HTTP, internal  | factory — `create()` returns the Fastify instance, and Watt injects into it |
-| `worker`    | headless        | script, with `node.hasServer: false` in its `watt.json`                     |
+| Application | Kind            | Start mode                                                                                         |
+| ----------- | --------------- | -------------------------------------------------------------------------------------------------- |
+| `web`       | HTTP entrypoint | script — `main.ts` calls `run()`, and Watt takes over its `listen()`                               |
+| `orders`    | HTTP, internal  | factory — `create()` returns the node:http server, and Watt serves it through its request listener |
+| `worker`    | headless        | script, with `node.hasServer: false` in its `watt.json`                                            |
 
 [`watt.ts`](watt.ts) is the part to copy: `registerWattChecks(app)` answers Watt's readiness and
 liveness checks from the application's `ApplicationHealth`. `orders` also hands Watt its OpenAPI document with

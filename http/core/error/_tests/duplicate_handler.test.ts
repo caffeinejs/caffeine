@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../../application.js'
 import { Catch, type IContext, ErrConfiguration, ErrHTTPNotFound, ErrorHandler } from '../../../index.js'
-import { createWebApplication } from '../../../platform/fastify/index.js'
+import { node } from '../../../platform/node/index.js'
 
 // Two handlers for the same error type. Declaring both is fine — enrolling both is what the application
 // cannot mean, because nothing then decides which one renders an ErrHTTPNotFound.
@@ -17,7 +18,9 @@ class SecondHandler implements ErrorHandler<ErrHTTPNotFound> {
 
 describe('ambiguous error handler', () => {
   it('rejects when two enrolled handlers target the same error type', async () => {
-    const app = createWebApplication().errorHandling(e => e.globalHandlers(FirstHandler, SecondHandler))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e =>
+      e.globalHandlers(FirstHandler, SecondHandler),
+    )
 
     await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
@@ -25,7 +28,7 @@ describe('ambiguous error handler', () => {
   // The pair only conflicts because both were named. Declaring a second handler for an error type some other
   // controller renders with @CatchWith is not itself an error, which is the whole point of enrolment.
   it('accepts the same two handlers when only one is enrolled', async () => {
-    const app = createWebApplication().errorHandling(e => e.globalHandlers(FirstHandler))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.globalHandlers(FirstHandler))
 
     await app.bootstrap()
 

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { Controller, Get, Post, Status } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 describe('Status', () => {
   it('returns the custom status code set by @Status', async () => {
@@ -16,7 +17,7 @@ describe('Status', () => {
 
     void [StatusController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/status/created', { method: 'POST' })
@@ -24,7 +25,7 @@ describe('Status', () => {
     expect(res.status).toBe(201)
   })
 
-  it('leaves status code to Fastify when @Status is not set', async () => {
+  it('leaves the status code to the server when @Status is not set', async () => {
     @Controller('/status-default')
     class StatusDefaultController {
       @Get('/ok')
@@ -35,7 +36,7 @@ describe('Status', () => {
 
     void [StatusDefaultController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/status-default/ok')
@@ -53,7 +54,7 @@ describe('Status', () => {
 
     void [StatusEmptyController]
 
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     const res = await app.request('/status-empty/ok')

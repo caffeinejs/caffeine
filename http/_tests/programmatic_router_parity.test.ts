@@ -1,6 +1,8 @@
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { createWebApplication } from '../application.js'
+import { authentication } from '../core/security/security.js'
 import {
   AuthenticateResult,
   AuthenticationTicket,
@@ -20,7 +22,7 @@ import {
   Authentication,
   Guards,
 } from '../index.js'
-import { constraints, createWebApplication, authentication } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 class FakeAuthHandler extends BaseAuthenticationHandler<{}> {
   result: AuthenticateResult = AuthenticateResult.none()
@@ -72,7 +74,7 @@ describe('programmatic router parity with the decorator feature set', () => {
 
       const container = new CaffeineIoC()
 
-      const app = createWebApplication({ container }).mount(router)
+      const app = createWebApplication({ adapter: node(), container }).mount(router)
       await app.bootstrap()
 
       expect((await app.request('/guarded/open')).status).toBe(200)
@@ -95,7 +97,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       const handler = new FakeAuthHandler()
       handler.result = AuthenticateResult.none()
 
-      const builder = createWebApplication()
+      const builder = createWebApplication({ adapter: node() })
       builder
         .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
         .with(authentication())
@@ -120,7 +122,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         .handler(() => ({ ok: true }))
 
       const handler = new FakeAuthHandler()
-      const builder = createWebApplication()
+      const builder = createWebApplication({ adapter: node() })
       builder
         .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
         .with(authentication())
@@ -144,7 +146,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         .handler(() => ({ ok: true }))
 
       const handler = new FakeAuthHandler()
-      const builder = createWebApplication()
+      const builder = createWebApplication({ adapter: node() })
       builder
         .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
         .with(authentication())
@@ -178,7 +180,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         throw new ErrHTTPNotFound('nope')
       })
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const res = await app.request('/catching/missing')
@@ -214,7 +216,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         throw new ErrHTTPNotFound('nope')
       })
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const own = await app.request('/catching-route/own')
@@ -241,7 +243,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         .produces('text/plain')
         .handler(() => 'created')
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const plain = await app.request('/shaped/plain')
@@ -267,7 +269,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         .bodyLimit(16)
         .handler(ctx => ctx.body(ctx.req.body()))
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const res = await app.request('/limited/small', {
@@ -286,7 +288,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       const router = new Router('/multi')
       router.route(['GET', 'POST'], '/both').handler(ctx => ({ method: ctx.req.method }))
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       expect(await (await app.request('/multi/both')).json()).toEqual({ method: 'GET' })
@@ -299,7 +301,7 @@ describe('programmatic router parity with the decorator feature set', () => {
     it('should take one method as a string, in any case', async () => {
       const router = new Router('/single').route('patch', '/lower', ctx => ({ method: ctx.req.method }))
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       expect(await (await app.request('/single/lower', { method: 'PATCH' })).json()).toEqual({ method: 'PATCH' })
@@ -311,13 +313,13 @@ describe('programmatic router parity with the decorator feature set', () => {
 
   describe('given the verb helpers past the common four', () => {
     it('should answer HEAD alone on a head() route', async () => {
-      // No GET on this path: Fastify gives a GET route a HEAD twin, which a head() route on the same path would meet.
+      // No GET on this path: a GET route also answers HEAD, which a head() route on the same path would meet.
       const router = new Router('/probe').head('/', ctx => {
         ctx.header('x-probe', 'yes')
         return { ok: true }
       })
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const head = await app.request('/probe', { method: 'HEAD' })
@@ -334,7 +336,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         return { methods: ['GET', 'OPTIONS'] }
       })
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const options = await app.request('/opts', { method: 'OPTIONS' })
@@ -349,13 +351,17 @@ describe('programmatic router parity with the decorator feature set', () => {
     it('should answer the seven methods all() names, and not QUERY', async () => {
       const router = new Router('/any').all('/', ctx => ({ method: ctx.req.method }))
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
-      for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']) {
+      for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
         expect(await (await app.request('/any', { method })).json()).toEqual({ method })
       }
-      // A QUERY carries a body, and Fastify wants its content type before it finds there is no route.
+      // The engine strips the body of a HEAD answer.
+      const head = await app.request('/any', { method: 'HEAD' })
+      expect(head.status).toBe(200)
+      expect(await head.text()).toBe('')
+      // A QUERY carries a body, so it is sent with its content type.
       const query = await app.request('/any', {
         method: 'QUERY',
         headers: { 'content-type': 'application/json' },
@@ -376,7 +382,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         .bodyLimit(1024)
         .handler(ctx => ctx.body(ctx.req.body()))
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const post = (path: string) =>
@@ -401,7 +407,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       router.get('/slow').handler(slow)
       router.get('/patient').timeout(500).handler(slow)
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       expect((await app.request('/timed-group/slow')).status).toBe(503)
@@ -415,14 +421,14 @@ describe('programmatic router parity with the decorator feature set', () => {
     // What a feature reads per request, as `@Config` writes it. The more specific level wins a key outright.
     it("should give every route the group's entries, a route's own replacing the group's for its key", async () => {
       const read = (ctx: IContext) => {
-        const config = ctx.routeConfig as Record<string, unknown>
+        const config = Object.fromEntries(ctx.route?.config ?? [])
         return { feature: config.feature, other: config.other }
       }
       const router = new Router('/configured').config('feature', { level: 'group' }).config('other', 'kept')
       router.get('/inherits').handler(read)
       router.get('/overrides').config('feature', { tier: 'route' }).handler(read)
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       expect(await (await app.request('/configured/inherits')).json()).toEqual({
@@ -448,7 +454,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         .consumes(['application/x-www-form-urlencoded', 'multipart/form-data'])
         .handler(() => ({ ok: true }))
 
-      const app = createWebApplication().mount(router)
+      const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
 
       const group = app.routeGroups.find(candidate => candidate.path === '/consuming')!
@@ -467,7 +473,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       const v2 = new Router('/pets').name('ParityPetsV2').extend(version('2.0.0'))
       v2.get('/').handler(() => ({ v: 2 }))
 
-      const app = createWebApplication().with(constraints()).mount(v1, v2)
+      const app = createWebApplication({ adapter: node() }).mount(v1, v2)
       await app.bootstrap()
 
       expect(await (await app.request('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })

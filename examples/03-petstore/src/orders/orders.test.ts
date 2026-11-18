@@ -133,8 +133,8 @@ describe('orders feature (via @caffeinejs/testing and brewer)', () => {
     expect((await client.orders.post({ body: { petId } })).status).toBe(401)
   })
 
-  // A body the schema rejects never reaches the handler, and the fallback error handler answers 422 rather
-  // than Fastify's default 400.
+  // A body the schema rejects never reaches the handler, and the fallback error handler answers 422 with the
+  // fields that failed.
   it('refuses a body the schema rejects, with the fields that failed', async () => {
     const response = await client.orders.post({
       body: { petId: 'not-a-uuid' },

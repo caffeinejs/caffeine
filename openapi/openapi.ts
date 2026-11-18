@@ -5,17 +5,19 @@ import { ErrFeatureNotInstalled } from '@caffeinejs/application'
 import {
   AuthenticationSchemeProvider,
   AuthenticationService,
-  RouteBuilder,
+  HTTPPlugin,
   kAuthSchemeDescriptors,
   kErrorHandlingOptions,
+  Router,
+  type HTTPPluginFactory,
   type AuthSchemeDescriptor,
-  type RouteAuthzOptions,
+  type HTTPPluginConfigurer,
+  type HTTPSetupContext,
+  type IRoute,
   type IRouteGroup,
+  type RouteAuthzOptions,
 } from '@caffeinejs/http'
-import { collectRouteGroups, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
 import { errMessage } from '@caffeinejs/std/err'
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
 
 import { DEFAULT_DOCUMENT_NAME } from './_default_name.js'
@@ -48,8 +50,9 @@ interface EndpointPaths {
 }
 
 /**
- * Generates an OpenAPI document, registers it with `OpenAPIProvider`, and serves it, as an ordinary Fastify plugin
- * factory: `.with(openapi(o => ...))`. Needs `.install(OpenAPI())` on the application.
+ * Generates an OpenAPI document, registers it with `OpenAPIProvider`, and serves it, as a plugin:
+ * `.with(openapi(o => ...))`. Needs `.install(OpenAPI())` on the application, and installs on the application or a
+ * listener: a router or a controller is refused.
  *
  * Most of what ends up in the document is not configured here at all — it is read from the routes the
  * application already declares. The builder covers the document-level facts nothing else can know (title,
@@ -63,7 +66,8 @@ interface EndpointPaths {
  * .with(openapi('admin', o => o.include((group, route, path) => path.startsWith('/admin'))))
  * ```
  *
- * @throws ErrOpenAPIConfiguration when the name is not letters, digits, `-` and `_`, starting with a letter or digit.
+ * @throws ErrOpenAPIConfiguration when the name is not letters, digits, `-` and `_`, starting with a letter or digit,
+ *   and at start-up when it is installed on a router or a controller.
  */
 export function openapi<C = unknown>(configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C>
 export function openapi<C = unknown>(name: string, configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C>
@@ -91,47 +95,82 @@ export function openapi<C = unknown>(
     const provider = context.container.get(OpenAPIProvider)
     provider[kReserve](name)
 
-    return openapiPlugin(name, options, provider)
+    return new OpenAPIPlugin(name, options, provider)
   }
 }
 
 /**
- * Collects the application's routes as they register and generates the document in `onReady`, once all of
- * them have — whichever order the plugins that contributed them were installed in. The routes that serve the
- * document are real, protectable routes registered through `instance.$route(...)`, marked hidden so the
- * document never describes them.
+ * Collects the routes of its server as they register and generates the document in `onReady`, once all of them
+ * have — whichever order the plugins that contributed them were installed in. The routes that serve the document
+ * are real, protectable routes on a router it mounts, marked hidden so the document never describes them.
  *
  * Failures are fatal to start-up. A malformed document is not something a consumer recovers from at request
  * time, and one that silently omits routes is worse than one that never shipped; the framework already
  * refuses to start on an unconvertible route schema, and this matches it.
  */
-function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIProvider): FastifyPluginAsync {
-  const label = name === DEFAULT_DOCUMENT_NAME ? 'openapi' : `openapi:${name}`
-  const paths = resolvePaths(options)
-  const served = paths.json !== undefined || paths.yaml !== undefined || paths.docs !== undefined
+class OpenAPIPlugin extends HTTPPlugin {
+  override readonly name: string
+  readonly #document: string
+  readonly #options: OpenAPIOptions
+  readonly #provider: OpenAPIProvider
 
-  const plugin: FastifyPluginAsync = async instance => {
-    const descriptors = instance.$container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
-    assertSchemesExist(instance, options)
-    if (served) {
-      warnIfUnprotected(instance, name, options)
+  constructor(name: string, options: OpenAPIOptions, provider: OpenAPIProvider) {
+    super()
+    this.name = name === DEFAULT_DOCUMENT_NAME ? 'openapi' : `openapi:${name}`
+    this.#document = name
+    this.#options = options
+    this.#provider = provider
+  }
+
+  register(context: HTTPSetupContext): void {
+    const name = this.#document
+    const options = this.#options
+    const provider = this.#provider
+    const server = context.app.server
+
+    if (server === undefined) {
+      throw new ErrOpenAPIConfiguration(
+        errMessage(`Cannot install openapi() on a router or a controller: the document "${name}" describes a server`)
+          .solutions('Register it on the application or a listener: ".with(openapi(...))"')
+          .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+          .build(),
+      )
     }
 
-    const routeGroups = collectRouteGroups(instance)
+    const { container } = context
+    const paths = resolvePaths(options)
+    const served = paths.json !== undefined || paths.yaml !== undefined || paths.docs !== undefined
+    const descriptors = container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
+    assertSchemesExist(container, options)
+    if (served) {
+      warnIfUnprotected(container, name, options)
+    }
+
+    // A group holds only the routes that registered, in registration order; the HEAD twin of a GET is not listed.
+    const groups = new Map<IRouteGroup<unknown>, Set<IRoute<unknown>>>()
+    context.app.hook('onRoute', ({ route, group }) => {
+      let routes = groups.get(group as IRouteGroup<unknown>)
+      if (routes === undefined) {
+        routes = new Set()
+        groups.set(group as IRouteGroup<unknown>, routes)
+      }
+
+      routes.add(route as IRoute<unknown>)
+    })
 
     // Assigned in `onReady`, which settles before any request reaches the handlers below.
     let document!: OpenAPIDocument
     let yaml!: string
 
-    instance.addHook('onReady', async () => {
+    context.app.hook('onReady', () => {
       const warnings: string[] = []
       const generated =
         options.source === undefined
           ? generateDocument({
-              routeGroups: routeGroups() as Array<IRouteGroup<unknown>>,
-              options: withBasePathServer(options, instance.$basePath),
+              routeGroups: Array.from(groups, ([group, routes]) => ({ ...group, routes: [...routes] })),
+              options: withBasePathServer(options, server.basePath),
               schemes: descriptors,
-              problemMediaTypes: problemMediaTypes(instance),
+              problemMediaTypes: problemMediaTypes(container),
               onWarning: message => warnings.push(message),
             })
           : readDocument(options.source)
@@ -157,43 +196,43 @@ function openapiPlugin(name: string, options: OpenAPIOptions, provider: OpenAPIP
       document = publishable(name, transformed)
       yaml = toYAML(document)
       provider[kPublish](name, document)
+      // Generated once: the routes it was read from need not stay held for the server's lifetime.
+      groups.clear()
     })
 
     if (!served) {
       return
     }
 
-    const { docsPage, asset } = ui(options, paths, instance.$basePath)
-
+    const { docsPage, asset } = ui(options, paths, server.basePath)
     const authz = options.secure === undefined ? undefined : toRouteAuthz(options.secure)
+    const router = new Router(options.routes.base === '/' ? '' : options.routes.base)
+      .name(this.name)
+      .detail('openapi', { hidden: true })
 
-    instance.$route(label, router => {
-      router.path(options.routes.base)
-      router.detail('openapi', { hidden: true })
-      router.routes(
-        [
-          paths.json === undefined
-            ? undefined
-            : route('GET', paths.json, 'application/json', authz).handle(() => document),
-          paths.yaml === undefined ? undefined : route('GET', paths.yaml, 'application/yaml', authz).handle(() => yaml),
-          paths.docs === undefined ? undefined : route('GET', paths.docs, 'text/html', authz).handle(() => docsPage),
-          paths.asset === undefined
-            ? undefined
-            : route('GET', paths.asset, 'text/javascript', authz)
-                .handle(() => asset)
-                .header('cache-control', ASSET_CACHE_CONTROL),
-        ].filter((r): r is RouteBuilder => r !== undefined),
-      )
-    })
+    if (paths.json !== undefined) {
+      endpoint(router, paths.json, 'application/json', authz).handler(() => document)
+    }
+    if (paths.yaml !== undefined) {
+      endpoint(router, paths.yaml, 'application/yaml', authz).handler(() => yaml)
+    }
+    if (paths.docs !== undefined) {
+      endpoint(router, paths.docs, 'text/html', authz).handler(() => docsPage)
+    }
+    if (paths.asset !== undefined) {
+      endpoint(router, paths.asset, 'text/javascript', authz)
+        .header('cache-control', ASSET_CACHE_CONTROL)
+        .handler(() => asset)
+    }
+
+    context.app.mount(router)
   }
-
-  return fp(plugin, { name: label })
 }
 
 // The formats error handling negotiates among, so the document lists what the server can send.
 // Error handling is registered in every application, so its options are always bound.
-function problemMediaTypes(instance: FastifyInstance): string[] {
-  return [...instance.$container.get(kErrorHandlingOptions).formats.values()].map(format => format.mediaType)
+function problemMediaTypes(container: HTTPSetupContext['container']): string[] {
+  return [...container.get(kErrorHandlingOptions).formats.values()].map(format => format.mediaType)
 }
 
 /**
@@ -276,21 +315,17 @@ function assertUIHasDocument(name: string, options: OpenAPIOptions): void {
 }
 
 /**
- * Builds one endpoint route.
+ * Adds one endpoint route to `router`.
  *
  * `authorize` is called only when protection was actually configured. Routing reads *any* defined authz —
  * including an empty object — as protection, and an application with no authentication then refuses to start
  * with "authorization is configured but authentication is not". Passing `{}` to mean "public" would break
  * every unauthenticated application that turns documentation on.
  */
-function route(method: string, path: string, contentType: string, authz: RouteAuthzOptions | undefined): RouteBuilder {
-  const builder = new RouteBuilder().method(method).path(path).produces(contentType)
+function endpoint(router: Router, path: string, contentType: string, authz: RouteAuthzOptions | undefined) {
+  const route = router.get(path).produces(contentType)
 
-  if (authz !== undefined) {
-    builder.authorize(authz)
-  }
-
-  return builder
+  return authz === undefined ? route : route.authorize(authz)
 }
 
 /**
@@ -353,13 +388,13 @@ function ui(options: OpenAPIOptions, paths: EndpointPaths, basePath: string): { 
  * Without this the name matches nothing and the endpoints are protected by the authenticated-user
  * requirement alone — quieter than intended, and invisible until someone tests it.
  */
-function assertSchemesExist(instance: FastifyInstance, options: OpenAPIOptions): void {
+function assertSchemesExist(container: HTTPSetupContext['container'], options: OpenAPIOptions): void {
   const wanted = options.secure?.schemes ?? []
   if (wanted.length === 0) {
     return
   }
 
-  const provider = instance.$container.getOptional(AuthenticationSchemeProvider)
+  const provider = container.getOptional(AuthenticationSchemeProvider)
   const known = provider?.schemeNames ?? []
 
   for (const name of wanted) {
@@ -385,14 +420,14 @@ function assertSchemesExist(instance: FastifyInstance, options: OpenAPIOptions):
  * is exactly that. But an unlisted description of every endpoint and every auth scheme is worth one line of
  * output when nobody stated it was intended, and `.public()` silences it.
  */
-function warnIfUnprotected(instance: FastifyInstance, name: string, options: OpenAPIOptions): void {
+function warnIfUnprotected(container: HTTPSetupContext['container'], name: string, options: OpenAPIOptions): void {
   if (options.secureExplicit || options.secure !== undefined) {
     return
   }
 
   // Configuring authentication binds the coordinator, and nothing else does, so its presence is the feature
   // being on.
-  if (!instance.$container.has(AuthenticationService)) {
+  if (!container.has(AuthenticationService)) {
     return
   }
 

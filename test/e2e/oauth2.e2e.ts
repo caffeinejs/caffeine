@@ -1,5 +1,10 @@
-import { Claim, type OAuth2AuthenticationOptionsBuilder, Authentication } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import {
+  authentication,
+  Claim,
+  type OAuth2AuthenticationOptionsBuilder,
+  Authentication,
+  Router,
+} from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { startApp } from './internal/app.js'
@@ -29,16 +34,12 @@ function spring(o: OAuth2AuthenticationOptionsBuilder): OAuth2AuthenticationOpti
 }
 
 function routes() {
-  return newRouter().mount(
-    newRouter('/me')
+  return new Router().mount(
+    new Router('/me')
       .authorize()
       .get('/', ctx => Object.fromEntries(ctx.user.claims().map(claim => [claim.type, claim.value]))),
-    newRouter('/admin')
-      .authorize({ roles: ['admin'] })
-      .get('/', () => ({ ok: true })),
-    newRouter('/superadmin')
-      .authorize({ roles: ['superadmin'] })
-      .get('/', () => ({ ok: true })),
+    new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })),
+    new Router('/superadmin').authorize({ roles: ['superadmin'] }).get('/', () => ({ ok: true })),
   )
 }
 

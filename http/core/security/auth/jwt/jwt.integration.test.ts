@@ -1,6 +1,8 @@
 import { SignJWT } from 'jose'
 import { describe, it, expect, vi } from 'vitest'
 
+import { createWebApplication } from '../../../../application.js'
+import { authentication } from '../../../../core/security/security.js'
 import {
   AllowAnonymous,
   Authorize,
@@ -13,7 +15,7 @@ import {
   $p,
   Authentication,
 } from '../../../../index.js'
-import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+import { node } from '../../../../platform/node/index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 const secretBytes = new TextEncoder().encode(TEST_SECRET)
@@ -54,7 +56,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTValidController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -81,7 +83,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTNoHeaderController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -106,7 +108,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTBadTokenController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -132,7 +134,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTExpiredController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -159,7 +161,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTWrongIssController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth =>
@@ -193,7 +195,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTWrongAudController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth =>
@@ -228,7 +230,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTSubClaimController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -257,7 +259,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTRoleController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -284,7 +286,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTArrayRolesController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -313,7 +315,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTOnValidatedController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth =>
@@ -355,7 +357,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTOnFailController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth =>
@@ -395,7 +397,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTRole403Controller]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -429,7 +431,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTStatusGuardController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
@@ -460,7 +462,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTAllowAnonController]
 
-    const builder = createWebApplication()
+    const builder = createWebApplication({ adapter: node() })
     builder
       .install(
         Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),

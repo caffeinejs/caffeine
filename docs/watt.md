@@ -28,8 +28,8 @@ of each snippet: an HTTP entrypoint, an internal HTTP application and a headless
   probe.
   Watt's schema marks that key deprecated, but the runtime still reads it.
 - **Workers never receive a signal.** Watt handles `SIGTERM` in its main thread, then stops each worker by
-  awaiting the entry module's exported `close()` and closing what it started — the Fastify instance `create()`
-  returned, or the server it saw `listen()`. A worker still running after `gracefulShutdown.application` (10 s)
+  awaiting the entry module's exported `close()` and closing what it started — the server `create()` returned,
+  or the one it saw `listen()`. A worker still running after `gracefulShutdown.application` (10 s)
   is terminated.
 
 ## Answering Watt's checks
@@ -104,7 +104,7 @@ internal applications, which other applications reach through the runtime withou
 ### Script mode
 
 ```ts
-const app = createWebApplication().with(healthProbes()).mount(routes)
+const app = createWebApplication({ adapter: node() }).with(healthProbes()).mount(routes)
 
 await app.bootstrap()
 registerWattChecks(app)
@@ -121,11 +121,11 @@ application in script mode listens on whatever port it asks for, and the runtime
 ### Factory mode
 
 ```ts
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   .mount(routes)
   .shutdown(s => s.drainDelay(0))
 
-export async function create(): Promise<FastifyInstance> {
+export async function create(): Promise<NodeHTTPServer> {
   await app.bootstrap()
   registerWattChecks(app)
   app.availability.markStarted().acceptTraffic()
@@ -137,6 +137,10 @@ export async function close(): Promise<void> {
   await app.close()
 }
 ```
+
+`create()` returns the node:http server the `node()` adapter built, typed `NodeHTTPServer`, which
+`@caffeinejs/http/node` exports beside `node`. Watt serves it through its request listener, listening on it for the
+entrypoint and sending it requests in process otherwise.
 
 `markStarted().acceptTraffic()` is not optional. Without it the application stays "starting", readiness never
 passes, and since `/status` fails with readiness, an orchestrator restarts the pod in a loop.
@@ -185,8 +189,8 @@ refuses, the drain delay passes, the server closes, and the container disposes, 
 Kafka consumer committing and leaving its group, a pool closing. Leave it out and Watt only closes the server:
 none of that runs.
 
-Watt then closes the Fastify instance or the server itself. That second close does nothing: Fastify runs its
-close handlers once, and Watt skips a server that is no longer listening. `app.close()` is equally safe to reach
+Watt then closes the server itself. That second close does nothing: Watt skips a server that is no longer
+listening. `app.close()` is equally safe to reach
 twice — a later call waits for the first and resolves.
 
 - **Budgets.** Watt stops the entrypoint first, then the others, each within `gracefulShutdown.application`
@@ -221,7 +225,9 @@ already has. Read it with `getBasePath` from `@platformatic/globals`, which answ
 not to throw. Its type also allows `null`, which `.basePath(...)` does not take:
 
 ```ts
-const app = createWebApplication().basePath(() => getBasePath({ throwOnMissing: false }) ?? undefined)
+const app = createWebApplication({ adapter: node() }).basePath(
+  () => getBasePath({ throwOnMissing: false }) ?? undefined,
+)
 ```
 
 `.basePath(...)` drops the trailing slash. The example's `web` is served under `/shop` this way. See
@@ -234,12 +240,12 @@ A Watt gateway composes the APIs it fronts from the OpenAPI documents its applic
 ready and keeps it in `OpenAPIProvider`, so read it once `bootstrap()` has resolved:
 
 ```ts
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
   .install(OpenAPI())
   .with(openapi(o => o.info({ title: 'Orders', version: '1.0.0' }).json(false).yaml(false).docs(false)))
   .mount(routes)
 
-export async function create(): Promise<FastifyInstance> {
+export async function create(): Promise<NodeHTTPServer> {
   await app.bootstrap()
   registerWattChecks(app)
   setOpenapiSchema(app.container.get(OpenAPIProvider).docs())
@@ -312,7 +318,7 @@ No such package exists. This is what one could offer, built on what Watt 3.70 ha
 - **`.with(watt())`.** A feature whose bootstrap hook registers both checks from `ApplicationHealth` once the
   container has initialized. There is no ordering to get wrong, and outside Watt it does nothing.
 - **An entry helper.** It builds the `create()` and `close()` exports: it readies the application, marks it started
-  and hands Watt the Fastify instance. It would move onto Caffeine's own step for starting without listening, once
+  and hands Watt the server. It would move onto Caffeine's own step for starting without listening, once
   there is one.
 - **Settings read from Watt:**
   - a drain delay of 0 for every application but the entrypoint, from `isEntrypoint`, which Watt sets before the
@@ -341,5 +347,5 @@ How it would be built:
 - on `@platformatic/globals`' getters with `{ throwOnMissing: false }`, so that under plain Node every part stands
   down;
 - depending on `@caffeinejs/application` alone, with the HTTP parts behind a subpath, so a headless worker does not load
-  Fastify;
+  the HTTP engine;
 - verified by running `examples/05-watt` under each Watt release it supports.

@@ -3,12 +3,26 @@ import type { IncomingMessage } from 'node:http'
 import { ErrApplicationStarted, newConfiguration } from '@caffeinejs/application'
 import type { InferConfig } from '@caffeinejs/application/config'
 import { $t } from '@caffeinejs/application/schema'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Controller, ErrConfiguration, Get, RouteBuilder, type NodeMiddleware, type WebApplication } from '../index.js'
-import { createWebApplication, newRouter, type HTTPPluginFactory, healthProbes } from '../platform/fastify/index.js'
+import { createWebApplication } from '../application.js'
+import { healthProbes } from '../core/health/index.js'
+import {
+  Controller,
+  ErrConfiguration,
+  Get,
+  HTTPPlugin,
+  Router,
+  type HTTPSetupContext,
+  type NodeMiddleware,
+  type WebApplication,
+} from '../index.js'
+import { node } from '../platform/node/index.js'
+
+/** A plugin that does nothing, where a factory must return one. */
+class NoopPlugin extends HTTPPlugin {
+  register(): void {}
+}
 
 /**
  * An application served under a base path, the way `UsePathBase` serves one in ASP.NET Core: the server takes the
@@ -37,26 +51,20 @@ void [BasePathController]
 
 /** A route answering with what its handler saw of the request, so a test can tell where the base went. */
 function echo(path = '/pets') {
-  return newRouter().get(path, ctx => ({
+  return new Router().get(path, ctx => ({
     url: ctx.req.url,
     basePath: ctx.req.basePath,
-    originalUrl: ctx.platform.request.originalUrl,
+    originalUrl: (u => u.pathname + u.search)(new URL(ctx.req.raw.url)),
     x: ctx.req.query('x') ?? null,
-    rawOriginalUrlSet: 'originalUrl' in ctx.req.raw,
   }))
 }
 
-/** A plugin adding a route through `$route`, as `@caffeinejs/openapi` does for its own endpoints. */
-function lateRoute(): HTTPPluginFactory {
-  return () => async (instance: FastifyInstance) => {
-    instance.$route('late', router => {
-      router.path('/late').routes([
-        new RouteBuilder()
-          .method('GET')
-          .path('/hello')
-          .handle(() => ({ source: '$route' })),
-      ])
-    })
+/** A plugin mounting a router of its own, as `@caffeinejs/openapi` does for its own endpoints. */
+class LateRoute extends HTTPPlugin {
+  override readonly name = 'late-route'
+
+  register({ app }: HTTPSetupContext): void {
+    app.mount(new Router('/late').get('/hello', () => ({ source: 'late' })))
   }
 }
 
@@ -82,11 +90,10 @@ describe('an application under a base path', () => {
 
   describe('configuration', () => {
     it('drops trailing slashes and exposes the base to plugins', async () => {
-      app = createWebApplication().basePath('/api/').mount(echo()) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/api/').mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect(await get(app, '/api/pets')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '/api' } })
-      expect(app.instance.$basePath).toBe('/api')
     })
 
     it.each([
@@ -95,15 +102,23 @@ describe('an application under a base path', () => {
       ['a callback returning undefined', () => undefined],
       ['a callback returning "/"', () => '/'],
     ])('reads %s as no base path at all', async (_label, value) => {
-      app = createWebApplication().basePath(value).mount(echo()) as WebApplication
+      let seen: string | undefined
+
+      app = createWebApplication({ adapter: node() })
+        .with(context => {
+          seen = context.app.server?.basePath
+          return new NoopPlugin()
+        })
+        .basePath(value)
+        .mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect(await get(app, '/pets')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '' } })
-      expect(app.instance.$basePath).toBe('')
+      expect(seen).toBe('')
     })
 
     it('resolves an async callback the same as a string', async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .basePath(async () => '/api')
         .mount(echo()) as WebApplication
       await app.bootstrap()
@@ -116,10 +131,10 @@ describe('an application under a base path', () => {
       let factoryContext: unknown
       let basePathContext: unknown
 
-      app = createWebApplication({ config: conf })
+      app = createWebApplication({ adapter: node(), config: conf })
         .with(context => {
           factoryContext = context
-          return async () => {}
+          return new NoopPlugin()
         })
         .basePath(context => {
           basePathContext = context
@@ -139,7 +154,7 @@ describe('an application under a base path', () => {
       ['/api#x', 'contains "#"'],
     ])('fails start-up on %s, given directly or by a callback', async (value, reason) => {
       for (const basePath of [value, () => value]) {
-        const ready = createWebApplication().basePath(basePath).bootstrap()
+        const ready = createWebApplication({ adapter: node() }).basePath(basePath).bootstrap()
 
         await expect(ready).rejects.toThrow(ErrConfiguration)
         await expect(ready).rejects.toThrow(reason)
@@ -150,10 +165,10 @@ describe('an application under a base path', () => {
       const boom = new Error('no base path today')
       let factoryRan = false
 
-      const failing = createWebApplication()
+      const failing = createWebApplication({ adapter: node() })
         .with(() => {
           factoryRan = true
-          return async () => {}
+          return new NoopPlugin()
         })
         .basePath(() => {
           throw boom
@@ -166,10 +181,10 @@ describe('an application under a base path', () => {
     it('is resolved after the server settings and before the plugin factories', async () => {
       const order: string[] = []
 
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .with(() => {
           order.push('factory')
-          return async () => {}
+          return new NoopPlugin()
         })
         .basePath(() => {
           order.push('basePath')
@@ -185,7 +200,7 @@ describe('an application under a base path', () => {
     })
 
     it('takes the last call', async () => {
-      app = createWebApplication().basePath('/a').basePath('/b').mount(echo()) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/a').basePath('/b').mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect(await get(app, '/b/pets')).toMatchObject({ status: 200, body: { basePath: '/b' } })
@@ -193,7 +208,7 @@ describe('an application under a base path', () => {
     })
 
     it('refuses a change once the application is ready', async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
       await app.bootstrap()
 
       expect(() => app!.basePath('/api')).toThrow(ErrApplicationStarted)
@@ -202,7 +217,7 @@ describe('an application under a base path', () => {
 
   describe('matching a request', () => {
     it('routes a request with or without the base, telling the handler which it was', async () => {
-      app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect(await get(app, '/api/pets')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '/api' } })
@@ -214,35 +229,35 @@ describe('an application under a base path', () => {
       ['/api/', '/', null],
       ['/api?x=1', '/?x=1', '1'],
     ])('takes %s to the root route, as %s', async (url, appURL, x) => {
-      app = createWebApplication().basePath('/api').mount(echo('/')) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo('/')) as WebApplication
       await app.bootstrap()
 
       expect(await get(app, url)).toMatchObject({ status: 200, body: { url: appURL, basePath: '/api', x } })
     })
 
     it('takes the base off only on a segment boundary', async () => {
-      app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect((await get(app, '/apix/pets')).status).toBe(404)
     })
 
     it('leaves a route that merely starts like the base to answer as declared', async () => {
-      app = createWebApplication().basePath('/api').mount(echo('/apix/pets')) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo('/apix/pets')) as WebApplication
       await app.bootstrap()
 
       expect(await get(app, '/apix/pets')).toMatchObject({ status: 200, body: { url: '/apix/pets', basePath: '' } })
     })
 
     it('compares the base case-sensitively, as the router compares paths', async () => {
-      app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect((await get(app, '/API/pets')).status).toBe(404)
     })
 
     it('takes the base off once, so a route declared under the same segment is reached below it', async () => {
-      app = createWebApplication().basePath('/api').mount(echo('/api/pets')) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo('/api/pets')) as WebApplication
       await app.bootstrap()
 
       expect(await get(app, '/api/api/pets')).toMatchObject({
@@ -252,15 +267,15 @@ describe('an application under a base path', () => {
       expect((await get(app, '/api/pets')).status).toBe(404)
     })
 
-    it("answers HEAD through Fastify's automatic HEAD route", async () => {
-      app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
+    it('answers HEAD for a GET route under the base', async () => {
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect((await app.request('/api/pets', { method: 'HEAD' })).status).toBe(200)
     })
 
     it('keeps the query, and the full URL as the request arrived', async () => {
-      app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect(await get(app, '/api/pets?x=1')).toMatchObject({
@@ -270,41 +285,19 @@ describe('an application under a base path', () => {
     })
 
     it("applies the server's router options to the path left once the base is off", async () => {
-      app = createWebApplication()
+      app = createWebApplication({ adapter: node() })
         .basePath('/api')
-        .server(() => ({ factory: { routerOptions: { ignoreTrailingSlash: true } } }))
+        .server(() => ({ router: { ignoreTrailingSlash: true } }))
         .mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect((await get(app, '/api/pets/')).status).toBe(200)
     })
 
-    it("runs the application's own rewriteUrl after it, on the path the application sees", async () => {
-      // Fastify calls a `rewriteUrl` with the server as `this`; wrapping it must not lose that.
-      const calledOnServer: boolean[] = []
-
-      app = createWebApplication()
-        .basePath('/api')
-        .server(() => ({
-          factory: {
-            rewriteUrl(req) {
-              calledOnServer.push(this === app?.instance)
-              return req.url === '/old' ? '/pets' : (req.url ?? '/')
-            },
-          },
-        }))
-        .mount(echo()) as WebApplication
-      await app.bootstrap()
-
-      expect(await get(app, '/api/old')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '/api' } })
-      expect(await get(app, '/old')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '' } })
-      expect(calledOnServer).toEqual([true, true])
-    })
-
     it('answers a miss under the base exactly as it answers one without a base path', async () => {
-      app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo()) as WebApplication
       await app.bootstrap()
-      const plain = createWebApplication().mount(echo()) as WebApplication
+      const plain = createWebApplication({ adapter: node() }).mount(echo()) as WebApplication
       await plain.bootstrap()
 
       try {
@@ -322,29 +315,16 @@ describe('an application under a base path', () => {
     const sources = [
       ['a decorated controller', '/base-path-controller/hello'],
       ['a mounted router', '/router/hello'],
-      ['a $route group', '/late/hello'],
+      ['a router mounted by a plugin', '/late/hello'],
       ['the health probes', '/livez'],
-      ['a raw route written in .serverCallback(...)', '/callback-raw'],
-      ['a raw route a plugin registered', '/plugin-raw'],
     ] as const
 
     function everySource(): WebApplication {
-      return createWebApplication()
+      return createWebApplication({ adapter: node() })
         .basePath('/api')
-        .serverCallback((_context, instance) => {
-          instance.get('/callback-raw', async () => ({ source: 'serverCallback' }))
-        })
-        .with(lateRoute())
+        .with(() => new LateRoute())
         .with(healthProbes())
-        .with(() =>
-          fp(
-            async (instance: FastifyInstance) => {
-              instance.get('/plugin-raw', async () => ({ source: 'plugin' }))
-            },
-            { name: 'base-path-raw-route' },
-          ),
-        )
-        .mount(newRouter('/router').get('/hello', () => ({ source: 'router' }))) as WebApplication
+        .mount(new Router('/router').get('/hello', () => ({ source: 'router' }))) as WebApplication
     }
 
     it.each(sources)('serves %s under the base, and without it', async (_label, path) => {
@@ -360,10 +340,10 @@ describe('an application under a base path', () => {
 
   describe('redirects the application writes', () => {
     function redirecting(): WebApplication {
-      return createWebApplication()
+      return createWebApplication({ adapter: node() })
         .basePath('/api')
         .mount(
-          newRouter()
+          new Router()
             .get('/go', ctx => {
               ctx.redirect('~/done', 303)
             })
@@ -405,7 +385,9 @@ describe('an application under a base path', () => {
     it('runs a path middleware for its path under the base, with the full URL still on the request', async () => {
       const seen: Array<{ url: string | undefined; originalUrl: string | undefined }> = []
 
-      app = createWebApplication().basePath('/api').mount(echo('/admin/x'), echo('/other')) as WebApplication
+      app = createWebApplication({ adapter: node() })
+        .basePath('/api')
+        .mount(echo('/admin/x'), echo('/other')) as WebApplication
       app.use('/admin', ((req, _res, next) => {
         seen.push({ url: req.url, originalUrl: (req as IncomingMessage & { originalUrl?: string }).originalUrl })
         next()
@@ -427,7 +409,9 @@ describe('an application under a base path', () => {
     it('runs a Caffeine middleware registered under a path for that path under the base', async () => {
       const seen: Array<{ basePath: string; url: string }> = []
 
-      app = createWebApplication().basePath('/api').mount(echo('/admin/x'), echo('/other')) as WebApplication
+      app = createWebApplication({ adapter: node() })
+        .basePath('/api')
+        .mount(echo('/admin/x'), echo('/other')) as WebApplication
       app.use('/admin', (ctx, next) => {
         seen.push({ basePath: ctx.req.basePath, url: ctx.req.url })
         next()
@@ -442,26 +426,12 @@ describe('an application under a base path', () => {
     })
 
     it('still refuses a route that takes a probe path, both being relative to the application', async () => {
-      const failing = createWebApplication().basePath('/api').with(healthProbes()).mount(echo('/livez'))
+      const failing = createWebApplication({ adapter: node() })
+        .basePath('/api')
+        .with(healthProbes())
+        .mount(echo('/livez'))
 
       await expect(failing.bootstrap()).rejects.toThrow(/already registered at "\/livez"/)
-    })
-  })
-
-  describe('cost', () => {
-    it('leaves the server without a URL rewrite when there is no base path', async () => {
-      app = createWebApplication().mount(echo()) as WebApplication
-      await app.bootstrap()
-
-      // Fastify saves `originalUrl` on the raw request only when it has a `rewriteUrl` to run.
-      expect(await get(app, '/pets')).toMatchObject({ status: 200, body: { rawOriginalUrlSet: false } })
-    })
-
-    it('rewrites the URL once a base path is set', async () => {
-      app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
-      await app.bootstrap()
-
-      expect(await get(app, '/api/pets')).toMatchObject({ status: 200, body: { rawOriginalUrlSet: true } })
     })
   })
 })

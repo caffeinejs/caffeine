@@ -1,8 +1,9 @@
 import { createHash, createHmac } from 'node:crypto'
 
 import { $t } from '@caffeinejs/application/schema'
-import { Router, bodyAsBuffer } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Router, bodyAsBuffer, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { brewer, type BrewClient, type BrewOptions } from '../index.js'
@@ -74,8 +75,10 @@ const oauth = new Router('/oauth')
     return { access_token: server.access, refresh_token: server.refresh }
   })
 
-const app = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 } }))
+// A client that stops part-way can leave a connection holding a partial request, which a graceful close would wait
+// out (caffeinejs/caffeine#131): the close cuts it after a second.
+const app = createWebApplication({ adapter: node() })
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(orders, oauth)
 
 let origin: string

@@ -13,10 +13,11 @@ else, and every client route is a route the application wrote.
 - **Two hardcoded accounts** through the framework's credential flow: a `UserProvider`, `CredentialsService`
   and scrypt hashing, with no plaintext comparison anywhere.
 - **Both route sources side by side** — `@Controller` classes for `/api/profile` and `/api/admin`, a
-  programmatic `newRouter()` for `/api/projects`. They compile identically.
+  programmatic `new Router()` for `/api/projects`. They compile identically.
 - **CSRF protection by Fetch Metadata** — the framework's `csrf()`, which judges every unsafe request by
-  `Sec-Fetch-Site` and `Origin`, so the client sends no token — and **security headers** with `@fastify/helmet`, an
-  official Fastify plugin the application registers itself, because `@caffeinejs/http` ships no wrapper for it.
+  `Sec-Fetch-Site` and `Origin`, so the client sends no token — and **security headers** with `helmet`, written
+  from an `onRequest` hook of a plugin (`SecurityHeaders`) installed ahead of the authentication gate, so they reach
+  a 401 too. `@caffeinejs/http` ships no wrapper for it.
 - **A real front-end build**: esbuild, content-hashed asset names, then `buildStatic()`, which writes `br` and
   `gzip` variants of each file worth compressing to `.static-variants/`, and the manifest the static mount serves
   from.
@@ -39,7 +40,7 @@ examples/04-spa-dashboard/
     ├── app.config.ts         the $t schema every SPA_* variable folds into
     ├── auth/                 the two accounts, and /auth/login · /logout · /me
     ├── profile/              @Controller('/api/profile')
-    ├── projects/             newRouter('/api/projects') — the programmatic half
+    ├── projects/             new Router('/api/projects') — the programmatic half
     ├── admin/                @Controller('/api/admin'), behind a role
     └── spa/                  the static mount, the client routes, helmet
 ```
@@ -53,7 +54,7 @@ The only path that crosses the boundary is `api/spa/site.ts`, which points the m
 `/pricing` is a fallback, so it is a page for a browser and a `404` for anything else — which is what keeps a
 missing `/assets/main-ABC123.js` a real 404 instead of HTML under a JavaScript content type.
 
-**The API owns its own misses.** One line — `newRouter('/api').get('/*', notFound)` — covers a router base and
+**The API owns its own misses.** One line — `new Router('/api').get('/*', notFound)` — covers a router base and
 two controller bases, and every future one. Without it a browser typing `/api/typo` is handed the application.
 
 ## Run it

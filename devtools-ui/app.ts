@@ -4,8 +4,14 @@ import { fileURLToPath } from 'node:url'
 import type { Logger } from '@caffeinejs/application/logger'
 import { CaffeineIoC, type Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
-import { ErrHTTPMisdirectedRequest, type MiddlewareFn } from '@caffeinejs/http'
-import { createWebApplication, csrf, healthProbes } from '@caffeinejs/http/fastify'
+import {
+  ErrHTTPMisdirectedRequest,
+  type MiddlewareFn,
+  csrf,
+  healthProbes,
+  createWebApplication,
+} from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 import { staticFiles } from '@caffeinejs/static'
 
 import { DevToolsAPI } from './api.js'
@@ -39,8 +45,8 @@ export function buildApp(options: BuildAppOptions = {}) {
   container.bind(DevToolsAPI, t => t.toFactory(ctx => new DevToolsAPI(ctx.container.get(kConfig))))
 
   return (
-    createWebApplication({ container, config: configuration, logger: options.logger })
-      .server(({ config }) => ({ listener: config.server }))
+    createWebApplication({ adapter: node(), container, config: configuration, logger: options.logger })
+      .server(({ config }) => ({ listen: config.server }))
       .logger((b, { config }) => b.level(config.log.level))
       .errorHandling(e => e.globalHandlers(PageErrorHandler, TargetErrorHandler))
       // Refuses DNS rebinding on any address, since behind a container's published port requests are not on loopback.

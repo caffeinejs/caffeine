@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../application.js'
 import { $p, Controller, Get, Args, type ActionResult } from '../index.js'
-import { createWebApplication } from '../platform/fastify/index.js'
+import { node } from '../platform/node/index.js'
 
 // @Args accepts either an array of `$p` pickers or a builder function that receives the builtin pickers.
 // Both must resolve handler arguments identically.
@@ -24,7 +25,7 @@ void [ParamsBuilderController]
 
 describe('@Args builder signature', () => {
   it('resolves the same arguments from the function form as the array form', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
 
     try {

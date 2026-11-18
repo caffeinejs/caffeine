@@ -1,0 +1,10 @@
+{
+  "name": "portable-email-template-probe",
+  "private": true,
+  "dependencies": {
+    "aws4fetch": "1.0.20",
+    "ejs": "6.0.1",
+    "handlebars": "4.7.10",
+    "parse5": "8.1.1"
+  }
+}

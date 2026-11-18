@@ -2,8 +2,8 @@ import { newConfiguration } from '@caffeinejs/application'
 import type { InferConfig } from '@caffeinejs/application/config'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
-import { WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication, type WebApplication } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, inject, it } from 'vitest'
 
 import { staticFiles } from '../index.js'
@@ -11,7 +11,7 @@ import { staticFiles } from '../index.js'
 const { fixtures, fixtures2 } = inject('fixtures')
 
 describe('static feature', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     if (app !== undefined) {
@@ -21,7 +21,7 @@ describe('static feature', () => {
   })
 
   it('serves a file under the configured prefix', async () => {
-    app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
+    app = createWebApplication({ adapter: node() }).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
     await app.bootstrap()
 
     const res = await app.request('/static/hello.txt')
@@ -32,7 +32,7 @@ describe('static feature', () => {
   })
 
   it('sets the css content-type from the extension', async () => {
-    app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/assets' })))
+    app = createWebApplication({ adapter: node() }).with(staticFiles(s => s.serve(fixtures, { prefix: '/assets' })))
     await app.bootstrap()
 
     const res = await app.request('/assets/style.css')
@@ -42,7 +42,7 @@ describe('static feature', () => {
   })
 
   it('404s for a missing file', async () => {
-    app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
+    app = createWebApplication({ adapter: node() }).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
     await app.bootstrap()
 
     const res = await app.request('/static/nope.txt')
@@ -51,7 +51,7 @@ describe('static feature', () => {
   })
 
   it('serves several mounts from one staticFiles(...)', async () => {
-    app = createWebApplication({}).with(
+    app = createWebApplication({ adapter: node() }).with(
       staticFiles(s => s.serve(fixtures, { prefix: '/one' }).serve(fixtures2, { prefix: '/two' })),
     )
     await app.bootstrap()
@@ -78,7 +78,7 @@ describe('static feature configured from the tree', () => {
   const schema = $t.Object({ static: $t.Object({ mounts: $t.Optional($t.Array(mount)) }, { default: {} }) })
   type AppConfig = InferConfig<typeof schema>
 
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -93,6 +93,7 @@ describe('static feature configured from the tree', () => {
 
   it('serves the configured mounts with the MountOptions members they carry', async () => {
     app = createWebApplication({
+      adapter: node(),
       config: configured([
         { root: fixtures, prefix: '/from-config', immutable: ['style.css'], cacheControl: 'max-age=60' },
       ]),
@@ -109,9 +110,10 @@ describe('static feature configured from the tree', () => {
   })
 
   it('serves only the mounts written in code when there are any', async () => {
-    app = createWebApplication({ config: configured([{ root: fixtures, prefix: '/from-config' }]) }).with(
-      staticFiles<AppConfig>((s, { config }) => s.config(config.static).serve(fixtures2, { prefix: '/coded' })),
-    )
+    app = createWebApplication({
+      adapter: node(),
+      config: configured([{ root: fixtures, prefix: '/from-config' }]),
+    }).with(staticFiles<AppConfig>((s, { config }) => s.config(config.static).serve(fixtures2, { prefix: '/coded' })))
     await app.bootstrap()
 
     expect((await app.request('/coded/other.txt')).status).toBe(200)

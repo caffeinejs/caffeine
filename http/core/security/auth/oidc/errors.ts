@@ -5,7 +5,7 @@ import { RemoteAuthenticationError } from '../internal/remote/errors.js'
  *
  * Protocol-generic configuration failures — TLS on endpoints, cookie naming, session secret
  * strength — raise `ErrOAuthConfiguration` from the shared core instead. Both extend
- * `RemoteAuthenticationError`, so the adapter collapses either to the same client response.
+ * `RemoteAuthenticationError`, so the server collapses either to the same client response.
  */
 export class ErrOIDCConfiguration extends RemoteAuthenticationError {
   constructor(message: string) {

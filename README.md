@@ -93,7 +93,7 @@ const orders = newRouter('/orders')
   .schema({ body: $t.Object({ item: $t.String(), quantity: $t.Integer({ minimum: 1 }) }) })
   .handler((ctx, { orders }) => {
     const { item, quantity } = ctx.req.body()
-    
+
     return ctx.status(201).body(orders.place(item, quantity))
   })
 

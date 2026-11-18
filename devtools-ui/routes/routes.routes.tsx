@@ -42,7 +42,6 @@ export const routesRouter = new Router('/routes')
               <p
                 safe
               >{`Fallback policy: ${security.authorization.fallbackPolicy ?? 'none, undeclared routes are open'}`}</p>
-              <p safe>{`Left open by it: ${display(security.authorization.fallbackExcept)}`}</p>
             </div>
           </section>
           <form class="filters" method="get" action="/routes">

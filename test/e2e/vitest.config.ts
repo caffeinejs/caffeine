@@ -28,7 +28,8 @@ export default defineConfig({
   resolve: {
     alias: {
       // Test the working-tree source, not a built dist. A string alias matches by prefix, so the subpath goes first.
-      '@caffeinejs/http/fastify': fileURLToPath(new URL('../../http/platform/fastify/index.ts', import.meta.url)),
+      '@caffeinejs/http/node': fileURLToPath(new URL('../../http/platform/node/index.ts', import.meta.url)),
+      '@caffeinejs/http/compress': fileURLToPath(new URL('../../http/core/compress/index.ts', import.meta.url)),
       // One copy of the route registry: the resilience HTTP check reads the routes the source decorators wrote.
       '@caffeinejs/http/decorators/registrar': fileURLToPath(
         new URL('../../http/decorators/registrar/index.ts', import.meta.url),
@@ -47,6 +48,9 @@ export default defineConfig({
         new URL('../../distlock/backend/redis/index.ts', import.meta.url),
       ),
       '@caffeinejs/distlock': fileURLToPath(new URL('../../distlock/index.ts', import.meta.url)),
+      // One copy of HTTPPlugin: from dist, StaticFiles would extend another copy than the server checks with instanceof.
+      '@caffeinejs/static/build': fileURLToPath(new URL('../../static/build/index.ts', import.meta.url)),
+      '@caffeinejs/static': fileURLToPath(new URL('../../static/index.ts', import.meta.url)),
     },
   },
   test: {

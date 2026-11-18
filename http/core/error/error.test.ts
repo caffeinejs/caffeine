@@ -1,8 +1,10 @@
+import { newNoopLogger, type Logger, type LogFn } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
 import type { Ctor, Provider } from '@caffeinejs/di'
 import { Injectable, Lifetime, Named, Primary, Scopes, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
+import { createWebApplication } from '../../application.js'
 import {
   Catch,
   CatchWith,
@@ -18,8 +20,9 @@ import {
   Schema,
   $p,
   type ActionResult,
+  Router,
 } from '../../index.js'
-import { createWebApplication, newRouter } from '../../platform/fastify/index.js'
+import { node } from '../../platform/node/index.js'
 import { ErrConfiguration } from './common.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
@@ -91,7 +94,7 @@ describe('ErrorHandlerProvider', () => {
 // The three handlers every application below enrols. Declaring the others in this module no longer reaches
 // any of them, which is what lets one file hold handlers that would otherwise collide on the same error type.
 function buildApp() {
-  return createWebApplication().errorHandling(e =>
+  return createWebApplication({ adapter: node() }).errorHandling(e =>
     e.globalHandlers(NotFoundHandler, CatchAllHandler, AlphaGammaHandler),
   )
 }
@@ -617,7 +620,7 @@ describe('@CatchWith', () => {
 
 describe('serializer', () => {
   function orders() {
-    return newRouter('/orders')
+    return new Router('/orders')
       .get('/:id', () => {
         throw new ErrHTTPConflict('Order 42 is already paid')
       })
@@ -628,7 +631,7 @@ describe('serializer', () => {
 
   // A browser names text/html, so a page the application renders reaches it, and every other client keeps JSON.
   it('answers a client that asks for its media type with the page the application renders', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e =>
         e.serializer('text/html', (ctx, problem) => `<h1>${problem.status} ${problem.title}</h1><p>${ctx.req.url}</p>`),
       )
@@ -655,7 +658,7 @@ describe('serializer', () => {
   it.each(['text/html; charset=iso-8859-1', 'text/plain; charset="us-ascii"'])(
     'refuses "%s" at start-up',
     async mediaType => {
-      const app = createWebApplication().errorHandling(e => e.serializer(mediaType, () => ''))
+      const app = createWebApplication({ adapter: node() }).errorHandling(e => e.serializer(mediaType, () => ''))
 
       const failure = await app.bootstrap().then(
         () => undefined,
@@ -671,7 +674,7 @@ describe('serializer', () => {
 
   // UTF-8 is what goes out, so declaring it is allowed, in any case and quoted, and the bytes match it.
   it('sends non-ASCII text from a serializer as the UTF-8 it declares', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.serializer('text/html; charset="UTF-8"', () => '<p>café</p>'))
       .mount(orders())
     await app.bootstrap()
@@ -686,7 +689,7 @@ describe('serializer', () => {
 
   // The built-ins are defaults, not a contract: a house Markdown layout replaces Caffeine's under the same type.
   it('replaces a built-in serializer registered under the same media type', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.serializer('Text/Markdown', (_ctx, problem) => `# ${problem.code}`))
       .mount(orders())
     await app.bootstrap()
@@ -701,11 +704,9 @@ describe('serializer', () => {
 
   // An error page that fails must not turn one error into a hung request or a second, opaque one.
   it('falls back to JSON and logs the failure when a serializer throws', async () => {
-    const logged: string[] = []
-    const app = createWebApplication()
-      .server(() => ({
-        factory: { logger: { level: 'error', stream: { write: (line: string) => logged.push(line) } } },
-      }))
+    const logged: LogEntry[] = []
+    const app = createWebApplication({ adapter: node() })
+      .logger(b => b.use(recordTo(logged)))
       .errorHandling(e =>
         e.serializer('text/html', () => {
           throw new Error('template missing')
@@ -719,14 +720,15 @@ describe('serializer', () => {
     expect(res.status).toBe(409)
     expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
     expect(await res.json()).toMatchObject({ status: 409, code: 'ERR_HTTP_CONFLICT' })
-    expect(logged.some(line => line.includes('Cannot serialize a problem as \\"text/html\\"'))).toBe(true)
+    expect(logged).toHaveLength(1)
+    expect(logged[0]!.msg).toContain('Cannot serialize a problem as "text/html"')
 
     await app.close()
   })
 
   // A wildcard or a bare word would be offered to every client, or to none.
   it.each(['text/*', '*/*', 'html', ''])('refuses "%s" at start-up', async mediaType => {
-    const app = createWebApplication().errorHandling(e => e.serializer(mediaType, () => ''))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.serializer(mediaType, () => ''))
 
     const failure = await app.bootstrap().then(
       () => undefined,
@@ -740,9 +742,37 @@ describe('serializer', () => {
   })
 })
 
+interface LogEntry {
+  level: number
+  msg: string
+  [field: string]: unknown
+}
+
+const LEVELS = { info: 30, warn: 40, error: 50 } as const
+
+/** The application logger, recording each line at `threshold` or above. */
+function recordTo(logged: LogEntry[], threshold: keyof typeof LEVELS = 'info'): Logger {
+  const at = (level: keyof typeof LEVELS): LogFn =>
+    ((obj: unknown, msg?: string) => {
+      if (LEVELS[level] < LEVELS[threshold]) {
+        return
+      }
+      const [fields, text] = typeof obj === 'string' ? [{}, obj] : [obj as Record<string, unknown>, msg ?? '']
+      logged.push({ ...fields, level: LEVELS[level], msg: text })
+    }) as LogFn
+  const logger: Logger = {
+    ...newNoopLogger(),
+    info: at('info'),
+    warn: at('warn'),
+    error: at('error'),
+    child: () => logger,
+  }
+  return logger
+}
+
 describe('correlationID', () => {
   function payments() {
-    return newRouter('/payments')
+    return new Router('/payments')
       .post('/', () => {
         throw new ErrHTTPConflict('Payment already captured')
       })
@@ -753,8 +783,8 @@ describe('correlationID', () => {
 
   // The ID a support request quotes is the one the server's log lines carry for that request.
   it('is the request ID by default', async () => {
-    const app = createWebApplication()
-      .server(() => ({ factory: { requestIdHeader: 'x-request-id' } }))
+    const app = createWebApplication({ adapter: node() })
+      .server(() => ({ requestIDHeader: 'x-request-id' }))
       .mount(payments())
     await app.bootstrap()
 
@@ -769,7 +799,7 @@ describe('correlationID', () => {
 
   // A trace ID ties the error to every span of the request, across services.
   it('comes from the provider the application sets, such as the trace in traceparent', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.correlationID(ctx => ctx.req.header('traceparent')?.split('-')[1]))
       .mount(payments())
     await app.bootstrap()
@@ -789,7 +819,7 @@ describe('correlationID', () => {
     ['no value', () => undefined],
     ['an empty one', () => ''],
   ])('is absent when the provider returns %s', async (_label, provider) => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e => e.correlationID(provider))
       .mount(payments())
     await app.bootstrap()
@@ -804,11 +834,9 @@ describe('correlationID', () => {
 
   // The error is what the client needs; a provider failing on top of it must not cost them the answer.
   it('is absent, and the failure logged, when the provider throws', async () => {
-    const logged: string[] = []
-    const app = createWebApplication()
-      .server(() => ({
-        factory: { logger: { level: 'error', stream: { write: (line: string) => logged.push(line) } } },
-      }))
+    const logged: LogEntry[] = []
+    const app = createWebApplication({ adapter: node() })
+      .logger(b => b.use(recordTo(logged)))
       .errorHandling(e =>
         e.correlationID(() => {
           throw new Error('no active span')
@@ -822,7 +850,9 @@ describe('correlationID', () => {
 
     expect(res.status).toBe(409)
     expect(Object.keys(problem)).not.toContain('correlation_id')
-    expect(logged.some(line => line.includes('Cannot read the correlation ID'))).toBe(true)
+    expect(logged.filter(entry => entry.level === 50).map(entry => entry.msg)).toEqual([
+      'Cannot read the correlation ID: sending the problem without one',
+    ])
 
     await app.close()
   })
@@ -830,12 +860,12 @@ describe('correlationID', () => {
 
 describe('validation', () => {
   function signup() {
-    return newRouter('/signup').post('/', { body: $t.Object({ email: $t.String({ minLength: 3 }) }) }, () => ({}))
+    return new Router('/signup').post('/', { body: $t.Object({ email: $t.String({ minLength: 3 }) }) }, () => ({}))
   }
 
   // A cap of 0 would send a problem that lists nothing and says so; a fraction or Infinity is a typo for a number.
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('refuses a maxErrors of %s at start-up', async n => {
-    const app = createWebApplication().errorHandling(e => e.validation({ maxErrors: n }))
+    const app = createWebApplication({ adapter: node() }).errorHandling(e => e.validation({ maxErrors: n }))
 
     const failure = await app.bootstrap().then(
       () => undefined,
@@ -850,7 +880,7 @@ describe('validation', () => {
 
   // A shared block sets the type, the place that knows the audience sets the title; neither undoes the other.
   it('merges calls key by key, over the defaults', async () => {
-    const app = createWebApplication()
+    const app = createWebApplication({ adapter: node() })
       .errorHandling(e =>
         e
           .validation({ type: 'https://api.example.com/problems/validation-error', title: 'Draft' })

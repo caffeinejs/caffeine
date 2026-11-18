@@ -1,0 +1,11 @@
+export function respond(request: Request): Response {
+  const bytes = new TextEncoder().encode(new URL(request.url).pathname)
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes)
+      controller.close()
+    },
+  })
+
+  return new Response(body, { headers: { 'content-type': 'text/plain; charset=utf-8' } })
+}

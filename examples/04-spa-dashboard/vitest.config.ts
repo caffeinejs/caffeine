@@ -29,7 +29,8 @@ export default defineConfig({
       '@caffeinejs/http/decorators/registrar': fileURLToPath(
         new URL('../../http/decorators/registrar/index.ts', import.meta.url),
       ),
-      '@caffeinejs/http/fastify': fileURLToPath(new URL('../../http/platform/fastify/index.ts', import.meta.url)),
+      '@caffeinejs/http/node': fileURLToPath(new URL('../../http/platform/node/index.ts', import.meta.url)),
+      '@caffeinejs/http/compress': fileURLToPath(new URL('../../http/core/compress/index.ts', import.meta.url)),
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
       '@caffeinejs/openapi': fileURLToPath(new URL('../../openapi/index.ts', import.meta.url)),
       // Source too: `ErrSendFileUnavailable` extends a class the error pipeline matches on, and a copy

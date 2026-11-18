@@ -1,4 +1,5 @@
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
 
 // Same app graph as app.ts, built but never listened on: this worker measures the resident memory
 // of the constructed application, not its network stack.
@@ -8,7 +9,7 @@ import './cart/cart.controller.js'
 import './order/order.controller.js'
 import './payment/payment.controller.js'
 
-const app = createWebApplication()
+const app = createWebApplication({ adapter: node() })
 await app.bootstrap()
 
 // Twice: the first pass can leave objects that only become unreachable once finalizers have run.

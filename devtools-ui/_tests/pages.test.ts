@@ -11,15 +11,20 @@ import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import {
   AuthenticateResult,
   Authentication,
+  authentication,
   AuthenticationTicket,
   BaseAuthenticationHandler,
   Claim,
+  csrf,
+  healthProbes,
+  type IContext,
   Identity,
   Principal,
-  type IContext,
+  Router,
+  createWebApplication,
   type WebApplication,
 } from '@caffeinejs/http'
-import { authentication, createWebApplication, csrf, healthProbes, newRouter } from '@caffeinejs/http/fastify'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { testClient, type TestClient } from '@caffeinejs/testing/http'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -118,7 +123,7 @@ function expectView(actual: number[], expected: number[]): void {
 }
 
 describe('devtools UI', () => {
-  let target: WebApplication
+  let target: WebApplication<never, never, unknown, NodeAdapter>
   let ui: ReturnType<typeof buildApp>
   // Typed by the UI's own routes: a page renamed or removed breaks this file.
   let client: TestClient<ReturnType<typeof buildApp>>
@@ -128,9 +133,14 @@ describe('devtools UI', () => {
       .source(new InlineConfigSource({ db: { pass: 'hunter2', pool: 4 } }))
       .build().config
 
-    target = createWebApplication({ container: new CaffeineIoC({ decorators: false }), config: conf, logger: false })
-      .server(() => ({ listener }))
-      .install(DevTools(d => d.port(0).showConfigValues())) as WebApplication
+    target = createWebApplication({
+      adapter: node(),
+      container: new CaffeineIoC({ decorators: false }),
+      config: conf,
+      logger: false,
+    })
+      .server(() => ({ listen: listener }))
+      .install(DevTools(d => d.port(0).showConfigValues())) as WebApplication<never, never, unknown, NodeAdapter>
     target.container.bind(Repository, t => t.toSelf())
     target.container.bind(PetService, t => t.toSelf([Repository]))
     target.container.bind(Rates, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('rates')))
@@ -519,23 +529,23 @@ class BearerScheme extends BaseAuthenticationHandler<object> {
 }
 
 describe('devtools UI over devtools that require credentials', () => {
-  let target: WebApplication
+  let target: WebApplication<never, never, unknown, NodeAdapter>
 
   beforeAll(async () => {
-    target = createWebApplication({ logger: false })
-      .server(() => ({ listener }))
+    target = createWebApplication({ adapter: node(), logger: false })
+      .server(() => ({ listen: listener }))
       .install(Authentication(a => a.addStrategy('Bearer', new BearerScheme())))
       .install(DevTools(d => d.port(0).authorize({ roles: ['ops'] })))
       .with(authentication())
       .with(csrf())
-      // Raw routes, exempt from authentication.
+      // Exempt from authentication.
       .with(healthProbes(h => h.enabled(true)))
       .mount(
-        newRouter('/pets')
+        new Router('/pets')
           .authorize({ roles: ['keeper'] })
           .get('/', () => [])
           .post('/', () => ({})),
-      ) as WebApplication
+      ) as WebApplication<never, never, unknown, NodeAdapter>
     await target.run()
   })
 
@@ -574,7 +584,8 @@ describe('devtools UI over devtools that require credentials', () => {
 
     expect(res.status).toBe(200)
     expect(page).toContain('role keeper')
-    expect(page).toMatch(/<code>\/livez<\/code> <span class="badge badge-muted">raw<\/span>/)
+    expect(page).toContain('<code>/livez</code>')
+    expect(page).not.toMatch(/<code>\/livez<\/code> <span class="badge badge-muted">raw/)
     expect(page).toContain('exempt')
     expect(page).toContain('default: Bearer')
     expect(page).toMatch(/protected/)

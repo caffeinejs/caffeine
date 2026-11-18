@@ -1,8 +1,9 @@
 import { type InjectionToken, Scopes } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import type { HTTPSetupContext } from '../../adapter.js'
+import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
+import type { RequestHookName } from '../lifecycle/lifecycle.js'
 import { ErrNextCalledTwice, ErrPipelineSealed } from './errors.js'
 import {
   type Middleware,
@@ -24,45 +25,47 @@ interface Entry {
   readonly factory: boolean
 }
 
-interface Resolved {
+/** A middleware in both forms: Node's, which the Node platform runs, and the context form the engine runs. */
+interface Forms {
   readonly fn: NodeMiddleware
-  readonly hint: unknown
+  readonly handle: MiddlewareFn | undefined
 }
 
-/** One middleware as the adapter installs it: resolved, adapted to the Node signature, and placed. */
+type Resolved = Forms & { readonly hint: unknown }
+
+/** One middleware as the engine installs it: resolved, adapted to the Node signature, and placed. */
 export interface ResolvedMiddleware {
   /** Where it applies, or `undefined` for every request. */
   readonly path: MiddlewarePath | undefined
   /**
    * The hook `use()` named, else the middleware's own {@link kMiddlewareHook} hint, else `undefined` for the
-   * adapter's default. The adapter validates it: nothing here knows which names exist.
+   * default, `onRequest`. The engine refuses a hint that is not a request hook point.
    */
   readonly hook: string | undefined
   readonly fn: NodeMiddleware
+  /** The context form, `(ctx, next)`; `undefined` for a Node `(req, res, next)` middleware, which `fn` is as written. */
+  readonly handle: MiddlewareFn | undefined
 }
 
 /**
  * The application's middleware pipeline: what `app.use()` and `app.useFn()` register, resolved once at start-up
- * for the adapter to install.
- *
- * Entries keep their registration order. Which hooks exist, and how a middleware is attached to one, is the
- * adapter's business: `H` is the names its hooks go by.
+ * for the engine to install. Entries keep their registration order.
  */
-export class MiddlewarePipeline<H extends string = string> {
+export class MiddlewarePipeline {
   readonly #entries: Entry[] = []
   #sealed = false
 
   /** Registers `target` at `hook`, optionally restricted to `path`. Throws once the pipeline has been resolved. */
-  add(path: MiddlewarePath | undefined, target: unknown, hook?: H): this {
+  add(path: MiddlewarePath | undefined, target: unknown, hook?: RequestHookName): this {
     return this.#add(path, target, hook, false)
   }
 
   /** Registers a factory that produces middleware once at start-up. */
-  addFactory(path: MiddlewarePath | undefined, target: unknown, hook?: H): this {
+  addFactory(path: MiddlewarePath | undefined, target: unknown, hook?: RequestHookName): this {
     return this.#add(path, target, hook, true)
   }
 
-  #add(path: MiddlewarePath | undefined, target: unknown, hook: H | undefined, factory: boolean): this {
+  #add(path: MiddlewarePath | undefined, target: unknown, hook: RequestHookName | undefined, factory: boolean): this {
     if (this.#sealed) {
       throw new ErrPipelineSealed()
     }
@@ -84,7 +87,7 @@ export class MiddlewarePipeline<H extends string = string> {
       const resolved = resolve(entry.target, context, entry.factory)
       const hook = entry.hook ?? (resolved.hint === undefined ? undefined : String(resolved.hint))
 
-      return { path: entry.path, hook, fn: resolved.fn }
+      return { path: entry.path, hook, fn: resolved.fn, handle: resolved.handle }
     })
   }
 }
@@ -92,18 +95,18 @@ export class MiddlewarePipeline<H extends string = string> {
 function resolve(target: unknown, context: HTTPSetupContext, factory: boolean): Resolved {
   if (factory) {
     const produced = (target as MiddlewareFactory)(context)
-    return { fn: fromFactory(produced), hint: hintOn(target as object) }
+    return { ...fromFactory(produced), hint: hintOn(target as object) }
   }
 
   if (isMiddlewareInstance(target)) {
-    return { fn: adaptCaffeine((ctx, next) => target.handle(ctx, next)), hint: hintOn(target.constructor) }
+    return { ...caffeine((ctx, next) => target.handle(ctx, next)), hint: hintOn(target.constructor) }
   }
 
   if (typeof target === 'function' && !isMiddlewareClass(target)) {
     if (target.length >= 3) {
-      return { fn: target as NodeMiddleware, hint: undefined }
+      return { fn: target as NodeMiddleware, handle: undefined, hint: undefined }
     }
-    return { fn: adaptCaffeine(target as MiddlewareFn), hint: hintOn(target) }
+    return { ...caffeine(target as MiddlewareFn), hint: hintOn(target) }
   }
 
   const container = context.container
@@ -112,22 +115,24 @@ function resolve(target: unknown, context: HTTPSetupContext, factory: boolean): 
   if (container.hasScopeInGraph(key, Scopes.REQUEST)) {
     const provider = container.wrap<Middleware>(key)
     return {
-      fn: adaptCaffeine((ctx, next) => provider.get().handle(ctx, next)),
+      ...caffeine((ctx, next) => provider.get().handle(ctx, next)),
       hint: typeof key === 'function' ? hintOn(key) : undefined,
     }
   }
 
   const instance = container.get<Middleware>(key)
-  return { fn: adaptCaffeine((ctx, next) => instance.handle(ctx, next)), hint: hintOn(instance.constructor) }
+  return { ...caffeine((ctx, next) => instance.handle(ctx, next)), hint: hintOn(instance.constructor) }
 }
 
-function fromFactory(produced: unknown): NodeMiddleware {
+function fromFactory(produced: unknown): Forms {
   if (isMiddlewareInstance(produced)) {
-    return adaptCaffeine((ctx, next) => produced.handle(ctx, next))
+    return caffeine((ctx, next) => produced.handle(ctx, next))
   }
 
   if (typeof produced === 'function' && !isMiddlewareClass(produced)) {
-    return produced.length >= 3 ? (produced as NodeMiddleware) : adaptCaffeine(produced as MiddlewareFn)
+    return produced.length >= 3
+      ? { fn: produced as NodeMiddleware, handle: undefined }
+      : caffeine(produced as MiddlewareFn)
   }
 
   throw new ErrConfiguration(
@@ -135,6 +140,11 @@ function fromFactory(produced: unknown): NodeMiddleware {
       .reference('@caffeinejs/http', ErrConfiguration)
       .build(),
   )
+}
+
+/** A context-form middleware with its Node form. */
+function caffeine(handle: MiddlewareFn): Forms {
+  return { fn: adaptCaffeine(handle), handle }
 }
 
 function hintOn(holder: object): unknown {

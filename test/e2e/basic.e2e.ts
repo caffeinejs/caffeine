@@ -1,5 +1,4 @@
-import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { authentication, Claim, Identity, Principal, Authentication, Router } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -41,11 +40,7 @@ describe('HTTP Basic authentication', () => {
           ),
         )
         .with(authentication())
-        .mount(
-          newRouter('/docs')
-            .authorize()
-            .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
-        ),
+        .mount(new Router('/docs').authorize().get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value }))),
     )
   })
 
@@ -108,11 +103,7 @@ describe('HTTP Basic authentication with a realm that needs quoting', () => {
       app
         .install(Authentication(auth => auth.addBasic(b => b.realm(realm).validate(() => null))))
         .with(authentication())
-        .mount(
-          newRouter('/docs')
-            .authorize()
-            .get('/', () => ({ ok: true })),
-        ),
+        .mount(new Router('/docs').authorize().get('/', () => ({ ok: true }))),
     )
 
     try {

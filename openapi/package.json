@@ -29,7 +29,7 @@
     "!dist/**/_spectypes"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "^24.22.0 || >=26.10.0"
   },
   "publishConfig": {
     "access": "public"
@@ -40,15 +40,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "fastify-plugin": "^6.0.0",
     "yaml": "^2.9.1"
   },
   "peerDependencies": {
     "@caffeinejs/application": "0.0.0",
     "@caffeinejs/http": "0.0.0",
     "@caffeinejs/std": "0.0.0",
-    "@scalar/api-reference": "^1.0.0",
-    "fastify": "^5.0.0"
+    "@scalar/api-reference": "^1.0.0"
   },
   "peerDependenciesMeta": {
     "@scalar/api-reference": {
@@ -57,9 +55,7 @@
   },
   "devDependencies": {
     "@caffeinejs/di": "0.0.0",
-    "@caffeinejs/multipart": "0.0.0",
     "@scalar/api-reference": "^1.68.0",
-    "fastify": "^5.12.8",
     "jose": "^6.2.10"
   }
 }

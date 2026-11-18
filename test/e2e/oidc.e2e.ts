@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto'
 
 import {
+  authentication,
   AuthenticationService,
   type OAuth2AuthenticationOptionsBuilder,
   type OIDCAuthenticationOptionsBuilder,
   Authentication,
   Authorization,
+  Router,
 } from '@caffeinejs/http'
-import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -56,15 +57,15 @@ function springOAuth2(o: OAuth2AuthenticationOptionsBuilder): OAuth2Authenticati
 // Routers rather than controllers: a controller registers globally, so every application built in this file
 // would carry the routes of all the others.
 function routes(scheme: string) {
-  const identity = newRouter('/me')
+  const identity = new Router('/me')
     .authorize()
     .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value, email: ctx.user.findFirst('email')?.value }))
 
-  const reports = newRouter('/reports')
+  const reports = new Router('/reports')
     .authorize()
     .get('/:year', ctx => ({ year: ctx.req.param('year'), tab: ctx.req.query('tab') }))
 
-  const session = newRouter()
+  const session = new Router()
     .inject({ auth: AuthenticationService })
     .get('/public', () => ({ ok: true }))
     .get('/signed-out', () => ({ signedOut: true }))
@@ -80,16 +81,12 @@ function routes(scheme: string) {
       await auth.signOut(ctx, scheme)
     })
 
-  return newRouter().mount(
+  return new Router().mount(
     identity,
     reports,
     session,
-    newRouter('/admin')
-      .authorize({ roles: ['admin'] })
-      .get('/', () => ({ ok: true })),
-    newRouter('/superadmin')
-      .authorize({ roles: ['superadmin'] })
-      .get('/', () => ({ ok: true })),
+    new Router('/admin').authorize({ roles: ['admin'] }).get('/', () => ({ ok: true })),
+    new Router('/superadmin').authorize({ roles: ['superadmin'] }).get('/', () => ({ ok: true })),
   )
 }
 
@@ -510,7 +507,7 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
             .install(Authentication(auth => auth.addOIDC(OIDC, springOIDC)))
             .with(authentication())
             .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
-            .mount(newRouter('/dashboard').get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value }))),
+            .mount(new Router('/dashboard').get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value }))),
         { port: PORT },
       )
     })
@@ -635,12 +632,12 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
             )
             .with(authentication())
             .mount(
-              newRouter('/via-oidc')
+              new Router('/via-oidc')
                 .authorize({ schemes: [OIDC] })
                 .get('/', ctx => ({ via: ctx.user.identities[0]?.authenticationType })),
             )
             .mount(
-              newRouter('/via-oauth2')
+              new Router('/via-oauth2')
                 .authorize({ schemes: [OAUTH2] })
                 .get('/', ctx => ({ via: ctx.user.identities[0]?.authenticationType })),
             ),

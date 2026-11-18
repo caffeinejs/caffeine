@@ -4,12 +4,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { $t } from '@caffeinejs/application/schema'
-import { Router, bodyAsStream } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { formData, multipart } from '@caffeinejs/multipart'
+import { Router, bodyAsBuffer, bodyAsStream, createWebApplication } from '@caffeinejs/http'
+import { node } from '@caffeinejs/http/node'
+import { MiB } from '@caffeinejs/std/bytes'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
+import { formOf } from './_forms.js'
 
 /**
  * Uploads as the server receives them: a form built by `$formData`, files of every size and name, and a body streamed
@@ -23,7 +25,7 @@ type Part =
   | { field: string; value: string }
   | { field: string; name: string; type: string; size: number; sha256: string }
 
-const LARGE = 8 * 1024 * 1024
+const LARGE = 8 * MiB
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
@@ -48,9 +50,13 @@ let reading: { received: () => void; broken: () => void } | undefined
 const uploads = new Router('/uploads')
   .post('/profile')
   .schema({ body: $t.Object({ caption: $t.String(), avatar: $t.File(), photos: $t.Optional($t.Files()) }) })
-  .handler(async ctx => ({ parts: await partsOf(await formData(ctx).form()) }))
+  .extend(bodyAsBuffer())
+  .bodyLimit(2 * LARGE)
+  .handler(async ctx => ({ parts: await partsOf(await formOf(ctx)) }))
   .post('/files')
-  .handler(async ctx => ({ parts: await partsOf(await formData(ctx).form()) }))
+  .extend(bodyAsBuffer())
+  .bodyLimit(2 * LARGE)
+  .handler(async ctx => ({ parts: await partsOf(await formOf(ctx)) }))
   .post('/raw')
   .extend(bodyAsStream())
   .bodyLimit(2 * LARGE)
@@ -81,11 +87,10 @@ const uploads = new Router('/uploads')
     }
   })
 
-// An upload stopped part-way can leave the server a connection with no request on it, which its graceful close
-// would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
-const app = createWebApplication()
-  .server(() => ({ factory: { forceCloseConnections: true } }))
-  .with(multipart(() => ({ limits: { fileSize: 2 * LARGE } })))
+// A client that stops part-way can leave a connection holding a partial request, which a graceful close would wait
+// out (caffeinejs/caffeine#131): the close cuts it after a second.
+const app = createWebApplication({ adapter: node() })
+  .shutdown(s => s.shutdownTimeout(1 * Second))
   .mount(uploads)
 
 let origin: string

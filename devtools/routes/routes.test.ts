@@ -2,16 +2,20 @@ import { brewer } from '@caffeinejs/brewer'
 import {
   AuthenticateResult,
   Authentication,
+  authentication,
   AuthenticationTicket,
   Authorization,
   BaseAuthenticationHandler,
   bindTo,
+  healthProbes,
+  type IContext,
   Identity,
   Principal,
-  type IContext,
+  Router,
+  createWebApplication,
   type WebApplication,
 } from '@caffeinejs/http'
-import { authentication, createWebApplication, healthProbes, newRouter } from '@caffeinejs/http/fastify'
+import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { DevTools, type DevToolsRoutes } from '../devtools.js'
@@ -36,7 +40,7 @@ class HeaderScheme extends BaseAuthenticationHandler<object> {
  * devtools' own included, served from a server of its own: a route missing from it is one nobody reviews.
  */
 describe('routesRouter', () => {
-  let app: WebApplication | undefined
+  let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -47,22 +51,18 @@ describe('routesRouter', () => {
 
   /** The devtools of an application with two servers besides theirs, read as `user` when one is named. */
   async function boot(user?: string) {
-    app = createWebApplication({ logger: false })
-      .server(() => ({ listener: loopback }))
+    app = createWebApplication({ adapter: node(), logger: false })
+      .server(() => ({ listen: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
-      .install(Authorization(z => z.requireAuthenticatedByDefault({ except: ['/livez'] })))
-      .listener('admin', l => l.server(() => ({ listener: loopback })).with(authentication()))
+      .install(Authorization(z => z.requireAuthenticatedByDefault()))
+      .listener('admin', l => l.server(() => ({ listen: loopback })).with(authentication()))
       .install(DevTools(d => d.port(0)))
       .with(authentication())
       .with(healthProbes(h => h.enabled(true)))
       .mount(
-        newRouter('/pets')
-          .authorize({ roles: ['keeper'] })
-          .get('/', () => []),
-        newRouter('/jobs')
-          .extend(bindTo('admin'))
-          .get('/', () => []),
-      ) as WebApplication
+        new Router('/pets').authorize({ roles: ['keeper'] }).get('/', () => []),
+        new Router('/jobs').extend(bindTo('admin')).get('/', () => []),
+      ) as WebApplication<never, never, unknown, NodeAdapter>
     await app.run()
 
     // The fallback policy reaches the devtools too: their own server runs the gate.
@@ -113,7 +113,8 @@ describe('routesRouter', () => {
 
     expect(res.status).toBe(200)
     expect(security.authentication).toEqual({ schemes: ['Header'], defaultScheme: 'Header' })
-    expect(security.authorization).toMatchObject({ fallbackPolicy: expect.any(String), fallbackExcept: ['/livez'] })
+    expect(security.authorization).toMatchObject({ fallbackPolicy: expect.any(String) })
+    expect(security.authorization).not.toHaveProperty('fallbackExcept')
     expect(security.gates).toEqual([
       { server: '', gates: ['default'] },
       { server: 'admin', gates: ['default'] },

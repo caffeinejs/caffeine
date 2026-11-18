@@ -1,6 +1,6 @@
 import type { ObjectInjectionSpec } from '@caffeinejs/di'
 
-import type { AdapterExtensionFactory } from '../../../adapter.js'
+import type { HTTPPluginFactory } from '../../../plugin.js'
 import type { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteInvoker } from '../spec.js'
 
@@ -28,7 +28,7 @@ export interface RouterState {
   readonly routes: RouteState[]
   readonly children: RouterState[]
   /** The factories `.with(...)` registered on this router, in the order they were written. */
-  readonly plugins: AdapterExtensionFactory<unknown>[]
+  readonly plugins: HTTPPluginFactory[]
 }
 
 // Kept off the classes so nothing internal shows up on the public type, and so `flatten` can read a whole tree

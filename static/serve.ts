@@ -1,19 +1,22 @@
 import { constants, createReadStream, lstatSync, open as openCallback, realpathSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
-import type { Readable } from 'node:stream'
+import { Readable } from 'node:stream'
 
 import {
   ErrHTTPInternalServerError,
-  ErrHTTPNotAcceptable,
   ErrHTTPPreconditionFailed,
+  Responder,
   appendVary,
   byteRanges,
   notModified,
   preconditionFailed,
   rangeHolds,
+  type ActionResult,
+  type IContext,
   type Validators,
   type VaryReply,
 } from '@caffeinejs/http'
+import { selectEncoding } from '@caffeinejs/http/compress'
 import { KiB } from '@caffeinejs/std/bytes'
 
 import {
@@ -23,7 +26,6 @@ import {
   type ManifestFile,
   type ManifestVariant,
 } from './manifest/manifest.js'
-import { selectEncoding } from './negotiate.js'
 import { hashFile } from './scan/scan.js'
 
 /** What a mount decides about every file it serves, computed once when the mount is built. */
@@ -98,6 +100,8 @@ export interface ServeOptions {
   /** Whether preconditions and ranges apply: a `GET` or a `HEAD` answering in place of a `200`. */
   readonly conditional: boolean
   readonly log: FileLog
+  /** The request's ID, on what is logged. */
+  readonly reqId?: string
 }
 
 /** The stream buffer, so a slow reader holds one file descriptor and this much memory. */
@@ -193,9 +197,8 @@ export function prepareFile(disk: RootOnDisk, path: string, entry: ManifestFile,
  *
  * A request carrying `Range` gets identity, so offsets mean what the client thinks, unless the client refuses
  * identity, when the range is ignored. One range is a `206`, a range past the end a `416`, and anything else the
- * whole `200`.
+ * whole `200`. A client that accepts no representation on disk gets identity, for a plugin that compresses to code.
  *
- * @throws {@link ErrHTTPNotAcceptable} when the client accepts no representation
  * @throws {@link ErrHTTPPreconditionFailed} when `If-Match` or `If-Unmodified-Since` no longer holds
  * @throws {@link ErrHTTPInternalServerError} when the file cannot be opened, which is logged
  */
@@ -247,11 +250,11 @@ export async function serveFile(
         'content-range': `bytes ${start}-${end}/${selected.size}`,
       }
 
-      return { status: 206, headers, cacheControl, body: await openFile(selected, options.log, start, end) }
+      return { status: 206, headers, cacheControl, body: await openFile(selected, options, start, end) }
     }
   }
 
-  return { status: 200, headers: selected.headers, cacheControl, body: await openFile(selected, options.log) }
+  return { status: 200, headers: selected.headers, cacheControl, body: await openFile(selected, options) }
 }
 
 /**
@@ -274,16 +277,14 @@ export function writeHeaders(reply: VaryReply, headers: Readonly<Record<string, 
 function representationFor(file: PreparedFile, acceptEncoding: string | undefined): Representation {
   const encoding = selectEncoding(acceptEncoding, file.encodings)
 
-  if (encoding === undefined) {
-    throw new ErrHTTPNotAcceptable()
-  }
-
-  return encoding === 'identity' ? file.identity : file.variants[file.encodings.indexOf(encoding)]!
+  return encoding === undefined || encoding === 'identity'
+    ? file.identity
+    : file.variants[file.encodings.indexOf(encoding)]!
 }
 
 async function openFile(
   representation: Representation,
-  log: FileLog,
+  { log, reqId }: ServeOptions,
   start = 0,
   // The last byte, always given: without it the stream reads once more to find the end, a read syscall per response.
   end = Math.max(representation.size - 1, 0),
@@ -294,12 +295,12 @@ async function openFile(
     fd = await openDescriptor(representation.path)
   } catch (err) {
     // The manifest says the file is there, so the deployment changed under a running server.
-    log.error({ err, path: representation.path }, 'Cannot open a static file the manifest lists')
+    log.error({ err, path: representation.path, reqId }, 'Cannot open a static file the manifest lists')
     throw new ErrHTTPInternalServerError()
   }
 
   // A descriptor rather than a `FileHandle`: its stream reads with callbacks, not a promise per chunk. It closes the
-  // descriptor when it ends or is destroyed, which Fastify does when the client goes away.
+  // descriptor when it ends or is destroyed, which the server does when the client goes away.
   return createReadStream('', { fd, start, end, highWaterMark: HIGH_WATER_MARK })
 }
 
@@ -393,7 +394,7 @@ export async function verifyHashes(root: string, file: PreparedFile, entry: Mani
 
 /**
  * Writes `Vary` into `headers`: what `headers(file)` asked for, merged with `Accept-Encoding`. A file without variants
- * varies too: the header decides between it and a 406, and a shared cache must not answer one with the other.
+ * varies too: a plugin that compresses may code it, and a shared cache must not answer one coding with the other.
  */
 function varyOf(headers: Record<string, string>, given: string | undefined): void {
   const reply = {
@@ -408,4 +409,53 @@ function varyOf(headers: Record<string, string>, given: string | undefined): voi
   }
 
   appendVary(reply, ['Accept-Encoding'])
+}
+
+/**
+ * Answers with one file a mount lists: from its own route, or from a handler through `sendFile`.
+ *
+ * A route's answer applies preconditions and a range whatever status the request has; `sendFile`'s applies them to a
+ * `GET` or a `HEAD` the handler left at `200`, and keeps a status it set, with the whole file.
+ */
+export class FileResponder extends Responder {
+  constructor(
+    readonly file: PreparedFile,
+    readonly via: 'route' | 'sendFile',
+    readonly log: FileLog,
+  ) {
+    super()
+  }
+
+  async respond(ctx: IContext): Promise<ActionResult> {
+    const method = ctx.req.method
+    const conditional = this.via === 'route' || ((method === 'GET' || method === 'HEAD') && ctx.statusCode === 200)
+    // Read before the open: it aborts when the handler times out or the client leaves while the file opens.
+    const signal = ctx.signal
+    const decision = await serveFile(
+      this.file,
+      { method, header: name => ctx.req.header(name) },
+      { via: this.via, conditional, log: this.log, reqId: ctx.req.id },
+    )
+
+    // Nothing will send the file, so nothing would close it.
+    if (signal.aborted) {
+      decision.body?.destroy()
+
+      return undefined
+    }
+
+    writeHeaders(ctx.status(conditional ? decision.status : ctx.statusCode), decision.headers)
+
+    if (decision.cacheControl !== undefined) {
+      ctx.header('cache-control', decision.cacheControl)
+    }
+
+    // A HEAD is answered through the GET, and an empty payload is written with `Content-Length: 0`: an empty stream
+    // keeps the file's length. A `304` has no length to keep, and a stream would have the server label it
+    // `application/octet-stream`.
+    return (
+      decision.body ??
+      (method === 'HEAD' && decision.headers['content-length'] !== undefined ? Readable.from([]) : undefined)
+    )
+  }
 }

@@ -58,8 +58,8 @@ const encoder = new TextEncoder()
 export const kSigning = Symbol('caffeine.http.cookies.signing')
 
 /**
- * Signs with HMAC through Web Crypto, in the format `@fastify/cookie` and `cookie-signature` write: the value, a dot,
- * and the signature in base64 without padding. A cookie either of them signed verifies here, and the reverse.
+ * Signs with HMAC through Web Crypto, in the format `cookie-signature` writes: the value, a dot, and the signature in
+ * base64 without padding. A cookie it signed verifies here, and the reverse.
  *
  * A secret handed to a call is imported on its first use, and the keys of the 64 used most recently are kept.
  *
