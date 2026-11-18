@@ -6,7 +6,7 @@ import {
   type RouteDefinition,
   type SendPayload,
 } from '@caffeinejs/http'
-import { selectEncoding } from '@caffeinejs/http/compress'
+import { acceptsEncoding } from '@caffeinejs/http/compress'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import { type Duration, Second } from '@caffeinejs/std/duration'
 
@@ -845,15 +845,11 @@ function coded(contentEncoding: string | undefined): boolean {
   return codingsOf(contentEncoding).length > 0
 }
 
-// Whether the request accepts every coding the entry was stored in. A request that names no coding takes identity
-// alone. With identity ruled out first, a coding is picked exactly when the header rates it above zero.
+// Whether the request accepts every coding the entry was stored in.
 function codingAccepted(ctx: IContext, entry: HTTPCacheEntry): boolean {
   const name = Object.keys(entry.headers).find(header => header.toLowerCase() === 'content-encoding')
-  const codings = codingsOf(name === undefined ? undefined : entry.headers[name])
-  if (codings.length === 0) {
-    return true
-  }
-
-  const ruled = `identity;q=0, ${ctx.req.header('accept-encoding') ?? ''}`
-  return codings.every(coding => selectEncoding(ruled, [coding]) === coding)
+  const acceptEncoding = ctx.req.header('accept-encoding')
+  return codingsOf(name === undefined ? undefined : entry.headers[name]).every(coding =>
+    acceptsEncoding(acceptEncoding, coding),
+  )
 }

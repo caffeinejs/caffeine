@@ -877,6 +877,11 @@ export class ContextRequest implements IRequest<
     return value === undefined ? undefined : [value]
   }
 
+  /** The field as the client sent it: never what a route schema made of it, nor withheld. */
+  wireHeader(key: string): string | undefined {
+    return this.#platform.header(this.#native, key)
+  }
+
   header(): Record<string, string>
   header(key: string): string | undefined
   header(key?: string): Record<string, string> | string | undefined {

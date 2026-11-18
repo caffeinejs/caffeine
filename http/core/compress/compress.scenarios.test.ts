@@ -128,7 +128,7 @@ describe('a download under compression()', () => {
     expect(res.body).toEqual(CONTENT.subarray(1000))
   })
 
-  it("revalidates the compressed answer with a 304 that carries the route's tag, as the route built it", async () => {
+  it("revalidates the compressed answer with a 304 that carries the route's tag and the 200's Vary", async () => {
     const origin = await listen(app().with(compression()), download())
 
     const first = await send(origin, '/report.txt', { headers: { 'accept-encoding': 'br' } })
@@ -139,7 +139,7 @@ describe('a download under compression()', () => {
     expect(first.headers.etag).toBe('"r1"')
     expect(again.status).toBe(304)
     expect(again.headers.etag).toBe('"r1"')
-    expect(again.headers.vary).toBe(undefined)
+    expect(again.headers.vary).toBe('Accept-Encoding')
     expect(again.body.byteLength).toBe(0)
   })
 })

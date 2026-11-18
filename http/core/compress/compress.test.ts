@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream'
 import { brotliCompressSync, constants, deflateSync, gunzipSync, gzipSync, zstdCompressSync } from 'node:zlib'
 
+import { $t } from '@caffeinejs/application/schema'
 import { KiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -79,6 +80,21 @@ describe('compression() choosing a coding', () => {
     expect(res.headers.get('content-encoding')).toBe(null)
     expect(res.headers.get('vary')).toBe('Accept-Encoding')
     expect(await res.text()).toBe(PETS_JSON)
+  })
+})
+
+describe('compression() reading Accept-Encoding', () => {
+  // The schema's output is the handler's; the coding is chosen from the field the client sent.
+  it('negotiates from the field as sent, whatever a route schema made of it for the handler', async () => {
+    const listed = new Router('/listed')
+      .get('/')
+      .schema({ headers: $t.Object({ 'accept-encoding': $t.Array($t.String()) }) })
+      .handler(ctx => ({ received: ctx.req.header('accept-encoding') as unknown, rows: PETS.pets }))
+    const res = await (await serve(undefined, listed)).request('/listed', { headers: { 'accept-encoding': 'gzip' } })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    expect(JSON.parse(await decoded(res))).toEqual({ received: ['gzip'], rows: PETS.pets })
   })
 })
 

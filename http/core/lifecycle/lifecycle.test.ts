@@ -166,6 +166,48 @@ describe('runSendHooks', () => {
       'a-1-2',
     )
   })
+
+  // The caller holds only the payload it passed in, which a pipe an earlier entry built over it has locked: the stream
+  // that entry returned is cancelled, and the cancellation reaches the source through the pipe.
+  describe('when an entry fails after an earlier one returned a stream over the payload', () => {
+    const failure = new Error('send')
+    const piped: SendEntry<Ctx> = (_ctx, payload) => (payload as ReadableStream).pipeThrough(new TransformStream())
+    const later: SendEntry<Ctx> = (_ctx, payload) =>
+      Promise.resolve((payload as ReadableStream).pipeThrough(new TransformStream()))
+    const throws: SendEntry<Ctx> = () => {
+      throw failure
+    }
+    const rejects: SendEntry<Ctx> = () => Promise.reject(failure)
+
+    it.each([
+      ['a synchronous entry throws', [piped, throws]],
+      ['an asynchronous entry rejects', [piped, rejects]],
+      ['an entry throws after an asynchronous one', [later, throws]],
+    ] as const)('cancels it when %s', async (_, entries) => {
+      const cancelled = Promise.withResolvers<unknown>()
+      const source = new ReadableStream<Uint8Array>({
+        pull: () => undefined,
+        cancel: reason => cancelled.resolve(reason),
+      })
+
+      await expect(Promise.resolve().then(() => runSendHooks(entries, newCtx(), source))).rejects.toBe(failure)
+      expect(await cancelled.promise).toBe(failure)
+    })
+
+    it('leaves the payload it was handed to the caller when no entry replaced it', async () => {
+      let cancelled = false
+      const source = new ReadableStream<Uint8Array>({
+        pull: () => undefined,
+        cancel: () => {
+          cancelled = true
+        },
+      })
+
+      await expect(Promise.resolve().then(() => runSendHooks([throws], newCtx(), source))).rejects.toBe(failure)
+      expect(cancelled).toBe(false)
+      expect(source.locked).toBe(false)
+    })
+  })
 })
 
 describe('runErrorHooks', () => {

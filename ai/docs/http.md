@@ -515,9 +515,9 @@ app.with(
 - Such an answer varies on `Accept-Encoding` whichever coding goes out, identity included. A compressed one keeps
   its `ETag`, and drops `Accept-Ranges`, `Content-Digest`, `Repr-Digest` and `Content-MD5`: they describe the identity
   bytes. A `Range` request still gets identity bytes.
-- Left as they are: an answer already carrying a `Content-Encoding`, a `206`, `204`, `205` and `304`, and one that says
-  `Cache-Control: no-transform`. A client that accepts no coding offered, `identity;q=0` included, gets identity,
-  never a `406`.
+- Left as they are: an answer already carrying a `Content-Encoding`, a `204` and a `205`, and one that says
+  `Cache-Control: no-transform`. A `206` and a `304` are never coded, and vary on `Accept-Encoding` unless their
+  type is one it never compresses. A client that accepts no coding offered, `identity;q=0` included, gets identity, never a `406`.
 - Settings: `encodings`, `threshold`, `gzip({ level })` and `deflate({ level })` (1 to 9, default 6),
   `br({ quality })` (0 to 11, default 4), `zstd({ level })` (1 to 19, default 3) and `compressible(type => ...)`.
   `config(config.app.compression)` reads them from the configuration tree; a fluent

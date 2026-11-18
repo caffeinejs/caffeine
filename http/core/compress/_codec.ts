@@ -285,6 +285,8 @@ export function decompressStream(coding: ContentCoding, body: ReadableStream<Uin
                 // Counted only, as far as the first byte that is not part of the content.
               }
               if (complete()) {
+                // Its writable side may still be open, as gunzip's is at zero padding: the native coder goes now.
+                decoder.destroy()
                 controller.close()
               } else {
                 fail(controller, invalid(coding))

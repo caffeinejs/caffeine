@@ -224,6 +224,28 @@ describe('lifecycle hooks', () => {
     expect(trace).toEqual(['onError:send'])
   })
 
+  // An earlier onSend hook piped the handler's stream: the 500 cancels the pipe, so the stream's source is released.
+  it('releases the handler stream an earlier onSend hook piped when a later one throws', async () => {
+    const released = Promise.withResolvers<void>()
+    const a = await boot(a =>
+      a
+        .hook('onSend', (_ctx, payload) => (payload as ReadableStream).pipeThrough(new TransformStream()))
+        .hook('onSend', () => {
+          throw new Error('send')
+        })
+        .mount(
+          new Router('/x')
+            .get('/')
+            .handler(() => new ReadableStream<Uint8Array>({ pull: () => undefined, cancel: () => released.resolve() })),
+        ),
+    )
+
+    const res = await a.request('/x')
+
+    expect(res.status).toBe(500)
+    await released.promise
+  })
+
   // The 500 is a problem of its own: what described the answer it replaces must not describe it.
   it('drops the representation headers of the answer a failed onSend replaced', async () => {
     const a = await boot(a =>

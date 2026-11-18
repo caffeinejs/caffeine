@@ -1,6 +1,7 @@
 /**
- * The most `Accept-Encoding` entries read. A longer header is not read at all, and `selectEncoding` answers
- * `undefined`: an entry past the limit could refuse the coding the others pick, identity included.
+ * The most `Accept-Encoding` entries read. A longer header is not read at all: `selectEncoding` answers `undefined`
+ * and `acceptsEncoding` `false`, since an entry past the limit could refuse the coding the others pick, identity
+ * included.
  */
 const MOST_ENTRIES = 32
 
@@ -26,14 +27,11 @@ export function selectEncoding<E extends string>(
     return 'identity'
   }
 
-  // Split no further than one entry past the limit, so the work stays bounded however long the header.
-  const entries = header.split(',', MOST_ENTRIES + 1)
+  const rated = ratingsOf(header)
 
-  if (entries.length > MOST_ENTRIES) {
+  if (rated === undefined) {
     return undefined
   }
-
-  const rated = ratings(entries)
   const star = rated.get('*')
   let best: E | undefined
   let bestQ = 0
@@ -60,6 +58,39 @@ export function selectEncoding<E extends string>(
   }
 
   return best
+}
+
+/**
+ * Whether an `Accept-Encoding` header rates `coding` above zero, by RFC 9110 §12.5.3: whether a response in that
+ * coding is one the client accepts, whatever it prefers.
+ *
+ * Read as {@link selectEncoding} reads it: tokens compare without regard to case, `x-gzip` is `gzip`, the first entry
+ * for a token wins and `*` rates every coding the header does not list. `identity` is accepted unless the header rates
+ * it, or `*`, at `q=0`. No header, or an empty one, accepts identity alone, and a header of more than 32 entries
+ * accepts nothing.
+ */
+export function acceptsEncoding(header: string | undefined, coding: string): boolean {
+  const token = normalize(coding.trim().toLowerCase())
+
+  if (header === undefined || header.trim() === '') {
+    return token === 'identity'
+  }
+
+  const rated = ratingsOf(header)
+
+  if (rated === undefined || token === '') {
+    return false
+  }
+
+  return (rated.get(token) ?? rated.get('*') ?? (token === 'identity' ? 1 : 0)) > 0
+}
+
+/** The header's ratings, or `undefined` for a header of more than 32 entries, which is not read. */
+function ratingsOf(header: string): Map<string, number> | undefined {
+  // Split no further than one entry past the limit, so the work stays bounded however long the header.
+  const entries = header.split(',', MOST_ENTRIES + 1)
+
+  return entries.length > MOST_ENTRIES ? undefined : ratings(entries)
 }
 
 /** The rating of each token the header's entries list, the first entry for a token winning. */

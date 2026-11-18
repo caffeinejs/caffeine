@@ -167,6 +167,7 @@ describe('serveFile', () => {
     expect(decision.status).toBe(200)
     expect(decision.headers).toEqual(icon.identity.headers)
     expect(decision.headers['content-encoding']).toBe(undefined)
+    decision.body?.destroy()
   })
 
   it('applies neither preconditions nor ranges to an answer that is not in place of a 200', async () => {

@@ -74,6 +74,17 @@ describe('HTTPCaching registered before compression() in one slot', () => {
     expect(br.headers.get('x-runs')).toBe('1')
   })
 
+  it('answers a client that refuses identity from the identity entry, coded on the way out', async () => {
+    const app = await start()
+
+    await app.request('/report')
+    const refused = await app.request('/report', { headers: { 'accept-encoding': 'gzip, identity;q=0' } })
+
+    expect(refused.headers.get('x-cache')).toBe('HIT')
+    expect(refused.headers.get('content-encoding')).toBe('gzip')
+    expect(gunzipSync(Buffer.from(await refused.arrayBuffer())).toString()).toBe(JSON_TEXT)
+  })
+
   it('varies a hit on Accept-Encoding, and sends the stored tag on a compressed hit and on its 304', async () => {
     const app = await start()
 

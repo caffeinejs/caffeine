@@ -838,20 +838,62 @@ describe('an entry the application put in the store itself', () => {
     expect(await keyed.json()).toEqual({ n: 3 })
     expect(misses.map(event => event.reason)).toEqual(['absent', 'unacceptable-coding', 'unacceptable-coding'])
   })
-  // A coding stored as several field lines is read as their list; a request that names no coding takes identity alone.
-  it('is not served to a request that names no coding, its coding stored as several field lines', async () => {
-    const misses: CacheMissEvent[] = []
+  // The longest header the compressor reads is read whole here too: the entry the compressor would code is a hit.
+  it('is served to a request of 32 Accept-Encoding entries that takes its coding, for the store alone', async () => {
     const store = new MemoryHTTPCacheStore()
 
-    @Controller('/store-lines')
-    class LinesStoreController {
-      @CacheControl({ ttl: 60 * Second, key: () => 'store-lines' })
+    @Controller('/store-wide')
+    class WideStoreController {
+      @CacheControl({ ttl: 60 * Second, key: () => 'store-wide' })
       @Get('/data')
       data() {
         return { fresh: true }
       }
     }
-    void [LinesStoreController]
+    void [WideStoreController]
+
+    await store.put(
+      'store-wide',
+      {
+        payload: gzipSync('{"warm":true}'),
+        statusCode: 200,
+        headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+      },
+      { ttl: 60 * Second },
+    )
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(store)))
+    close = () => app.close()
+    await app.bootstrap()
+
+    const header = [...Array.from({ length: 31 }, (_, i) => `x-${i}`), 'gzip'].join(', ')
+    const res = await app.request('/store-wide/data', {
+      headers: { 'accept-encoding': header, 'cache-control': 'only-if-cached' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-cache')).toBe('HIT')
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+  })
+
+  @Controller('/store-lines')
+  class LinesStoreController {
+    @CacheControl({ ttl: 60 * Second, key: () => 'store-lines' })
+    @Get('/data')
+    data() {
+      return { fresh: true }
+    }
+  }
+  void [LinesStoreController]
+
+  // A coding stored as several field lines is read as their list, and each one must be accepted: a request that names
+  // no coding takes identity alone. Each case gets its own store, so a miss cannot replace the entry for the next.
+  it.each([
+    ['gzip, br', 'HIT'],
+    ['gzip', 'MISS'],
+    ['br', 'MISS'],
+    [undefined, 'MISS'],
+  ] as const)('stored in gzip then br, answers Accept-Encoding %j with %s', async (acceptEncoding, cache) => {
+    const store = new MemoryHTTPCacheStore()
 
     await store.put(
       'store-lines',
@@ -862,19 +904,19 @@ describe('an entry the application put in the store itself', () => {
       },
       { ttl: 60 * Second },
     )
-    const app = createWebApplication({ adapter: node() }).with(
-      HTTPCaching(b => b.store(store).observer({ onMiss: event => misses.push(event) })),
-    )
+    const app = createWebApplication({ adapter: node() }).with(HTTPCaching(b => b.store(store)))
     close = () => app.close()
     await app.bootstrap()
 
-    const both = await app.request('/store-lines/data', { headers: { 'accept-encoding': 'gzip, br' } })
-    const none = await app.request('/store-lines/data')
+    const res = await app.request(
+      '/store-lines/data',
+      acceptEncoding === undefined ? {} : { headers: { 'accept-encoding': acceptEncoding } },
+    )
 
-    expect(both.headers.get('x-cache')).toBe('HIT')
-    expect(none.headers.get('x-cache')).toBe('MISS')
-    expect(await none.json()).toEqual({ fresh: true })
-    expect(misses.map(event => event.reason)).toEqual(['unacceptable-coding'])
+    expect(res.headers.get('x-cache')).toBe(cache)
+    if (cache === 'MISS') {
+      expect(await res.json()).toEqual({ fresh: true })
+    }
   })
 })
 

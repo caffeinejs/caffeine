@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { isCompressible, selectEncoding } from './negotiate.js'
+import { acceptsEncoding, isCompressible, selectEncoding } from './negotiate.js'
 
 // RFC 9110 §12.5.3 over two codings offered, `br` preferred.
 describe('selectEncoding', () => {
@@ -66,6 +66,42 @@ describe('selectEncoding over codings the caller spells its own way', () => {
     expect(selectEncoding('gzip', ['x-gzip'])).toBe('x-gzip')
     expect(selectEncoding('x-gzip', ['Gzip'])).toBe('Gzip')
     expect(selectEncoding('br;q=0, gzip', ['BR', 'Gzip'])).toBe('Gzip')
+  })
+})
+
+describe('acceptsEncoding', () => {
+  // Accepted is rated above zero, whatever the client prefers: a cache serves what it stored to any client that takes it.
+  it.each([
+    ['gzip;q=0.5, identity', 'gzip', true],
+    ['GZIP', 'gzip', true],
+    ['x-gzip', 'gzip', true],
+    ['gzip', 'X-Gzip', true],
+    ['gzip;q=0', 'gzip', false],
+    ['gzip;q=0, *', 'gzip', false],
+    ['*', 'zstd', true],
+    ['*;q=0', 'zstd', false],
+    ['br', 'gzip', false],
+    ['br', 'identity', true],
+    ['br, identity;q=0', 'identity', false],
+    ['*;q=0', 'identity', false],
+    ['*;q=0, identity', 'identity', true],
+    ['gzip;q=abc', 'gzip', false],
+  ])('reads %j as %s accepted: %s', (header, coding, accepted) => {
+    expect(acceptsEncoding(header, coding)).toBe(accepted)
+  })
+
+  // A client that sends nothing may not decode: it takes identity alone.
+  it.each([undefined, '', ' '])('reads the header %j as identity alone', header => {
+    expect(acceptsEncoding(header, 'identity')).toBe(true)
+    expect(acceptsEncoding(header, 'gzip')).toBe(false)
+  })
+
+  it('reads up to 32 entries, as selectEncoding does, and accepts nothing past them', () => {
+    const filler = Array.from({ length: 31 }, (_, i) => `x-${i}`)
+
+    expect(acceptsEncoding([...filler, 'gzip'].join(', '), 'gzip')).toBe(true)
+    expect(acceptsEncoding([...filler, 'br', 'gzip'].join(', '), 'gzip')).toBe(false)
+    expect(acceptsEncoding([...filler, 'br', 'gzip'].join(', '), 'identity')).toBe(false)
   })
 })
 

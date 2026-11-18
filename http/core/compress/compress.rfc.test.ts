@@ -229,7 +229,7 @@ describe('RFC 9110 §8.8 validators, and 304 Not Modified', () => {
     expect(identity.headers.get('etag')).toBe('"v1"')
   })
 
-  it('leaves a 304 as the route built it, as ASP.NET Core does: its tag, no Vary and no Content-Encoding added', async () => {
+  it("§15.4.5: sends a 304 the Vary its 200 carries, with the route's tag and no Content-Encoding", async () => {
     const app = await serve(undefined, download())
     const res = await app.request('/download', {
       headers: { 'accept-encoding': 'gzip', 'if-none-match': '"v1"' },
@@ -237,7 +237,7 @@ describe('RFC 9110 §8.8 validators, and 304 Not Modified', () => {
 
     expect(res.status).toBe(304)
     expect(res.headers.get('etag')).toBe('"v1"')
-    expect(res.headers.get('vary')).toBe(null)
+    expect(res.headers.get('vary')).toBe('Accept-Encoding')
     expect(res.headers.get('content-encoding')).toBe(null)
     expect((await wire(res)).byteLength).toBe(0)
   })
@@ -293,6 +293,38 @@ describe('RFC 9110 §14 ranges', () => {
     expect(res.headers.get('content-encoding')).toBe(null)
     expect(res.headers.get('content-range')).toBe(`bytes 0-9/${BYTES.byteLength}`)
     expect((await wire(res)).toString()).toBe(TEXT.slice(0, 10))
+  })
+
+  // §15.3.7 and §15.4.5: a 206 and a 304 carry the Vary the 200 would, what the route said added to.
+  it('§15.3.7: sends the 200, a 206 and a 304 of one attachment the same Vary', async () => {
+    const varied = new Router('/varied-download').get('/').handler(ctx => {
+      ctx.header('vary', 'Origin')
+      return Attachment(BYTES, { name: 'fox.txt', type: 'text/plain', etag: '"v1"' })
+    })
+    const app = await serve(undefined, varied)
+    const whole = await app.request('/varied-download', { headers: { 'accept-encoding': 'gzip' } })
+    const part = await app.request('/varied-download', { headers: { 'accept-encoding': 'gzip', range: 'bytes=0-9' } })
+    const unchanged = await app.request('/varied-download', {
+      headers: { 'accept-encoding': 'gzip', 'if-none-match': '"v1"' },
+    })
+
+    expect([whole.status, part.status, unchanged.status]).toEqual([200, 206, 304])
+    expect(whole.headers.get('vary')).toBe('Origin, Accept-Encoding')
+    expect(part.headers.get('vary')).toBe('Origin, Accept-Encoding')
+    expect(unchanged.headers.get('vary')).toBe('Origin, Accept-Encoding')
+  })
+
+  it('§15.3.7: sends a range of a type never compressed no Vary, as its 200 has none', async () => {
+    const image = new Router('/image')
+      .get('/')
+      .handler(() => Attachment(new Uint8Array(4 * 1024), { name: 'a.png', type: 'image/png' }))
+    const app = await serve(undefined, image)
+    const whole = await app.request('/image', { headers: { 'accept-encoding': 'gzip' } })
+    const part = await app.request('/image', { headers: { 'accept-encoding': 'gzip', range: 'bytes=0-9' } })
+
+    expect(part.status).toBe(206)
+    expect(whole.headers.get('vary')).toBe(null)
+    expect(part.headers.get('vary')).toBe(null)
   })
 
   it('§14.3: drops Accept-Ranges from a compressed answer, whose bytes no range is served from', async () => {

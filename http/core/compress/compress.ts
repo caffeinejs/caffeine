@@ -7,6 +7,7 @@ import type { ErrConfiguration } from '../error/common.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import type { AnyRouteExtension } from '../routing/extension.js'
+import type { Context } from '../server/context.js'
 import { configurationError } from '../server/error.js'
 import { isOptions } from '../server/settings.js'
 import { compressBytes, compressStream } from './_codec.js'
@@ -126,11 +127,11 @@ export class CompressionBuilder {
  *
  * It compresses an answer in the coding the client prefers among those offered (RFC 9110 §12.5.3). An answer is
  * compressed when its `Content-Type` is compressible and its size, when known, is at least the threshold; it then
- * varies on `Accept-Encoding`, whichever coding goes out. An answer that is already coded, a 206, or one that says
- * `Cache-Control: no-transform` goes out as it is. A compressed answer keeps its `ETag`, and its `Accept-Ranges`,
- * `Content-Digest`, `Repr-Digest` and `Content-MD5` are dropped: they describe the identity bytes. A 304 goes out as
- * the route built it. No acceptable coding, `identity;q=0` included, sends identity rather than a 406, since the
- * handler has run.
+ * varies on `Accept-Encoding`, whichever coding goes out. An answer that is already coded, or one that says
+ * `Cache-Control: no-transform`, goes out as it is. A 206 and a 304 are never coded, and vary on `Accept-Encoding`
+ * unless their type is one it never compresses. A compressed answer keeps its `ETag`, and its `Accept-Ranges`,
+ * `Content-Digest`, `Repr-Digest` and `Content-MD5` are dropped: they describe the identity bytes. No acceptable
+ * coding, `identity;q=0` included, sends identity rather than a 406, since the handler has run.
  *
  * Its hooks run on each route after the server's, the scopes', the group's and the route's own, and after the hooks
  * that plugins in outer slots, or registered before it in its slot, add to the route. So it compresses what
@@ -272,13 +273,20 @@ function encode(
   // Read before the coding replaces the body: a stream that declared its length is a whole, not a feed.
   const sized = ctx.getHeader('content-length') !== undefined
 
-  // Bodies the engine never sends: no content (204, 205, 304) and a range of identity bytes (206).
+  // A range of identity bytes (206) and a 304 are never coded, and vary as the whole representation's 200 would
+  // (RFC 9110 §15.3.7, §15.4.5).
+  if (status === 206 || status === 304) {
+    if (eligible(ctx, policy, true)) {
+      varyOnCoding(ctx)
+    }
+    return undefined
+  }
+
+  // Bodies the engine never sends, no content (204, 205), and a range answered under another status.
   if (
     (payload === null && !(head && sized)) ||
     status === 204 ||
     status === 205 ||
-    status === 206 ||
-    status === 304 ||
     ctx.getHeader('content-range') !== undefined ||
     !eligible(ctx, policy) ||
     belowThreshold(ctx, payload, policy.threshold)
@@ -288,7 +296,8 @@ function encode(
 
   varyOnCoding(ctx)
 
-  const coding = selectEncoding(ctx.req.header('accept-encoding'), policy.encodings)
+  // As the client sent it: a route schema may have made the handler's value something else.
+  const coding = selectEncoding((ctx as unknown as Context).req.wireHeader('accept-encoding'), policy.encodings)
   if (!isCoding(coding)) {
     return undefined
   }
@@ -330,8 +339,12 @@ function isCoding(selected: ContentCoding | 'identity' | undefined): selected is
   return selected !== undefined && selected !== 'identity'
 }
 
-/** Whether the head lets the answer be compressed: no coding of its own, no `no-transform`, and a compressible type. */
-function eligible(ctx: IContext, policy: ResolvedCompression): boolean {
+/**
+ * Whether the head lets the answer be compressed: no coding of its own, no `no-transform`, and a compressible type.
+ * For a `part`, a 206 or a 304, whether the whole representation would be: its type, when it states one, may be the
+ * envelope of several ranges, and a missing or multipart type counts as compressible.
+ */
+function eligible(ctx: IContext, policy: ResolvedCompression, part = false): boolean {
   const coded = ctx.getHeader('content-encoding')
   if (
     (coded !== undefined && coded.trim().toLowerCase() !== 'identity') ||
@@ -341,8 +354,14 @@ function eligible(ctx: IContext, policy: ResolvedCompression): boolean {
   }
 
   const type = ctx.getHeader('content-type')
-  return type !== undefined && policy.compressible(type)
+  if (type === undefined || (part && MULTIPART_RANGES.test(type))) {
+    return part
+  }
+
+  return policy.compressible(type)
 }
+
+const MULTIPART_RANGES = /^multipart\/byteranges\b/i
 
 // RFC 9110 §12.5.5: the coding was chosen by `Accept-Encoding`.
 function varyOnCoding(ctx: IContext): void {
