@@ -15,6 +15,12 @@
   },
   "type": "module",
   "types": "dist/index.d.ts",
+  "imports": {
+    "#static-sha256": {
+      "node": "./dist/web/_sha256_node.js",
+      "default": "./dist/web/_sha256.js"
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -23,6 +29,14 @@
     "./build": {
       "types": "./dist/build/index.d.ts",
       "default": "./dist/build/index.js"
+    },
+    "./directory": {
+      "types": "./dist/directory/index.d.ts",
+      "default": "./dist/directory/index.js"
+    },
+    "./web": {
+      "types": "./dist/web/index.d.ts",
+      "default": "./dist/web/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -50,5 +64,8 @@
   "devDependencies": {
     "@caffeinejs/application": "0.0.0",
     "@caffeinejs/di": "0.0.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.0.1"
   }
 }

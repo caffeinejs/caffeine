@@ -24,7 +24,8 @@ import { errMessage } from '@caffeinejs/std/err'
 import { StaticBuilder, kBuild } from './builder.js'
 import type { MountOptions, ResolvedMount } from './config.js'
 import { ErrStaticRouteConflict, ErrStaticScanInProduction } from './errors.js'
-import { nameProblem, readManifest, type ManifestFile, type StaticManifest } from './manifest/manifest.js'
+import { nameProblem, type ManifestFile, type StaticManifest } from './manifest/manifest.js'
+import { readManifest } from './manifest/read.js'
 import { readFileEntry, scan } from './scan/scan.js'
 import {
   FileResponder,

@@ -23,6 +23,9 @@
       "path": "./static"
     },
     {
+      "path": "./static-cli"
+    },
+    {
       "path": "./openapi"
     },
     {

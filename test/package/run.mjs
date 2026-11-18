@@ -126,6 +126,7 @@ function main() {
     dependencies,
     devDependencies: {
       typescript: rootManifest.devDependencies.typescript,
+      esbuild: readJSON(join(root, 'package-lock.json')).packages['node_modules/esbuild'].version,
       '@types/node': rootManifest.devDependencies['@types/node'],
     },
     ...(pm === 'npm' ? { overrides } : {}),
@@ -193,6 +194,28 @@ process.exit(failed === 0 ? 0 : 1)
     run(project, 'node', ['imports.mjs'])
   })
 
+  check('the static verifier type-checks and bundles for a Web Worker', () => {
+    copyFileSync(join(root, 'test/package/worker.mts'), join(project, 'worker.mts'))
+    writeJSON(join(project, 'tsconfig.worker.json'), {
+      compilerOptions: {
+        target: 'ES2023',
+        module: 'ESNext',
+        moduleResolution: 'Bundler',
+        lib: ['ES2023', 'WebWorker'],
+        types: [],
+        strict: true,
+        skipLibCheck: false,
+        noEmit: true,
+      },
+      files: ['worker.mts'],
+    })
+    run(project, ...bin('tsc', ['-p', 'tsconfig.worker.json']))
+    run(
+      project,
+      ...bin('esbuild', ['worker.mts', '--bundle', '--platform=browser', '--format=esm', '--outfile=worker.js']),
+    )
+  })
+
   check('every export type-checks', () => {
     const specifiers = exported.filter(({ types }) => types).map(({ specifier }) => specifier)
     writeFileSync(
@@ -236,6 +259,16 @@ process.exit(failed === 0 ? 0 : 1)
     ) {
       const ours = lines.filter(line => line !== '' && !theirs.includes(line))
       throw new Error(`tsc failed with ${result.error?.message ?? `code ${result.status}`}:\n${ours.join('\n')}`)
+    }
+  })
+
+  check('caffeine-static builds and verifies a staged release', () => {
+    const directory = 'staged'
+    mkdirSync(join(project, directory))
+    writeFileSync(join(project, directory, 'app.js'), 'hello')
+
+    for (const command of ['build', 'verify']) {
+      run(project, ...bin('caffeine-static', [command, '--root', directory]))
     }
   })
 

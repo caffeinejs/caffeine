@@ -25,6 +25,7 @@ export default defineConfig({
       './caching/vitest.config.ts',
       './html/vitest.config.ts',
       './static/vitest.config.ts',
+      './static-cli/vitest.config.ts',
       './openapi/vitest.config.ts',
       './messaging/vitest.config.ts',
       './kafka/vitest.config.ts',

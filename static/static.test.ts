@@ -27,7 +27,8 @@ import { afterEach, beforeEach, describe, expect, inject, it, vi } from 'vitest'
 import { buildStatic } from './build/build.js'
 import type { MountOptions } from './config.js'
 import { ErrStaticRouteConflict, ErrStaticScanInProduction } from './errors.js'
-import { ErrStaticManifest, readManifest, type StaticManifest } from './manifest/manifest.js'
+import { ErrStaticManifest, type StaticManifest } from './manifest/manifest.js'
+import { readManifest } from './manifest/read.js'
 import { staticFiles, type StaticConfigurer } from './static.js'
 
 const { spa, fixtures } = inject('fixtures')
