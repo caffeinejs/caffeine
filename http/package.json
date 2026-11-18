@@ -109,7 +109,7 @@
     "!dist/**/_spectypes"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "^24.20.0 || >=26.6.0"
   },
   "publishConfig": {
     "access": "public"

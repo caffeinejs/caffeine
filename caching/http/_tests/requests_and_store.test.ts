@@ -838,6 +838,51 @@ describe('an entry the application put in the store itself', () => {
     expect(await keyed.json()).toEqual({ n: 3 })
     expect(misses.map(event => event.reason)).toEqual(['absent', 'unacceptable-coding', 'unacceptable-coding'])
   })
+  // A key that varies on Accept-Encoding records the header, not the coding of what was stored under it.
+  it('is served only in a content coding the request accepts, under a default key that varies on it', async () => {
+    let calls = 0
+    const misses: CacheMissEvent[] = []
+    const store = new MemoryHTTPCacheStore()
+
+    @Controller('/store-varied')
+    class VariedStoreController {
+      @CacheControl({ ttl: 60 * Second, vary: ['Accept-Encoding'] })
+      @Get('/data')
+      data() {
+        return { n: ++calls }
+      }
+    }
+    void [VariedStoreController]
+
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer({ onMiss: event => misses.push(event) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    const headers = { 'accept-encoding': 'identity' }
+    await app.request('/store-varied/data', { headers })
+    await store.put(
+      misses[0]!.key,
+      {
+        payload: gzipSync('{"warm":true}'),
+        statusCode: 200,
+        headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+      },
+      { ttl: 60 * Second },
+    )
+    const cacheOnly = await app.request('/store-varied/data', {
+      headers: { ...headers, 'cache-control': 'only-if-cached' },
+    })
+    const identity = await app.request('/store-varied/data', { headers })
+
+    expect(cacheOnly.status).toBe(504)
+    expect(cacheOnly.headers.get('content-encoding')).toBe(null)
+    expect(identity.headers.get('x-cache')).toBe('MISS')
+    expect(identity.headers.get('content-encoding')).toBe(null)
+    expect(await identity.json()).toEqual({ n: 2 })
+    expect(misses.map(event => event.reason)).toEqual(['absent', 'only-if-cached', 'unacceptable-coding'])
+  })
   // The longest header the compressor reads is read whole here too: the entry the compressor would code is a hit.
   it('is served to a request of 32 Accept-Encoding entries that takes its coding, for the store alone', async () => {
     const store = new MemoryHTTPCacheStore()

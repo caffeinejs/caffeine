@@ -289,8 +289,6 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
   const varyAny = vary?.includes('*') === true
   // Whether the default key tells one content coding of a response from another.
   const keyedOnCoding = read.key === undefined && vary?.some(name => name.toLowerCase() === 'accept-encoding') === true
-  // Only where the key may hold an entry in a coding other than the one the request was keyed by.
-  const refusesCoding = (ctx: IContext, entry: HTTPCacheEntry) => !keyedOnCoding && !codingAccepted(ctx, entry)
   const statusHeaderName = statusHeader.toLowerCase()
 
   // One request's state, from its read hook to its store hook. Created on the first write: a request the read hook
@@ -417,7 +415,7 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
     }
 
     if (cached !== undefined) {
-      if (refusesCoding(ctx, cached)) {
+      if (!codingAccepted(ctx, cached)) {
         return miss(ctx, key, directives, 'unacceptable-coding', !readFailed)
       }
 
@@ -557,7 +555,7 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
         return
       }
 
-      if (again !== undefined && refusesCoding(ctx, again)) {
+      if (again !== undefined && !codingAccepted(ctx, again)) {
         reason = 'unacceptable-coding'
       } else if (again !== undefined) {
         const age = ageOf(again)

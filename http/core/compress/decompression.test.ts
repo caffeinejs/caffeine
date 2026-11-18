@@ -130,6 +130,30 @@ describe('decompression() decoding request bodies', () => {
     },
   )
 
+  // Content cut short decodes to part of what the client sent: a route that reads the raw bytes would take it whole.
+  it.each(['zstd', 'br', 'gzip', 'deflate'] as const)(
+    'answers %s content cut short with a 400, buffered and streamed',
+    async coding => {
+      const buffered = new Router('/raw')
+        .post('/')
+        .extend(bodyAsBuffer())
+        .handler(ctx => ({ size: (ctx.req.body() as Buffer).byteLength }))
+      const streamed = new Router('/stream')
+        .post('/')
+        .extend(bodyAsStream())
+        .handler(async ctx => new Response(ctx.req.body() as ReadableStream<Uint8Array>).text())
+      const app = await serve(buffered, streamed)
+      const coded = ENCODE[coding](Buffer.from(PETS_JSON))
+      const cut = coded.subarray(0, coded.byteLength - 4)
+
+      const raw = await app.request(...post(coding, cut, '/raw'))
+      const stream = await app.request(...post(coding, cut, '/stream'))
+
+      expect(raw.status).toBe(400)
+      expect(stream.status).toBe(400)
+    },
+  )
+
   // gunzip reads zero bytes after a member as the padding some writers leave, and decodes the member.
   it('decodes gzip content followed by zero padding, buffered and streamed', async () => {
     const padded = Buffer.concat([gzipSync('{"a":1}'), Buffer.alloc(4)])
