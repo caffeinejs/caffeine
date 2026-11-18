@@ -6,6 +6,7 @@ import {
   type RouteDefinition,
   type SendPayload,
 } from '@caffeinejs/http'
+import { selectEncoding } from '@caffeinejs/http/compress'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import { type Duration, Second } from '@caffeinejs/std/duration'
 
@@ -132,7 +133,7 @@ export interface CacheControlOptions {
    * Derives the store key instead of the default. Eviction is by tag, so the key is the cache's own concern.
    *
    * It answers for every header the response varies on: a response carrying a `Content-Encoding` is stored whatever
-   * the key reads.
+   * the key reads, and served only to a request whose `Accept-Encoding` accepts that coding.
    */
   key?: (req: IContext['req']) => string
   /**
@@ -202,9 +203,10 @@ interface CacheRequestState {
  *
  * Concurrent misses for one key run the handler once. The first leads and the rest wait on its flight; when
  * it stored, they are served the entry (`coalesced` on the hit event), otherwise they run the handler themselves
- * (`not-coalesced` on the miss event). A `HEAD` never leads, since its response is never stored, but it does
- * wait. The leader settles the flight from its store hook, and a flight settles itself at `lockTimeout` for a
- * leader whose store hook never runs. A follower whose own request ends first stops waiting.
+ * (`not-coalesced` on the miss event, or `unacceptable-coding` when it stored a coding the request does not
+ * accept). A `HEAD` never leads, since its response is never stored, but it does wait. The leader settles the
+ * flight from its store hook, and a flight settles itself at `lockTimeout` for a leader whose store hook never
+ * runs. A follower whose own request ends first stops waiting.
  *
  * A conditional request is answered `304` in two shapes. From the store, the `304` carries only what guides a
  * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
@@ -286,7 +288,9 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
   const vary = read.vary?.length ? read.vary : undefined
   const varyAny = vary?.includes('*') === true
   // Whether the default key tells one content coding of a response from another.
-  const keyedOnCoding = vary?.some(name => name.toLowerCase() === 'accept-encoding') === true
+  const keyedOnCoding = read.key === undefined && vary?.some(name => name.toLowerCase() === 'accept-encoding') === true
+  // Only where the key may hold an entry in a coding other than the one the request was keyed by.
+  const refusesCoding = (ctx: IContext, entry: HTTPCacheEntry) => !keyedOnCoding && !codingAccepted(ctx, entry)
   const statusHeaderName = statusHeader.toLowerCase()
 
   // One request's state, from its read hook to its store hook. Created on the first write: a request the read hook
@@ -413,6 +417,10 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
     }
 
     if (cached !== undefined) {
+      if (refusesCoding(ctx, cached)) {
+        return miss(ctx, key, directives, 'unacceptable-coding', !readFailed)
+      }
+
       const age = ageOf(cached)
       if (accepts(age, directives)) {
         return serve(ctx, cached, age, false, false)
@@ -525,6 +533,7 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
 
   async function follow(ctx: IContext, key: string, directives: RequestCacheControl, flight: Flight): Promise<void> {
     const outcome = await flight.wait(ctx.signal)
+    let reason: CacheMissReason = 'not-coalesced'
 
     // The request is over — the client left, or the server has answered its handler timeout: nothing to serve,
     // nobody to tell.
@@ -548,7 +557,9 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
         return
       }
 
-      if (again !== undefined) {
+      if (again !== undefined && refusesCoding(ctx, again)) {
+        reason = 'unacceptable-coding'
+      } else if (again !== undefined) {
         const age = ageOf(again)
         if (accepts(age, directives)) {
           return serve(ctx, again, age, true, false)
@@ -569,7 +580,7 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
 
     // What the leader did is no use to this request: it runs the handler itself, and leads nobody.
     ctx.header(statusHeader, CACHE_MISS)
-    observer?.onMiss?.({ route: routeOf(ctx), key, reason: 'not-coalesced' })
+    observer?.onMiss?.({ route: routeOf(ctx), key, reason })
   }
 
   function serve(ctx: IContext, cached: HTTPCacheEntry, age: number, coalesced: boolean, stale: boolean): void {
@@ -669,6 +680,8 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
 
     ctx.status(stale.statusCode)
     ctx.removeHeader('retry-after')
+    // The coding a plugin gave the error's body; a stored entry without one goes out as stored.
+    ctx.removeHeader('content-encoding')
     applyStoredHeaders(ctx, stale.headers, 'replacement')
     ctx.header(statusHeader, CACHE_STALE).header('Age', String(age))
     state.flight?.settle('rescued')
@@ -816,13 +829,31 @@ function discard(payload: SendPayload): void {
   }
 }
 
-// Whether a `Content-Encoding` names a coding other than identity.
+// The codings a `Content-Encoding` names, identity left out.
+function codingsOf(contentEncoding: string | readonly string[] | undefined): string[] {
+  if (contentEncoding === undefined) {
+    return []
+  }
+
+  return (typeof contentEncoding === 'string' ? contentEncoding : contentEncoding.join(','))
+    .split(',')
+    .map(coding => coding.trim())
+    .filter(coding => coding !== '' && coding.toLowerCase() !== 'identity')
+}
+
 function coded(contentEncoding: string | undefined): boolean {
-  return (
-    contentEncoding !== undefined &&
-    contentEncoding.split(',').some(coding => {
-      const token = coding.trim().toLowerCase()
-      return token !== '' && token !== 'identity'
-    })
-  )
+  return codingsOf(contentEncoding).length > 0
+}
+
+// Whether the request accepts every coding the entry was stored in. A request that names no coding takes identity
+// alone. With identity ruled out first, a coding is picked exactly when the header rates it above zero.
+function codingAccepted(ctx: IContext, entry: HTTPCacheEntry): boolean {
+  const name = Object.keys(entry.headers).find(header => header.toLowerCase() === 'content-encoding')
+  const codings = codingsOf(name === undefined ? undefined : entry.headers[name])
+  if (codings.length === 0) {
+    return true
+  }
+
+  const ruled = `identity;q=0, ${ctx.req.header('accept-encoding') ?? ''}`
+  return codings.every(coding => selectEncoding(ruled, [coding]) === coding)
 }

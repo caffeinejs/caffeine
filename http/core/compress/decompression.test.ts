@@ -8,6 +8,7 @@ import { createWebApplication } from '../../application.js'
 import { bodyAsBuffer, bodyAsStream } from '../../index.js'
 import { node } from '../../platform/node/node.js'
 import { ErrConfiguration } from '../error/common.js'
+import { ErrHTTP } from '../error/http.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import type { ContentCoding } from './compress.js'
 import { ENCODE, send } from './compress.testkit.js'
@@ -158,6 +159,99 @@ describe('decompression() decoding request bodies', () => {
 
     expect((await app.request(...post('gzip', tail))).status).toBe(400)
     expect((await app.request(...post('gzip', tail, '/stream'))).status).toBe(400)
+  })
+
+  type Upstream = ReadableStreamDefaultController<Uint8Array>
+
+  // gunzip ends its output at a zero byte after a member, while the request body may still be coming: the rest of the
+  // body is read before the decoded one ends, so what comes after the padding is checked and a failure reaches the
+  // reader.
+  it.each([
+    [
+      'other bytes',
+      (c: Upstream) => {
+        c.enqueue(Buffer.from('junk'))
+        c.close()
+      },
+      400,
+    ],
+    [
+      'more zero padding',
+      (c: Upstream) => {
+        c.enqueue(Buffer.alloc(3))
+        c.close()
+      },
+      'ended',
+    ],
+    ['a failure of the body', (c: Upstream) => c.error(new Error('gone')), 'gone'],
+  ] as const)('reads a streamed gzip body past its padding to the end: %s', async (_, then, outcome) => {
+    let release!: () => void
+    const held = new Promise<void>(resolve => (release = resolve))
+    let sent = false
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (!sent) {
+          sent = true
+          controller.enqueue(Buffer.concat([gzipSync('{"a":1}'), Buffer.alloc(1)]))
+          return
+        }
+        await held
+        then(controller)
+      },
+    })
+    const streamed = new Router('/stream')
+      .post('/')
+      .extend(bodyAsStream())
+      .handler(async ctx => {
+        const reader = (ctx.req.body() as ReadableStream<Uint8Array>).getReader()
+        const first = await reader.read()
+        const rest = reader.read().then(
+          next => (next.done ? 'ended' : 'more'),
+          (err: unknown) => (err instanceof ErrHTTP ? err.statusCode : (err as Error).message),
+        )
+        // One turn of the event loop: an end already decided is settled by then.
+        const early = await Promise.race([
+          rest.then(() => true),
+          new Promise<boolean>(resolve => setImmediate(() => resolve(false))),
+        ])
+        release()
+        return { content: Buffer.from(first.value!).toString(), early, rest: await rest }
+      })
+    const app = await serve(streamed)
+
+    const res = await app.request('/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+
+    expect(await res.json()).toEqual({ content: '{"a":1}', early: false, rest: outcome })
+  })
+
+  it('stops reading a streamed body once it is known not to be its coding', async () => {
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      pull: controller => controller.enqueue(Buffer.from('not gzip at all')),
+      cancel: () => {
+        cancelled = true
+      },
+    })
+    const streamed = new Router('/stream')
+      .post('/')
+      .extend(bodyAsStream())
+      .handler(async ctx => new Response(ctx.req.body() as ReadableStream<Uint8Array>).text())
+    const app = await serve(streamed)
+
+    const res = await app.request('/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+
+    expect(res.status).toBe(400)
+    expect(cancelled).toBe(true)
   })
 
   it("decodes only the route's own codings", async () => {

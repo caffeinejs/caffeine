@@ -357,10 +357,11 @@ describe('a response left out of the store', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    await app.request('/skip/declared')
-    const declared = await app.request('/skip/declared')
-    await app.request('/skip/keyed')
-    const keyed = await app.request('/skip/keyed')
+    const gzip = { headers: { 'accept-encoding': 'gzip' } }
+    await app.request('/skip/declared', gzip)
+    const declared = await app.request('/skip/declared', gzip)
+    await app.request('/skip/keyed', gzip)
+    const keyed = await app.request('/skip/keyed', gzip)
 
     expect(declared.headers.get('x-cache')).toBe('HIT')
     expect(keyed.headers.get('x-cache')).toBe('HIT')
@@ -777,6 +778,65 @@ describe('an entry the application put in the store itself', () => {
     expect(res.headers.get('age')).toBe('0')
     expect(await res.json()).toEqual({ warm: true })
     expect(calls).toBe(0)
+  })
+
+  // An entry written before the route stored only what its key covers, or under a key that leaves the coding out.
+  it('is served only in a content coding the request accepts, under the default key or a key function', async () => {
+    let calls = 0
+    const misses: CacheMissEvent[] = []
+    const store = new MemoryHTTPCacheStore()
+    const coded = {
+      payload: gzipSync('{"warm":true}'),
+      statusCode: 200,
+      headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+    }
+
+    @Controller('/store-coded')
+    class CodedStoreController {
+      @CacheControl({ ttl: 60 * Second })
+      @Get('/default')
+      byDefault() {
+        return { n: ++calls }
+      }
+
+      @CacheControl({ ttl: 60 * Second, key: () => 'store-coded' })
+      @Get('/keyed')
+      keyed() {
+        return { n: ++calls }
+      }
+    }
+    void [CodedStoreController]
+
+    // Header names as the application wrote them.
+    await store.put(
+      'store-coded',
+      { ...coded, headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' } },
+      { ttl: 60 * Second },
+    )
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer({ onMiss: event => misses.push(event) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    await app.request('/store-coded/default')
+    await store.put(misses[0]!.key, coded, { ttl: 60 * Second })
+    const gzip = await app.request('/store-coded/default', { headers: { 'accept-encoding': 'gzip' } })
+    const lowered = await app.request('/store-coded/default', {
+      headers: { 'accept-encoding': 'gzip;q=0.5, identity' },
+    })
+    const identity = await app.request('/store-coded/default', { headers: { 'accept-encoding': 'identity' } })
+    const keyed = await app.request('/store-coded/keyed', { headers: { 'accept-encoding': 'identity' } })
+
+    expect(gzip.headers.get('x-cache')).toBe('HIT')
+    expect(gzip.headers.get('content-encoding')).toBe('gzip')
+    expect(lowered.headers.get('x-cache')).toBe('HIT')
+    expect(identity.headers.get('x-cache')).toBe('MISS')
+    expect(identity.headers.get('content-encoding')).toBe(null)
+    expect(await identity.json()).toEqual({ n: 2 })
+    expect(keyed.headers.get('x-cache')).toBe('MISS')
+    expect(await keyed.json()).toEqual({ n: 3 })
+    expect(misses.map(event => event.reason)).toEqual(['absent', 'unacceptable-coding', 'unacceptable-coding'])
   })
 })
 

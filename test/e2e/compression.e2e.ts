@@ -23,6 +23,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
 
+const DECODES_BROTLI = (() => {
+  try {
+    new DecompressionStream('brotli')
+    return true
+  } catch {
+    return false
+  }
+})()
+
 /**
  * `compression()` and `decompression()` over real sockets, read by real clients: Node's `fetch` (undici), which decodes as a browser does;
  * `node:http`, which shows the bytes on the wire; the web `DecompressionStream`; and an HTTP/2 client. No external
@@ -186,11 +195,7 @@ describe('compression() and decompression() over HTTP/1.1', () => {
     }
   })
 
-  it.each([
-    ['gzip', 'gzip'],
-    ['deflate', 'deflate'],
-    ['br', 'brotli'],
-  ] as const)('is decoded by the web DecompressionStream: %s', async (coding, format) => {
+  async function decodedByWebStream(coding: string, format: 'gzip' | 'deflate' | 'brotli'): Promise<string> {
     const body = await new Promise<ReadableStream<Uint8Array>>((resolve, reject) => {
       const url = new URL('/catalog', running.origin)
       httpRequest(
@@ -204,9 +209,19 @@ describe('compression() and decompression() over HTTP/1.1', () => {
     const decoder = new DecompressionStream(format)
     // The decoder reads any buffer source; the body is bytes, one kind of it.
     void body.pipeTo(decoder.writable as WritableStream<Uint8Array>)
-    const text = await new Response(decoder.readable).text()
+    return new Response(decoder.readable).text()
+  }
 
-    expect(text).toBe(CATALOG_JSON)
+  it.each([
+    ['gzip', 'gzip'],
+    ['deflate', 'deflate'],
+  ] as const)('is decoded by the web DecompressionStream: %s', async (coding, format) => {
+    expect(await decodedByWebStream(coding, format)).toBe(CATALOG_JSON)
+  })
+
+  // Node's DecompressionStream takes `brotli` from 24.7.0 on; the wire checks above decode br on every Node 24.
+  it.skipIf(!DECODES_BROTLI)('is decoded by the web DecompressionStream: br', async () => {
+    expect(await decodedByWebStream('br', 'brotli')).toBe(CATALOG_JSON)
   })
 
   it('streams a feed: each record arrives decoded before the next is written', async () => {

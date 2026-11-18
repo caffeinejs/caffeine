@@ -420,7 +420,7 @@ function resolve(config: CompressionConfig, where: string, route: boolean): Reso
   }
 
   const threshold = config.threshold ?? DEFAULT_THRESHOLD
-  if (!Number.isInteger(threshold) || threshold < 0) {
+  if (!Number.isSafeInteger(threshold) || threshold < 0) {
     throw refusal(where, '"threshold" must be a size in bytes', 'Write a size, such as 1 * KiB')
   }
 

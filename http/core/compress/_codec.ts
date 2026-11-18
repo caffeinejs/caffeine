@@ -1,5 +1,5 @@
 import { constants as buffers } from 'node:buffer'
-import { Duplex, type Transform } from 'node:stream'
+import type { Transform } from 'node:stream'
 import {
   brotliCompress,
   brotliCompressSync,
@@ -222,66 +222,102 @@ export function decompressStream(coding: ContentCoding, body: ReadableStream<Uin
     }
   })()
 
-  // The coded bytes, counted, and what they failed with: a failure of the body is not one of its coding.
   const source = body.getReader()
+  // The coded bytes, counted, and the offset of the last one that is not zero, to tell gzip's zero padding from
+  // other bytes.
   let received = 0
-  // The offset of the last byte received that is not zero, to tell gzip's zero padding from other bytes.
   let lastNonZero = -1
-  let failure: unknown
-  let failed = false
-  const counted = new ReadableStream<Uint8Array>(
-    {
-      async pull(controller) {
-        try {
-          const next = await source.read()
-          if (next.done) {
-            controller.close()
-          } else {
-            const at = coding === 'gzip' ? lastNonZeroOf(next.value) : -1
-            if (at >= 0) {
-              lastNonZero = received + at
-            }
-            received += next.value.byteLength
-            controller.enqueue(next.value)
-          }
-        } catch (err) {
-          failure = err
-          failed = true
-          controller.error(err)
-        }
-      },
-      cancel: reason => source.cancel(reason),
-    },
-    { highWaterMark: 0 },
-  )
+  let writing = false
 
-  const pair = Duplex.toWeb(decoder) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>
-  const reader = counted.pipeThrough(pair).getReader()
+  // The pull waiting on the decoder: woken by its output, its end, its failure, or a write it has taken in.
+  let wake: (() => void) | undefined
+  const notify = () => {
+    wake?.()
+    wake = undefined
+  }
+  decoder.on('readable', notify).on('end', notify).on('error', notify)
+
+  // The next coded chunk, counted; `undefined` once the body has ended. What the body fails with, such as the
+  // limit's 413 or a client gone, is thrown as it is: a failure of the body is not one of its coding.
+  const take = async (): Promise<Uint8Array | undefined> => {
+    const next = await source.read()
+    if (next.done) {
+      return undefined
+    }
+    const at = coding === 'gzip' ? lastNonZeroOf(next.value) : -1
+    if (at >= 0) {
+      lastNonZero = received + at
+    }
+    received += next.value.byteLength
+    return next.value
+  }
+  const complete = () => consumed(coding, decoder.bytesWritten, received, () => lastNonZero)
+  // A body known not to be its coding, or one that failed, is read no further.
+  const fail = (controller: ReadableStreamDefaultController<Uint8Array>, err: unknown) => {
+    decoder.destroy()
+    source.cancel(err).catch(() => undefined)
+    controller.error(err)
+  }
 
   return new ReadableStream<Uint8Array>(
     {
       async pull(controller) {
         try {
-          const next = await reader.read()
-          if (!next.done) {
-            controller.enqueue(next.value)
-          } else if (consumed(coding, decoder.bytesWritten, received, () => lastNonZero)) {
-            controller.close()
-          } else {
-            // Bytes after the coded content are not part of it.
-            controller.error(invalid(coding))
+          for (;;) {
+            if (decoder.errored !== null) {
+              fail(controller, invalid(coding))
+              return
+            }
+
+            const chunk = decoder.read() as Uint8Array | null
+            if (chunk !== null) {
+              controller.enqueue(chunk)
+              return
+            }
+
+            // The decoder may end before the body does, as gunzip does at zero padding: the rest is read before
+            // the decoded body ends, and bytes after the coded content are not part of it.
+            if (decoder.readableEnded) {
+              while (complete() && (await take()) !== undefined) {
+                // Counted only, as far as the first byte that is not part of the content.
+              }
+              if (complete()) {
+                controller.close()
+              } else {
+                fail(controller, invalid(coding))
+              }
+              return
+            }
+
+            if (!decoder.writableEnded && !writing) {
+              const next = await take()
+              if (next === undefined && received === 0) {
+                decoder.destroy()
+                controller.close()
+                return
+              }
+              if (next === undefined) {
+                decoder.end()
+              } else {
+                writing = true
+                decoder.write(next, () => {
+                  writing = false
+                  notify()
+                })
+              }
+              continue
+            }
+
+            await new Promise<void>(resolve => (wake = resolve))
           }
         } catch (err) {
-          if (failed) {
-            controller.error(failure)
-          } else if (received === 0) {
-            controller.close()
-          } else {
-            controller.error(err instanceof ErrHTTP ? err : invalid(coding))
-          }
+          fail(controller, err)
         }
       },
-      cancel: reason => reader.cancel(reason),
+      cancel: reason => {
+        decoder.destroy()
+        return source.cancel(reason)
+      },
     },
     // Pulled only when read, so the decoder holds no more than the reader asked for.
     { highWaterMark: 0 },

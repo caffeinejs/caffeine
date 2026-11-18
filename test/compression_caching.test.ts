@@ -7,7 +7,7 @@ import { Router, createWebApplication } from '@caffeinejs/http'
 import { compression } from '@caffeinejs/http/compress'
 import { node } from '@caffeinejs/http/node'
 import { Minute } from '@caffeinejs/std/duration'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * `HTTPCaching` and `compression()` over the same route. The cache must store identity bytes and the compressor code
@@ -20,6 +20,7 @@ const JSON_TEXT = JSON.stringify(REPORT)
 let close: (() => Promise<unknown>) | undefined
 
 afterEach(async () => {
+  vi.useRealTimers()
   await close?.()
   close = undefined
 })
@@ -109,5 +110,37 @@ describe('compression() on the server with HTTPCaching on a router, the order it
     expect(identity.headers.get('x-cache')).toBe('MISS')
     expect(identity.headers.get('content-encoding')).toBe(null)
     expect(await identity.text()).toBe(JSON_TEXT)
+  })
+
+  it('answers a 5xx compression coded with the stale identity entry, labelled as identity', async () => {
+    let failing = false
+    const router = new Router('/flaky')
+    router
+      .get('/')
+      .extend(cacheControl({ ttl: 1 * Minute, staleIfError: 5 * Minute }))
+      .handler(ctx => {
+        if (failing) {
+          ctx.status(503).header('content-type', 'text/plain')
+          return 'down '.repeat(1000)
+        }
+        return REPORT
+      })
+    const app = newApp()
+      .with(compression())
+      .mount(router.with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()))))
+    close = () => app.close()
+    await app.bootstrap()
+    vi.useFakeTimers({ toFake: ['Date'] })
+
+    const stored = await app.request('/flaky', { headers: { 'accept-encoding': 'identity' } })
+    vi.setSystemTime(Date.now() + 2 * Minute)
+    failing = true
+    const rescued = await app.request('/flaky', { headers: { 'accept-encoding': 'gzip' } })
+
+    expect(stored.headers.get('x-cache')).toBe('MISS')
+    expect(rescued.status).toBe(200)
+    expect(rescued.headers.get('x-cache')).toBe('STALE')
+    expect(rescued.headers.get('content-encoding')).toBe(null)
+    expect(await rescued.text()).toBe(JSON_TEXT)
   })
 })

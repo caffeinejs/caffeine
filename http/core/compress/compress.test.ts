@@ -104,6 +104,20 @@ describe('compression() deciding what is worth compressing', () => {
     expect(await decoded(res)).toBe('a'.repeat(1024))
   })
 
+  // The largest count of bytes configuration reads, `$t.Bytes()` as `parseBytes`: one past it is refused.
+  it('takes the largest safe count of bytes as the threshold, and refuses one past it', async () => {
+    const res = await (
+      await serve(c => c.threshold(Number.MAX_SAFE_INTEGER), sized(4 * KiB))
+    ).request('/sized', { headers: { 'accept-encoding': 'gzip' } })
+    const past = await serve(c => c.threshold(2 ** 53)).then(
+      () => undefined,
+      (err: unknown) => (err as Error).message.split('\n')[0],
+    )
+
+    expect(res.headers.get('content-encoding')).toBe(null)
+    expect(past).toBe('Cannot build compression(): "threshold" must be a size in bytes')
+  })
+
   it('leaves a type that is not compressible alone', async () => {
     const png = new Router('/png').get('/').handler(ctx => {
       ctx.header('content-type', 'image/png')
