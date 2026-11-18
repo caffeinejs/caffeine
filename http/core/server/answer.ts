@@ -13,19 +13,7 @@ import { isThenable, type SendPayload } from '../lifecycle/lifecycle.js'
 import type { IRoute } from '../routing/route.js'
 import type { CompiledSerializer, SchemaCompiler } from '../validation/validation.js'
 import type { Context } from './context.js'
-
-// RFC 9110 §7.6.1: fields that describe one connection, never forwarded. A Node server writes its own, and HTTP/2
-// refuses `connection` outright.
-const HOP_BY_HOP = new Set([
-  'connection',
-  'keep-alive',
-  'proxy-connection',
-  'transfer-encoding',
-  'te',
-  'trailer',
-  'upgrade',
-  'proxy-authenticate',
-])
+import { isHopByHop } from './header_fields.js'
 
 // The codings `fetch` decodes, leaving `Content-Encoding` and the encoded `Content-Length` on the body it decoded:
 // `zstd` only where the bundled undici, from 7.11, and zlib both decode it (Node 24, not Node 22).
@@ -152,11 +140,6 @@ function unwrap(target: AnswerTarget, response: Response, keepStatus: boolean): 
   return response.body
 }
 
-/** Whether `name`, lower-case, is a field RFC 9110 §7.6.1 says describes one connection. */
-export function isHopByHop(name: string): boolean {
-  return HOP_BY_HOP.has(name)
-}
-
 /**
  * Whether a field of `headers` describes the one connection it came over, and so is never forwarded: a field RFC 9110
  * §7.6.1 names, or one the `Connection` field lists.
@@ -165,7 +148,7 @@ export function connectionFields(headers: Pick<Headers, 'get'>): (name: string) 
   const connection = headers.get('connection')
   const named = connection === null ? undefined : new Set(connection.split(',').map(name => name.trim().toLowerCase()))
 
-  return name => HOP_BY_HOP.has(name) || named?.has(name) === true
+  return name => isHopByHop(name) || named?.has(name) === true
 }
 
 /** Whether every coding `contentEncoding` lists is one `fetch` decoded: it decodes all of them or none. */

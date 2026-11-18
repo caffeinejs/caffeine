@@ -1,5 +1,5 @@
 import { $t } from '@caffeinejs/application/schema'
-import { Byte } from '@caffeinejs/std/bytes'
+import { Byte, KiB } from '@caffeinejs/std/bytes'
 import { Second } from '@caffeinejs/std/duration'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,8 +8,10 @@ import { z } from 'zod'
 import { createWebApplication, type WebApplication } from '../../application.js'
 import { bodyAsBuffer } from '../../decorators/body_as_buffer.js'
 import { bodyAsStream } from '../../decorators/body_as_stream.js'
+import { multipartBody } from '../../decorators/multipart_body.js'
 import { Router } from '../routing/programmatic/programmatic.js'
-import type { ServerSettings } from './settings.js'
+import { compileRouteInput } from './input.js'
+import { resolveServerSettings, type ServerSettings } from './settings.js'
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
 type AnyRouter = Router<any, any, any, any, any>
@@ -180,6 +182,98 @@ describe('reading the body', () => {
     )
 
     expect(await res.json()).toEqual({ body: null })
+  })
+})
+
+describe('multipart route admission', () => {
+  it('resolves the inherited body limit and overlays each route limit while preserving the other validation slots', async () => {
+    const settings = { bodyLimit: 5 * KiB, multipart: { maxParts: 7, maxFiles: 3 } }
+    const served = await serve(
+      new Router('/upload')
+        .bodyLimit(10 * KiB)
+        .post('/')
+        .name('upload')
+        .extend(multipartBody('form-data', { maxFiles: 0 }))
+        .schema({ body: $t.File(), querystring: $t.Object({ page: $t.Integer() }) })
+        .handler(() => 'ok'),
+      settings,
+    )
+    const route = served.routeGroups.flatMap(group => group.routes).find(route => route.name === 'upload')!
+    const input = compileRouteInput(route, 'POST /upload', resolveServerSettings(settings))
+
+    expect(input.limit).toBe(10 * KiB)
+    expect(input.multipart).toMatchObject({
+      subtype: 'form-data',
+      limits: { maxFiles: 0, maxParts: 7, maxPartSize: 10 * KiB },
+    })
+    expect(input.validators.map(([slot]) => slot)).toEqual(['querystring'])
+  })
+
+  it('refuses a multipart route that declares no HTTP method', async () => {
+    app = createWebApplication().mount(
+      new Router('/upload')
+        .route([], '/')
+        .extend(multipartBody())
+        .handler(() => 'ok'),
+    )
+    await expect(app.bootstrap()).rejects.toThrow('its multipart input requires an HTTP method')
+  })
+
+  it('refuses a multipart body on a method that cannot read one', async () => {
+    app = createWebApplication().mount(
+      new Router('/upload')
+        .get('/')
+        .extend(multipartBody())
+        .handler(() => 'ok'),
+    )
+    await expect(app.bootstrap()).rejects.toThrow('its method GET carries no multipart body')
+  })
+
+  it.each([
+    ['form-data', $t.String()],
+    ['related', $t.File()],
+    ['*', $t.File()],
+  ] as const)('refuses a body schema that cannot describe a %s reader', async (subtype, body) => {
+    app = createWebApplication().mount(
+      new Router('/upload')
+        .post('/')
+        .extend(multipartBody(subtype))
+        .schema({ body })
+        .handler(() => 'ok'),
+    )
+    await expect(app.bootstrap()).rejects.toThrow('its body schema conflicts with its multipart input')
+  })
+
+  it.each(['form-data', '*'])('rejects JSON before pulling a request when the route declares %s', async subtype => {
+    const handler = vi.fn(() => 'ok')
+    const served = await serve(new Router('/upload').post('/').extend(multipartBody(subtype)).handler(handler))
+    const body = counted(4)
+    const response = await streamed(served, '/upload', body.stream, { 'content-type': 'application/json' })
+    expect(response.status).toBe(415)
+    expect(body.pulled()).toBe(false)
+    expect(handler).not.toHaveBeenCalled()
+    expect((await post(served, '/upload', null)).status).toBe(415)
+  })
+
+  it('checks the outer Content-Type byte limit before pulling the upload', async () => {
+    const served = await serve(
+      new Router('/upload')
+        .post('/')
+        .extend(multipartBody('*', { maxHeaderSize: 32 * Byte }))
+        .handler(() => 'ok'),
+    )
+    const body = counted(1)
+    const res = await streamed(served, '/upload', body.stream, { 'content-type': 'multipart/mixed; boundary=abcdefg' })
+    expect(res.status).toBe(413)
+    expect(body.pulled()).toBe(false)
+  })
+
+  it('rejects an unsolicited multipart request on an ordinary route', async () => {
+    const served = await serve(new Router('/ordinary').post('/').handler(() => 'ok'))
+    const body = counted(10)
+    const res = await streamed(served, '/ordinary', body.stream, { 'content-type': 'multipart/mixed; boundary=b' })
+    expect(res.status).toBe(415)
+    expect(body.pulled()).toBe(false)
   })
 })
 

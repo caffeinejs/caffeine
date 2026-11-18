@@ -8,8 +8,11 @@ import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import { assertHookName, REQUEST_HOOK_NAMES, type RequestHookName, type RequestHooks } from '../lifecycle/lifecycle.js'
 import type { AuthoredHooks } from '../lifecycle/route_definition.js'
+import type { MultipartInput } from '../multipart/multipart.js'
+import { configurationError } from '../server/error.js'
 import { mergeValue } from './_merge.js'
 import { foldAuthz } from './inherit.js'
+import { compileMultipartDeclaration } from './multipart.js'
 import type {
   BodyMode,
   RouteAuthz,
@@ -212,6 +215,7 @@ export class RouteBuilder {
   #timeout?: Duration
   #statusCode?: number
   #bodyAs?: BodyMode
+  #multipart?: MultipartInput[]
   #authorize?: RouteAuthz
   #config?: Map<string, unknown>
   #detail?: RouteDetail
@@ -289,6 +293,13 @@ export class RouteBuilder {
     return this
   }
 
+  /** Declares the route's multipart subtype and limit overrides. A route can declare one body reader. */
+  multipart(input: MultipartInput): this {
+    this.#multipart ??= []
+    this.#multipart.push(input)
+    return this
+  }
+
   /** Adds a declaration to the route's. Calling it again adds another; nothing is replaced. */
   authorize(opts: RouteAuthzOptions = {}): this {
     this.#authorize = foldAuthz(this.#authorize, opts)
@@ -345,10 +356,26 @@ export class RouteBuilder {
   }
 
   toRoute<R>(): RouteSpec<R> {
+    let accept = [...(this.#consumes ?? [])]
+    let multipart: MultipartInput | undefined
+    if (this.#multipart !== undefined) {
+      const identity = this.#name ?? this.#path
+      const owner = identity === undefined ? 'a multipart route' : `route "${String(identity)}"`
+      if (this.#multipart.length !== 1 || this.#bodyAs !== undefined) {
+        throw configurationError(
+          `Cannot configure ${owner}: it declares multiple body readers`,
+          'Declare multipartBody(...) once and remove bodyAsStream() or bodyAsBuffer() from the route',
+        )
+      }
+      const declaration = compileMultipartDeclaration(this.#multipart[0], accept, owner)
+      multipart = declaration.multipart
+      accept = declaration.accept
+    }
+
     return {
       path: normalizeRoutePath(this.#path ?? ''),
       method: [...(this.#method ?? [])],
-      accept: [...(this.#consumes ?? [])],
+      accept,
       contentType: this.#produces ?? '',
       parameters: [...(this.#parameters ?? [])] as ParameterPickOptions<R>[],
       name: this.#name ?? '',
@@ -359,6 +386,7 @@ export class RouteBuilder {
       header: this.#header,
       statusCode: this.#statusCode,
       bodyAs: this.#bodyAs,
+      multipart,
       authz: this.#authorize,
       config: this.#config,
       detail: this.#detail,

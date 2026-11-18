@@ -9,7 +9,7 @@ import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import type { AnyRouteExtension } from '../routing/extension.js'
 import { kRouteOf, type Context } from '../server/context.js'
 import { configurationError } from '../server/error.js'
-import { HEADER_NAME } from '../server/settings.js'
+import { HEADER_NAME } from '../server/header_fields.js'
 
 /** The route config key `corsPolicy()` reads, holding a {@link CORSConfig} or a boolean. */
 export const kCORSRoute = 'caffeine:cors'

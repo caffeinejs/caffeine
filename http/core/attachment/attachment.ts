@@ -10,6 +10,7 @@ import { notModified, preconditionFailed, rangeHolds, type Validators } from '..
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPPreconditionFailed } from '../error/http.js'
 import { byteRanges, multipartByteRanges } from '../range/range.js'
+import { FIELD_VALUE } from '../server/header_fields.js'
 import { contentDisposition } from './_disposition.js'
 
 // The largest end offset Node's `Blob.slice` takes: it asserts a 32-bit one, aborting the process past it.
@@ -17,10 +18,6 @@ const LARGEST_SLICEABLE = 2 ** 32 - 1
 
 // RFC 9110 §8.8.3: an optional weak prefix, then a quoted string holding neither a space nor a quote.
 const ENTITY_TAG = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/
-
-// What Node writes as a header value: tabs, visible ASCII and spaces, and obs-text. Node refuses anything else in a
-// header, and nothing else may reach a part of a multipart body, where a line break would add lines of its own.
-const FIELD_VALUE = /^[\t\x20-\x7e\x80-\xff]*$/
 
 /** {@link Attachment}'s options. */
 export interface AttachmentOptions extends Validators {

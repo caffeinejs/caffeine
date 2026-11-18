@@ -6,12 +6,12 @@ import {
   declaredOver,
   ErrRequestBodyConsumed,
   ErrRequestBodyDiscarded,
-  isBodyLimit,
   limitStream,
   parsedMediaType,
   parseBody,
   readLimited,
 } from './body.js'
+import { isBodyLimit } from './body_limit.js'
 
 const encode = (text: string) => new TextEncoder().encode(text)
 

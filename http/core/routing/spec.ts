@@ -9,6 +9,7 @@ import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import type { RequestHookName } from '../lifecycle/lifecycle.js'
 import type { AuthoredHooks } from '../lifecycle/route_definition.js'
+import type { MultipartInput } from '../multipart/multipart.js'
 
 /**
  * A group of routes, as authored. Inert: it describes routes, it does not know how any of them is called.
@@ -60,6 +61,8 @@ export interface RouteSpec<R> {
   statusCode?: number
   /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
   bodyAs?: BodyMode
+  /** The multipart body this route declared, including its per-route limit overrides. */
+  multipart?: MultipartInput
   authz?: RouteAuthz
   config?: Map<string, unknown>
   detail?: RouteDetail

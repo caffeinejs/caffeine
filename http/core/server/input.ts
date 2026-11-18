@@ -2,13 +2,17 @@ import { type AnySchema, hasFileSchema, isStandardSchema, isTypeBoxSchema } from
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
-import { ErrHTTPBadRequest, ErrHTTPUnsupportedMediaType } from '../error/http.js'
+import { ErrHTTPBadRequest, ErrHTTPContentTooLarge, ErrHTTPUnsupportedMediaType } from '../error/http.js'
+import { mediaTypeEssence } from '../error/serializer.js'
 import { ErrRequestValidation, type ValidationSlot } from '../error/validation.js'
 import { andThen, isThenable } from '../lifecycle/lifecycle.js'
+import { resolveMultipartLimits, type MultipartLimits } from '../multipart/limits.js'
+import { compileMultipartDeclaration } from '../routing/multipart.js'
 import type { IRoute } from '../routing/route.js'
 import type { BodyMode } from '../routing/spec.js'
 import { applySlotPolicy, lowerCaseHeaders } from '../validation/slots.js'
-import { BODY_METHODS, isBodyLimit, parseBody, parsedMediaType } from './body.js'
+import { BODY_METHODS, parseBody, parsedMediaType } from './body.js'
+import { isBodyLimit } from './body_limit.js'
 import type { Context } from './context.js'
 import { configurationError } from './error.js'
 import type { ResolvedServerSettings } from './settings.js'
@@ -22,6 +26,8 @@ export interface RouteInput {
   readonly body: 'parse' | BodyMode
   /** The route's `bodyLimit`, else the server's. */
   readonly limit: ByteSize
+  /** The admitted MIME subtype and effective limits after server, group and route inheritance. */
+  readonly multipart?: { readonly subtype: string; readonly limits: Readonly<Required<MultipartLimits>> }
   /** Each slot to validate, in validation order: params, body, querystring, headers. */
   readonly validators: readonly (readonly [ValidationSlot, StandardSchemaV1])[]
   /** The route in failures, e.g. `POST /pets`. */
@@ -46,6 +52,8 @@ export function compileRouteInput(route: IRoute<Context>, name: string, settings
     )
   }
 
+  const limit = route.bodyLimit ?? settings.bodyLimit
+  const multipart = compileMultipart(route, name, limit, settings)
   const validators: (readonly [ValidationSlot, StandardSchemaV1])[] = []
 
   for (const slot of VALIDATION_SLOTS) {
@@ -80,7 +88,43 @@ export function compileRouteInput(route: IRoute<Context>, name: string, settings
     validators.push([slot, slotValidator(authored, slot, name, settings)])
   }
 
-  return { body: route.bodyAs ?? 'parse', limit: route.bodyLimit ?? settings.bodyLimit, validators, route: name }
+  return { body: route.bodyAs ?? 'parse', limit, multipart, validators, route: name }
+}
+
+function compileMultipart(
+  route: IRoute<Context>,
+  name: string,
+  limit: ByteSize,
+  settings: ResolvedServerSettings,
+): RouteInput['multipart'] {
+  if (route.multipart === undefined) {
+    return undefined
+  }
+  const { multipart: input } = compileMultipartDeclaration(route.multipart, route.accept, `route "${name}"`)
+
+  if (route.bodyAs !== undefined) {
+    throw configurationError(
+      `Cannot serve "${name}": multipart and raw body modes both claim its body`,
+      'Choose multipartBody(), bodyAsStream() or bodyAsBuffer()',
+    )
+  }
+  const bodiless = route.method.find(method => !BODY_METHODS.has(method.toUpperCase()))
+  if (bodiless !== undefined || route.method.length === 0) {
+    throw configurationError(
+      bodiless === undefined
+        ? `Cannot serve "${name}": its multipart input requires an HTTP method`
+        : `Cannot serve "${name}": its method ${bodiless.toUpperCase()} carries no multipart body`,
+      'Declare multipart on a POST, PUT, PATCH, DELETE, OPTIONS or QUERY route',
+    )
+  }
+  const schema = route.schema?.body
+  if (schema !== undefined && (input.subtype !== 'form-data' || !hasFileSchema(schema))) {
+    throw configurationError(
+      `Cannot serve "${name}": its body schema conflicts with its multipart input`,
+      'Remove the body schema or document a form-data upload with $t.File()',
+    )
+  }
+  return { subtype: input.subtype, limits: resolveMultipartLimits(limit, settings.multipart, input.limits) }
 }
 
 /**
@@ -127,11 +171,29 @@ function readBody(ctx: Context, input: RouteInput): void | Promise<void> {
     if (req.method === 'QUERY') {
       throw new ErrHTTPBadRequest('A QUERY request must carry a Content-Type')
     }
+    if (input.multipart !== undefined) {
+      throw new ErrHTTPUnsupportedMediaType('This route requires a multipart Content-Type')
+    }
     if (!req.hasBody()) {
       return
     }
     if (input.body === 'parse') {
       throw new ErrHTTPUnsupportedMediaType('The request has a body but no Content-Type')
+    }
+  }
+
+  if (input.multipart !== undefined && type !== undefined) {
+    // HTTP header values are byte strings. Bound the whole field before extracting its media type.
+    if (type.length > input.multipart.limits.maxHeaderSize) {
+      throw new ErrHTTPContentTooLarge('The multipart Content-Type exceeds the header size limit')
+    }
+    const essence = mediaTypeEssence(type)
+    if (
+      input.multipart.subtype === '*'
+        ? !essence.startsWith('multipart/')
+        : essence !== `multipart/${input.multipart.subtype}`
+    ) {
+      throw new ErrHTTPUnsupportedMediaType('This route does not accept the supplied Content-Type')
     }
   }
 
