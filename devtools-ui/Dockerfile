@@ -1,13 +1,13 @@
 # Build from the repo root: docker build -f devtools-ui/Dockerfile .
 
 # Manifests alone, so the install layer is cached until a dependency changes.
-FROM --platform=$BUILDPLATFORM node:26-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS manifests
+FROM --platform=$BUILDPLATFORM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS manifests
 WORKDIR /src
 COPY . .
 RUN mkdir /manifests \
   && find . -name package.json -o -name package-lock.json | tar -cf - -T - | tar -xf - -C /manifests
 
-FROM --platform=$BUILDPLATFORM node:26-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS build
+FROM --platform=$BUILDPLATFORM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS build
 WORKDIR /src
 COPY --from=manifests /manifests ./
 RUN --mount=type=cache,target=/root/.npm \
@@ -42,7 +42,7 @@ RUN find /app -type f \( -name '*.d.ts' -o -name '*.d.ts.map' -o -name '*.d.mts'
     -o -name examples -o -name benchmark -o -name benchmarks -o -name .github \) -prune -exec rm -rf {} + \
   && find /app/node_modules -type f \( -name '*.map' -o -name '*.md' -o -name '*.markdown' \) -delete
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:088a01637f22908632ba09018be2e0b516f2fa6f7869c191d29491139db43c78
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:6abfcb367ebc291572c774c1592a986be2ab26a2486f73093401327495a5962a
 
 LABEL org.opencontainers.image.title="caffeinejs-devtools-ui" \
   org.opencontainers.image.description="A web UI for the CaffeineJS devtools endpoints" \
