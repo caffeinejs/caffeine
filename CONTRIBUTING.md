@@ -4,6 +4,7 @@
 - Coding conventions: [`CONVENTIONS.md`](CONVENTIONS.md)
 - Writing features and plugins: [`FEATURES.md`](FEATURES.md)
 - AI-assisted contributions: [`AI_POLICY.md`](AI_POLICY.md)
+- Agent coordination setup: [`docs/agent-coordination.md`](docs/agent-coordination.md)
 - MCP servers: [`.mcp.json`](.mcp.json). Export the environment variables it names in the shell that launches the client.
 
 ## Prerequisites
