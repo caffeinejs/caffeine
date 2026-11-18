@@ -32,6 +32,10 @@
       "types": "./dist/platform/bun/index.d.ts",
       "default": "./dist/platform/bun/index.js"
     },
+    "./compress": {
+      "types": "./dist/core/compress/index.d.ts",
+      "default": "./dist/core/compress/index.js"
+    },
     "./conditional": {
       "types": "./dist/core/conditional/index.d.ts",
       "default": "./dist/core/conditional/index.js"
@@ -105,7 +109,7 @@
     "!dist/**/_spectypes"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "^24.22.0 || >=26.10.0"
   },
   "publishConfig": {
     "access": "public"

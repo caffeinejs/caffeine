@@ -4,7 +4,6 @@ import { Readable } from 'node:stream'
 
 import {
   ErrHTTPInternalServerError,
-  ErrHTTPNotAcceptable,
   ErrHTTPPreconditionFailed,
   Responder,
   appendVary,
@@ -17,6 +16,7 @@ import {
   type Validators,
   type VaryReply,
 } from '@caffeinejs/http'
+import { selectEncoding } from '@caffeinejs/http/compress'
 import { KiB } from '@caffeinejs/std/bytes'
 
 import {
@@ -26,7 +26,6 @@ import {
   type ManifestFile,
   type ManifestVariant,
 } from './manifest/manifest.js'
-import { selectEncoding } from './negotiate.js'
 import { hashFile } from './scan/scan.js'
 
 /** What a mount decides about every file it serves, computed once when the mount is built. */
@@ -198,9 +197,8 @@ export function prepareFile(disk: RootOnDisk, path: string, entry: ManifestFile,
  *
  * A request carrying `Range` gets identity, so offsets mean what the client thinks, unless the client refuses
  * identity, when the range is ignored. One range is a `206`, a range past the end a `416`, and anything else the
- * whole `200`.
+ * whole `200`. A client that accepts no representation on disk gets identity, for a plugin that compresses to code.
  *
- * @throws {@link ErrHTTPNotAcceptable} when the client accepts no representation
  * @throws {@link ErrHTTPPreconditionFailed} when `If-Match` or `If-Unmodified-Since` no longer holds
  * @throws {@link ErrHTTPInternalServerError} when the file cannot be opened, which is logged
  */
@@ -279,11 +277,9 @@ export function writeHeaders(reply: VaryReply, headers: Readonly<Record<string, 
 function representationFor(file: PreparedFile, acceptEncoding: string | undefined): Representation {
   const encoding = selectEncoding(acceptEncoding, file.encodings)
 
-  if (encoding === undefined) {
-    throw new ErrHTTPNotAcceptable()
-  }
-
-  return encoding === 'identity' ? file.identity : file.variants[file.encodings.indexOf(encoding)]!
+  return encoding === undefined || encoding === 'identity'
+    ? file.identity
+    : file.variants[file.encodings.indexOf(encoding)]!
 }
 
 async function openFile(
@@ -398,7 +394,7 @@ export async function verifyHashes(root: string, file: PreparedFile, entry: Mani
 
 /**
  * Writes `Vary` into `headers`: what `headers(file)` asked for, merged with `Accept-Encoding`. A file without variants
- * varies too: the header decides between it and a 406, and a shared cache must not answer one with the other.
+ * varies too: a plugin that compresses may code it, and a shared cache must not answer one coding with the other.
  */
 function varyOf(headers: Record<string, string>, given: string | undefined): void {
   const reply = {

@@ -46,11 +46,11 @@ titles of the pull requests it holds: breaking changes, then features, fixes, pe
 
 ## Runtime
 
-| Requirement | Supported                                                                                |
-| ----------- | ---------------------------------------------------------------------------------------- |
-| Node.js     | 24 and 26, the versions CI tests. Every package declares `"engines": { "node": ">=24" }` |
-| Modules     | ES modules only                                                                          |
-| Decorators  | Standard ECMAScript decorators. No `experimentalDecorators` or `emitDecoratorMetadata`   |
+| Requirement | Supported                                                                                                                                            |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js     | 24.22 or later on 24, and 26.10 or later, the versions CI tests. Every published package declares `"engines": { "node": "^24.22.0 \|\| >=26.10.0" }` |
+| Modules     | ES modules only                                                                                                                                      |
+| Decorators  | Standard ECMAScript decorators. No `experimentalDecorators` or `emitDecoratorMetadata`                                                               |
 
 The `caffeine` command of `@caffeinejs/cli` is a native binary, built for Linux (x64 and arm64, glibc and musl), macOS
 (x64 and arm64) and Windows (x64).

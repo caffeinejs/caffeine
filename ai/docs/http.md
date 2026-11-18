@@ -5,7 +5,8 @@ web-standards engine, and a server adapter runs it on a runtime. `adapter: node(
 listens on a node:http, node:https or node:http2 server. `adapter: bun()`, from `@caffeinejs/http/bun`, listens with
 `Bun.serve`. With no adapter the application has no socket of its own: the runtime calls `app.fetch`, as Deno and
 workers do. `authentication()`, `csrf()`, `cors()`, `corsPolicy()`, `healthProbes()`, cookies and error handling are
-imported from `@caffeinejs/http` and run under every adapter.
+imported from `@caffeinejs/http` and run under every adapter. `compression()`, `decompression()` and their
+decorators are imported from `@caffeinejs/http/compress`.
 
 ```ts
 import { Controller, Get, Post, Args, $p, createWebApplication } from '@caffeinejs/http'
@@ -488,6 +489,76 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
   part out of one.
 - `fs.openAsBlob` reports a file past 4 GiB at its size modulo 2^32 (Node 22 and 24). Serve such a file with
   `@caffeinejs/static`'s `sendFile` when its build lists it, or as a stream otherwise.
+
+## Compression
+
+`compression()`, from `@caffeinejs/http/compress`, compresses answers. It is off until registered, on the application, a listener, a router or a controller, and covers that slot's routes.
+
+```ts
+import { compression } from '@caffeinejs/http/compress'
+import { KiB } from '@caffeinejs/std/bytes'
+
+app.with(
+  compression(c =>
+    c
+      .encodings('zstd', 'br', 'gzip')
+      .threshold(2 * KiB)
+      .br({ quality: 5 }),
+  ),
+)
+```
+
+- An answer is compressed in the coding the client rates highest among those offered, `zstd`, `br`, `gzip` and
+  `deflate` in that order by default, when its `Content-Type` is compressible (text, JSON, XML, JavaScript; never
+  `text/event-stream` nor `application/octet-stream`) and its size, when known, is at least the threshold, `1 * KiB`
+  by default. A stream of unknown size is compressed and flushed chunk by chunk, so a feed stays a feed.
+- Such an answer varies on `Accept-Encoding` whichever coding goes out, identity included. A compressed one keeps
+  its `ETag`, and drops `Accept-Ranges`, `Content-Digest`, `Repr-Digest` and `Content-MD5`: they describe the identity
+  bytes. A `Range` request still gets identity bytes.
+- Left as they are: an answer already carrying a `Content-Encoding`, a `204` and a `205`, and one that says
+  `Cache-Control: no-transform`. A `206` and a `304` are never coded, and vary on `Accept-Encoding` unless their
+  type is one it never compresses. A client that accepts no coding offered, `identity;q=0` included, gets identity, never a `406`.
+- Settings: `encodings`, `threshold`, `gzip({ level })` and `deflate({ level })` (1 to 9, default 6),
+  `br({ quality })` (0 to 11, default 4), `zstd({ level })` (1 to 19, default 3) and `compressible(type => ...)`.
+  `config(config.app.compression)` reads them from the configuration tree; a fluent
+  setter wins over it. A bad setting fails start-up with `ErrConfiguration`.
+- Per route: `compress({ ... })` or `@Compress({ ... })` sets members over the plugin's, `compress(false)` turns it
+  off, `compress(true)` turns it back on under a group's `false`. `@Gzip()`, `@Brotli()`, `@Zstd()` and `@Deflate()`
+  offer that coding alone, identity otherwise, and take its level or quality: `@Gzip({ level: 9 })`. One coding
+  decorator per method; for several, `@Compress({ encodings: [...] })`.
+- With several over one route, a server's, a router's and a controller's, the innermost one alone compresses it, by
+  its own settings and the route's `compress(...)`.
+- Order: its hooks run after a route's own and after those of plugins registered before it in its slot or in an
+  outer slot. Register `HTTPCaching` before it in the same slot, or in an outer one, so the cache stores identity
+  bytes; under it on a router, the cache stores none of the answers it coded, unless the route's key varies on
+  `Accept-Encoding`.
+- A static mount is the server's own, so `compress(false)` cannot reach it: register `compression()` on the routers
+  that should compress to keep a mount's files identity. A variant the build wrote goes out as it is.
+- Compressing a secret beside input the request reflects lets an attacker who sees response sizes guess the secret
+  (BREACH). Turn such a route off with `compress(false)`.
+
+## Request decompression
+
+`decompression()`, from `@caffeinejs/http/compress`, decodes request bodies sent with a `Content-Encoding`. It is
+off until registered, on the application, a listener, a router or a controller, and covers that slot's routes.
+
+```ts
+import { decompression } from '@caffeinejs/http/compress'
+
+app.with(decompression(d => d.encodings('gzip', 'br')))
+```
+
+- A `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` or `QUERY` body sent with a `Content-Encoding` the route decodes is
+  decoded before it is parsed or streamed, and the route's `bodyLimit` holds the decoded bytes, so a small body that
+  inflates past it is a `413`. Another coding, or more than one, is a `415` whose `Accept-Encoding` lists what the
+  route decodes; bytes that are not the coding they claim are a `400`. `ctx.req.raw` stays the request as received.
+- Settings: `encodings(...codings)`, every coding (`zstd`, `br`, `gzip`, `deflate`) by default.
+  `config(config.app.decompression)` reads them from the configuration tree. An empty list or an unknown coding fails
+  start-up with `ErrConfiguration`.
+- Per route: `decompress('gzip')` or `@Decompress('gzip')` sets a route's own list, `decompress(false)` decodes
+  nothing, and a method's list replaces its controller's.
+- With several over one route, the innermost one alone decodes it, by its own codings and the route's
+  `decompress(...)`.
 
 ## Plugins
 
