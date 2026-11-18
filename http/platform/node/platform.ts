@@ -678,16 +678,15 @@ function signalOf(res: NodeResponse): AbortSignal {
   return controller.signal
 }
 
-// The two response classes overload their methods apart, so a union of them cannot be called: each call branches.
-
-function writeHead(res: NodeResponse, status: number, headers: OutgoingHttpHeaders): void {
-  if (res instanceof Http2ServerResponse) {
-    res.writeHead(status, headers)
-  } else {
-    res.writeHead(status, headers)
-  }
+function writeHead(
+  res: { writeHead(status: number, headers: OutgoingHttpHeaders): void },
+  status: number,
+  headers: OutgoingHttpHeaders,
+): void {
+  res.writeHead(status, headers)
 }
 
+// The two response classes have different end() overloads, so the call branches by response type.
 function end(res: NodeResponse, chunk?: string | Uint8Array): void {
   if (res instanceof Http2ServerResponse) {
     if (chunk === undefined) {
