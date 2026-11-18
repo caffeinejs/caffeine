@@ -129,7 +129,8 @@ export class CompressionBuilder {
  * compressed when its `Content-Type` is compressible and its size, when known, is at least the threshold; it then
  * varies on `Accept-Encoding`, whichever coding goes out. An answer that is already coded, or one that says
  * `Cache-Control: no-transform`, goes out as it is. A 206 and a 304 are never coded, and vary on `Accept-Encoding`
- * unless their type is one it never compresses. A compressed answer keeps its `ETag`, and its `Accept-Ranges`,
+ * unless their type is one it never compresses. A 304 whose 200 would be coded carries no `Content-Length`. A
+ * compressed answer keeps its `ETag`, and its `Accept-Ranges`,
  * `Content-Digest`, `Repr-Digest` and `Content-MD5` are dropped: they describe the identity bytes. No acceptable
  * coding, `identity;q=0` included, sends identity rather than a 406, since the handler has run.
  *
@@ -213,7 +214,7 @@ class CompressionPlugin extends HTTPPlugin {
   constructor(config: CompressionConfig) {
     super()
     this.#own = resolve(config, 'build compression()', false)
-    this.#options = config
+    this.#options = settingsOf(this.#own)
   }
 
   register(context: HTTPSetupContext): void {
@@ -276,8 +277,23 @@ function encode(
   // A range of identity bytes (206) and a 304 are never coded, and vary as the whole representation's 200 would
   // (RFC 9110 §15.3.7, §15.4.5).
   if (status === 206 || status === 304) {
-    if (eligible(ctx, policy, true)) {
-      varyOnCoding(ctx)
+    if (!eligible(ctx, policy, true)) {
+      return undefined
+    }
+    varyOnCoding(ctx)
+    // RFC 9110 §8.6: a 304's Content-Length is its 200's, not known once that 200 is coded. Only a length the route
+    // declared is the 200's: a payload, such as a JSON `null` serialized, may not be.
+    if (
+      status === 304 &&
+      !(ctx.getHeader('content-length') !== undefined && belowThreshold(ctx, null, policy.threshold)) &&
+      isCoding(selectEncoding((ctx as unknown as Context).req.wireHeader('accept-encoding'), policy.encodings))
+    ) {
+      // The engine closes a 304's body only while it is the payload: the handler's own stream is closed here.
+      if (payload instanceof ReadableStream) {
+        payload.cancel().catch(() => undefined)
+      }
+      ctx.removeHeader('content-length')
+      return null
     }
     return undefined
   }
@@ -408,6 +424,19 @@ function belowThreshold(ctx: IContext, payload: SendPayload, threshold: ByteSize
   const declared = ctx.getHeader('content-length')
   const length = declared === undefined ? Number.NaN : Number(declared)
   return Number.isInteger(length) && length >= 0 && length < threshold
+}
+
+// The settings a policy was resolved from, as a route's `compress({...})` is written over them.
+function settingsOf(policy: ResolvedCompression): CompressionConfig {
+  return {
+    encodings: policy.encodings,
+    threshold: policy.threshold,
+    compressible: policy.compressible,
+    gzip: policy.codecs.gzip,
+    deflate: policy.codecs.deflate,
+    br: policy.codecs.br,
+    zstd: policy.codecs.zstd,
+  }
 }
 
 /** `base` with every member of `over` that is not `undefined` written over it. */

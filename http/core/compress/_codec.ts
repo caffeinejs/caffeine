@@ -140,7 +140,13 @@ export function decompressBytes(coding: ContentCoding, bytes: Uint8Array, limit:
       case 'br':
         return oneShot(done => brotliDecompress(bytes, { maxOutputLength: most, info: true }, done))
       case 'zstd':
-        return oneShot(done => zstdDecompress(bytes, { maxOutputLength: most, params: ZSTD_WINDOW, info: true }, done))
+        return oneShot(done =>
+          zstdDecompress(
+            bytes,
+            { maxOutputLength: most, params: ZSTD_WINDOW, rejectGarbageAfterEnd: true, info: true },
+            done,
+          ),
+        )
     }
   })()
 
@@ -161,7 +167,12 @@ function decompressSync(coding: ContentCoding, bytes: Uint8Array, limit: ByteSiz
     case 'br':
       return brotliDecompressSync(bytes, { maxOutputLength: limit, info: true })
     case 'zstd':
-      return zstdDecompressSync(bytes, { maxOutputLength: limit, params: ZSTD_WINDOW, info: true })
+      return zstdDecompressSync(bytes, {
+        maxOutputLength: limit,
+        params: ZSTD_WINDOW,
+        rejectGarbageAfterEnd: true,
+        info: true,
+      })
   }
 }
 
@@ -221,7 +232,7 @@ export function decompressStream(coding: ContentCoding, body: ReadableStream<Uin
       case 'br':
         return createBrotliDecompress()
       case 'zstd':
-        return createZstdDecompress({ params: ZSTD_WINDOW })
+        return createZstdDecompress({ params: ZSTD_WINDOW, rejectGarbageAfterEnd: true })
     }
   })()
 

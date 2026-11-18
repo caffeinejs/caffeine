@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import { node } from '../../platform/node/node.js'
+import { HTTPPlugin } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { compress, compression, type CompressionBuilder, type ContentCoding } from './compress.js'
@@ -523,6 +524,33 @@ describe('compression() reading its settings once', () => {
     const res = await app.request('/pets', { headers: { 'accept-encoding': 'br' } })
 
     expect(res.headers.get('content-encoding')).toBe(null)
+  })
+
+  // A later plugin's factory runs before routes are compiled, where a route's compress({...}) is resolved.
+  it("resolves a route's compress({...}) against the settings it was built with, not a list changed later", async () => {
+    class Noop extends HTTPPlugin {
+      register(): void {}
+    }
+    const list: ContentCoding[] = ['gzip']
+    const zero = new Router('/zero')
+      .extend(compress({ threshold: 0 }))
+      .get('/')
+      .handler(() => 'a'.repeat(100))
+    const app = createWebApplication()
+      .with(compression(c => c.config({ encodings: list })))
+      .with(() => {
+        list.splice(0, list.length, 'br')
+        return new Noop()
+      })
+      .mount(pets(), zero)
+    apps.push(app)
+    await app.bootstrap()
+
+    const ordinary = await app.request('/pets', { headers: { 'accept-encoding': 'gzip' } })
+    const overridden = await app.request('/zero', { headers: { 'accept-encoding': 'gzip' } })
+
+    expect(ordinary.headers.get('content-encoding')).toBe('gzip')
+    expect(overridden.headers.get('content-encoding')).toBe('gzip')
   })
 })
 

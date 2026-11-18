@@ -8,7 +8,7 @@
 
 ## Prerequisites
 
-- Node.js 24 or later (CI runs 24 and 26)
+- Node.js 24.22 or later on 24, or 26.10 or later (CI runs 24 and 26)
 - npm >= 10
 - [Bun](https://bun.sh), at the version root `package.json` names in `engines.bun`: it builds and tests the CLI
   (`cli/`), and `make check` runs those tests

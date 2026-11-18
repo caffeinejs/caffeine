@@ -211,6 +211,106 @@ describe('RFC 9110 §8.6 Content-Length', () => {
     expect(res.headers.get('content-length')).toBe(String(bytes.byteLength))
     expect(bytes.byteLength).not.toBe(BYTES.byteLength)
   })
+
+  // A conditional route whose 304 carries the length its identity 200 would, declared or left for the server to
+  // measure.
+  const declared = () =>
+    new Router('/declared').get('/').handler(ctx => {
+      ctx.header('content-type', 'text/plain; charset=utf-8')
+      if (ctx.req.header('if-none-match') !== '"v1"') {
+        return TEXT
+      }
+      ctx.header('content-length', String(BYTES.byteLength))
+      ctx.status(304)
+      return null
+    })
+  const left = () =>
+    new Router('/left').get('/').handler(ctx => {
+      ctx.header('content-type', 'text/plain; charset=utf-8')
+      if (ctx.req.header('if-none-match') === '"v1"') {
+        ctx.status(304)
+      }
+      return TEXT
+    })
+
+  // A 304's Content-Length is its 200's, and the coded 200's length is not known without coding it.
+  it.each(['/declared', '/left'])('sends no Content-Length on a 304 whose 200 would be coded: %s', async path => {
+    const app = await serve(undefined, declared(), left())
+    const ok = await app.request(path, { headers: { 'accept-encoding': 'gzip' } })
+    const res = await app.request(path, { headers: { 'accept-encoding': 'gzip', 'if-none-match': '"v1"' } })
+
+    expect(ok.headers.get('content-encoding')).toBe('gzip')
+    expect(res.status).toBe(304)
+    expect(res.headers.get('content-length')).toBe(null)
+    expect(res.headers.get('vary')).toBe('Accept-Encoding')
+    expect((await wire(res)).byteLength).toBe(0)
+  })
+
+  // A JSON 304's `null` serializes to bytes that are not the representation's, whether the route declares its length
+  // or not.
+  it.each([
+    ['declares', true],
+    ['does not declare', false],
+  ])('sends no Content-Length on a JSON 304 whose route %s its length', async (_, declare) => {
+    const pets = new Router('/pets').get('/').handler(ctx => {
+      if (ctx.req.header('if-none-match') !== '"v1"') {
+        return { text: TEXT }
+      }
+      if (declare) {
+        ctx.header('content-length', String(BYTES.byteLength))
+      }
+      ctx.status(304)
+      return null
+    })
+    const app = await serve(undefined, pets)
+    const ok = await app.request('/pets', { headers: { 'accept-encoding': 'gzip' } })
+    const res = await app.request('/pets', { headers: { 'accept-encoding': 'gzip', 'if-none-match': '"v1"' } })
+
+    expect(ok.headers.get('content-encoding')).toBe('gzip')
+    expect(res.status).toBe(304)
+    expect(res.headers.get('content-length')).toBe(null)
+    expect((await wire(res)).byteLength).toBe(0)
+  })
+
+  it('keeps the Content-Length of a 304 whose 200 would not be coded', async () => {
+    const app = await serve(undefined, declared())
+    const res = await app.request('/declared', { headers: { 'accept-encoding': 'identity', 'if-none-match': '"v1"' } })
+
+    expect(res.status).toBe(304)
+    expect(res.headers.get('content-length')).toBe(String(BYTES.byteLength))
+  })
+
+  it('keeps the Content-Length a route declares on a 304 whose 200 is under the threshold', async () => {
+    const small = new Router('/small').get('/').handler(ctx => {
+      ctx.header('content-type', 'text/plain; charset=utf-8')
+      ctx.header('content-length', '100')
+      ctx.status(304)
+      return null
+    })
+    const app = await serve(undefined, small)
+    const res = await app.request('/small', { headers: { 'accept-encoding': 'gzip' } })
+
+    expect(res.status).toBe(304)
+    expect(res.headers.get('content-length')).toBe('100')
+  })
+
+  // The body a 304 drops is the handler's to release: a stream left open holds what it reads from.
+  it('closes the stream a 304 whose 200 would be coded leaves unread', async () => {
+    let closed!: () => void
+    const cancelled = new Promise<void>(resolve => (closed = resolve))
+    const streamed = new Router('/streamed').get('/').handler(ctx => {
+      ctx.header('content-type', 'text/plain; charset=utf-8')
+      ctx.status(304)
+      return new ReadableStream<Uint8Array>({ pull: () => undefined, cancel: () => closed() })
+    })
+    const app = await serve(undefined, streamed)
+    const res = await app.request('/streamed', { headers: { 'accept-encoding': 'gzip' } })
+
+    expect(res.status).toBe(304)
+    expect(res.headers.get('content-length')).toBe(null)
+    expect((await wire(res)).byteLength).toBe(0)
+    await cancelled
+  })
 })
 
 describe('RFC 9110 §8.8 validators, and 304 Not Modified', () => {

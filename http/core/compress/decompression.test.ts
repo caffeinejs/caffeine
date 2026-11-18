@@ -154,6 +154,69 @@ describe('decompression() decoding request bodies', () => {
     },
   )
 
+  // RFC 8878 §3.1: zstd content is one or more frames, each decoded in turn.
+  it('decodes zstd content of two frames sent together, buffered and streamed', async () => {
+    const buffered = new Router('/raw')
+      .post('/')
+      .extend(bodyAsBuffer())
+      .handler(ctx => (ctx.req.body() as Buffer).toString())
+    const streamed = new Router('/stream')
+      .post('/')
+      .extend(bodyAsStream())
+      .handler(async ctx => new Response(ctx.req.body() as ReadableStream<Uint8Array>).text())
+    const app = await serve(buffered, streamed)
+    const body = Buffer.concat([zstdCompressSync(PETS_JSON.slice(0, 100)), zstdCompressSync(PETS_JSON.slice(100))])
+
+    const raw = await app.request(...post('zstd', body, '/raw'))
+    const stream = await app.request(...post('zstd', body, '/stream'))
+
+    expect([raw.status, stream.status]).toEqual([200, 200])
+    expect(await raw.text()).toBe(PETS_JSON)
+    expect(await stream.text()).toBe(PETS_JSON)
+  })
+
+  // A frame whose header the body ends inside is content cut short, though the frames before it are whole.
+  it('answers zstd content that ends inside a second frame header with a 400, buffered and streamed', async () => {
+    const buffered = new Router('/raw')
+      .post('/')
+      .extend(bodyAsBuffer())
+      .handler(ctx => ({ size: (ctx.req.body() as Buffer).byteLength }))
+    const streamed = new Router('/stream')
+      .post('/')
+      .extend(bodyAsStream())
+      .handler(async ctx => new Response(ctx.req.body() as ReadableStream<Uint8Array>).text())
+    const app = await serve(buffered, streamed)
+    const body = Buffer.concat([zstdCompressSync(PETS_JSON), zstdCompressSync(PETS_JSON).subarray(0, 3)])
+
+    const raw = await app.request(...post('zstd', body, '/raw'))
+    const stream = await app.request(...post('zstd', body, '/stream'))
+
+    expect([raw.status, stream.status]).toEqual([400, 400])
+  })
+
+  // Past 16 KiB the body is decoded on the threadpool, by another call than the one in place.
+  it('answers zstd content decoded off the calling thread that ends inside a second frame header with a 400, buffered and streamed', async () => {
+    const random = randomBytes(64 * KiB)
+    const buffered = new Router('/sized-raw')
+      .post('/')
+      .bodyLimit(128 * KiB)
+      .extend(bodyAsBuffer())
+      .handler(ctx => ({ size: (ctx.req.body() as Buffer).byteLength }))
+    const streamed = new Router('/sized-stream')
+      .post('/')
+      .bodyLimit(128 * KiB)
+      .extend(bodyAsStream())
+      .handler(async ctx => new Response(ctx.req.body() as ReadableStream<Uint8Array>).text())
+    const app = await serve(buffered, streamed)
+    const body = Buffer.concat([zstdCompressSync(random), zstdCompressSync(random).subarray(0, 3)])
+
+    const raw = await app.request(...post('zstd', body, '/sized-raw'))
+    const stream = await app.request(...post('zstd', body, '/sized-stream'))
+
+    expect(body.byteLength).toBeGreaterThan(16 * KiB)
+    expect([raw.status, stream.status]).toEqual([400, 400])
+  })
+
   // gunzip reads zero bytes after a member as the padding some writers leave, and decodes the member.
   it('decodes gzip content followed by zero padding, buffered and streamed', async () => {
     const padded = Buffer.concat([gzipSync('{"a":1}'), Buffer.alloc(4)])
