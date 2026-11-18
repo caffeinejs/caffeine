@@ -19,6 +19,7 @@
     "request/caffeine-request-scope/**/*.ts",
     "request/caffeine-router/**/*.ts",
     "request/caffeine-web-codec/**/*.ts",
+    "runtimes/bun/request/caffeine/**/*.ts",
     "mixedscopes/caffeine/**/*.ts",
     "authn/caffeine/**/*.ts",
     "authn/shared.ts",

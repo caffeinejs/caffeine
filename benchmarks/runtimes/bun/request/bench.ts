@@ -7,16 +7,16 @@ import { runLoadBenchmark, type ServerConfig } from '../../../load-harness.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const benchmarksRoot = resolve(__dirname, '../../..')
 
-const built = (dir: string, file: string): Pick<ServerConfig, 'args' | 'builtPath'> => {
-  const path = resolve(benchmarksRoot, 'dist', 'request', dir, file)
+const built = (...segments: string[]): Pick<ServerConfig, 'args' | 'builtPath'> => {
+  const path = resolve(benchmarksRoot, 'dist', ...segments)
   return { args: [path], builtPath: path }
 }
 
 const servers: ServerConfig[] = [
   { name: 'fastify', cmd: 'bun', port: 3020, args: [resolve(benchmarksRoot, 'request', 'fastify', 'fastify.ts')] },
   { name: 'hono', cmd: 'bun', port: 3021, args: [resolve(__dirname, 'hono', 'hono.ts')] },
-  { name: 'nestjs', cmd: 'bun', port: 3022, ...built('nestjs', 'nestjs.js') },
-  { name: 'caffeine', cmd: 'bun', port: 3023, ...built('caffeine', 'caffeine.js') },
+  { name: 'nestjs', cmd: 'bun', port: 3022, ...built('request', 'nestjs', 'nestjs.js') },
+  { name: 'caffeine', cmd: 'bun', port: 3023, ...built('runtimes', 'bun', 'request', 'caffeine', 'caffeine.js') },
   { name: 'elysia', cmd: 'bun', port: 3024, args: [resolve(__dirname, 'elysia', 'elysia.ts')] },
 ]
 

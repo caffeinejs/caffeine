@@ -40,7 +40,7 @@ const servers: ServerConfig[] = [
   {
     name: 'caffeine',
     cmd: 'bun',
-    args: [resolve(benchmarksRoot, 'dist', 'request', 'caffeine', 'caffeine.js')],
+    args: [resolve(benchmarksRoot, 'dist', 'runtimes', 'bun', 'request', 'caffeine', 'caffeine.js')],
     port: 3023,
     requiresBuild: true,
   },
