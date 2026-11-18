@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream'
-import { gzipSync } from 'node:zlib'
+import { brotliCompressSync, gzipSync } from 'node:zlib'
 
 import {
   Controller,
@@ -837,6 +837,44 @@ describe('an entry the application put in the store itself', () => {
     expect(keyed.headers.get('x-cache')).toBe('MISS')
     expect(await keyed.json()).toEqual({ n: 3 })
     expect(misses.map(event => event.reason)).toEqual(['absent', 'unacceptable-coding', 'unacceptable-coding'])
+  })
+  // A coding stored as several field lines is read as their list; a request that names no coding takes identity alone.
+  it('is not served to a request that names no coding, its coding stored as several field lines', async () => {
+    const misses: CacheMissEvent[] = []
+    const store = new MemoryHTTPCacheStore()
+
+    @Controller('/store-lines')
+    class LinesStoreController {
+      @CacheControl({ ttl: 60 * Second, key: () => 'store-lines' })
+      @Get('/data')
+      data() {
+        return { fresh: true }
+      }
+    }
+    void [LinesStoreController]
+
+    await store.put(
+      'store-lines',
+      {
+        payload: brotliCompressSync(gzipSync('{"warm":true}')),
+        statusCode: 200,
+        headers: { 'content-type': 'application/json', 'content-encoding': ['gzip', 'br'] },
+      },
+      { ttl: 60 * Second },
+    )
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer({ onMiss: event => misses.push(event) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    const both = await app.request('/store-lines/data', { headers: { 'accept-encoding': 'gzip, br' } })
+    const none = await app.request('/store-lines/data')
+
+    expect(both.headers.get('x-cache')).toBe('HIT')
+    expect(none.headers.get('x-cache')).toBe('MISS')
+    expect(await none.json()).toEqual({ fresh: true })
+    expect(misses.map(event => event.reason)).toEqual(['unacceptable-coding'])
   })
 })
 

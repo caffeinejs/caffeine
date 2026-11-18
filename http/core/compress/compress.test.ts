@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream'
-import { gunzipSync, gzipSync } from 'node:zlib'
+import { brotliCompressSync, constants, deflateSync, gunzipSync, gzipSync } from 'node:zlib'
 
 import { KiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -270,6 +270,46 @@ describe('compression() on a stream', () => {
     }
     expect(rest).toBe('second third')
   })
+
+  // Without a flush per chunk, the coder codes the whole as it would one buffer: the bytes are the one-shot coding's.
+  it.each([
+    ['gzip', (text: string) => gzipSync(text)],
+    ['deflate', (text: string) => deflateSync(text)],
+    ['br', (text: string) => brotliCompressSync(text, { params: { [constants.BROTLI_PARAM_QUALITY]: 4 } })],
+    ['zstd', undefined],
+  ] as const)('codes a stream of declared length in %s as a whole, and drops its length', async (coding, oneShot) => {
+    const chunks = Array.from({ length: 8 }, (_, i) => `chunk ${i} `.repeat(200))
+    const text = chunks.join('')
+    const sized = new Router('/sized').get('/').handler(ctx => {
+      ctx.header('content-type', 'text/plain').header('content-length', String(Buffer.byteLength(text)))
+      return Readable.toWeb(Readable.from(chunks.map(chunk => Buffer.from(chunk))))
+    })
+    const res = await (await serve(undefined, sized)).request('/sized', { headers: { 'accept-encoding': coding } })
+    const body = await bytesOf(res)
+
+    expect(res.headers.get('content-encoding')).toBe(coding)
+    expect(res.headers.get('content-length')).toBe(null)
+    expect(DECODE[coding](body).toString()).toBe(text)
+    if (oneShot !== undefined) {
+      expect(body).toEqual(oneShot(text))
+    }
+  })
+
+  it('fails the coded answer when the stream fails, rather than end it as a whole body', async () => {
+    const failing = new Router('/failing').get('/').handler(ctx => {
+      ctx.header('content-type', 'text/plain')
+      return new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(Buffer.from('first '.repeat(500)))
+          controller.error(new Error('source gone'))
+        },
+      })
+    })
+    const res = await (await serve(undefined, failing)).request('/failing', { headers: { 'accept-encoding': 'gzip' } })
+
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    await expect(res.arrayBuffer()).rejects.toThrow()
+  })
 })
 
 describe('compression() per route', () => {
@@ -423,6 +463,25 @@ describe('two compression() over one route', () => {
   })
 })
 
+describe("compression() coding at each builder method's setting", () => {
+  it.each([
+    ['gzip', (c: CompressionBuilder) => c.gzip({ level: 1 }), () => gzipSync(PETS_JSON, { level: 1 })],
+    ['deflate', (c: CompressionBuilder) => c.deflate({ level: 9 }), () => deflateSync(PETS_JSON, { level: 9 })],
+    [
+      'br',
+      (c: CompressionBuilder) => c.br({ quality: 0 }),
+      () => brotliCompressSync(PETS_JSON, { params: { [constants.BROTLI_PARAM_QUALITY]: 0 } }),
+    ],
+    // An empty object sets nothing: the default level stands.
+    ['deflate', (c: CompressionBuilder) => c.deflate({}), () => deflateSync(PETS_JSON, { level: 6 })],
+  ] as const)('codes %s at the level its builder method sets', async (coding, configure, expected) => {
+    const res = await (await serve(configure)).request('/pets', { headers: { 'accept-encoding': coding } })
+
+    expect(res.headers.get('content-encoding')).toBe(coding)
+    expect(await bytesOf(res)).toEqual(expected())
+  })
+})
+
 describe('compression() reading its settings once', () => {
   it('keeps the codings it was built with when the list handed to config(...) changes later', async () => {
     const list: ContentCoding[] = ['gzip']
@@ -446,6 +505,33 @@ describe('compression() refusing settings at start-up', () => {
   }
 
   const withConfig = (config: object) => () => serve(c => c.config(config as never))
+
+  it.each([
+    ['gzip', (c: CompressionBuilder) => c.gzip({ level: 10 }), '"gzip.level" must be a whole number from 1 to 9'],
+    [
+      'deflate',
+      (c: CompressionBuilder) => c.deflate({ level: 0 }),
+      '"deflate.level" must be a whole number from 1 to 9',
+    ],
+    ['br', (c: CompressionBuilder) => c.br({ quality: 12 }), '"br.quality" must be a whole number from 0 to 11'],
+  ] as const)('refuses a %s setting out of its range given to its builder method', async (_, configure, reason) => {
+    expect(await refusal(() => serve(configure))).toBe(`Cannot build compression(): ${reason}`)
+  })
+
+  it("refuses a route's compress({ encodings: [] }), and tells it to turn compression off instead", async () => {
+    const route = new Router('/r')
+      .extend(compress({ encodings: [] }))
+      .get('/')
+      .handler(() => 'r')
+    const failure = await serve(undefined, route).then(
+      () => undefined,
+      (err: unknown) => err as Error,
+    )
+
+    expect(failure).toBeInstanceOf(ErrConfiguration)
+    expect(failure!.message.split('\n')[0]).toBe('Cannot serve "GET /r": "encodings" lists no coding')
+    expect(failure!.message).toContain('Write compress(false) to turn compression off for the route')
+  })
 
   it('refuses encodings() called with no coding after one with codings: the call empties the list', async () => {
     expect(await refusal(() => serve(c => c.encodings('gzip').encodings()))).toBe(

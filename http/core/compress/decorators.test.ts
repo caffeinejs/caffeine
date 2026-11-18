@@ -1,4 +1,4 @@
-import { gunzipSync, gzipSync, brotliCompressSync } from 'node:zlib'
+import { brotliCompressSync, constants, deflateSync, gunzipSync, gzipSync, zstdCompressSync } from 'node:zlib'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { KiB } from '@caffeinejs/std/bytes'
@@ -130,6 +130,41 @@ describe('coding decorators', () => {
 
     expect(fast).toEqual(gzipSync(text, { level: 1 }))
     expect(best).toEqual(gzipSync(text, { level: 9 }))
+  })
+
+  // Under 16 KiB at a fast setting, each is coded on the calling thread, as the one-shot call here codes it.
+  it('compresses at the setting @Deflate, @Brotli and @Zstd name', async () => {
+    const text = Array.from({ length: 600 }, (_, i) => `line ${i % 97} of ${i % 13}\n`).join('')
+
+    @Controller('/z-settings')
+    class Settings {
+      @Deflate({ level: 1 })
+      @Get('/deflate')
+      deflate(): string {
+        return text
+      }
+
+      @Brotli({ quality: 0 })
+      @Get('/br')
+      br(): string {
+        return text
+      }
+
+      @Zstd({ level: 1 })
+      @Get('/zstd')
+      zstd(): string {
+        return text
+      }
+    }
+    void Settings
+
+    const built = await serve()
+    const bytes = async (path: string) =>
+      Buffer.from(await (await built.request(`/z-settings/${path}`, { headers: EVERY })).arrayBuffer())
+
+    expect(await bytes('deflate')).toEqual(deflateSync(text, { level: 1 }))
+    expect(await bytes('br')).toEqual(brotliCompressSync(text, { params: { [constants.BROTLI_PARAM_QUALITY]: 0 } }))
+    expect(await bytes('zstd')).toEqual(zstdCompressSync(text, { params: { [constants.ZSTD_c_compressionLevel]: 1 } }))
   })
 
   // On one method the two settings merge; @Gzip() with no options sets no level, so @Compress's stands.

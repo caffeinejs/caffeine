@@ -279,22 +279,38 @@ describe('decompression() decoding request bodies', () => {
   })
 
   // Coded bytes past 16 KiB are decoded on the threadpool, where those below are decoded in place.
-  it('decodes a coded body too large to decode in place, and refuses one that inflates past the limit', async () => {
-    const random = randomBytes(64 * KiB)
-    const sized = new Router('/sized')
-      .post('/')
-      .bodyLimit(128 * KiB)
-      .extend(bodyAsBuffer())
-      .handler(ctx => ({ same: Buffer.compare(ctx.req.body() as Buffer, random) === 0 }))
-    const app = await serve(sized)
-    const coded = gzipSync(random)
-    // Under the limit coded, past it decoded.
-    const over = gzipSync(Buffer.concat([random, Buffer.alloc(128 * KiB)]))
+  it.each(['gzip', 'deflate', 'br', 'zstd'] as const)(
+    'decodes a %s body too large to decode in place, and refuses one that inflates past the limit',
+    async coding => {
+      const random = randomBytes(64 * KiB)
+      const sized = new Router('/sized')
+        .post('/')
+        .bodyLimit(128 * KiB)
+        .extend(bodyAsBuffer())
+        .handler(ctx => ({ same: Buffer.compare(ctx.req.body() as Buffer, random) === 0 }))
+      const app = await serve(sized)
+      const coded = ENCODE[coding](random)
+      // Under the limit coded, past it decoded.
+      const over = ENCODE[coding](Buffer.concat([random, Buffer.alloc(128 * KiB)]))
 
-    expect(coded.byteLength).toBeGreaterThan(16 * KiB)
-    expect(over.byteLength).toBeLessThan(128 * KiB)
-    expect(await (await app.request(...post('gzip', coded, '/sized'))).json()).toEqual({ same: true })
-    expect((await app.request(...post('gzip', over, '/sized'))).status).toBe(413)
+      expect(coded.byteLength).toBeGreaterThan(16 * KiB)
+      expect(over.byteLength).toBeLessThan(128 * KiB)
+      expect(await (await app.request(...post(coding, coded, '/sized'))).json()).toEqual({ same: true })
+      expect((await app.request(...post(coding, over, '/sized'))).status).toBe(413)
+    },
+  )
+
+  // The hook runs for every method of a route that takes a body under one of them: a GET's header is not a body's.
+  it('leaves a GET alone on a route that also takes POST, whatever Content-Encoding it names', async () => {
+    const both = new Router('/both').route(['GET', 'POST'], '/').handler(ctx => ({ method: ctx.req.method }))
+    const app = await serve(both)
+
+    const get = await app.request('/both', { headers: { 'content-encoding': 'lzma' } })
+    const posted = await app.request(...post('lzma', Buffer.from('{}'), '/both'))
+
+    expect(get.status).toBe(200)
+    expect(await get.json()).toEqual({ method: 'GET' })
+    expect(posted.status).toBe(415)
   })
 
   // A client that sets its coding on every request sends it on an empty body too.
