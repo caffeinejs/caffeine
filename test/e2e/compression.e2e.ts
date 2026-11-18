@@ -1,6 +1,6 @@
 import { Agent, request as httpRequest, type IncomingMessage } from 'node:http'
 import { connect as http2Connect } from 'node:http2'
-import type { Socket } from 'node:net'
+import { Socket } from 'node:net'
 import { Readable } from 'node:stream'
 import {
   brotliDecompressSync,
@@ -117,10 +117,12 @@ function call(
         agent: options.agent,
       },
       res => {
+        // Read now: on a kept-alive connection, Node clears it before the test's own end listener runs.
+        const socket = res.socket
         const chunks: Buffer[] = []
         res.on('data', (chunk: Buffer) => chunks.push(chunk))
         res.on('end', () =>
-          resolve({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(chunks), socket: res.socket }),
+          resolve({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(chunks), socket }),
         )
       },
     )
@@ -172,6 +174,7 @@ describe('compression() and decompression() over HTTP/1.1', () => {
         replies.push(await call(running.origin, '/catalog', { headers: { 'accept-encoding': accept }, agent }))
       }
 
+      expect(replies[0]!.socket).toBeInstanceOf(Socket)
       for (const [i, reply] of replies.entries()) {
         const coding = reply.headers['content-encoding'] as ContentCoding | undefined
         expect(coding).toBe(accepts[i] === 'identity' ? undefined : accepts[i])

@@ -6,6 +6,7 @@ import { KiB, MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
+import { bodyAsStream } from '../../index.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { decompression, type DecompressionBuilder } from './decompression.js'
 
@@ -70,6 +71,32 @@ describe('RFC 9110 §8.4 and §15.5.16 a coded request body', () => {
     expect(Buffer.byteLength(exact)).toBe(1 * KiB)
     expect((await app.request('/echo', post('gzip', gzipSync(exact)))).status).toBe(200)
     expect((await app.request('/echo', post('gzip', gzipSync(over)))).status).toBe(413)
+  })
+
+  it('§15.5.14: holds the decoded bytes of a streamed body to the limit: exactly the limit passes, one more is a 413', async () => {
+    const streamed = new Router('/stream')
+      .post('/')
+      .bodyLimit(1 * KiB)
+      .extend(bodyAsStream())
+      .handler(async ctx => ({
+        size: (await new Response(ctx.req.body() as ReadableStream<Uint8Array>).arrayBuffer()).byteLength,
+      }))
+    const app = await serve(undefined, streamed)
+    const exact = gzipSync(Buffer.alloc(1 * KiB, 'x'))
+    const over = gzipSync(Buffer.alloc(1 * KiB + 1, 'x'))
+    const send = (coded: Uint8Array) =>
+      app.request('/stream', {
+        method: 'POST',
+        headers: { 'content-type': 'application/octet-stream', 'content-encoding': 'gzip' },
+        body: coded,
+      })
+
+    // Coded, both are well under the limit: only the limit on the decoded bytes tells them apart.
+    expect(over.byteLength).toBeLessThan(1 * KiB)
+    const passed = await send(exact)
+    expect(passed.status).toBe(200)
+    expect(await passed.json()).toEqual({ size: 1 * KiB })
+    expect((await send(over)).status).toBe(413)
   })
 })
 

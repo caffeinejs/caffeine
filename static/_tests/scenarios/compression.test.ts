@@ -44,6 +44,21 @@ describe('a static mount under compression()', () => {
     expect(brotliDecompressSync(Buffer.from(await res.arrayBuffer())).toString()).toContain('spa bundle')
   })
 
+  // RFC 9110 §12.1: with nothing on disk the client accepts, the mount sends identity for compression() to code.
+  it('codes a file with no variant for a client that refuses identity', async () => {
+    const built = await serve(() =>
+      isolated()
+        .with(compression(c => c.threshold(0)))
+        .with(staticFiles(s => s.serve(fixtures, { anonymous: true }))),
+    )
+
+    const res = await built.request('/hello.txt', { headers: { 'accept-encoding': 'gzip, identity;q=0' } })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    expect(gunzipSync(Buffer.from(await res.arrayBuffer())).toString()).toBe('hello static world\n')
+  })
+
   it('compresses a file the build wrote no variant for', async () => {
     const built = await serve(() =>
       isolated()

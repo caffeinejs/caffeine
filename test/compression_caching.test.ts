@@ -73,37 +73,41 @@ describe('HTTPCaching registered before compression() in one slot', () => {
     expect(br.headers.get('x-runs')).toBe('1')
   })
 
-  it('varies a hit on Accept-Encoding, and sends the weak tag on a compressed hit and on its 304', async () => {
+  it('varies a hit on Accept-Encoding, and sends the stored tag on a compressed hit and on its 304', async () => {
     const app = await start()
 
-    await app.request('/report')
+    const identity = await app.request('/report')
     const hit = await app.request('/report', { headers: { 'accept-encoding': 'gzip' } })
-    const etag = hit.headers.get('etag')!
+    const etag = identity.headers.get('etag')!
     const revalidated = await app.request('/report', {
       headers: { 'accept-encoding': 'gzip', 'if-none-match': etag },
     })
 
+    expect(etag.startsWith('"')).toBe(true)
     expect(hit.headers.get('x-cache')).toBe('HIT')
+    expect(hit.headers.get('content-encoding')).toBe('gzip')
     expect(hit.headers.get('vary')).toBe('Accept-Encoding')
-    expect(etag.startsWith('W/"')).toBe(true)
+    expect(hit.headers.get('etag')).toBe(etag)
     expect(revalidated.status).toBe(304)
     expect(revalidated.headers.get('etag')).toBe(etag)
-    expect(revalidated.headers.get('vary')).toBe('Accept-Encoding')
   })
 })
 
-// Documented, not refused: the compressor on the server runs before a cache on a router, whatever the order written.
+// Not refused at start-up: the compressor on the server runs before a cache on a router, whatever the order written.
 describe('compression() on the server with HTTPCaching on a router, the order its documentation warns against', () => {
-  it('stores the compressed bytes, and hands them to a client that accepts no coding', async () => {
+  it('stores nothing compression coded, so a client asking for identity gets identity', async () => {
     const router = report().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     const app = newApp().with(compression()).mount(router)
     close = () => app.close()
     await app.bootstrap()
 
-    await app.request('/report', { headers: { 'accept-encoding': 'gzip' } })
-    const identity = await app.request('/report')
+    const gzip = await app.request('/report', { headers: { 'accept-encoding': 'gzip' } })
+    const identity = await app.request('/report', { headers: { 'accept-encoding': 'identity' } })
 
-    expect(identity.headers.get('x-cache')).toBe('HIT')
-    expect(identity.headers.get('content-encoding')).toBe('gzip')
+    expect(gzip.headers.get('content-encoding')).toBe('gzip')
+    expect(gzip.headers.get('x-cache')).toBe('MISS')
+    expect(identity.headers.get('x-cache')).toBe('MISS')
+    expect(identity.headers.get('content-encoding')).toBe(null)
+    expect(await identity.text()).toBe(JSON_TEXT)
   })
 })

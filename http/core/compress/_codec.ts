@@ -120,7 +120,7 @@ export function decompressBytes(coding: ContentCoding, bytes: Uint8Array, limit:
   // In place only while what it may inflate to stays small: past it, a small bomb would hold the event loop.
   if (bytes.byteLength <= SYNC_LIMIT && limit <= SYNC_OUTPUT_LIMIT) {
     try {
-      return Promise.resolve(decompressSync(coding, bytes, limit))
+      return Promise.resolve(whole(decompressSync(coding, bytes, limit), bytes, coding))
     } catch (err) {
       return Promise.reject(decodeFailure(err, coding, limit))
     }
@@ -131,32 +131,69 @@ export function decompressBytes(coding: ContentCoding, bytes: Uint8Array, limit:
   const decoded = (() => {
     switch (coding) {
       case 'gzip':
-        return oneShot(done => gunzip(bytes, { maxOutputLength: most }, done))
+        return oneShot(done => gunzip(bytes, { maxOutputLength: most, info: true }, done))
       case 'deflate':
-        return oneShot(done => inflate(bytes, { maxOutputLength: most }, done))
+        return oneShot(done => inflate(bytes, { maxOutputLength: most, info: true }, done))
       case 'br':
-        return oneShot(done => brotliDecompress(bytes, { maxOutputLength: most }, done))
+        return oneShot(done => brotliDecompress(bytes, { maxOutputLength: most, info: true }, done))
       case 'zstd':
-        return oneShot(done => zstdDecompress(bytes, { maxOutputLength: most, params: ZSTD_WINDOW }, done))
+        return oneShot(done => zstdDecompress(bytes, { maxOutputLength: most, params: ZSTD_WINDOW, info: true }, done))
     }
   })()
 
-  return decoded.catch((err: unknown) => {
-    throw decodeFailure(err, coding, limit)
-  })
+  return decoded.then(
+    result => whole(result, bytes, coding),
+    (err: unknown) => {
+      throw decodeFailure(err, coding, limit)
+    },
+  )
 }
 
-function decompressSync(coding: ContentCoding, bytes: Uint8Array, limit: ByteSize): Uint8Array {
+function decompressSync(coding: ContentCoding, bytes: Uint8Array, limit: ByteSize): unknown {
   switch (coding) {
     case 'gzip':
-      return gunzipSync(bytes, { maxOutputLength: limit })
+      return gunzipSync(bytes, { maxOutputLength: limit, info: true })
     case 'deflate':
-      return inflateSync(bytes, { maxOutputLength: limit })
+      return inflateSync(bytes, { maxOutputLength: limit, info: true })
     case 'br':
-      return brotliDecompressSync(bytes, { maxOutputLength: limit })
+      return brotliDecompressSync(bytes, { maxOutputLength: limit, info: true })
     case 'zstd':
-      return zstdDecompressSync(bytes, { maxOutputLength: limit, params: ZSTD_WINDOW })
+      return zstdDecompressSync(bytes, { maxOutputLength: limit, params: ZSTD_WINDOW, info: true })
   }
+}
+
+/**
+ * Whether the coder used all of the input that is content. gunzip stops at a zero byte after a member, the padding
+ * some writers add, and leaves the rest unread: that is padding only when every byte of it is zero. `lastNonZero`
+ * gives the offset of the input's last byte that is not zero, `-1` when there is none.
+ */
+function consumed(coding: ContentCoding, used: number, received: number, lastNonZero: () => number): boolean {
+  return used === received || (coding === 'gzip' && lastNonZero() < used)
+}
+
+// The offset of the last byte of `bytes` that is not zero, `-1` when there is none.
+function lastNonZeroOf(bytes: Uint8Array): number {
+  let at = bytes.byteLength - 1
+  while (at >= 0 && bytes[at] === 0) {
+    at--
+  }
+  return at
+}
+
+/** A one-shot decode run with `info: true`: what it decoded, and how much of the input the coder used. */
+interface Decoded {
+  readonly buffer: Uint8Array
+  readonly engine: { readonly bytesWritten: number }
+}
+
+// What a one-shot run with `info: true` decoded, when the coded content was all of `bytes`: bytes after it are not
+// part of it. `@types/node` types the result as the bytes alone.
+function whole(result: unknown, bytes: Uint8Array, coding: ContentCoding): Uint8Array {
+  const decoded = result as Decoded
+  if (!consumed(coding, decoded.engine.bytesWritten, bytes.byteLength, () => lastNonZeroOf(bytes))) {
+    throw invalid(coding)
+  }
+  return decoded.buffer
 }
 
 // Past the limit is a 413; anything else, bytes that are not `coding`'s.
@@ -188,6 +225,8 @@ export function decompressStream(coding: ContentCoding, body: ReadableStream<Uin
   // The coded bytes, counted, and what they failed with: a failure of the body is not one of its coding.
   const source = body.getReader()
   let received = 0
+  // The offset of the last byte received that is not zero, to tell gzip's zero padding from other bytes.
+  let lastNonZero = -1
   let failure: unknown
   let failed = false
   const counted = new ReadableStream<Uint8Array>(
@@ -198,6 +237,10 @@ export function decompressStream(coding: ContentCoding, body: ReadableStream<Uin
           if (next.done) {
             controller.close()
           } else {
+            const at = coding === 'gzip' ? lastNonZeroOf(next.value) : -1
+            if (at >= 0) {
+              lastNonZero = received + at
+            }
             received += next.value.byteLength
             controller.enqueue(next.value)
           }
@@ -220,10 +263,13 @@ export function decompressStream(coding: ContentCoding, body: ReadableStream<Uin
       async pull(controller) {
         try {
           const next = await reader.read()
-          if (next.done) {
+          if (!next.done) {
+            controller.enqueue(next.value)
+          } else if (consumed(coding, decoder.bytesWritten, received, () => lastNonZero)) {
             controller.close()
           } else {
-            controller.enqueue(next.value)
+            // Bytes after the coded content are not part of it.
+            controller.error(invalid(coding))
           }
         } catch (err) {
           if (failed) {

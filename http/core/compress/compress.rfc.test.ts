@@ -213,83 +213,33 @@ describe('RFC 9110 §8.6 Content-Length', () => {
   })
 })
 
-describe('RFC 9110 §8.8 validators and §15.4.5 304 Not Modified', () => {
-  const download = (type: string) =>
-    new Router('/download').get('/').handler(() => Attachment(BYTES, { name: 'fox.txt', type, etag: '"v1"' }))
+describe('RFC 9110 §8.8 validators, and 304 Not Modified', () => {
+  const download = () =>
+    new Router('/download')
+      .get('/')
+      .handler(() => Attachment(BYTES, { name: 'fox.txt', type: 'text/plain', etag: '"v1"' }))
 
-  it('§8.8.1: sends a strong tag weak on a compressed answer, one tag over two codings being two representations', async () => {
-    const app = await serve(undefined, download('text/plain'))
+  it("§8.8: keeps the route's tag on a compressed answer, so the tag a precondition compared is the one sent", async () => {
+    const app = await serve(undefined, download())
     const coded = await app.request('/download', { headers: { 'accept-encoding': 'gzip' } })
     const identity = await app.request('/download', { headers: { 'accept-encoding': 'identity' } })
 
-    expect(coded.headers.get('etag')).toBe('W/"v1"')
+    expect(coded.headers.get('content-encoding')).toBe('gzip')
+    expect(coded.headers.get('etag')).toBe('"v1"')
     expect(identity.headers.get('etag')).toBe('"v1"')
   })
 
-  it('§15.4.5: a 304 for a client holding the compressed answer carries the weak tag and the Vary its 200 had', async () => {
-    const app = await serve(undefined, download('text/plain'))
-    const res = await app.request('/download', {
-      headers: { 'accept-encoding': 'gzip', 'if-none-match': 'W/"v1"' },
-    })
-
-    expect(res.status).toBe(304)
-    expect(res.headers.get('etag')).toBe('W/"v1"')
-    expect(res.headers.get('vary')).toBe('Accept-Encoding')
-    expect(res.headers.get('content-encoding')).toBe(null)
-    expect((await wire(res)).byteLength).toBe(0)
-  })
-
-  it('§15.4.5: a 304 for a client holding the identity answer keeps the strong tag', async () => {
-    const app = await serve(undefined, download('text/plain'))
-    const res = await app.request('/download', { headers: { 'if-none-match': '"v1"' } })
-
-    expect(res.status).toBe(304)
-    expect(res.headers.get('etag')).toBe('"v1"')
-    expect(res.headers.get('vary')).toBe('Accept-Encoding')
-  })
-
-  // RFC 9110 §8.8.3: an entity tag's quoted part may hold a comma.
-  it('§15.4.5: reads a held weak tag holding a comma as one tag', async () => {
-    const commas = new Router('/commas')
-      .get('/')
-      .handler(() => Attachment(BYTES, { name: 'fox.txt', type: 'text/plain', etag: '"a,b"' }))
-    const app = await serve(undefined, commas)
-    const res = await app.request('/commas', {
-      headers: { 'accept-encoding': 'gzip', 'if-none-match': 'W/"a,b"' },
-    })
-
-    expect(res.status).toBe(304)
-    expect(res.headers.get('etag')).toBe('W/"a,b"')
-  })
-
-  // A client revalidating by date names no tag: the 304 carries the one the 200 it would get carries, or the client's
-  // cache stores the strong tag over the compressed bytes (RFC 9111 §4.3.4).
-  it('§15.4.5: a 304 for a client revalidating by date alone carries the weak tag of the compressed answer', async () => {
-    const changed = new Date('2026-01-01T00:00:00Z')
-    const dated = new Router('/dated')
-      .get('/')
-      .handler(() => Attachment(BYTES, { name: 'fox.txt', type: 'text/plain', etag: '"v1"', lastModified: changed }))
-    const app = await serve(undefined, dated)
-    const res = await app.request('/dated', {
-      headers: { 'accept-encoding': 'gzip', 'if-modified-since': changed.toUTCString() },
-    })
-
-    expect(res.status).toBe(304)
-    expect(res.headers.get('etag')).toBe('W/"v1"')
-    expect(res.headers.get('vary')).toBe('Accept-Encoding')
-  })
-
-  // A 304 carries no type to judge: what tells it the 200 was compressed is the weak tag the client sends back.
-  it('§15.4.5: a 304 for a client that holds the strong tag keeps it, even when it accepts a coding', async () => {
-    const app = await serve(undefined, download('image/png'))
+  it('leaves a 304 as the route built it, as ASP.NET Core does: its tag, no Vary and no Content-Encoding added', async () => {
+    const app = await serve(undefined, download())
     const res = await app.request('/download', {
       headers: { 'accept-encoding': 'gzip', 'if-none-match': '"v1"' },
     })
 
     expect(res.status).toBe(304)
     expect(res.headers.get('etag')).toBe('"v1"')
-    // Over-varies, as accepted: with no type, the 304 cannot tell its 200 was never compressed.
-    expect(res.headers.get('vary')).toBe('Accept-Encoding')
+    expect(res.headers.get('vary')).toBe(null)
+    expect(res.headers.get('content-encoding')).toBe(null)
+    expect((await wire(res)).byteLength).toBe(0)
   })
 })
 
@@ -371,6 +321,46 @@ describe('RFC 9110 §9.3.2 HEAD', () => {
     }
     expect((await wire(head)).byteLength).toBe(0)
   })
+
+  it('sends, for the HEAD of a GET that answers with no body, the head of that GET: nothing to code', async () => {
+    const nothing = new Router('/nothing').get('/').handler(ctx => {
+      ctx.header('content-type', 'text/plain')
+      return null
+    })
+    const app = await serve(undefined, nothing)
+    const get = await app.request('/nothing', { headers: { 'accept-encoding': 'gzip' } })
+    const head = await app.request('/nothing', { method: 'HEAD', headers: { 'accept-encoding': 'gzip' } })
+
+    expect(get.headers.get('content-encoding')).toBe(null)
+    expect(head.headers.get('content-encoding')).toBe(null)
+    expect(head.headers.get('vary')).toBe(get.headers.get('vary'))
+  })
+
+  // A HEAD route of its own answers with no body: what it says of the GET's representation decides.
+  it('sends, for a HEAD route that answers with no body, the head of the GET, with no identity length', async () => {
+    const pair = new Router('/pair')
+    pair.get('/').handler(ctx => {
+      ctx.header('content-type', 'text/plain')
+      ctx.header('etag', '"p1"')
+      return TEXT
+    })
+    pair.head('/').handler(ctx => {
+      ctx.header('content-type', 'text/plain')
+      ctx.header('content-length', String(BYTES.byteLength))
+      ctx.header('etag', '"p1"')
+      return null
+    })
+    const app = await serve(undefined, pair)
+    const get = await app.request('/pair', { headers: { 'accept-encoding': 'gzip' } })
+    const head = await app.request('/pair', { method: 'HEAD', headers: { 'accept-encoding': 'gzip' } })
+
+    expect(get.headers.get('content-encoding')).toBe('gzip')
+    for (const name of ['content-encoding', 'vary', 'etag', 'content-type']) {
+      expect(head.headers.get(name)).toBe(get.headers.get(name))
+    }
+    expect(head.headers.get('content-length')).toBe(null)
+    expect((await wire(head)).byteLength).toBe(0)
+  })
 })
 
 describe('RFC 9110 §15.3.5 204 and §15.3.6 205', () => {
@@ -418,5 +408,19 @@ describe('RFC 9110 §7.7 and RFC 9111 §5.2.2.6 no-transform', () => {
     })
 
     expect(res.headers.get('content-encoding')).toBe('gzip')
+  })
+
+  // RFC 9111 §5.2: a quoted value is one value, commas included: "no-transform" inside one names a field.
+  it.each([
+    ['private="x-one,no-transform,x-two"', 'gzip'],
+    ['private="x-one,no-transform,x-two", no-transform', null],
+  ])('reads %j as a list of directives outside its quoted values', async (value, coding) => {
+    const res = await (
+      await serve(undefined, cached(value))
+    ).request('/cc', {
+      headers: { 'accept-encoding': 'gzip' },
+    })
+
+    expect(res.headers.get('content-encoding')).toBe(coding)
   })
 })

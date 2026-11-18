@@ -39,7 +39,7 @@ export class DecompressionBuilder {
 
   /** The request codings decoded. Each call adds to the list; called with nothing, it sets the list empty. */
   encodings(...encodings: ContentCoding[]): this {
-    ;(this.#set.encodings ??= []).push(...encodings)
+    this.#set.encodings = encodings.length === 0 ? [] : [...(this.#set.encodings ?? []), ...encodings]
     return this
   }
 

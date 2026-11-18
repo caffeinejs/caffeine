@@ -9,6 +9,7 @@ import { bodyAsBuffer, bodyAsStream } from '../../index.js'
 import { node } from '../../platform/node/node.js'
 import { ErrConfiguration } from '../error/common.js'
 import { Router } from '../routing/programmatic/programmatic.js'
+import type { ContentCoding } from './compress.js'
 import { ENCODE, send } from './compress.testkit.js'
 import { decompress, decompression, type DecompressionBuilder } from './decompression.js'
 
@@ -92,6 +93,71 @@ describe('decompression() decoding request bodies', () => {
     const res = await (await serve(echo())).request(...post('gzip', Buffer.from('not gzip at all')))
 
     expect(res.status).toBe(400)
+  })
+
+  // Bytes after the coded content are not part of it: decoding only what comes before would hand the route part of
+  // what the client sent.
+  it.each(['zstd', 'br', 'gzip', 'deflate'] as const)(
+    'answers %s content followed by other bytes with a 400',
+    async coding => {
+      const res = await (
+        await serve(echo())
+      ).request(...post(coding, Buffer.concat([ENCODE[coding](Buffer.from('{"a":1}')), Buffer.from('trailing junk')])))
+
+      expect(res.status).toBe(400)
+    },
+  )
+
+  it.each(['zstd', 'br', 'gzip', 'deflate'] as const)(
+    'answers %s content followed by other bytes with a 400 when the route streams it',
+    async coding => {
+      const streamed = new Router('/stream')
+        .post('/')
+        .extend(bodyAsStream())
+        .handler(async ctx => new Response(ctx.req.body() as ReadableStream<Uint8Array>).text())
+      const res = await (
+        await serve(streamed)
+      ).request(
+        ...post(
+          coding,
+          Buffer.concat([ENCODE[coding](Buffer.from('{"a":1}')), Buffer.from('trailing junk')]),
+          '/stream',
+        ),
+      )
+
+      expect(res.status).toBe(400)
+    },
+  )
+
+  // gunzip reads zero bytes after a member as the padding some writers leave, and decodes the member.
+  it('decodes gzip content followed by zero padding, buffered and streamed', async () => {
+    const padded = Buffer.concat([gzipSync('{"a":1}'), Buffer.alloc(4)])
+    const streamed = new Router('/stream')
+      .post('/')
+      .extend(bodyAsStream())
+      .handler(async ctx => new Response(ctx.req.body() as ReadableStream<Uint8Array>).text())
+    const app = await serve(echo(), streamed)
+
+    const buffered = await app.request(...post('gzip', padded))
+    const stream = await app.request(...post('gzip', padded, '/stream'))
+
+    expect(buffered.status).toBe(200)
+    expect(await buffered.json()).toEqual({ a: 1 })
+    expect(stream.status).toBe(200)
+    expect(await stream.text()).toBe('{"a":1}')
+  })
+
+  // Padding is zeros to the end: a zero byte then others is not padding, and the others are not part of the content.
+  it('answers gzip content followed by a zero byte and other bytes with a 400, buffered and streamed', async () => {
+    const tail = Buffer.concat([gzipSync('{"a":1}'), Buffer.from([0]), Buffer.from('junk')])
+    const streamed = new Router('/stream')
+      .post('/')
+      .extend(bodyAsStream())
+      .handler(async ctx => new Response(ctx.req.body() as ReadableStream<Uint8Array>).text())
+    const app = await serve(echo(), streamed)
+
+    expect((await app.request(...post('gzip', tail))).status).toBe(400)
+    expect((await app.request(...post('gzip', tail, '/stream'))).status).toBe(400)
   })
 
   it("decodes only the route's own codings", async () => {
@@ -322,6 +388,22 @@ describe('two decompression() over one route', () => {
   })
 })
 
+describe('decompression() reading its settings once', () => {
+  it('keeps the codings it was built with when the list handed to config(...) changes later', async () => {
+    const list: ContentCoding[] = ['gzip']
+    const app = await serveWith(
+      d => d.config({ encodings: list }),
+      new Router('/echo').post('/').handler(ctx => ctx.req.body()),
+    )
+    list.push('br')
+
+    const res = await app.request(...post('br', brotliCompressSync('{"a":1}')))
+
+    expect(res.status).toBe(415)
+    expect(res.headers.get('accept-encoding')).toBe('gzip')
+  })
+})
+
 describe('decompression() refusing settings at start-up', () => {
   async function refusal(build: () => Promise<unknown>): Promise<string> {
     const failure = await build().then(
@@ -340,6 +422,12 @@ describe('decompression() refusing settings at start-up', () => {
     [{ level: 1 }, 'Cannot build decompression(): "level" is not a decompression setting'],
   ])('refuses %j', async (config, message) => {
     expect(await refusal(() => serveWith(d => d.config(config as never)))).toBe(message)
+  })
+
+  it('refuses encodings() called with no coding after one with codings: the call empties the list', async () => {
+    expect(await refusal(() => serveWith(d => d.encodings('gzip').encodings()))).toBe(
+      'Cannot build decompression(): "encodings" lists no coding',
+    )
   })
 
   it('refuses encodings() called with no coding', async () => {

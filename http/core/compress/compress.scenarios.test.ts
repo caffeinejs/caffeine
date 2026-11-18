@@ -107,7 +107,7 @@ describe('a download under compression()', () => {
     const resumed = await send(origin, '/report.txt', { headers: { 'accept-encoding': 'gzip', range: 'bytes=1000-' } })
 
     expect(whole.headers['content-encoding']).toBe('gzip')
-    expect(whole.headers.etag).toBe('W/"r1"')
+    expect(whole.headers.etag).toBe('"r1"')
     expect(whole.headers['accept-ranges']).toBe(undefined)
     expect(gunzipSync(whole.body)).toEqual(CONTENT)
 
@@ -116,19 +116,19 @@ describe('a download under compression()', () => {
     expect(resumed.body).toEqual(CONTENT.subarray(1000))
   })
 
-  // A weak tag never satisfies If-Range: resuming on the compressed answer's tag restarts the download whole.
-  it('sends the whole file to a client resuming on the weak tag of the compressed answer', async () => {
+  it("resumes from identity bytes on the route's tag", async () => {
     const origin = await listen(app().with(compression()), download())
 
     const res = await send(origin, '/report.txt', {
-      headers: { 'accept-encoding': 'identity', range: 'bytes=1000-', 'if-range': 'W/"r1"' },
+      headers: { 'accept-encoding': 'gzip', range: 'bytes=1000-', 'if-range': '"r1"' },
     })
 
-    expect(res.status).toBe(200)
-    expect(res.body).toEqual(CONTENT)
+    expect(res.status).toBe(206)
+    expect(res.headers['content-encoding']).toBe(undefined)
+    expect(res.body).toEqual(CONTENT.subarray(1000))
   })
 
-  it('revalidates the compressed answer with a 304 that keeps its weak tag and Vary', async () => {
+  it("revalidates the compressed answer with a 304 that carries the route's tag, as the route built it", async () => {
     const origin = await listen(app().with(compression()), download())
 
     const first = await send(origin, '/report.txt', { headers: { 'accept-encoding': 'br' } })
@@ -136,10 +136,10 @@ describe('a download under compression()', () => {
       headers: { 'accept-encoding': 'br', 'if-none-match': first.headers.etag as string },
     })
 
-    expect(first.headers.etag).toBe('W/"r1"')
+    expect(first.headers.etag).toBe('"r1"')
     expect(again.status).toBe(304)
-    expect(again.headers.etag).toBe('W/"r1"')
-    expect(again.headers.vary).toBe('Accept-Encoding')
+    expect(again.headers.etag).toBe('"r1"')
+    expect(again.headers.vary).toBe(undefined)
     expect(again.body.byteLength).toBe(0)
   })
 })

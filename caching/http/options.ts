@@ -30,8 +30,8 @@ export interface HTTPCachingOptions {
    * `string`/`symbol` is a token, a `function` is the generator itself. Defaults to an internal SHA-1 hash
    * when omitted; a token that resolves to nothing throws `ErrConfiguration`.
    *
-   * The default tag is strong and hashed before any content-coding. Behind `compression()`, a compressed answer
-   * carries it weak and an identity answer keeps it strong.
+   * The default tag is strong and hashed before any content-coding. Behind `compression()`, the one tag goes out
+   * with every coding.
    */
   etagGenerator?: ETagGenerator | InjectionToken<ETagGenerator>
   /** The cache-status response header name. Defaults to {@link DEFAULT_STATUS_HEADER}. */

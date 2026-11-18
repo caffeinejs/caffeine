@@ -60,6 +60,15 @@ describe('selectEncoding over codings in the order the server prefers them', () 
   })
 })
 
+describe('selectEncoding over codings the caller spells its own way', () => {
+  it('matches an offered token whatever its case or alias, and answers with the entry as offered', () => {
+    expect(selectEncoding('gzip', ['GZIP'])).toBe('GZIP')
+    expect(selectEncoding('gzip', ['x-gzip'])).toBe('x-gzip')
+    expect(selectEncoding('x-gzip', ['Gzip'])).toBe('Gzip')
+    expect(selectEncoding('br;q=0, gzip', ['BR', 'Gzip'])).toBe('Gzip')
+  })
+})
+
 describe('isCompressible', () => {
   it.each([
     'text/html; charset=utf-8',

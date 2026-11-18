@@ -1,6 +1,16 @@
 import { Readable } from 'node:stream'
+import { gzipSync } from 'node:zlib'
 
-import { Controller, ErrConfiguration, Get, Header, Post, Status, createWebApplication } from '@caffeinejs/http'
+import {
+  Controller,
+  ErrConfiguration,
+  Get,
+  Header,
+  Post,
+  Status,
+  corsPolicy,
+  createWebApplication,
+} from '@caffeinejs/http'
 import { node } from '@caffeinejs/http/node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
@@ -252,6 +262,27 @@ describe('a response left out of the store', () => {
     @CacheControl({ ttl: 60 * Second })
     @Get('/empty')
     empty() {}
+
+    @CacheControl({ ttl: 60 * Second })
+    @Header('Content-Encoding', 'gzip')
+    @Get('/coded')
+    coded() {
+      return gzipSync('coded')
+    }
+
+    @CacheControl({ ttl: 60 * Second, vary: ['Accept-Encoding'] })
+    @Header('Content-Encoding', 'gzip')
+    @Get('/declared')
+    declared() {
+      return gzipSync('coded')
+    }
+
+    @CacheControl({ ttl: 60 * Second, key: req => `keyed:${req.header('accept-encoding') ?? ''}` })
+    @Header('Content-Encoding', 'gzip')
+    @Get('/keyed')
+    keyed() {
+      return gzipSync('coded')
+    }
   }
   void [SkipController]
 
@@ -294,6 +325,74 @@ describe('a response left out of the store', () => {
     await app.request('/skip/cookie')
 
     expect(skips).toMatchObject([{ route: { url: '/skip/cookie' }, reason: 'set-cookie', size: 11 }])
+  })
+
+  // RFC 9111 §4.1: coded bytes answer only the requests that accept the coding, such as gzip a compressor wrote, and
+  // a key without Accept-Encoding would hand them to a client asking for identity.
+  it('carries a content coding the key does not vary on: it goes out, is not stored, and is reported', async () => {
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    const first = await app.request('/skip/coded')
+    const second = await app.request('/skip/coded')
+    const size = gzipSync('coded').byteLength
+
+    expect(first.headers.get('content-encoding')).toBe('gzip')
+    expect(second.headers.get('x-cache')).toBe('MISS')
+    expect(skips).toMatchObject([
+      { route: { url: '/skip/coded' }, reason: 'uncovered-vary', size },
+      { route: { url: '/skip/coded' }, reason: 'uncovered-vary', size },
+    ])
+  })
+
+  it('carries a content coding the key varies on, by vary or by a key function: it is stored', async () => {
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    await app.request('/skip/declared')
+    const declared = await app.request('/skip/declared')
+    await app.request('/skip/keyed')
+    const keyed = await app.request('/skip/keyed')
+
+    expect(declared.headers.get('x-cache')).toBe('HIT')
+    expect(keyed.headers.get('x-cache')).toBe('HIT')
+    expect(skips).toEqual([])
+  })
+
+  // CORS sets its headers, Vary: Origin among them, on every answer, a hit included: the stored body fits every origin.
+  it('varies on Origin through corsPolicy(): it is stored, and each hit answers its own origin', async () => {
+    @Controller('/skip-cors')
+    class CorsController {
+      @CacheControl({ ttl: 60 * Second })
+      @Get('/')
+      list() {
+        return [1, 2, 3]
+      }
+    }
+    void [CorsController]
+
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication({ adapter: node() })
+      .with(corsPolicy(c => c.origins('https://a.example', 'https://b.example')))
+      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })))
+    close = () => app.close()
+    await app.bootstrap()
+
+    await app.request('/skip-cors', { headers: { origin: 'https://a.example' } })
+    const hit = await app.request('/skip-cors', { headers: { origin: 'https://b.example' } })
+
+    expect(hit.headers.get('x-cache')).toBe('HIT')
+    expect(hit.headers.get('vary')).toBe('Origin')
+    expect(hit.headers.get('access-control-allow-origin')).toBe('https://b.example')
+    expect(skips).toEqual([])
   })
 
   // A compressor installed ahead of the cache hands it a stream on every response: without a report the cache

@@ -330,10 +330,14 @@ Order matters in two places:
 - Install it after the authentication gate, `.with(authentication())`. Guards run before the cache, on a hit as
   well as on a miss, so a cached response never skips authorization.
 - Install it before `compression()`, in the same slot or an outer one, so the store holds identity bytes and each
-  answer is compressed for the client asking, hit or miss.
+  answer is compressed for the client asking, hit or miss. Installed after it, it stores none of the answers
+  `compression()` coded, unless the route's key varies on `Accept-Encoding`.
 
-The default `ETag` is a strong tag hashed from the payload before any content-coding. Behind `compression()`, a
-compressed answer carries it weak and an identity answer keeps it strong.
+A response that carries a `Content-Encoding` other than `identity` is stored only when the key tells codings apart:
+`vary: ['Accept-Encoding']`, or a `key` function.
+
+The default `ETag` is a strong tag hashed from the payload before any content-coding. Behind `compression()`, the one
+tag goes out with every coding.
 
 ## Stores
 
@@ -514,7 +518,7 @@ HTTPCaching((b, { logger }) => b.store(store).observer(composeObservers(metrics,
 | `onMiss`         | Nothing to serve: `absent`, `expired`, `stale-for-request`, `only-if-cached` (answered `504`), or `not-coalesced` (waited on a handler run that stored nothing it could use).                |
 | `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `range`, `precondition`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`. |
 | `onStore`        | A response was stored, with its `size` in bytes and its tags.                                                                                                                                |
-| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `entry-too-large`, `stream`, or `empty` (no body at all).                                                                   |
+| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `uncovered-vary`, `entry-too-large`, `stream`, or `empty` (no body at all).                                                 |
 | `onInvalidate`   | An eviction went through, with its tags.                                                                                                                                                     |
 | `onStaleIfError` | A `5xx` was replaced by a stale entry. The miss was already reported; this is not a second hit.                                                                                              |
 | `onError`        | A store call rejected or timed out: `get`, `put` or `evict`.                                                                                                                                 |

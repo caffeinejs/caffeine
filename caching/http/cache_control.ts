@@ -91,6 +91,9 @@ export interface CacheControlOptions {
    *
    * A route selected by a constraint — a version, a host — shares its URL with the routes selected otherwise, so
    * it must list the constraint's header here, or have its own `key`; it is refused at start-up otherwise.
+   *
+   * A response carrying a `Content-Encoding` other than `identity` is stored only when this lists `Accept-Encoding`,
+   * or the route has its own `key`.
    */
   vary?: string[]
   /**
@@ -125,7 +128,12 @@ export interface CacheControlOptions {
    * other status carries nothing of this policy but `noStore`.
    */
   statusCodes?: number[]
-  /** Derives the store key instead of the default. Eviction is by tag, so the key is the cache's own concern. */
+  /**
+   * Derives the store key instead of the default. Eviction is by tag, so the key is the cache's own concern.
+   *
+   * It answers for every header the response varies on: a response carrying a `Content-Encoding` is stored whatever
+   * the key reads.
+   */
   key?: (req: IContext['req']) => string
   /**
    * Hashes the payload into the `ETag`, instead of the one given to `HTTPCaching`. The default tag is strong and
@@ -277,6 +285,8 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
   const privateCacheControl = buildCacheControl(read, 'private')
   const vary = read.vary?.length ? read.vary : undefined
   const varyAny = vary?.includes('*') === true
+  // Whether the default key tells one content coding of a response from another.
+  const keyedOnCoding = vary?.some(name => name.toLowerCase() === 'accept-encoding') === true
   const statusHeaderName = statusHeader.toLowerCase()
 
   // One request's state, from its read hook to its store hook. Created on the first write: a request the read hook
@@ -737,6 +747,10 @@ export function attachCacheHooks(route: RouteDefinition, opts: CacheControlOptio
       if (read.privacy !== 'public' && ctx.hasHeader('set-cookie')) {
         // A response that sets a cookie is taken for one client's, unless the route said `public`.
         observer?.onSkip?.({ route: routeOf(ctx), key, reason: 'set-cookie', size })
+      } else if (read.key === undefined && !keyedOnCoding && coded(ctx.getHeader('content-encoding'))) {
+        // RFC 9111 §4.1: coded bytes, such as a compressor wrote, answer only the requests that accept that coding,
+        // which a key without Accept-Encoding cannot tell apart.
+        observer?.onSkip?.({ route: routeOf(ctx), key, reason: 'uncovered-vary', size })
       } else if (maxEntrySize !== undefined && size > maxEntrySize) {
         observer?.onSkip?.({ route: routeOf(ctx), key, reason: 'entry-too-large', size })
       } else {
@@ -800,4 +814,15 @@ function discard(payload: SendPayload): void {
   if (payload instanceof ReadableStream) {
     payload.cancel().catch(() => undefined)
   }
+}
+
+// Whether a `Content-Encoding` names a coding other than identity.
+function coded(contentEncoding: string | undefined): boolean {
+  return (
+    contentEncoding !== undefined &&
+    contentEncoding.split(',').some(coding => {
+      const token = coding.trim().toLowerCase()
+      return token !== '' && token !== 'identity'
+    })
+  )
 }

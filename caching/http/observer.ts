@@ -55,6 +55,8 @@ export type CacheMissReason =
 export type CacheSkipReason =
   /** The response set a cookie and the route did not declare itself public. */
   | 'set-cookie'
+  /** The response carries a content coding and the cache key does not vary on `Accept-Encoding`. */
+  | 'uncovered-vary'
   /** The payload is larger than `maxEntrySize`. */
   | 'entry-too-large'
   /** The payload is a stream, which is neither hashed nor stored. */

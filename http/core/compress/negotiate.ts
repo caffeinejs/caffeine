@@ -1,6 +1,6 @@
 /**
- * The most `Accept-Encoding` entries read. A longer header is not read at all, and refused: an entry past the limit
- * could refuse the coding the others pick, identity included.
+ * The most `Accept-Encoding` entries read. A longer header is not read at all, and `selectEncoding` answers
+ * `undefined`: an entry past the limit could refuse the coding the others pick, identity included.
  */
 const MOST_ENTRIES = 32
 
@@ -40,7 +40,7 @@ export function selectEncoding<E extends string>(
 
   // In preference order, and only a higher rating replaces it, so a tie keeps the one offered first.
   for (const encoding of available) {
-    const q = rated.get(encoding) ?? star ?? 0
+    const q = rated.get(normalize(encoding.toLowerCase())) ?? star ?? 0
 
     if (q > bestQ) {
       best = encoding

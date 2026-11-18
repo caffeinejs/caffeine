@@ -3,7 +3,6 @@ import { KiB, type ByteSize } from '@caffeinejs/std/bytes'
 import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import { appendVary } from '../../vary.js'
-import { preconditionFailed } from '../conditional/conditional.js'
 import type { ErrConfiguration } from '../error/common.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
@@ -72,9 +71,12 @@ export class CompressionBuilder {
     return this
   }
 
-  /** The codings offered, in the order the server prefers them. */
+  /**
+   * The codings offered, in the order the server prefers them. Each call adds to the list; called with nothing, it
+   * sets the list empty.
+   */
   encodings(...encodings: ContentCoding[]): this {
-    ;(this.#set.encodings ??= []).push(...encodings)
+    this.#set.encodings = encodings.length === 0 ? [] : [...(this.#set.encodings ?? []), ...encodings]
     return this
   }
 
@@ -125,13 +127,15 @@ export class CompressionBuilder {
  * It compresses an answer in the coding the client prefers among those offered (RFC 9110 §12.5.3). An answer is
  * compressed when its `Content-Type` is compressible and its size, when known, is at least the threshold; it then
  * varies on `Accept-Encoding`, whichever coding goes out. An answer that is already coded, a 206, or one that says
- * `Cache-Control: no-transform` goes out as it is. A compressed answer's strong `ETag` is sent weak, and its
- * `Accept-Ranges`, `Content-Digest`, `Repr-Digest` and `Content-MD5` are dropped: they describe the identity bytes.
- * No acceptable coding, `identity;q=0` included, sends identity rather than a 406, since the handler has run.
+ * `Cache-Control: no-transform` goes out as it is. A compressed answer keeps its `ETag`, and its `Accept-Ranges`,
+ * `Content-Digest`, `Repr-Digest` and `Content-MD5` are dropped: they describe the identity bytes. A 304 goes out as
+ * the route built it. No acceptable coding, `identity;q=0` included, sends identity rather than a 406, since the
+ * handler has run.
  *
  * Its hooks run on each route after the server's, the scopes', the group's and the route's own, and after the hooks
  * that plugins in outer slots, or registered before it in its slot, add to the route. So it compresses what
- * `HTTPCaching` stores only when caching is registered before it in the same slot, or in an outer one. Only the
+ * `HTTPCaching` stores only when caching is registered before it in the same slot, or in an outer one; registered
+ * after it, caching stores none of the answers it coded, unless the route's key varies on `Accept-Encoding`. Only the
  * routes of its slot are covered: a 404 for a path no route matches is not compressed. With several over one route, a
  * server's, a router's and a controller's, the innermost one alone compresses it, by its own settings and the route's
  * `compress(...)`.
@@ -263,26 +267,20 @@ function encode(
 ): SendPayload | undefined | Promise<SendPayload> {
   const status = ctx.statusCode
 
-  // A 304 carries no body, so it reaches here with none: it says what its 200 would have, by type when it has one.
-  // Its tag is sent weak to a client that holds it weak, one a compressed 200 gave it, or that names no tag.
-  if (status === 304) {
-    if (eligible(ctx, policy, true)) {
-      varyOnCoding(ctx)
-      if (isCoding(selectEncoding(ctx.req.header('accept-encoding'), policy.encodings)) && heldWeak(ctx)) {
-        weakenETag(ctx)
-      }
-    }
-    return undefined
-  }
+  // A HEAD route of its own answers with no body, and says in its head what the GET's representation is: a length.
+  const head = ctx.req.method === 'HEAD'
+  // Read before the coding replaces the body: a stream that declared its length is a whole, not a feed.
+  const sized = ctx.getHeader('content-length') !== undefined
 
-  // Bodies the engine never sends: no content (204, 205) and a range of identity bytes (206).
+  // Bodies the engine never sends: no content (204, 205, 304) and a range of identity bytes (206).
   if (
-    payload === null ||
+    (payload === null && !(head && sized)) ||
     status === 204 ||
     status === 205 ||
     status === 206 ||
+    status === 304 ||
     ctx.getHeader('content-range') !== undefined ||
-    !eligible(ctx, policy, false) ||
+    !eligible(ctx, policy) ||
     belowThreshold(ctx, payload, policy.threshold)
   ) {
     return undefined
@@ -295,22 +293,21 @@ function encode(
     return undefined
   }
 
-  // Read before the coding replaces the body: a stream that declared its length is a whole, not a feed.
-  const sized = ctx.getHeader('content-length') !== undefined
   ctx.header('content-encoding', coding)
-  weakenETag(ctx)
   // What describes the identity bytes no longer holds: their ranges, and their digests (RFC 9530, RFC 1864).
   for (const name of IDENTITY_ONLY) {
     ctx.removeHeader(name)
   }
 
-  if (ctx.req.method === 'HEAD') {
+  // `payload` is `null` for a HEAD alone.
+  if (head || payload === null) {
     // The engine drops what goes out and cancels only that: the handler's own stream is closed here.
     if (payload instanceof ReadableStream) {
       payload.cancel().catch(() => undefined)
     }
 
-    // A stream has no length, so the head carries none rather than the identity body's.
+    // The coded length is not known, so the head carries none rather than the identity body's.
+    ctx.removeHeader('content-length')
     return new ReadableStream<Uint8Array>({ start: controller => controller.close() })
   }
 
@@ -333,34 +330,8 @@ function isCoding(selected: ContentCoding | 'identity' | undefined): selected is
   return selected !== undefined && selected !== 'identity'
 }
 
-// RFC 9110 §8.8.1: one tag for two codings is two representations under one strong validator.
-function weakenETag(ctx: IContext): void {
-  const etag = ctx.getHeader('etag')
-  if (etag !== undefined && etag.startsWith('"')) {
-    ctx.header('etag', `W/${etag}`)
-  }
-}
-
-/**
- * Whether a client whose `If-None-Match` matched the answer's strong tag holds it weak: one a compressed 200 gave it.
- * The list is read as `If-Match` reads it, by strong comparison (RFC 9110 §8.8.3.2), which only the strong tag passes.
- * A client that names no tag, revalidating by date, is sent the tag the 200 it would get carries.
- */
-function heldWeak(ctx: IContext): boolean {
-  const etag = ctx.getHeader('etag')
-  if (etag === undefined || !etag.startsWith('"')) {
-    return false
-  }
-
-  const held = ctx.req.header('if-none-match')
-  return held === undefined || preconditionFailed(held, undefined, { etag })
-}
-
-/**
- * Whether the head lets the answer be compressed: no coding of its own, no `no-transform`, and a compressible type;
- * `untyped` says what an answer with no `Content-Type` is, as a 304 carries none.
- */
-function eligible(ctx: IContext, policy: ResolvedCompression, untyped: boolean): boolean {
+/** Whether the head lets the answer be compressed: no coding of its own, no `no-transform`, and a compressible type. */
+function eligible(ctx: IContext, policy: ResolvedCompression): boolean {
   const coded = ctx.getHeader('content-encoding')
   if (
     (coded !== undefined && coded.trim().toLowerCase() !== 'identity') ||
@@ -370,7 +341,7 @@ function eligible(ctx: IContext, policy: ResolvedCompression, untyped: boolean):
   }
 
   const type = ctx.getHeader('content-type')
-  return type === undefined ? untyped : policy.compressible(type)
+  return type !== undefined && policy.compressible(type)
 }
 
 // RFC 9110 §12.5.5: the coding was chosen by `Accept-Encoding`.
@@ -382,23 +353,28 @@ function varyOnCoding(ctx: IContext): void {
   }
 }
 
-// RFC 9111 §5.2.2.6: a directive, matched as a token, without regard to case.
+// RFC 9111 §5.2.2.6: a directive, matched as a token, without regard to case. Only a comma outside a quoted value
+// separates two directives.
 function noTransform(cacheControl: string | undefined): boolean {
   return (
     cacheControl !== undefined &&
-    cacheControl.split(',').some(directive => directive.split('=', 1)[0]!.trim().toLowerCase() === 'no-transform')
+    NO_TRANSFORM.test(cacheControl) &&
+    cacheControl
+      .replace(QUOTED, '""')
+      .split(',')
+      .some(directive => directive.split('=', 1)[0]!.trim().toLowerCase() === 'no-transform')
   )
 }
 
+const NO_TRANSFORM = /no-transform/i
+const QUOTED = /"(?:[^"\\]|\\.)*"/g
+
 /**
  * Whether the body is known to be under `threshold`. Text is bounded by its length before it is measured: its UTF-8
- * bytes are at least its length and at most three times it. A stream is measured by the length it declares.
+ * bytes are at least its length and at most three times it. A stream, or a HEAD that answered with no body, is
+ * measured by the length its head declares.
  */
-function belowThreshold(
-  ctx: IContext,
-  payload: string | Uint8Array | ReadableStream<Uint8Array>,
-  threshold: ByteSize,
-): boolean {
+function belowThreshold(ctx: IContext, payload: SendPayload, threshold: ByteSize): boolean {
   if (typeof payload === 'string') {
     if (payload.length >= threshold) {
       return false
@@ -516,7 +492,8 @@ export function codingsOf(value: unknown, key: string, where: string): readonly 
     seen.add(coding)
   }
 
-  return value as ContentCoding[]
+  // A copy: the caller's array may change after the settings are read.
+  return [...(value as ContentCoding[])]
 }
 
 export function refusal(where: string, reason: string, ...solutions: string[]): ErrConfiguration {

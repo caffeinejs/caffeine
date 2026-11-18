@@ -8,7 +8,7 @@ import { createWebApplication } from '../../application.js'
 import { node } from '../../platform/node/node.js'
 import { ErrConfiguration } from '../error/common.js'
 import { Router } from '../routing/programmatic/programmatic.js'
-import { compress, compression, type CompressionBuilder } from './compress.js'
+import { compress, compression, type CompressionBuilder, type ContentCoding } from './compress.js'
 import { DECODE, decodeAs, send } from './compress.testkit.js'
 
 // Any router, as `mount` takes them: the route types each carries are not under test here.
@@ -155,43 +155,34 @@ describe('compression() deciding what is worth compressing', () => {
 })
 
 describe('compression() and validators', () => {
-  const tagged = (etag: string) =>
+  const tagged = () =>
     new Router('/tagged').get('/').handler(ctx => {
-      ctx.header('etag', etag)
+      ctx.header('etag', '"v1"')
       ctx.header('accept-ranges', 'bytes')
       return PETS
     })
 
-  it('sends a strong tag weak, and drops Accept-Ranges, on a compressed answer', async () => {
+  it("keeps the route's strong tag on a compressed answer, and drops Accept-Ranges", async () => {
     const res = await (
-      await serve(undefined, tagged('"v1"'))
+      await serve(undefined, tagged())
     ).request('/tagged', {
       headers: { 'accept-encoding': 'gzip' },
     })
 
-    expect(res.headers.get('etag')).toBe('W/"v1"')
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    expect(res.headers.get('etag')).toBe('"v1"')
     expect(res.headers.get('accept-ranges')).toBe(null)
   })
 
   it('keeps the strong tag and Accept-Ranges on an identity answer', async () => {
     const res = await (
-      await serve(undefined, tagged('"v1"'))
+      await serve(undefined, tagged())
     ).request('/tagged', {
       headers: { 'accept-encoding': 'identity' },
     })
 
     expect(res.headers.get('etag')).toBe('"v1"')
     expect(res.headers.get('accept-ranges')).toBe('bytes')
-  })
-
-  it('keeps a weak tag as it is', async () => {
-    const res = await (
-      await serve(undefined, tagged('W/"v1"'))
-    ).request('/tagged', {
-      headers: { 'accept-encoding': 'gzip' },
-    })
-
-    expect(res.headers.get('etag')).toBe('W/"v1"')
   })
 })
 
@@ -418,6 +409,18 @@ describe('two compression() over one route', () => {
   })
 })
 
+describe('compression() reading its settings once', () => {
+  it('keeps the codings it was built with when the list handed to config(...) changes later', async () => {
+    const list: ContentCoding[] = ['gzip']
+    const app = await serve(c => c.config({ encodings: list }))
+    list.push('br')
+
+    const res = await app.request('/pets', { headers: { 'accept-encoding': 'br' } })
+
+    expect(res.headers.get('content-encoding')).toBe(null)
+  })
+})
+
 describe('compression() refusing settings at start-up', () => {
   async function refusal(build: () => Promise<unknown>): Promise<string> {
     const failure = await build().then(
@@ -429,6 +432,12 @@ describe('compression() refusing settings at start-up', () => {
   }
 
   const withConfig = (config: object) => () => serve(c => c.config(config as never))
+
+  it('refuses encodings() called with no coding after one with codings: the call empties the list', async () => {
+    expect(await refusal(() => serve(c => c.encodings('gzip').encodings()))).toBe(
+      'Cannot build compression(): "encodings" lists no coding',
+    )
+  })
 
   it.each([
     [{ encodings: [] }, 'Cannot build compression(): "encodings" lists no coding'],
