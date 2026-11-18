@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream'
-import { brotliCompressSync, constants, deflateSync, gunzipSync, gzipSync } from 'node:zlib'
+import { brotliCompressSync, constants, deflateSync, gunzipSync, gzipSync, zstdCompressSync } from 'node:zlib'
 
 import { KiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -479,6 +479,22 @@ describe("compression() coding at each builder method's setting", () => {
 
     expect(res.headers.get('content-encoding')).toBe(coding)
     expect(await bytesOf(res)).toEqual(expected())
+  })
+})
+
+// zstd tunes its parameters to the size it is told, and records it in the frame: a body coded off the calling thread
+// is told its size as one coded on it is, and comes out the same.
+describe('compression() coding a body off the calling thread in zstd', () => {
+  it('codes it as the one-shot call does, its size in the frame', async () => {
+    const text = Array.from({ length: 4 * KiB }, (_, i) => `line ${i % 97} of ${i % 13}\n`).join('')
+    const large = new Router('/large').get('/').handler(() => text)
+    const res = await (
+      await serve(c => c.zstd({ level: 1 }), large)
+    ).request('/large', { headers: { 'accept-encoding': 'zstd' } })
+
+    expect(Buffer.byteLength(text)).toBeGreaterThan(16 * KiB)
+    expect(res.headers.get('content-encoding')).toBe('zstd')
+    expect(await bytesOf(res)).toEqual(zstdCompressSync(text, { params: { [constants.ZSTD_c_compressionLevel]: 1 } }))
   })
 })
 

@@ -73,7 +73,10 @@ export function compressBytes(
     }
     case 'zstd': {
       const options = zstdOptions(codecs)
-      return sync ? zstdCompressSync(bytes, options) : oneShot(done => zstdCompress(bytes, options, done))
+      // Told the size, as the call on this thread is, zstd tunes to it and records it in the frame.
+      return sync
+        ? zstdCompressSync(bytes, options)
+        : oneShot(done => zstdCompress(bytes, { ...options, pledgedSrcSize: bytes.byteLength }, done))
     }
   }
 }
