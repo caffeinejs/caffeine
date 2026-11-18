@@ -15,6 +15,12 @@ export interface BunServer {
   stop(closeActiveConnections?: boolean): Promise<void>
 }
 
+/** Bun's request `Headers`, with Bun's own `toJSON()`. */
+export interface BunHeaders extends Headers {
+  /** Every header by lower-case name; `set-cookie` as a list. */
+  toJSON(): Record<string, string | string[]>
+}
+
 /** What Bun's `tls` takes, in node:https's names: PEM text or bytes, one or several. */
 export interface BunTLS {
   readonly key?: string | Buffer | readonly (string | Buffer)[]

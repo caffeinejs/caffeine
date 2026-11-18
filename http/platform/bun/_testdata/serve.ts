@@ -3,7 +3,17 @@
 // where the application and its listener listen.
 import { readFileSync } from 'node:fs'
 
-import { $p, Args, bindTo, Controller, createWebApplication, Get, Router, type IContext } from '../../../dist/index.js'
+import {
+  $p,
+  Args,
+  bindTo,
+  Controller,
+  createWebApplication,
+  Get,
+  Post,
+  Router,
+  type IContext,
+} from '../../../dist/index.js'
 import { bun } from '../../../dist/platform/bun/index.js'
 
 const settings = JSON.parse(process.argv[2] ?? '{}') as Record<string, unknown>
@@ -26,6 +36,17 @@ class WhoController {
   }
 }
 void WhoController
+
+// Answers with the body and every header the route read.
+@Controller('/echo')
+class EchoController {
+  @Post('/')
+  @Args([$p.body(), $p.header()])
+  echo(body: unknown, headers: Record<string, string>) {
+    return { body, headers }
+  }
+}
+void EchoController
 
 let callbackPort: number | undefined
 

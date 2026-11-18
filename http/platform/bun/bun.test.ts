@@ -1,11 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtempSync, readFileSync } from 'node:fs'
-import { Agent, get as httpGet } from 'node:http'
+import { Agent, get as httpGet, request as httpRequest } from 'node:http'
 import { get as httpsGet } from 'node:https'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { Byte, KiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
@@ -163,6 +164,19 @@ function exited(child: ChildProcess): Promise<number | null> {
   })
 }
 
+// A body of `parts`, one chunk each, that declares no length: fetch sends it chunked.
+function chunked(...parts: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder()
+  return new ReadableStream({
+    start(controller) {
+      for (const part of parts) {
+        controller.enqueue(encoder.encode(part))
+      }
+      controller.close()
+    },
+  })
+}
+
 // A real `bun` process starts in well under a second; the budget covers a busy machine.
 describe('bun() on Bun', { timeout: 30_000 }, () => {
   it("answers over Bun's socket with the peer address, on the fetch platform", async () => {
@@ -229,6 +243,83 @@ describe('bun() on Bun', { timeout: 30_000 }, () => {
     // The fixture probes, from inside, the port the callback was handed, once run() has failed.
     expect(await running.line(line => 'failed' in line)).toEqual({ failed: 'callback failed', reachable: false })
     expect(await exited(running.child)).toBe(1)
+  })
+
+  it('reads a JSON body framed by Content-Length, and every request header by lower-case name', async () => {
+    const { origin } = await serve({ listen: { host: '127.0.0.1', port: 0 } })
+
+    const res = await fetch(`${origin}/echo`, {
+      method: 'POST',
+      body: JSON.stringify({ text: 'test', num: 99 }),
+      headers: { 'content-type': 'application/json', 'X-Trace': 'abc' },
+    })
+
+    expect(res.status).toBe(200)
+    const echoed = (await res.json()) as { body: unknown; headers: Record<string, string> }
+    expect(echoed.body).toEqual({ text: 'test', num: 99 })
+    expect(echoed.headers['x-trace']).toBe('abc')
+    expect(echoed.headers['content-type']).toBe('application/json')
+    expect(echoed.headers.host).toBe(new URL(origin).host)
+  })
+
+  // A header record holds strings: a repeated header must not reach a route as a list.
+  it('reads a repeated Set-Cookie request header as its last value', async () => {
+    const { origin } = await serve({ listen: { host: '127.0.0.1', port: 0 } })
+
+    const echoed = await new Promise<string>((resolve, reject) => {
+      const req = httpRequest(
+        `${origin}/echo`,
+        { method: 'POST', headers: { 'content-type': 'application/json', 'set-cookie': ['a=1', 'b=2'] } },
+        res => {
+          let text = ''
+          res.on('data', chunk => (text += String(chunk)))
+          res.once('end', () => resolve(text))
+        },
+      )
+      req.once('error', reject)
+      req.end('{}')
+    })
+
+    expect((JSON.parse(echoed) as { headers: Record<string, unknown> }).headers['set-cookie']).toBe('b=2')
+  })
+
+  it('reads a chunked body under bodyLimit whole', async () => {
+    const { origin } = await serve({ listen: { host: '127.0.0.1', port: 0 }, bodyLimit: 1 * KiB })
+
+    const res = await fetch(`${origin}/echo`, {
+      method: 'POST',
+      body: chunked('{"text":', '"chunked"}'),
+      headers: { 'content-type': 'application/json' },
+      duplex: 'half',
+    })
+
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { body: unknown }).body).toEqual({ text: 'chunked' })
+  })
+
+  it('refuses with 413 a body over bodyLimit that declares its length', async () => {
+    const { origin } = await serve({ listen: { host: '127.0.0.1', port: 0 }, bodyLimit: 16 * Byte })
+
+    const res = await fetch(`${origin}/echo`, {
+      method: 'POST',
+      body: JSON.stringify({ text: 'x'.repeat(20) }),
+      headers: { 'content-type': 'application/json' },
+    })
+
+    expect(res.status).toBe(413)
+  })
+
+  it('refuses with 413 a chunked body over bodyLimit, counted as it streams', async () => {
+    const { origin } = await serve({ listen: { host: '127.0.0.1', port: 0 }, bodyLimit: 16 * Byte })
+
+    const res = await fetch(`${origin}/echo`, {
+      method: 'POST',
+      body: chunked('{"text":"', 'x'.repeat(20), '"}'),
+      headers: { 'content-type': 'application/json' },
+      duplex: 'half',
+    })
+
+    expect(res.status).toBe(413)
   })
 
   it('answers a request in flight before it exits on SIGTERM', async () => {

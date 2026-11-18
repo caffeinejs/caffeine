@@ -1,12 +1,15 @@
 import type { Logger } from '@caffeinejs/application/logger'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import { Second } from '@caffeinejs/std/duration'
 
+import { ErrHTTPBadRequest } from '../../core/error/http.js'
+import { contentTooLarge } from '../../core/server/body.js'
 import { fetchPlatform, type FetchContextPlatform } from '../../core/server/fetch.js'
 import { addressOf, FetchServer, IDLE_TIMEOUT, logListening, type HostedServer } from '../../core/server/hosting.js'
 import type { ServerPlatform } from '../../core/server/platform.js'
 import type { HTTPServer } from '../../core/server/server.js'
 import type { ServerAddress } from '../../server.js'
-import type { BunServeOptions, BunServer } from './runtime.js'
+import type { BunHeaders, BunServeOptions, BunServer } from './runtime.js'
 import { bunListenOptions, type BunListen, type ResolvedBunSettings } from './settings.js'
 
 /**
@@ -75,6 +78,8 @@ export class BunHostedServer implements HostedServer<BunServer | undefined, BunL
     let runtime: readonly unknown[] = []
     const platform: ServerPlatform<Request, FetchContextPlatform, Response> = {
       ...fetchPlatform,
+      headers,
+      readBody,
       // The peer is the socket's, never a header's: what `trustProxy` by address decides on.
       remoteAddress: request => this.#server?.requestIP(request)?.address,
       // The idle cut comes back as the answer is handed over: Bun drops a request's own timeout once it completes.
@@ -127,4 +132,28 @@ export class BunHostedServer implements HostedServer<BunServer | undefined, BunL
     // Nothing waits on a forced stop: a failure of it must not surface as an unhandled rejection.
     void this.#server?.stop(true).catch(() => undefined)
   }
+}
+
+// A body that declares its length is read whole, and refused with a 413 when it brings more than the limit; a chunked
+// one is counted as it streams, cut at the limit.
+function readBody(request: Request, limit: ByteSize): Promise<Uint8Array> {
+  if (request.headers.get('content-length') === null) {
+    return fetchPlatform.readBody(request, limit)
+  }
+
+  return request.bytes().then(
+    bytes => (bytes.byteLength > limit ? Promise.reject(contentTooLarge(limit)) : bytes),
+    () => Promise.reject(new ErrHTTPBadRequest('The request body was cut short')),
+  )
+}
+
+// Every header by lower-case name, as `fetchPlatform.headers` reads them: a repeated Set-Cookie keeps its last value.
+function headers(request: Request): Record<string, string> {
+  const all = (request.headers as BunHeaders).toJSON()
+  const cookies = all['set-cookie']
+  if (Array.isArray(cookies)) {
+    all['set-cookie'] = cookies[cookies.length - 1]
+  }
+  all.host ??= new URL(request.url).host
+  return all as Record<string, string>
 }
