@@ -1,9 +1,4 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-
 import { errMessage } from '@caffeinejs/std/err'
-
-import { validContentTypeHeader } from '../content_type.js'
 
 /** A content coding a file has a variant in. The manifest keys variants by it. */
 export type Encoding = 'br' | 'gzip'
@@ -85,25 +80,19 @@ export const REBUILD_SOLUTIONS: readonly string[] = [
   "Use mode: 'scan' in development",
 ]
 
-/**
- * Reads and checks `<root>/static.manifest.json`: its JSON, its `version` and the shape of every entry. It touches no
- * other file: whether the files it lists exist is the server's check.
- *
- * @throws {@link ErrStaticManifest} naming what is wrong, and the field when it is the shape
- */
-export async function readManifest(root: string): Promise<StaticManifest> {
-  let text: string
-
-  try {
-    text = await readFile(join(root, MANIFEST_FILE), 'utf8')
-  } catch (err) {
-    const detail =
-      (err as NodeJS.ErrnoException).code === 'ENOENT'
-        ? `${MANIFEST_FILE} is missing`
-        : `${MANIFEST_FILE} cannot be read`
-    throw new ErrStaticManifest(root, detail, ...REBUILD_SOLUTIONS)
+/** Refuses a stored representation whose SHA-256 differs from the release inventory. */
+export function assertStoredHash(root: string, key: string, actual: string, expected: string): void {
+  if (actual !== expected) {
+    throw new ErrStaticManifest(
+      root,
+      `"${key}" changed after the build, its bytes no longer match the manifest's hash`,
+      ...REBUILD_SOLUTIONS,
+    )
   }
+}
 
+/** Parses v1 manifest text. An entry limit selects strict stored-release validation for portable sources. */
+export function parseManifest(text: string, root: string, maxEntries?: number): StaticManifest {
   let parsed: unknown
 
   try {
@@ -118,6 +107,12 @@ export async function readManifest(root: string): Promise<StaticManifest> {
     throw shape(`${MANIFEST_FILE} does not hold an object`)
   }
 
+  const strict = maxEntries !== undefined
+
+  if (strict) {
+    requireFields(parsed, ['version', 'files'], MANIFEST_FILE, shape)
+  }
+
   if (parsed.version !== MANIFEST_VERSION) {
     throw shape(
       typeof parsed.version === 'number'
@@ -130,21 +125,31 @@ export async function readManifest(root: string): Promise<StaticManifest> {
     throw shape(`"files" is not an object`)
   }
 
-  for (const [path, file] of Object.entries(parsed.files)) {
-    checkFile(path, file, shape)
+  const paths = Object.keys(parsed.files)
+
+  if (maxEntries !== undefined && paths.length > maxEntries) {
+    throw shape(`"files" exceeds the limit of ${maxEntries} identities`)
+  }
+
+  for (const path of paths) {
+    if (maxEntries !== undefined && path === MANIFEST_FILE) {
+      throw shape(`"${path}" is reserved for the release manifest`)
+    }
+
+    checkFile(path, parsed.files[path], shape, strict)
   }
 
   return parsed as unknown as StaticManifest
 }
 
-function checkFile(path: string, file: unknown, shape: (detail: string) => ErrStaticManifest): void {
+function checkFile(path: string, file: unknown, shape: (detail: string) => ErrStaticManifest, strict: boolean): void {
   const at = `files.${path}`
 
   if (!isRelativePath(path)) {
     throw shape(`"${at}" is not a relative path under the root`)
   }
 
-  const problem = nameProblem(path)
+  const problem = nameProblem(path, strict)
 
   if (problem !== undefined) {
     throw shape(problem)
@@ -157,6 +162,10 @@ function checkFile(path: string, file: unknown, shape: (detail: string) => ErrSt
 
   if (!isObject(file)) {
     throw shape(`"${at}" is not an object`)
+  }
+
+  if (strict) {
+    requireFields(file, ['size', 'hash', 'type', 'lastModified', 'variants'], at, shape)
   }
 
   checkFields(at, file, shape)
@@ -174,6 +183,10 @@ function checkFile(path: string, file: unknown, shape: (detail: string) => ErrSt
     throw shape(`"${at}.lastModified" is not an ISO 8601 time`)
   }
 
+  if (strict && new Date(file.lastModified).toISOString().replace(/\.\d{3}Z$/, 'Z') !== file.lastModified) {
+    throw shape(`"${at}.lastModified" must be a UTC timestamp to the second, as written by buildStatic`)
+  }
+
   if (!isObject(file.variants)) {
     throw shape(`"${at}.variants" is not an object`)
   }
@@ -189,6 +202,10 @@ function checkFile(path: string, file: unknown, shape: (detail: string) => ErrSt
       throw shape(`"${vat}" is not an object`)
     }
 
+    if (strict) {
+      requireFields(variant, ['size', 'hash', 'path'], vat, shape)
+    }
+
     checkFields(vat, variant, shape)
 
     // Any other path would send bytes the file's rules never checked, or another file's variant as this one's.
@@ -196,6 +213,19 @@ function checkFile(path: string, file: unknown, shape: (detail: string) => ErrSt
 
     if (variant.path !== expected) {
       throw shape(`"${vat}.path" is not "${expected}", the path the build writes it at`)
+    }
+  }
+}
+
+function requireFields(
+  record: Record<string, unknown>,
+  fields: readonly string[],
+  at: string,
+  shape: (detail: string) => ErrStaticManifest,
+): void {
+  for (const field of fields) {
+    if (!Object.hasOwn(record, field)) {
+      throw shape(`"${at}.${field}" is missing`)
     }
   }
 }
@@ -213,7 +243,7 @@ function checkFields(at: string, value: Record<string, unknown>, shape: (detail:
 
 // A path the build could have written: POSIX segments under the root, none empty, `.` or `..`, and no character a
 // header or a file system path would read differently.
-function isRelativePath(path: string): boolean {
+export function isRelativePath(path: string): boolean {
   return (
     path !== '' &&
     !/[\\\0]/.test(path) &&
@@ -242,7 +272,11 @@ const CONTROL = /\p{Cc}/u
  * character, or a name not in Unicode NFC, which a URL would spell another way. The build and the manifest reader
  * both apply it.
  */
-export function nameProblem(path: string): string | undefined {
+export function nameProblem(path: string, requireUTF8 = false): string | undefined {
+  if (requireUTF8 && !path.isWellFormed()) {
+    return `${JSON.stringify(path)} contains ill-formed Unicode`
+  }
+
   for (const [char, why] of SYNTAX) {
     if (path.includes(char)) {
       return `"${printable(path)}" holds "${char}", ${why}`
@@ -263,4 +297,10 @@ export function nameProblem(path: string): string | undefined {
 // A control character printed as its escape, so the message stays on one line.
 function printable(path: string): string {
   return path.replaceAll(/\p{Cc}/gu, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
+}
+
+/** Whether a content type is nonempty and can be sent as a header value. */
+export function validContentTypeHeader(type: string): boolean {
+  // Printable Latin-1, excluding C1 controls. The build and manifest reader accept the same values.
+  return /^[\x20-\x7e\xa0-\xff]+$/.test(type)
 }

@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { ErrStaticManifest, MANIFEST_FILE, readManifest } from './manifest.js'
+import { ErrStaticManifest, MANIFEST_FILE, parseManifest } from './manifest.js'
+import { readManifest } from './read.js'
 
 const committed = fileURLToPath(new URL('../_tests/_testdata/manifest', import.meta.url))
 
@@ -178,6 +179,52 @@ describe('readManifest', () => {
     expect(Object.keys((await readManifest(root)).files)).toEqual(['.well-known/security.txt'])
     expect(firstLine(await refusal(JSON.stringify({ version: 1, files: { 'a/.well-known/x.txt': file } })))).toBe(
       `Cannot serve "${root}": "files.a/.well-known/x.txt" has a segment starting with ".", which is never served`,
+    )
+  })
+})
+
+describe('portable manifest grammar', () => {
+  const file = {
+    hash: '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+    lastModified: '2026-11-18T07:30:00Z',
+    type: 'text/plain',
+    size: 0,
+    variants: {},
+  }
+
+  it.each(['2026-11-18T07:30:00', '2026-11-18T07:30:00.001Z', '2026-02-30T07:30:00Z'])(
+    'requires the timestamp emitted by the writer for portable records (%s)',
+    lastModified => {
+      const text = JSON.stringify({ version: 1, files: { 'a.txt': { ...file, lastModified } } })
+      expect(() => parseManifest(text, 'release', 1)).toThrow('UTC timestamp to the second')
+      expect(parseManifest(text, 'legacy').files['a.txt']?.lastModified).toBe(lastModified)
+    },
+  )
+
+  it('requires distinct UTF-8 encodings for portable identity keys', () => {
+    const invalid = JSON.stringify({ version: 1, files: { ['\ud800']: file, '\ufffd': file } })
+    expect(() => parseManifest(invalid, 'release', 2)).toThrow('ill-formed Unicode')
+    expect(Object.keys(parseManifest(invalid, 'legacy').files)).toHaveLength(2)
+
+    const valid = JSON.stringify({ version: 1, files: { '📁/a': file } })
+    expect(parseManifest(valid, 'release', 1).files['📁/a']).toEqual(file)
+  })
+
+  it('reserves the manifest filename in a portable release', () => {
+    const text = JSON.stringify({ version: 1, files: { [MANIFEST_FILE]: file } })
+    expect(() => parseManifest(text, 'release', 1)).toThrow('reserved for the release manifest')
+  })
+
+  it.each([
+    ['the files inventory', { version: 1 }],
+    ['an identity timestamp', { version: 1, files: { 'a.txt': { ...file, lastModified: undefined } } }],
+    [
+      'a stored variant path',
+      { version: 1, files: { 'a.txt': { ...file, variants: { gzip: { size: 0, hash: file.hash } } } } },
+    ],
+  ])('rejects a portable manifest missing %s', (_field, manifest) => {
+    expect(() => parseManifest(JSON.stringify(manifest), 'release', 1)).toThrow(
+      expect.objectContaining({ code: 'ERR_STATIC_MANIFEST' }),
     )
   })
 })

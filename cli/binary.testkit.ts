@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { hostPlatformPackage } from './binary.js'
 
 /** The built modules that find and run the binary: what an installation runs, so the package must be built first. */
-const MODULES = ['binary.js', 'launcher.js', '_err_message.gen.js']
+const MODULES = ['binary.js', 'launcher.js', 'err_message.gen.js']
 
 export interface Installation {
   /** The installed `dist/binary.js`. */

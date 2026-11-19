@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 
-import { errMessage } from './_err_message.gen.js'
+import { errMessage } from './err_message.gen.js'
 
 /** The caffeine binary could not be found: the package that holds it for this platform is not installed. */
 export class ErrBinaryNotFound extends Error {

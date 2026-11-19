@@ -4,6 +4,6 @@
     "@caffeinejs/di": "internal/util/errutil/errutil.gen.ts",
     "@caffeinejs/fetchy-logging-interceptor": "_err_message.gen.ts",
     "@caffeinejs/brewer": "_err_message.gen.ts",
-    "@caffeinejs/cli": "_err_message.gen.ts"
+    "@caffeinejs/cli": "err_message.gen.ts"
   }
 }

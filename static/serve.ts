@@ -20,6 +20,7 @@ import { selectEncoding } from '@caffeinejs/http/compress'
 import { KiB } from '@caffeinejs/std/bytes'
 
 import {
+  assertStoredHash,
   ErrStaticManifest,
   REBUILD_SOLUTIONS,
   type Encoding,
@@ -382,13 +383,7 @@ export async function verifyHashes(root: string, file: PreparedFile, entry: Mani
   ]
 
   for (const { path, absolute, hash } of expected) {
-    if ((await hashFile(absolute)).hash !== hash) {
-      throw new ErrStaticManifest(
-        root,
-        `"${path}" changed after the build, its bytes no longer match the manifest's hash`,
-        ...REBUILD_SOLUTIONS,
-      )
-    }
+    assertStoredHash(root, path, (await hashFile(absolute)).hash, hash)
   }
 }
 

@@ -10,11 +10,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   MANIFEST_FILE,
   VARIANT_DIRECTORY,
-  readManifest,
   type ManifestFile,
   type StaticManifest,
   variantPath,
 } from '../manifest/manifest.js'
+import { readManifest } from '../manifest/read.js'
 import { ErrStaticBuild } from '../scan/errors.js'
 import { buildStatic } from './build.js'
 

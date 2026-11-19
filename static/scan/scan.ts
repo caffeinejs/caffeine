@@ -5,8 +5,14 @@ import { join, posix, relative, sep } from 'node:path'
 
 import { Second } from '@caffeinejs/std/duration'
 
-import { contentTypeOf, validContentTypeHeader } from '../content_type.js'
-import { MANIFEST_FILE, VARIANT_DIRECTORY, nameProblem, type ManifestFile } from '../manifest/manifest.js'
+import { contentTypeOf } from '../content_type.js'
+import {
+  MANIFEST_FILE,
+  VARIANT_DIRECTORY,
+  nameProblem,
+  type ManifestFile,
+  validContentTypeHeader,
+} from '../manifest/manifest.js'
 import { ErrStaticBuild } from './errors.js'
 
 /** What the scan reads besides the fixed rules. */

@@ -5,7 +5,7 @@ import { type NodeAdapter } from '@caffeinejs/http-node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'
-import { readManifest } from '../../manifest/manifest.js'
+import { readManifest } from '../../manifest/read.js'
 import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, SCRIPT, shellOf } from './_headers.js'
 
 /**

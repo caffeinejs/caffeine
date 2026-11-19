@@ -13,6 +13,7 @@
 import { spawnSync } from 'node:child_process'
 import {
   copyFileSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -126,6 +127,7 @@ function main() {
     dependencies,
     devDependencies: {
       typescript: rootManifest.devDependencies.typescript,
+      esbuild: readJSON(join(root, 'package-lock.json')).packages['node_modules/esbuild'].version,
       '@types/node': rootManifest.devDependencies['@types/node'],
     },
     ...(pm === 'npm' ? { overrides } : {}),
@@ -193,6 +195,28 @@ process.exit(failed === 0 ? 0 : 1)
     run(project, 'node', ['imports.mjs'])
   })
 
+  check('the static verifier type-checks and bundles for a Web Worker', () => {
+    copyFileSync(join(root, 'static/_tests/_testdata/worker.mts'), join(project, 'worker.mts'))
+    writeJSON(join(project, 'tsconfig.worker.json'), {
+      compilerOptions: {
+        target: 'ES2023',
+        module: 'ESNext',
+        moduleResolution: 'Bundler',
+        lib: ['ES2023', 'WebWorker'],
+        types: [],
+        strict: true,
+        skipLibCheck: false,
+        noEmit: true,
+      },
+      files: ['worker.mts'],
+    })
+    run(project, ...bin('tsc', ['-p', 'tsconfig.worker.json']))
+    run(
+      project,
+      ...bin('esbuild', ['worker.mts', '--bundle', '--platform=browser', '--format=esm', '--outfile=worker.js']),
+    )
+  })
+
   check('every export type-checks', () => {
     const specifiers = exported.filter(({ types }) => types).map(({ specifier }) => specifier)
     writeFileSync(
@@ -236,6 +260,21 @@ process.exit(failed === 0 ? 0 : 1)
     ) {
       const ours = lines.filter(line => line !== '' && !theirs.includes(line))
       throw new Error(`tsc failed with ${result.error?.message ?? `code ${result.status}`}:\n${ours.join('\n')}`)
+    }
+  })
+
+  check('caffeine static verifies a staged copy and rejects a changed asset', () => {
+    mkdirSync(join(project, 'public'))
+    writeFileSync(join(project, 'public', 'app.js'), 'hello')
+    run(project, ...bin('caffeine', ['static', 'build', '--root', 'public']))
+
+    cpSync(join(project, 'public'), join(project, 'staged'), { recursive: true })
+    const verify = bin('caffeine', ['static', 'verify', '--root', 'staged'])
+    run(project, ...verify)
+    writeFileSync(join(project, 'staged', 'app.js'), 'stale')
+    const failed = spawn(project, ...verify, true)
+    if (failed.status !== 1 || failed.stdout !== '') {
+      throw new Error(`Expected verification of the changed asset to fail, got exit code ${failed.status}`)
     }
   })
 
