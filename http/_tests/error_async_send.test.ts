@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Catch, Controller, Get, HTTPPlugin, type HTTPSetupContext, type IContext } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /** An asynchronous `onSend` hook, counting each run through `onRun` and holding the send for `ms`. */
 class SlowSend extends HTTPPlugin {

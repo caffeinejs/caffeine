@@ -1,5 +1,5 @@
 import type { WebApplication } from '@caffeinejs/http'
-import type { NodeAdapter } from '@caffeinejs/http/node'
+import type { NodeAdapter } from '@caffeinejs/http-node'
 
 /** The application a client drives, whichever way it got one: a Node one. */
 export type TestApplication = WebApplication<never, never, unknown, NodeAdapter>

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { type ActionResult, Catch, IContext, ErrHTTPNotFound, ErrorHandler } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 @Catch(ErrHTTPNotFound)
 class GlobalNotFound implements ErrorHandler<ErrHTTPNotFound> {

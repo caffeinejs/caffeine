@@ -13,7 +13,7 @@ import {
   bodyAsStream,
   type RouteExtension,
 } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 // A third party annotating a route it does not own: the namespace is declared here, exactly as
 // `@caffeinejs/openapi` declares its own.

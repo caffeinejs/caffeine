@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Controller, Get } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 describe('Adapter Lifecycle', () => {
   it('a container OnBootstrap hook runs before the first request is served', async () => {

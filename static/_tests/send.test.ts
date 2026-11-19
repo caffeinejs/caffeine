@@ -19,7 +19,7 @@ import {
   createWebApplication,
   type WebApplication,
 } from '@caffeinejs/http'
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 import { Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, inject, it, vi } from 'vitest'
 

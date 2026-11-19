@@ -8,6 +8,9 @@
       "path": "./http/tsconfig.build.json"
     },
     {
+      "path": "./http-node/tsconfig.build.json"
+    },
+    {
       "path": "./caching/tsconfig.build.json"
     },
     {

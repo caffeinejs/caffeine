@@ -11,7 +11,7 @@ import {
   healthProbes,
   createWebApplication,
 } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { staticFiles } from '@caffeinejs/static'
 
 import { DevToolsAPI } from './api.js'

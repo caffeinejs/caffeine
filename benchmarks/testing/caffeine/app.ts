@@ -1,6 +1,6 @@
 import { CaffeineIoC, type Container } from '@caffeinejs/di'
 import { createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 import { hello } from './hello.routes.js'
 

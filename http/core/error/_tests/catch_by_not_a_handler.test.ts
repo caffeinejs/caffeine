@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 
 import { createWebApplication } from '../../../application.js'
 import { CatchWith, Controller, ErrConfiguration, ErrorHandler, Get, type ActionResult } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 // Isolated: the invalid reference poisons every app build in its module, so it must be the only
 // error-handler concern in this file. Referencing by name is the only way to reach this check —

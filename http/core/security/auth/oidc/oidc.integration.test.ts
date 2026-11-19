@@ -16,7 +16,7 @@ import {
   type AuthenticationGateBuilder,
   Router,
 } from '../../../../index.js'
-import { node } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node.testkit.js'
 import type { HTTPPluginConfigurer } from '../../../../plugin.js'
 import { authentication } from '../../security.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'

@@ -2,7 +2,7 @@ import { runInNewContext } from 'node:vm'
 
 import { $t } from '@caffeinejs/application/schema'
 import { Router, bodyAsBuffer, bodyAsStream, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { KiB } from '@caffeinejs/std/bytes'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 

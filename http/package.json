@@ -32,6 +32,10 @@
       "types": "./dist/platform/bun/index.d.ts",
       "default": "./dist/platform/bun/index.js"
     },
+    "./compress": {
+      "types": "./dist/core/compress/index.d.ts",
+      "default": "./dist/core/compress/index.js"
+    },
     "./conditional": {
       "types": "./dist/core/conditional/index.d.ts",
       "default": "./dist/core/conditional/index.js"
@@ -80,9 +84,9 @@
       "types": "./dist/core/middleware/index.d.ts",
       "default": "./dist/core/middleware/index.js"
     },
-    "./node": {
-      "types": "./dist/platform/node/index.d.ts",
-      "default": "./dist/platform/node/index.js"
+    "./platform": {
+      "types": "./dist/platform/index.d.ts",
+      "default": "./dist/platform/index.js"
     },
     "./range": {
       "types": "./dist/core/range/index.d.ts",
@@ -105,7 +109,7 @@
     "!dist/**/_spectypes"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "^24.22.0 || >=26.10.0"
   },
   "publishConfig": {
     "access": "public"
@@ -125,7 +129,6 @@
     "find-my-way": "^9.10.0",
     "ipaddr.js": "^2.5.0",
     "jose": "^6.2.10",
-    "light-my-request": "^6.6.0",
     "negotiator": "^1.1.0",
     "path-to-regexp": "^8.4.2",
     "secure-json-parse": "^4.1.1"
@@ -136,6 +139,7 @@
     "@caffeinejs/std": "0.0.0"
   },
   "devDependencies": {
+    "@caffeinejs/http-node": "0.0.0",
     "@caffeinejs/resilience": "0.0.0",
     "@caffeinejs/testing": "0.0.0",
     "@types/cors": "^2.8.19",

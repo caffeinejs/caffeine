@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { ErrConfiguration, Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 

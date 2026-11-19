@@ -50,11 +50,15 @@ export type CacheMissReason =
   | 'only-if-cached'
   /** The request waited on another's handler run, which stored nothing it could use, so it ran the handler itself. */
   | 'not-coalesced'
+  /** The entry stored is in a content coding the request's `Accept-Encoding` does not accept. */
+  | 'unacceptable-coding'
 
 /** Why a response the policy would have stored was left out. */
 export type CacheSkipReason =
   /** The response set a cookie and the route did not declare itself public. */
   | 'set-cookie'
+  /** The response carries a content coding and the cache key does not vary on `Accept-Encoding`. */
+  | 'uncovered-vary'
   /** The payload is larger than `maxEntrySize`. */
   | 'entry-too-large'
   /** The payload is a stream, which is neither hashed nor stored. */

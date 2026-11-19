@@ -22,7 +22,7 @@ import {
   $p,
   Authentication,
 } from '../../../../index.js'
-import { node } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node.testkit.js'
 
 const SECRET = 'a-very-long-test-secret-key-32-bytes!'
 const ISSUER = 'https://test.example.com'

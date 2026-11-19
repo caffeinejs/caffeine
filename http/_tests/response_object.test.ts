@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { type ActionResult, Catch, ErrHTTP, type ErrorHandler, Router, version } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 import { expectPatternedBody, streamOf } from './bodies.js'
 import { patterned } from './patterned.js'
 

@@ -14,7 +14,7 @@ Install them on a server of their own, which takes an adapter that listens, such
 ```ts
 import { DevTools } from '@caffeinejs/devtools'
 import { createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 const app = createWebApplication({ adapter: node() }).install(DevTools())
 ```

@@ -1,5 +1,5 @@
 import { createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 // Same app graph as app.ts, built but never listened on: this worker measures the resident memory
 // of the constructed application, not its network stack.

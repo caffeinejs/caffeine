@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 
 import { createWebApplication } from './application.js'
 import { Catch, type IContext, Controller, ErrorHandler, Get, Responder, ActionResult } from './index.js'
-import { node } from './platform/node/index.js'
+import { node } from './platform/node.testkit.js'
 
 // A custom response kind with NO view/Fastify involvement: it renders itself through the platform-neutral
 // Context API alone. Proves the adapter dispatches any ResponseResult subclass, not just ViewResult, and

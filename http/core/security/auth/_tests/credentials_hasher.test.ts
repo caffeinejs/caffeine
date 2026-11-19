@@ -10,7 +10,7 @@ import {
   UserProvider,
   Authentication,
 } from '../../../../index.js'
-import { node } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node.testkit.js'
 
 const JWT_SECRET = 'a-jwt-secret-that-is-at-least-32-bytes!!'
 

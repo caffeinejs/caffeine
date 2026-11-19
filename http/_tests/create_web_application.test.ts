@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest'
 import { createWebApplication } from '../application.js'
 import { authentication } from '../core/security/security.js'
 import { Controller, Get, Authentication, Authorization, Guards, HTTPPlugin } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /** A plugin that does nothing, where a factory must return one. */
 class NoopPlugin extends HTTPPlugin {

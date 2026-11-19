@@ -1,5 +1,5 @@
 import { createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 // Side-effect imports register the controllers (and, transitively, their services and repositories)
 // in the global component registry that the container snapshots when the app is built.

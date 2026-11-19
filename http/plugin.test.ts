@@ -15,7 +15,7 @@ import { describe, it, expect, expectTypeOf } from 'vitest'
 
 import { createWebApplication } from './application.js'
 import { ErrConfiguration, HTTPPlugin, Router, type HTTPPluginConfigurer, type HTTPPluginFactory } from './index.js'
-import { node } from './platform/node/index.js'
+import { node } from './platform/node.testkit.js'
 
 // A sentinel the feature's configurer binds into the container so a test can prove the feature rode
 // the same `bootstrap()` path as the built-in auth/authz services.

@@ -1,8 +1,9 @@
 import { connect } from 'node:net'
+import { gzipSync } from 'node:zlib'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Controller, Get, Head, Header, type NodeMiddleware, Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { type Duration, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -235,6 +236,47 @@ describe('concurrent misses for one key', () => {
 
     expect(calls).toBe(2)
     expect(recording.reasons()).toEqual(['absent', 'not-coalesced'])
+  })
+
+  it('run the handler themselves when they do not accept the coding the leader stored', async () => {
+    let calls = 0
+    const g = gate()
+
+    @Controller('/sf-coded')
+    class CodedController {
+      @CacheControl({ ttl: 60 * Second, key: () => 'sf-coded' })
+      @Header('Content-Encoding', 'gzip')
+      @Get('/data')
+      async data() {
+        calls++
+        await g.hold()
+        return gzipSync('coded')
+      }
+    }
+    void [CodedController]
+
+    const store = new WatchedStore()
+    const recording = new Recording()
+    const app = createWebApplication({ adapter: node() }).with(
+      HTTPCaching(b => b.store(store).observer(recording.observer)),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    const leader = app.request('/sf-coded/data', { headers: { 'accept-encoding': 'gzip' } })
+    await g.seen
+    const follower = app.request('/sf-coded/data', { headers: { 'accept-encoding': 'identity' } })
+    await store.reads.reached(2)
+    await turn()
+    g.open()
+
+    const [led, followed] = await Promise.all([leader, follower])
+
+    expect(led.headers.get('x-cache')).toBe('MISS')
+    expect(followed.headers.get('x-cache')).toBe('MISS')
+    expect(calls).toBe(2)
+    expect(recording.coalesced).toBe(0)
+    expect(recording.reasons()).toEqual(['absent', 'unacceptable-coding'])
   })
 
   it('answer only-if-cached with 504 at once, without waiting on the flight', async () => {

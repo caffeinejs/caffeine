@@ -6,11 +6,11 @@ How to change **this** monorepo. Agent behavior is in [`AGENTS.md`](AGENTS.md); 
 
 In this repository these names mean **this project**, not a third-party library:
 
-| You say                                  | It means                                                                                                                                                                                                          |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Caffeine Framework, Caffeine, CaffeineJS | This monorepo (`caffeinejs/caffeine`). npm scope `@caffeinejs/*`.                                                                                                                                                 |
-| CaffeineIoC                              | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`.                                                                                                                                                |
-| Caffeine HTTP, the HTTP package          | `@caffeinejs/http`, its own web-standards server, run on a runtime by a server adapter: one per runtime, from `@caffeinejs/http/<runtime>` (`node()` from `@caffeinejs/http/node`), and none for a fetch runtime. |
+| You say                                  | It means                                                                                                                                                                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Caffeine Framework, Caffeine, CaffeineJS | This monorepo (`caffeinejs/caffeine`). npm scope `@caffeinejs/*`.                                                                                                                                                   |
+| CaffeineIoC                              | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`.                                                                                                                                                  |
+| Caffeine HTTP, the HTTP package          | `@caffeinejs/http`, its own web-standards server, run on a runtime by a server adapter: one per runtime (`node()` from `@caffeinejs/http-node`, `bun()` from `@caffeinejs/http/bun`), and none for a fetch runtime. |
 
 This is not NestJS, Express, or Spring Boot.
 
@@ -34,6 +34,7 @@ One non-md file means the task is not docs-only: TSDoc inside `.ts`, `ai/llms.tx
 
 - `npm run build` does not produce the CLI binary. After a clone or a clean, run `npm run build:cli` (or `make build:cli`) before any example test or `caffeine generate`: until then `caffeine` is missing, is not executable, or fails with `ErrBinaryNotFound`.
 - A new production dependency or required peer must carry a license in the allowlist in `tools/check-licenses.mjs`; the `license-check` workflow fails the pull request otherwise.
+- A change to `http-node/**` also runs the `@caffeinejs/http` steps, whose suites exercise the adapter; a package whose tests import a workspace package its build project does not reference builds that package first (`npm run build -w <dep>`).
 
 ### Build and check projects
 
@@ -69,7 +70,7 @@ One non-md file means the task is not docs-only: TSDoc inside `.ts`, `ai/llms.tx
 - One import statement per module (`import/no-duplicates`). Every relative import ends in `.js`, TypeScript sources included.
 - A type from another module comes in through a top-level `import type`, never an inline `import('…')` type.
 - A file prefixed with `_` (`_noop.ts`) is private to its directory: never import it from another one (`no-restricted-imports`).
-- Do not re-export a symbol (type or value) from another module or package just to keep a surface stable or shorten an import path. Import it from its source at every use site. A package's `index.ts` aggregating the package's **own** modules is not a passthrough and is fine.
+- Do not re-export a symbol (type or value) from another module or package just to keep a surface stable or shorten an import path. Import it from its source at every use site. A package's `index.ts`, or a barrel its `exports` map publishes, aggregating the package's **own** modules is not a passthrough and is fine.
 
 ```ts
 // correct
@@ -94,7 +95,7 @@ A module is a directory of source files in a library package (not `benchmarks/`,
 - It has a main file named after it (`logger/logger.ts`, `circuitbreaker/circuitbreaker.ts`) and an `index.ts` barrel that only re-exports.
 - A directory of independent files with no main one (`decorators/`, `internal/`, `provider/`) has the barrel alone.
 - A barrel publishes what the package offers. A helper only the package's own code uses stays out of it and is imported by its path.
-- One capability's code and public types live in one module, and other modules call into it rather than hold parts of it, so the capability is found and changed in one place. A package that splits a capability across layers keeps each layer's half whole, as `http/` does between `core/` and `platform/node/`.
+- One capability's code and public types live in one module, and other modules call into it rather than hold parts of it, so the capability is found and changed in one place. A package that splits a capability across layers keeps each layer's half whole, as `http/` does between `core/` and `platform/bun/`.
 - Exempt: a package root, whose `index.ts` is the entry (`std/` has none); a directory holding only subdirectories; `_`-prefixed directories (`_tests/`, `_testdata/`, `_spectypes/`, `_spec/`).
 - A new or moved module follows these rules. An existing one keeps its layout until a change asks to move it.
 
@@ -249,6 +250,7 @@ An **application** that must use a library shipping only legacy decorators (Type
 - **Every assertion can fail.** Assert the exact value: `toBe(null)`, not `toBeDefined()` on something that can be `null`; the exact count, not `> 0`. A test that still passes with the behavior it names broken is wrong. Name a test after the behavior and why it matters, not after the function it calls.
 - **A test of one module sits beside it, named after it**, even when it boots a container, an application or a server to observe that module, so everything that pins one module's behavior is found beside it, under its name: `cache.ts`, `cache.test.ts`. A variant keeps the stem: `cache.prop.test.ts`, `cache.test-d.ts`.
 - **A wider test goes in `_tests/`** of the nearest directory that holds everything it exercises: one that belongs to no single module. Its helpers sit beside it in `_tests/` and its fixtures in `_testdata/`. A test across packages, or of the repository itself, goes in the root `test/`. The directory is `_tests/`, the name every exclude above carries: a helper outside it, unless it is a `*.testkit.ts`, ships in `dist/`.
+- **A `@caffeinejs/http` suite takes its server adapter from `http/platform/node.testkit.ts`**, never from `@caffeinejs/http-node`: a per-adapter Vitest config swaps that entry by alias and lists in `include` the suites that pass under its adapter.
 - **Fix a bug test-first.** Before changing code for a bug, or for an issue a review or a tool reports, write the test that reproduces it and run it. It must fail, and for the reason reported, not a typo or a missing import. A test you cannot make fail means the issue is not what you thought: stop, say so, and change nothing. Then fix it, see the same test pass, and keep the test in the change.
 - An existing test keeps its place. Move one only when asked.
 

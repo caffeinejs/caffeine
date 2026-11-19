@@ -46,7 +46,7 @@ App:
 
 ```ts
 import { createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 import './presentation/example.controller.js'
 

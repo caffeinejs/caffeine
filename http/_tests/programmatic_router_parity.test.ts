@@ -22,7 +22,7 @@ import {
   Authentication,
   Guards,
 } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 class FakeAuthHandler extends BaseAuthenticationHandler<{}> {
   result: AuthenticateResult = AuthenticateResult.none()

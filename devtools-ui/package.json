@@ -25,7 +25,7 @@
     "public"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "^24.22.0 || >=26.10.0"
   },
   "publishConfig": {
     "access": "public"
@@ -44,6 +44,7 @@
     "@caffeinejs/di": "0.0.0",
     "@caffeinejs/html": "0.0.0",
     "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/http-node": "0.0.0",
     "@caffeinejs/static": "0.0.0",
     "@caffeinejs/std": "0.0.0",
     "@hpcc-js/wasm-graphviz": "^1.30.0",

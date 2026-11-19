@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, expectTypeOf } from 'vitest'
 
 import { type WebApplication, type WebRunInfo, createWebApplication } from './application.js'
 import { ErrConfiguration, Router } from './index.js'
-import { node, type NodeAdapter } from './platform/node/index.js'
+import { node, type NodeAdapter } from './platform/node.testkit.js'
 
 let app: WebApplication | undefined
 
@@ -131,6 +131,15 @@ describe('createWebApplication({ adapter })', () => {
     expect((failure as ErrConfiguration).code).toBe('ERR_CONFIGURATION')
     expect((failure as Error).message.split('\n')[0]).toBe(
       'Cannot create the application: "adapter" is not a server adapter',
+    )
+  })
+
+  // An adapter built against another copy of this package carries that copy's hosting key, which this one cannot read.
+  it('tells the reader to install one copy of @caffeinejs/http when the adapter comes from another', () => {
+    const fromAnotherCopy = { [Symbol('@caffeinejs/http:hosting')]: () => ({}) }
+
+    expect(() => createWebApplication({ adapter: fromAnotherCopy as never })).toThrow(
+      'Install @caffeinejs/http and @caffeinejs/http-node at the same exact version, so both load one copy of @caffeinejs/http',
     )
   })
 })

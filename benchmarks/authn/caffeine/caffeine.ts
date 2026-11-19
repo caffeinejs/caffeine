@@ -9,7 +9,7 @@ import {
   authentication,
   createWebApplication,
 } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { Hour } from '@caffeinejs/std/duration'
 
 import { AUDIENCE, ISSUER, ROLE, SECRET } from '../shared.js'

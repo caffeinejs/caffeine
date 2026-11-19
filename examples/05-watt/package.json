@@ -11,6 +11,7 @@
   "dependencies": {
     "@caffeinejs/application": "0.0.0",
     "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/http-node": "0.0.0",
     "@caffeinejs/openapi": "0.0.0",
     "@platformatic/globals": "^3.70.0",
     "@platformatic/node": "^3.70.0",

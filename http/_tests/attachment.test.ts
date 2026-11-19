@@ -15,7 +15,7 @@ import {
   type IContext,
   Router,
 } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 import {
   expectPatternedBody,
   expectRangeAnswer,

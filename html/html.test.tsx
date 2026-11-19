@@ -16,7 +16,7 @@ import {
   type IContext,
   createWebApplication,
 } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { describe, it, expect } from 'vitest'
 
 import { HTML, html, type HTMLDefaults } from './index.js'

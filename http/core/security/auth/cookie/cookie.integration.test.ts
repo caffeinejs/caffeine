@@ -28,7 +28,7 @@ import {
   Authentication,
   Router,
 } from '../../../../index.js'
-import { node } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node.testkit.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
 let ALICE_HASH = ''

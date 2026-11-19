@@ -24,7 +24,6 @@ import {
   type NodeContextPlatform,
   type RouteAuthzOptions,
 } from '@caffeinejs/http'
-import type { NodeServerSettings } from '@caffeinejs/http/node'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { configRouter } from './config/config.route.js'
@@ -245,7 +244,7 @@ export class DevToolsBuilder<C = unknown> extends FeatureBuilder<C> {
     // Attached before the container initializes, so its start-up is recorded.
     const events = new EventsTool(kit.container.hooks)
 
-    listenersOf<C, NodeServerSettings>(kit).add(this.#listener ?? DEVTOOLS_LISTENER, l => {
+    listenersOf<C, { listen: typeof address }>(kit).add(this.#listener ?? DEVTOOLS_LISTENER, l => {
       l.server(() => ({ listen: { ...address } }))
 
       // A listener has no gate unless one is registered on it, and a route the fallback policy or `authorize(...)`

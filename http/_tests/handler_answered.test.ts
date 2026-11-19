@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { HTTPPlugin, Responder, type HTTPSetupContext, type IContext, Router } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * A handler that answered the request itself and then returned — the shape of a sign-out: `ctx.redirect(...)`,

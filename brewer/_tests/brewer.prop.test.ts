@@ -1,5 +1,5 @@
 import { Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { fc, it } from '@fast-check/vitest'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
 

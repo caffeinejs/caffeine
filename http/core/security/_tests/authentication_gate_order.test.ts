@@ -10,7 +10,7 @@ import {
   Get,
   type IContext,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 import { HTTPPlugin, type HTTPPluginFactory, type HTTPSetupContext } from '../../../plugin.js'
 import { authentication } from '../security.js'
 

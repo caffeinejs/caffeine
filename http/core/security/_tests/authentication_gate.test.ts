@@ -19,7 +19,7 @@ import {
   Schema,
   Authentication,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 /**
  * The authentication gate — authentication and the authorization that is folded into it.

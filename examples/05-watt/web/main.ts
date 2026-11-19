@@ -1,5 +1,5 @@
 import { healthProbes, Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { getBasePath } from '@platformatic/globals'
 
 import { registerWattChecks } from '../watt.js'

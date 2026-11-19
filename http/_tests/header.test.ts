@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Controller, Get, Header, MediaType } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 describe('Header', () => {
   it('applies class-level header to all routes', async () => {

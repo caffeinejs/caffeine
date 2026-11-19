@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Attachment, Router } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 import { expectPatternedBody, expectRangeAnswer } from './bodies.js'
 import { fillPatterned, firstMismatch, patterned } from './patterned.js'
 
