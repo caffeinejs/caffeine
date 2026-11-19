@@ -2,12 +2,12 @@ import { Readable } from 'node:stream'
 
 import { newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
-import { CaffeineIoC, Injectable, Lifetime, Scopes } from '@caffeinejs/di'
+import { CaffeineIoC, ContextStorage, Injectable, Lifetime, Scopes } from '@caffeinejs/di'
 import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
-import type { IContext } from '../../context.js'
+import { ErrWaitUntilClosed, type IContext } from '../../context.js'
 import { bindTo } from '../../decorators/bind_to.js'
 import { Catch, Controller, Get, Prefix } from '../../decorators/index.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
@@ -19,6 +19,10 @@ import type { Guard } from '../guards/guard.js'
 import { ErrRouteConflict } from '../matcher/matcher.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { Context } from './context.js'
+import { fetchPlatform } from './fetch.js'
+import { type FetchAdapter, fetchAdapter, kHosting } from './hosting.js'
+import type { SendHooks } from './platform.js'
+import type { HTTPServer } from './server.js'
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
 type AnyRouter = Router<any, any, any, any, any>
@@ -93,6 +97,25 @@ async function serve(router: AnyRouter, configure: (app: FetchApp) => FetchApp =
 
 function fetchOn(served: FetchApp, path: string, init?: RequestInit) {
   return served.fetch(new Request(`http://localhost${path}`, init))
+}
+
+async function serveEngine(router: AnyRouter): Promise<HTTPServer> {
+  let engine!: HTTPServer
+  const adapter: FetchAdapter = {
+    [kHosting](settings) {
+      const hosting = fetchAdapter[kHosting](settings)
+      return {
+        ...hosting,
+        serve(server, context, customize) {
+          engine = server
+          return hosting.serve(server, context, customize)
+        },
+      }
+    },
+  }
+  app = createWebApplication({ adapter }).mount(router)
+  await app.bootstrap()
+  return engine
 }
 
 function latch(): { promise: Promise<void>; release: () => void } {
@@ -612,6 +635,500 @@ describe('HTTPServer', () => {
     await closing
     expect(await (await first).text()).toBe('done')
     app = undefined
+  })
+
+  it('accepts work in onSend after ctx.body and observes refused work from onResponse', async () => {
+    const accepted = latch()
+    const refused = Promise.withResolvers<void>()
+    const failure = new Error('refused work failed')
+    const logger = capturing()
+    const responded = latch()
+    const onClose = vi.fn()
+    let reqId: string | undefined
+    let waitUntil: IContext['server']['waitUntil']
+    let refusal: unknown
+    const served = await serve(
+      new Router('/s').get('/').handler(ctx => {
+        reqId = ctx.req.id
+        ctx.body('ok')
+      }),
+      a =>
+        a
+          .logger(b => b.use(logger))
+          .shutdown(s => s.drainDelay(0))
+          .hook('onSend', ctx => {
+            waitUntil = ctx.server.waitUntil!
+            waitUntil(accepted.promise)
+          })
+          .hook('onResponse', () => {
+            try {
+              waitUntil!(refused.promise)
+            } catch (err) {
+              refusal = err
+            }
+            responded.release()
+          })
+          .hook('onClose', onClose),
+    )
+
+    try {
+      const res = await served.request('/s')
+      expect(await res.text()).toBe('ok')
+      await responded.promise
+      expect(refusal).toBeInstanceOf(ErrWaitUntilClosed)
+      expect(refusal).toMatchObject({
+        code: 'ERR_WAIT_UNTIL_CLOSED',
+        message: expect.stringContaining('Cannot register background work: the request is no longer accepting work'),
+      })
+
+      const closing = served.close()
+      await tick()
+      expect(onClose).not.toHaveBeenCalled()
+      accepted.release()
+      await closing
+      expect(onClose).toHaveBeenCalledTimes(1)
+
+      refused.reject(failure)
+      await tick()
+      expect(logger.error).toHaveBeenCalledExactlyOnceWith({ reqId, err: failure }, 'Background work failed')
+    } finally {
+      accepted.release()
+      refused.resolve()
+    }
+  })
+
+  it('drains independent work registered by an already admitted request during graceful shutdown', async () => {
+    const admitted = latch()
+    const register = latch()
+    const held = latch()
+    const failure = new Error('one task failed')
+    const logger = capturing()
+    const onClose = vi.fn()
+    let reqId: string | undefined
+    const served = await serve(
+      new Router('/s').get('/').handler(async ctx => {
+        reqId = ctx.req.id
+        const waitUntil = ctx.server.waitUntil!
+        admitted.release()
+        await register.promise
+        waitUntil(held.promise)
+        waitUntil(Promise.reject(failure))
+        return 'ok'
+      }),
+      a =>
+        a
+          .logger(b => b.use(logger))
+          .shutdown(s => s.drainDelay(0))
+          .hook('onClose', onClose),
+    )
+
+    try {
+      const pending = served.request('/s')
+      await admitted.promise
+      const closing = served.close()
+      await tick()
+      register.release()
+
+      expect(await (await pending).text()).toBe('ok')
+
+      expect(logger.error).toHaveBeenCalledExactlyOnceWith({ reqId, err: failure }, 'Background work failed')
+      expect(onClose).not.toHaveBeenCalled()
+
+      const closingAgain = served.close()
+      held.release()
+      await Promise.all([closing, closingAgain])
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      register.release()
+      held.release()
+    }
+  })
+
+  it('answers a plain 503 when the last background task settles during shutdown', async () => {
+    const work = latch()
+    const errorHook = latch()
+    const onError = vi.fn(() => errorHook.promise)
+    const served = await serve(
+      new Router('/s').get('/').handler(ctx => {
+        ctx.server.waitUntil!(work.promise)
+        return 'ok'
+      }),
+      a => a.shutdown(s => s.drainDelay(0)).hook('onError', onError),
+    )
+
+    try {
+      expect(await (await served.request('/s')).text()).toBe('ok')
+      const closing = served.close()
+      await tick()
+      const late = work.promise.then(() => served.request('/s'))
+      work.release()
+      await tick()
+
+      expect(onError).not.toHaveBeenCalled()
+      const response = await late
+      expect(response.status).toBe(503)
+      expect(await response.text()).toBe('Service Unavailable')
+      await closing
+    } finally {
+      work.release()
+      errorHook.release()
+    }
+  })
+
+  it('drains and reports rejected work when the container does not expose context storage', async () => {
+    // The request scope owns its storage. This container exposes neither the storage nor its dependent Context binding.
+    const container = new CaffeineIoC().overrides(ops => {
+      ops.unbind(Context)
+      ops.unbind(ContextStorage)
+    })
+    const work = Promise.withResolvers<void>()
+    const logger = capturing()
+    const onClose = vi.fn()
+    app = createWebApplication({ container })
+      .logger(b => b.use(logger))
+      .shutdown(s => s.drainDelay(0))
+      .hook('onClose', onClose)
+      .mount(
+        new Router('/s').get('/').handler(ctx => {
+          ctx.server.waitUntil!(work.promise)
+          return ctx.req.id
+        }),
+      )
+    await app.bootstrap()
+
+    try {
+      const response = await app.request('/s')
+      expect(response.status).toBe(200)
+      const reqId = await response.text()
+      const closing = app.close()
+      await tick()
+      expect(onClose).not.toHaveBeenCalled()
+      const err = new Error('task failed')
+      work.reject(err)
+      await closing
+      expect(logger.error).toHaveBeenCalledExactlyOnceWith({ reqId, err }, 'Background work failed')
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      work.resolve()
+    }
+  })
+
+  it('finishes shutdown when reporting a rejected background task throws', async () => {
+    const work = Promise.withResolvers<void>()
+    const logger = capturing()
+    logger.error.mockImplementation(() => {
+      throw new Error('log transport failed')
+    })
+    const served = await serve(
+      new Router('/s').get('/').handler(ctx => {
+        ctx.server.waitUntil!(work.promise)
+        return 'ok'
+      }),
+      a => a.logger(b => b.use(logger)).shutdown(s => s.drainDelay(0)),
+    )
+
+    try {
+      expect(await (await served.request('/s')).text()).toBe('ok')
+      const closing = served.close()
+      const err = new Error('task failed')
+      work.reject(err)
+      await closing
+      await tick()
+      expect(logger.error).toHaveBeenCalledExactlyOnceWith({ reqId: expect.any(String), err }, 'Background work failed')
+    } finally {
+      work.resolve()
+    }
+  })
+
+  it('cuts unread injected streams without aborting a completed response still running its hook', async () => {
+    const held = latch()
+    const cancel = latch()
+    let signal!: AbortSignal
+    const router = new Router('/s')
+    router.get('/stream').handler(() => new ReadableStream<Uint8Array>({ cancel: cancel.release }))
+    router.get('/done').handler(ctx => {
+      signal = ctx.signal
+      return 'sent'
+    })
+    const served = await serve(router, a =>
+      a.shutdown(s => s.drainDelay(0)).hook('onResponse', ctx => (ctx.signal === signal ? held.promise : undefined)),
+    )
+
+    try {
+      await served.request('/s/stream')
+      expect(await (await served.request('/s/done')).text()).toBe('sent')
+      const closing = served.close()
+      await cancel.promise
+      expect(signal.aborted).toBe(false)
+      held.release()
+      await closing
+    } finally {
+      held.release()
+    }
+  })
+
+  it.each(['graceful', 'forced'])(
+    'cuts an unread injected stream when its adapter registers cancellation during %s shutdown',
+    async mode => {
+      const register = latch()
+      const cancel = vi.fn()
+      const platform: typeof fetchPlatform = {
+        ...fetchPlatform,
+        respond: (native, head, payload, hooks) =>
+          fetchPlatform.respond(native, head, payload, {
+            sent: hooks.sent,
+            cancelWith: cut => void register.promise.then(() => hooks.cancelWith(cut)),
+          }),
+      }
+      const engine = await serveEngine(
+        new Router('/s').get('/').handler(() => new ReadableStream<Uint8Array>({ cancel })),
+      )
+      const response = await engine.serve(platform, new Request('http://localhost/s'), [], true)
+
+      try {
+        const closing = engine.close()
+        if (mode === 'forced') {
+          engine.forceClose()
+        }
+        expect(cancel).not.toHaveBeenCalled()
+        register.release()
+        await tick()
+        expect(cancel).toHaveBeenCalledExactlyOnceWith(expect.any(ErrHTTPServiceUnavailable))
+        await expect(response.text()).rejects.toBeInstanceOf(ErrHTTPServiceUnavailable)
+        await closing
+      } finally {
+        register.release()
+        await response.body?.cancel().catch(() => undefined)
+      }
+    },
+  )
+
+  it('cancels only the unread stream and cancels it once when graceful shutdown becomes forced', async () => {
+    const router = new Router('/s')
+    router.get('/finished').handler(() => new Response('done').body)
+    router.get('/unread').handler(() => new ReadableStream<Uint8Array>())
+    const engine = await serveEngine(router)
+    let hooks!: SendHooks
+    const cancel = vi.fn()
+    const platform: typeof fetchPlatform = {
+      ...fetchPlatform,
+      respond(native, head, payload, current) {
+        hooks = current
+        return fetchPlatform.respond(native, head, payload, {
+          sent: current.sent,
+          cancelWith: cut =>
+            current.cancelWith(reason => {
+              cancel(reason)
+              cut(reason)
+            }),
+        })
+      },
+    }
+
+    const finished = await engine.serve(platform, new Request('http://localhost/s/finished'), [], true)
+    expect(await finished.text()).toBe('done')
+    const afterFinish = vi.fn()
+    hooks.cancelWith(afterFinish)
+
+    const unread = await engine.serve(platform, new Request('http://localhost/s/unread'), [], true)
+    const closing = engine.close()
+    const afterCut = vi.fn()
+    hooks.cancelWith(afterCut)
+    engine.forceClose()
+    await closing
+
+    await expect(unread.text()).rejects.toBeInstanceOf(ErrHTTPServiceUnavailable)
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(expect.any(ErrHTTPServiceUnavailable))
+    expect(afterFinish).not.toHaveBeenCalled()
+    expect(afterCut).not.toHaveBeenCalled()
+  })
+
+  it('keeps registered work pending after the caller aborts its injected response stream', async () => {
+    const held = latch()
+    const onClose = vi.fn()
+    const cancel = vi.fn()
+    const served = await serve(
+      new Router('/s').get('/').handler(ctx => {
+        ctx.server.waitUntil!(held.promise)
+        return new ReadableStream<Uint8Array>({ cancel })
+      }),
+      a => a.shutdown(s => s.drainDelay(0)).hook('onClose', onClose),
+    )
+    const controller = new AbortController()
+    const reason = new Error('caller disconnected')
+
+    try {
+      const response = await served.request('/s', { signal: controller.signal })
+      expect(response.status).toBe(200)
+      controller.abort(reason)
+      await expect(response.text()).rejects.toBe(reason)
+      expect(cancel).toHaveBeenCalledExactlyOnceWith(reason)
+
+      const closing = served.close()
+      await tick()
+      expect(onClose).not.toHaveBeenCalled()
+      held.release()
+      await closing
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      controller.abort(reason)
+      held.release()
+    }
+  })
+
+  it('cuts unread injected responses on successive drain sweeps while waiting for background work', async () => {
+    const held = latch()
+    const cancelAdmitted = vi.fn()
+    const cancelClosing = vi.fn()
+    const onClose = vi.fn()
+    const closingCapability = vi.fn()
+    @Catch(ErrHTTPServiceUnavailable)
+    class StreamClosingResponse implements ErrorHandler<ErrHTTPServiceUnavailable> {
+      handle(ctx: IContext): void {
+        closingCapability('waitUntil' in ctx.server)
+        ctx.status(503).body(new ReadableStream<Uint8Array>({ cancel: cancelClosing }))
+      }
+    }
+    const served = await serve(
+      new Router('/s').get('/').handler(ctx => {
+        ctx.server.waitUntil!(held.promise)
+        return new ReadableStream<Uint8Array>({ cancel: cancelAdmitted })
+      }),
+      a =>
+        a
+          .errorHandling(e => e.globalHandlers(StreamClosingResponse))
+          .shutdown(s => s.drainDelay(0).shutdownTimeout(0))
+          .hook('onClose', onClose),
+    )
+
+    let admitted: Response | undefined
+    let refused: Response | undefined
+    try {
+      admitted = await served.request('/s')
+      expect(admitted.status).toBe(200)
+      const closing = served.close()
+      await tick()
+      expect(cancelAdmitted).toHaveBeenCalledTimes(1)
+      await expect(admitted.text()).rejects.toBeInstanceOf(ErrHTTPServiceUnavailable)
+
+      refused = await served.request('/s')
+      expect(refused.status).toBe(503)
+      expect(closingCapability).toHaveBeenCalledExactlyOnceWith(false)
+      await expect(refused.text()).rejects.toBeInstanceOf(ErrHTTPServiceUnavailable)
+      await vi.waitFor(() => expect(cancelClosing).toHaveBeenCalledTimes(1))
+      expect(cancelAdmitted).toHaveBeenCalledTimes(1)
+      expect(onClose).not.toHaveBeenCalled()
+
+      held.release()
+      await closing
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      held.release()
+      await admitted?.body?.cancel().catch(() => undefined)
+      await refused?.body?.cancel().catch(() => undefined)
+    }
+  })
+
+  it('refuses work registered by a handler after its route timeout', async () => {
+    const resume = latch()
+    const attempted = latch()
+    let refusal: unknown
+    const served = await serve(
+      new Router('/s')
+        .get('/')
+        .timeout(50 * Millisecond)
+        .handler(async ctx => {
+          const waitUntil = ctx.server.waitUntil!
+          await resume.promise
+          try {
+            waitUntil(Promise.resolve())
+          } catch (err) {
+            refusal = err
+          }
+          attempted.release()
+          return 'late'
+        }),
+      a => a.logger(b => b.use(newNoopLogger())),
+    )
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    try {
+      const pending = served.request('/s')
+      await vi.advanceTimersByTimeAsync(50)
+      expect((await pending).status).toBe(503)
+      resume.release()
+      await attempted.promise
+      expect(refusal).toMatchObject({ code: 'ERR_WAIT_UNTIL_CLOSED' })
+    } finally {
+      resume.release()
+    }
+  })
+
+  it('forces shutdown at its deadline and observes work that rejects after close', async () => {
+    const registered = Promise.withResolvers<void>()
+    const refused = Promise.withResolvers<void>()
+    const failure = new Error('registered work failed')
+    const lateFailure = new Error('refused work failed')
+    const logger = capturing()
+    const onClose = vi.fn()
+    const admitted = latch()
+    const resume = latch()
+    const attempted = latch()
+    let reqId: string | undefined
+    let refusal: unknown
+    const served = await serve(
+      new Router('/s').get('/').handler(async ctx => {
+        reqId = ctx.req.id
+        const waitUntil = ctx.server.waitUntil!
+        admitted.release()
+        waitUntil(registered.promise)
+        await resume.promise
+        try {
+          waitUntil(refused.promise)
+        } catch (err) {
+          refusal = err
+        }
+        attempted.release()
+        return 'late'
+      }),
+      a =>
+        a
+          .logger(b => b.use(logger))
+          .shutdown(s => s.drainDelay(0).shutdownTimeout(200 * Millisecond))
+          .hook('onClose', onClose),
+    )
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    try {
+      const pending = served.request('/s').catch((err: unknown) => err)
+      await admitted.promise
+      const closing = served.close().catch((err: unknown) => err)
+      await vi.advanceTimersByTimeAsync(199)
+      expect(onClose).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+
+      const error = await closing
+      expect(error).toBeInstanceOf(AggregateError)
+      expect((error as AggregateError).errors[0]).toBeInstanceOf(ErrShutdownTimeout)
+      expect(await pending).toBeInstanceOf(ErrHTTPServiceUnavailable)
+      expect(onClose).toHaveBeenCalledTimes(1)
+
+      resume.release()
+      await attempted.promise
+      expect(refusal).toMatchObject({ code: 'ERR_WAIT_UNTIL_CLOSED' })
+      registered.reject(failure)
+      refused.reject(lateFailure)
+      await tick()
+      expect(logger.error.mock.calls.filter(([, message]) => message === 'Background work failed')).toEqual([
+        [{ reqId, err: failure }, 'Background work failed'],
+        [{ reqId, err: lateFailure }, 'Background work failed'],
+      ])
+    } finally {
+      resume.release()
+      registered.resolve()
+      refused.resolve()
+      await vi.runOnlyPendingTimersAsync()
+    }
   })
 
   it('answers a plain 503 after close, without the container', async () => {

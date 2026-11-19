@@ -49,6 +49,8 @@ export interface SendHooks {
  */
 export interface ServerPlatform<N, P extends ContextPlatform, R> {
   readonly name: P['name']
+  /** The engine can keep work registered by this platform's requests in its graceful drain. */
+  readonly requestLifetime?: 'local'
   method(native: N): string
   /** Path and query as sent, before the base path is taken off. */
   target(native: N): string

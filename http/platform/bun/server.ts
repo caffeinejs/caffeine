@@ -78,6 +78,7 @@ export class BunHostedServer implements HostedServer<BunServer | undefined, BunL
     let runtime: readonly unknown[] = []
     const platform: ServerPlatform<Request, FetchContextPlatform, Response> = {
       ...fetchPlatform,
+      requestLifetime: 'local',
       headers,
       readBody,
       // The peer is the socket's, never a header's: what `trustProxy` by address decides on.

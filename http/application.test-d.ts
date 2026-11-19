@@ -3,7 +3,7 @@ import { expectTypeOf } from 'vitest'
 
 import { createWebApplication, type WebApplication } from './application.js'
 import type { FetchAdapter } from './core/server/hosting.js'
-import { Router, type ServerAddress } from './index.js'
+import { ErrWaitUntilClosed, Router, type IContext, type ServerAddress, type ServerContext } from './index.js'
 import { bun } from './platform/bun/index.js'
 import { node } from './platform/node.testkit.js'
 
@@ -13,6 +13,15 @@ const app = createWebApplication()
 expectTypeOf(app.instance).toEqualTypeOf<undefined>()
 expectTypeOf(app.run()).resolves.toEqualTypeOf<RunInfo>()
 expectTypeOf(app.mount(new Router('/y'))).toEqualTypeOf<WebApplication<never, never, unknown, FetchAdapter>>()
+
+expectTypeOf<IContext['server']>().toEqualTypeOf<ServerContext>()
+expectTypeOf<ServerContext>().toEqualTypeOf<{
+  readonly remoteAddress: string | undefined
+  readonly waitUntil?: (work: Promise<unknown>) => void
+}>()
+expectTypeOf<ErrWaitUntilClosed>().toExtend<Error>()
+expectTypeOf(app.fetch(new Request('http://localhost'), {}, {})).toEqualTypeOf<Response | Promise<Response>>()
+expectTypeOf(app.request('/y', { method: 'GET' })).toEqualTypeOf<Promise<Response>>()
 
 // Naming the configuration's type keeps the no-adapter types.
 expectTypeOf(createWebApplication<{ a: 1 }>().instance).toEqualTypeOf<undefined>()

@@ -1,3 +1,4 @@
+import { once } from 'node:events'
 import { get as httpGet } from 'node:http'
 import { connect as http2Connect } from 'node:http2'
 import { get as httpsGet } from 'node:https'
@@ -80,6 +81,40 @@ function http2Get(origin: string, path: string, options: object = {}): Promise<{
 }
 
 describe('the Node application', () => {
+  it('lets registered work outlive a live response and drains it before onClose', async () => {
+    const held = Promise.withResolvers<void>()
+    const events: string[] = []
+    const router = new Router('/work')
+    router.get('/').handler(ctx => {
+      const waitUntil = ctx.server.waitUntil!
+      waitUntil(held.promise.then(() => void events.push('work')))
+      return 'answered'
+    })
+    const built = app()
+      .mount(router)
+      .hook('onResponse', () => void events.push('response'))
+      .hook('onClose', () => void events.push('close'))
+    const { address } = await built.run({ host: '127.0.0.1', port: 0 })
+
+    try {
+      const response = await fetch(`${address.origin}/work`)
+      expect(response.status).toBe(200)
+      expect(await response.text()).toBe('answered')
+      expect(events).toEqual(['response'])
+
+      const stoppedListening = once(built.instance, 'close')
+      const closing = built.close()
+      await stoppedListening
+      expect(events).toEqual(['response'])
+
+      held.resolve()
+      await closing
+      expect(events).toEqual(['response', 'work', 'close'])
+    } finally {
+      held.resolve()
+    }
+  })
+
   it('listens on loopback, on a port the OS assigns, when nothing says where', async () => {
     const { address } = await app().run()
     const host = address.host === '::1' ? '[::1]' : address.host

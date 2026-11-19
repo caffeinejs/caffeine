@@ -32,9 +32,9 @@ import { node, type NodeAdapter } from './node.js'
 @Controller('/peer')
 class Peer {
   @Get('/')
-  @Args([$p.address()])
-  address(address: string | undefined): object {
-    return { address: address ?? null }
+  @Args([$p.context(), $p.address()])
+  address(ctx: IContext, address: string | undefined): object {
+    return { address: address ?? null, remoteAddress: ctx.server.remoteAddress }
   }
 }
 
@@ -623,11 +623,13 @@ describe('the Node platform', () => {
 
   // The response closed before the answer reached it, so it will not close again: the request must be let go at once,
   // or its scope never ends and close() waits for it forever.
-  it('lets close() finish when the client left before a streamed answer', async () => {
+  it('drains registered work after the client leaves before a streamed answer', async () => {
     let started!: () => void
     const running = new Promise<void>(resolve => (started = resolve))
     let destroyed!: () => void
     const scopeEnded = new Promise<void>(resolve => (destroyed = resolve))
+    const work = Promise.withResolvers<void>()
+    const events: string[] = []
     class Session {}
     const container = new CaffeineIoC()
     container.bind(Session, t =>
@@ -642,6 +644,7 @@ describe('the Node platform', () => {
       .inject(i => ({ session: i.provide(Session) }))
       .handler(async (ctx, deps) => {
         deps.session.get()
+        ctx.server.waitUntil!(work.promise.then(() => void events.push('work')))
         started()
         if (!ctx.signal.aborted) {
           await once(ctx.signal, 'abort')
@@ -656,23 +659,41 @@ describe('the Node platform', () => {
     const app = createWebApplication({ adapter: node(), container })
       .logger(b => b.use(newNoopLogger()))
       .mount(routes)
+      .hook('onClose', () => void events.push('close'))
     const { address } = await app.run({ host: '127.0.0.1', port: 0 })
     const socket = netConnect(address.port, '127.0.0.1', () =>
       socket.write('GET /a/late HTTP/1.1\r\nHost: localhost\r\n\r\n'),
     )
     socket.on('error', () => undefined)
 
-    await running
-    socket.destroy()
-    await scopeEnded
+    try {
+      await running
+      socket.destroy()
+      await scopeEnded
 
-    await expect(app.close()).resolves.toBe(undefined)
+      const stoppedListening = once(app.instance, 'close')
+      const closing = app.close()
+      await stoppedListening
+      expect(events).toEqual([])
+
+      work.resolve()
+      await closing
+      expect(events).toEqual(['work', 'close'])
+    } finally {
+      socket.destroy()
+      work.resolve()
+      await app.close()
+    }
   })
 
-  it('answers the address pick with the peer of the socket', async () => {
-    const { origin } = await serve(new Router('/unused'))
+  it('reports the socket peer through ctx.server and the address picker with a trusted proxy', async () => {
+    const { origin } = await serve(new Router('/unused'), { settings: { trustProxy: '127.0.0.1' } })
+    const headers = { 'x-forwarded-for': '203.0.113.1' }
 
-    expect(await (await fetch(`${origin}/peer`)).json()).toEqual({ address: '127.0.0.1' })
+    const response = await fetch(`${origin}/peer`, { headers })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ address: '127.0.0.1', remoteAddress: '127.0.0.1' })
   })
 
   it('follows the forwarding headers of a proxy trusted by address, and only of one', async () => {
