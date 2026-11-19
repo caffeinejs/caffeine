@@ -1,6 +1,7 @@
 import type { Duration } from '@caffeinejs/std/duration'
 
 import type { ManifestFile } from './manifest/manifest.js'
+import type { VerifiedStaticAssets } from './web/web.js'
 
 /** What `.serve(...)` accepts as a mount root: a directory, named or as a `file:` URL. */
 export type StaticRoot = string | URL
@@ -56,6 +57,14 @@ export interface MountOptions {
   headers?: (file: ManifestFile, path: string) => Readonly<Record<string, string>> | undefined
 }
 
+/** Routing and cache policy for a verified source. */
+export type AssetMountOptions = Omit<MountOptions, 'mode' | 'unrouted' | 'immutable'> & {
+  /** Exact manifest keys, `directory/**` or `**` kept off automatic routes. */
+  unrouted?: readonly string[]
+  /** Exact manifest keys, `directory/**` or `**` whose fingerprinted assets are immutable. */
+  immutable?: readonly string[]
+}
+
 /** One mount as a configuration tree carries it: the root and the data members of {@link MountOptions}. */
 export interface StaticMountConfig extends Readonly<Omit<MountOptions, 'headers'>> {
   readonly root: string
@@ -67,11 +76,13 @@ export interface StaticOptions {
 }
 
 /** One mount the plugin serves: its root as given and resolved, and its options. */
-export interface ResolvedMount {
-  /** The root as `.serve(...)` resolved it, absolute. */
-  readonly root: string
-  readonly options: MountOptions
-}
+export type ResolvedMount =
+  | {
+      /** The root as `.serve(...)` resolved it, absolute. */
+      readonly root: string
+      readonly options: MountOptions
+    }
+  | { readonly assets: VerifiedStaticAssets; readonly options: AssetMountOptions }
 
 /** What the plugin serves, folded from the builder. */
 export interface ResolvedStatic {

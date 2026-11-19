@@ -100,6 +100,18 @@
       "types": "./dist/core/security/index.d.ts",
       "default": "./dist/core/security/index.js"
     },
+    "./compress/negotiate": {
+      "types": "./dist/core/compress/negotiate.d.ts",
+      "default": "./dist/core/compress/negotiate.js"
+    },
+    "./range/parser": {
+      "types": "./dist/core/range/parser.d.ts",
+      "default": "./dist/core/range/parser.js"
+    },
+    "./vary": {
+      "types": "./dist/vary.d.ts",
+      "default": "./dist/vary.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

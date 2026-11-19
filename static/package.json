@@ -34,6 +34,10 @@
       "types": "./dist/directory/index.d.ts",
       "default": "./dist/directory/index.js"
     },
+    "./http": {
+      "types": "./dist/http/index.d.ts",
+      "default": "./dist/http/index.js"
+    },
     "./web": {
       "types": "./dist/web/index.d.ts",
       "default": "./dist/web/index.js"

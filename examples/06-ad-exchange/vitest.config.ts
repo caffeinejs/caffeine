@@ -27,7 +27,13 @@ export default defineConfig({
       ),
       '@caffeinejs/http-node': fileURLToPath(new URL('../../http-node/index.ts', import.meta.url)),
       '@caffeinejs/http/platform': fileURLToPath(new URL('../../http/platform/index.ts', import.meta.url)),
+      '@caffeinejs/http/compress/negotiate': fileURLToPath(
+        new URL('../../http/core/compress/negotiate.ts', import.meta.url),
+      ),
       '@caffeinejs/http/compress': fileURLToPath(new URL('../../http/core/compress/index.ts', import.meta.url)),
+      '@caffeinejs/http/conditional': fileURLToPath(new URL('../../http/core/conditional/index.ts', import.meta.url)),
+      '@caffeinejs/http/range/parser': fileURLToPath(new URL('../../http/core/range/parser.ts', import.meta.url)),
+      '@caffeinejs/http/vary': fileURLToPath(new URL('../../http/vary.ts', import.meta.url)),
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
     },
   },

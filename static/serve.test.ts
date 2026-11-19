@@ -10,8 +10,15 @@ import { afterEach, beforeAll, beforeEach, describe, expect, inject, it } from '
 import { buildStatic } from './build/build.js'
 import { ErrStaticManifest, type StaticManifest } from './manifest/manifest.js'
 import { readManifest } from './manifest/read.js'
+import {
+  decideFile,
+  type FilePolicy,
+  type FileRequest,
+  type FileSelection,
+  type PreparedFile,
+} from './response/index.js'
 import { sendFile } from './send.js'
-import { prepareFile, rootOnDisk, serveFile, type FilePolicy, type PreparedFile, type ServeOptions } from './serve.js'
+import { openFile, prepareFile, rootOnDisk } from './serve.js'
 import { staticFiles } from './static.js'
 
 const { spa } = inject('fixtures')
@@ -23,12 +30,25 @@ const POLICY: FilePolicy = {
 }
 
 const SILENT = { error: () => undefined }
-const ROUTE: ServeOptions = { via: 'route', conditional: true, log: SILENT }
+const ROUTE: FileSelection & { log: typeof SILENT } = { via: 'route', conditional: true, log: SILENT }
 
 const request = (headers: Record<string, string> = {}, method = 'GET') => ({
   method,
   header: (name: string) => headers[name],
 })
+
+async function serveFile(file: PreparedFile, request: FileRequest, options: typeof ROUTE) {
+  const { status, headers, cacheControl, representation, range } = decideFile(file, request, options)
+  if (status === 412) {
+    throw new ErrHTTPPreconditionFailed()
+  }
+  return {
+    status,
+    headers,
+    cacheControl,
+    body: representation && (await openFile(representation, options, range?.start, range && range.endExclusive - 1)),
+  }
+}
 
 async function text(body: Readable | undefined): Promise<string> {
   const chunks: Buffer[] = []

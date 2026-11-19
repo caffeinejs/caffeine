@@ -1,7 +1,8 @@
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import type { MountOptions, ResolvedStatic, StaticOptions, StaticRoot } from './config.js'
+import type { AssetMountOptions, MountOptions, ResolvedStatic, StaticOptions, StaticRoot } from './config.js'
+import type { VerifiedStaticAssets } from './web/web.js'
 
 /**
  * Materializes a {@link StaticBuilder} into the {@link ResolvedStatic} it built.
@@ -45,8 +46,14 @@ export class StaticBuilder {
    * s.serve('web/dist', { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })
    * ```
    */
-  serve(root: StaticRoot, options: MountOptions = {}): this {
-    this.#mounts.push({ root: resolveRoot(root), options: { ...options } })
+  serve(root: StaticRoot, options?: MountOptions): this
+  serve(assets: VerifiedStaticAssets, options?: AssetMountOptions): this
+  serve(root: StaticRoot | VerifiedStaticAssets, options: MountOptions = {}): this {
+    this.#mounts.push(
+      typeof root === 'string' || root instanceof URL
+        ? { root: resolveRoot(root), options: { ...options } }
+        : { assets: root, options: { ...options } },
+    )
     return this
   }
 

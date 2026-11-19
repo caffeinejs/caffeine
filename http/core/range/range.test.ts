@@ -2,7 +2,8 @@ import { Blob as NodeBlob } from 'node:buffer'
 
 import { describe, expect, it } from 'vitest'
 
-import { byteRanges, multipartByteRanges } from './range.js'
+import { byteRanges } from './parser.js'
+import { multipartByteRanges } from './range.js'
 
 describe('byteRanges reads the ranges a Range header asks of a body (RFC 9110 §14)', () => {
   it('reads a closed range, an open-ended one and a suffix', () => {

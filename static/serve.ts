@@ -1,22 +1,8 @@
 import { constants, createReadStream, lstatSync, open as openCallback, realpathSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
-import { Readable } from 'node:stream'
+import type { Readable } from 'node:stream'
 
-import {
-  ErrHTTPInternalServerError,
-  ErrHTTPPreconditionFailed,
-  Responder,
-  appendVary,
-  byteRanges,
-  notModified,
-  preconditionFailed,
-  rangeHolds,
-  type ActionResult,
-  type IContext,
-  type Validators,
-  type VaryReply,
-} from '@caffeinejs/http'
-import { selectEncoding } from '@caffeinejs/http/compress'
+import { ErrHTTPInternalServerError } from '@caffeinejs/http'
 import { KiB } from '@caffeinejs/std/bytes'
 
 import {
@@ -25,19 +11,15 @@ import {
   REBUILD_SOLUTIONS,
   type Encoding,
   type ManifestFile,
-  type ManifestVariant,
 } from './manifest/manifest.js'
+import {
+  prepareResponseFile,
+  type FileLog,
+  type Representation,
+  type FilePolicy,
+  type PreparedFile,
+} from './response/index.js'
 import { hashFile } from './scan/scan.js'
-
-/** What a mount decides about every file it serves, computed once when the mount is built. */
-export interface FilePolicy {
-  /** `Cache-Control` written on the mount's routes. */
-  readonly routeCacheControl: (path: string) => string
-  /** `Cache-Control` written by `sendFile`, which cannot see the gate of the route that called it. */
-  readonly sendFileCacheControl: (path: string) => string
-  /** Extra headers for one file, already checked. */
-  readonly headers: (path: string, file: ManifestFile) => Readonly<Record<string, string>> | undefined
-}
 
 /** A mount's root as start-up checks files against it: as given, resolved, and each directory resolved once. */
 export interface RootOnDisk {
@@ -47,62 +29,6 @@ export interface RootOnDisk {
   readonly real: string
   /** Real paths of the directories already resolved under it. */
   readonly directories: Map<string, string>
-}
-
-/** One representation of a file, its headers computed once. */
-export interface Representation {
-  readonly encoding: Encoding | 'identity'
-  /** Absolute path of the bytes on disk. */
-  readonly path: string
-  readonly size: number
-  readonly validators: Validators
-  /** What a `200` carries, but `Cache-Control`. */
-  readonly headers: Readonly<Record<string, string>>
-  /** What a `304` carries, but `Cache-Control`. */
-  readonly notModified: Readonly<Record<string, string>>
-}
-
-/** A manifest entry made ready to answer requests: every representation, and the variants smallest first. */
-export interface PreparedFile {
-  /** The manifest key. */
-  readonly path: string
-  readonly identity: Representation
-  readonly variants: readonly Representation[]
-  /** The variants' codings, smallest first, as negotiation takes them. */
-  readonly encodings: readonly Encoding[]
-  readonly cacheControl: { readonly route: string; readonly sendFile: string }
-}
-
-/** The part of a request {@link serveFile} reads. */
-export interface FileRequest {
-  readonly method: string
-  header(name: string): string | undefined
-}
-
-/** Where a failure to open a file is logged. */
-export interface FileLog {
-  error(fields: object, message: string): void
-}
-
-/** The answer {@link serveFile} decided on: written as status, headers, `Cache-Control`, then the body. */
-export interface FileDecision {
-  readonly status: number
-  readonly headers: Readonly<Record<string, string>>
-  /** Absent on a `416`, which carries `Content-Range` alone. */
-  readonly cacheControl: string | undefined
-  /** The open file, or nothing for a `HEAD`, a `304` or a `416`. */
-  readonly body: Readable | undefined
-}
-
-/** How a decision is asked for. */
-export interface ServeOptions {
-  /** Whose `Cache-Control` to write. */
-  readonly via: 'route' | 'sendFile'
-  /** Whether preconditions and ranges apply: a `GET` or a `HEAD` answering in place of a `200`. */
-  readonly conditional: boolean
-  readonly log: FileLog
-  /** The request's ID, on what is logged. */
-  readonly reqId?: string
 }
 
 /** The stream buffer, so a slow reader holds one file descriptor and this much memory. */
@@ -124,168 +50,12 @@ export function rootOnDisk(root: string): RootOnDisk {
  * the root
  */
 export function prepareFile(disk: RootOnDisk, path: string, entry: ManifestFile, policy: FilePolicy): PreparedFile {
-  const variants = (Object.entries(entry.variants) as Array<[Encoding, ManifestVariant]>).toSorted(
-    ([, a], [, b]) => a.size - b.size,
-  )
-  const lastModified = new Date(entry.lastModified)
-  const extra = policy.headers(path, entry)
-
-  const representation = (
-    encoding: Encoding | 'identity',
-    file: string,
-    size: number,
-    hash: string,
-  ): Representation => {
-    const absolute = checked(disk, file, size)
-    const validators = { etag: `"${hash}"`, lastModified }
-    const headers: Record<string, string> = {
-      'content-type': entry.type,
-      'content-length': String(size),
-      etag: validators.etag,
-      'last-modified': lastModified.toUTCString(),
-      'x-content-type-options': 'nosniff',
-    }
-
-    if (encoding === 'identity') {
-      headers['accept-ranges'] = 'bytes'
-    } else {
-      headers['content-encoding'] = encoding
-    }
-
-    Object.assign(headers, extra)
-    delete headers.vary
-    varyOf(headers, extra?.vary)
-
-    const notModifiedHeaders: Record<string, string> = {
-      etag: headers.etag!,
-      'last-modified': headers['last-modified']!,
-    }
-    // RFC 9110 §15.4.5 retains cache metadata from the corresponding 200 response.
-    for (const name of ['content-location', 'date', 'expires', 'vary']) {
-      const value = headers[name]
-      if (value !== undefined) {
-        notModifiedHeaders[name] = value
-      }
-    }
-
-    return {
-      encoding,
-      path: absolute,
-      size,
-      validators,
-      headers: Object.freeze(headers),
-      notModified: Object.freeze(notModifiedHeaders),
-    }
-  }
-
-  const identity = representation('identity', path, entry.size, entry.hash)
-  const prepared = variants.map(([encoding, variant]) =>
-    representation(encoding, variant.path, variant.size, variant.hash),
-  )
-
-  return {
-    path,
-    identity,
-    variants: prepared,
-    encodings: variants.map(([encoding]) => encoding),
-    cacheControl: { route: policy.routeCacheControl(path), sendFile: policy.sendFileCacheControl(path) },
-  }
+  return prepareResponseFile(path, entry, policy, (key, size) => checked(disk, key, size))
 }
 
-/**
- * Decides the answer to a request for `file`: negotiate the coding, check the preconditions on the representation
- * chosen, take a range of the identity, then open the file. Nothing is written here; the caller writes the decision.
- *
- * A request carrying `Range` gets identity, so offsets mean what the client thinks, unless the client refuses
- * identity, when the range is ignored. One range is a `206`, a range past the end a `416`, and anything else the
- * whole `200`. A client that accepts no representation on disk gets identity, for a plugin that compresses to code.
- *
- * @throws {@link ErrHTTPPreconditionFailed} when `If-Match` or `If-Unmodified-Since` no longer holds
- * @throws {@link ErrHTTPInternalServerError} when the file cannot be opened, which is logged
- */
-export async function serveFile(
-  file: PreparedFile,
-  request: FileRequest,
-  options: ServeOptions,
-): Promise<FileDecision> {
-  const cacheControl = options.via === 'route' ? file.cacheControl.route : file.cacheControl.sendFile
-  const range = options.conditional && request.method === 'GET' ? request.header('range') : undefined
-  const acceptEncoding = request.header('accept-encoding')
-
-  // A range is of the identity's bytes: taken when the client accepts identity, ignored when it does not.
-  const ranged = range !== undefined && selectEncoding(acceptEncoding, []) === 'identity'
-  const selected = ranged ? file.identity : representationFor(file, acceptEncoding)
-
-  if (options.conditional) {
-    if (preconditionFailed(request.header('if-match'), request.header('if-unmodified-since'), selected.validators)) {
-      throw new ErrHTTPPreconditionFailed()
-    }
-
-    if (notModified(request.header('if-none-match'), request.header('if-modified-since'), selected.validators)) {
-      return { status: 304, headers: selected.notModified, cacheControl, body: undefined }
-    }
-  }
-
-  if (request.method === 'HEAD') {
-    return { status: 200, headers: selected.headers, cacheControl, body: undefined }
-  }
-
-  if (ranged && rangeHolds(request.header('if-range'), selected.validators)) {
-    const ranges = byteRanges(range, selected.size)
-
-    if (ranges === 'unsatisfiable') {
-      return {
-        status: 416,
-        headers: { 'content-range': `bytes */${selected.size}` },
-        cacheControl: undefined,
-        body: undefined,
-      }
-    }
-
-    // Several ranges are served whole: RFC 9110 §14.2 lets a server ignore Range, and clients ask for one.
-    if (ranges !== undefined && ranges.length === 1) {
-      const [[start, end]] = ranges as [readonly [number, number]]
-      const headers = {
-        ...selected.headers,
-        'content-length': String(end - start + 1),
-        'content-range': `bytes ${start}-${end}/${selected.size}`,
-      }
-
-      return { status: 206, headers, cacheControl, body: await openFile(selected, options, start, end) }
-    }
-  }
-
-  return { status: 200, headers: selected.headers, cacheControl, body: await openFile(selected, options) }
-}
-
-/**
- * Writes a decision's headers on a reply. `Vary` is merged with what is already there, which a CORS plugin or the
- * handler may have written: replacing it would let a shared cache answer one `Origin` with another's response.
- */
-export function writeHeaders(reply: VaryReply, headers: Readonly<Record<string, string>>): void {
-  for (const name of Object.keys(headers)) {
-    if (name === 'vary') {
-      appendVary(
-        reply,
-        headers.vary!.split(',').map(name => name.trim()),
-      )
-    } else {
-      reply.header(name, headers[name]!)
-    }
-  }
-}
-
-function representationFor(file: PreparedFile, acceptEncoding: string | undefined): Representation {
-  const encoding = selectEncoding(acceptEncoding, file.encodings)
-
-  return encoding === undefined || encoding === 'identity'
-    ? file.identity
-    : file.variants[file.encodings.indexOf(encoding)]!
-}
-
-async function openFile(
+export async function openFile(
   representation: Representation,
-  { log, reqId }: ServeOptions,
+  { log, reqId }: { log: FileLog; reqId?: string },
   start = 0,
   // The last byte, always given: without it the stream reads once more to find the end, a read syscall per response.
   end = Math.max(representation.size - 1, 0),
@@ -384,73 +154,5 @@ export async function verifyHashes(root: string, file: PreparedFile, entry: Mani
 
   for (const { path, absolute, hash } of expected) {
     assertStoredHash(root, path, (await hashFile(absolute)).hash, hash)
-  }
-}
-
-/**
- * Writes `Vary` into `headers`: what `headers(file)` asked for, merged with `Accept-Encoding`. A file without variants
- * varies too: a plugin that compresses may code it, and a shared cache must not answer one coding with the other.
- */
-function varyOf(headers: Record<string, string>, given: string | undefined): void {
-  const reply = {
-    getHeader: (name: string) => headers[name],
-    header: (name: string, value: string) => {
-      headers[name] = value
-    },
-  }
-
-  if (given !== undefined) {
-    appendVary(reply, given.split(','))
-  }
-
-  appendVary(reply, ['Accept-Encoding'])
-}
-
-/**
- * Answers with one file a mount lists: from its own route, or from a handler through `sendFile`.
- *
- * A route's answer applies preconditions and a range whatever status the request has; `sendFile`'s applies them to a
- * `GET` or a `HEAD` the handler left at `200`, and keeps a status it set, with the whole file.
- */
-export class FileResponder extends Responder {
-  constructor(
-    readonly file: PreparedFile,
-    readonly via: 'route' | 'sendFile',
-    readonly log: FileLog,
-  ) {
-    super()
-  }
-
-  async respond(ctx: IContext): Promise<ActionResult> {
-    const method = ctx.req.method
-    const conditional = this.via === 'route' || ((method === 'GET' || method === 'HEAD') && ctx.statusCode === 200)
-    // Read before the open: it aborts when the handler times out or the client leaves while the file opens.
-    const signal = ctx.signal
-    const decision = await serveFile(
-      this.file,
-      { method, header: name => ctx.req.header(name) },
-      { via: this.via, conditional, log: this.log, reqId: ctx.req.id },
-    )
-
-    // Nothing will send the file, so nothing would close it.
-    if (signal.aborted) {
-      decision.body?.destroy()
-
-      return undefined
-    }
-
-    writeHeaders(ctx.status(conditional ? decision.status : ctx.statusCode), decision.headers)
-
-    if (decision.cacheControl !== undefined) {
-      ctx.header('cache-control', decision.cacheControl)
-    }
-
-    // A HEAD is answered through the GET, and an empty payload is written with `Content-Length: 0`: an empty stream
-    // keeps the file's length. A `304` has no length to keep, and a stream would have the server label it
-    // `application/octet-stream`.
-    return (
-      decision.body ??
-      (method === 'HEAD' && decision.headers['content-length'] !== undefined ? Readable.from([]) : undefined)
-    )
   }
 }

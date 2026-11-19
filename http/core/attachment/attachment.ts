@@ -9,7 +9,8 @@ import { Responder, type ActionResult } from '../../response.js'
 import { notModified, preconditionFailed, rangeHolds, type Validators } from '../conditional/conditional.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPPreconditionFailed } from '../error/http.js'
-import { byteRanges, multipartByteRanges } from '../range/range.js'
+import { byteRanges } from '../range/parser.js'
+import { multipartByteRanges } from '../range/range.js'
 import { contentDisposition } from './_disposition.js'
 
 // The largest end offset Node's `Blob.slice` takes: it asserts a 32-bit one, aborting the process past it.
