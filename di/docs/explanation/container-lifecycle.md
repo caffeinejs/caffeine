@@ -53,9 +53,9 @@ During init, the container does all its heavy lifting. The first steps are
    dropped, and one carrying conditions waits until everything else is
    registered and is then kept only if they pass. A `present()` or `missing()`
    condition on a key a binding without conditions answers to is checked
-   first, then its `env` and `config` conditions; any other `present()` or
-   `missing()` condition is decided after every binding that could answer to
-   its key. A key takes one binding: a second one fails with
+   first, then its `env`, `config` and runtime conditions; any other
+   `present()` or `missing()` condition is decided after every binding that
+   could answer to its key. A key takes one binding: a second one fails with
    `ErrDuplicateBinding`.
 6. **Overrides** — the steps added with `overrides()` run, in order, over the
    bindings that are left.

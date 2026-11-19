@@ -15,6 +15,11 @@ export type Condition =
   | { readonly kind: 'missing'; readonly key: InjectionToken }
   | { readonly kind: 'config'; readonly test: (config: never) => boolean }
   | { readonly kind: 'env'; readonly name: string; readonly expected?: string }
+  | { readonly kind: 'runtime'; readonly runtime: Runtime }
+
+const runtimes = ['browser', 'bun', 'deno', 'node', 'worker'] as const
+
+type Runtime = (typeof runtimes)[number]
 
 /**
  * One condition, or several that must all pass.
@@ -55,6 +60,38 @@ export interface ConditionHelpers<C = unknown> {
    * The variable is read when the container compiles.
    */
   env(name: string, expected?: string): Condition
+
+  /**
+   * Passes on Bun. A DOM test environment, which defines `window` and `document`, reads as a browser page and fails
+   * it.
+   */
+  bun(): Condition
+
+  /**
+   * Passes on Deno, a Deno worker included. A DOM test environment, which defines `window` and `document`, reads as a
+   * browser page and fails it.
+   */
+  deno(): Condition
+
+  /**
+   * Passes on Node.js. Bun, Deno and other hosts that report a Node.js version fail it.
+   *
+   * A DOM test environment such as jsdom, which defines `window` and `document`, reads as a browser page and fails it.
+   */
+  node(): Condition
+
+  /**
+   * Passes on a browser page: where `window` and `document` exist. A worker fails it.
+   *
+   * A DOM test environment such as jsdom, which defines both, passes it.
+   */
+  browser(): Condition
+
+  /**
+   * Passes in a browser's dedicated, shared or service worker. A Deno worker, Cloudflare Workers and a Node.js worker
+   * thread fail it.
+   */
+  worker(): Condition
 }
 
 function present(key: InjectionToken): Condition {
@@ -96,6 +133,10 @@ function env(name: string, expected?: string): Condition {
   return expected === undefined ? { kind: 'env', name } : { kind: 'env', name, expected }
 }
 
+function onRuntime(runtime: Runtime): () => Condition {
+  return () => ({ kind: 'runtime', runtime })
+}
+
 function checkedKey(kind: string, key: InjectionToken): InjectionToken {
   // A deferred key never answers to anything the container registers, so a condition on one could never pass.
   if (key instanceof DeferredCtor) {
@@ -128,7 +169,17 @@ function checkedKey(kind: string, key: InjectionToken): InjectionToken {
  * di.bind(Cache, t => t.toClass(InMemoryCache).conditional($cond.missing(Cache)))
  * ```
  */
-export const $cond: ConditionHelpers = { present, missing, config, env }
+export const $cond: ConditionHelpers = {
+  present,
+  missing,
+  config,
+  env,
+  bun: onRuntime('bun'),
+  deno: onRuntime('deno'),
+  node: onRuntime('node'),
+  browser: onRuntime('browser'),
+  worker: onRuntime('worker'),
+}
 
 function isCondition(value: unknown): value is Condition {
   if (typeof value !== 'object' || value === null) {
@@ -148,6 +199,8 @@ function isCondition(value: unknown): value is Condition {
         condition.name !== '' &&
         (condition.expected === undefined || typeof condition.expected === 'string')
       )
+    case 'runtime':
+      return (runtimes as readonly unknown[]).includes(condition.runtime)
     default:
       return false
   }
@@ -238,13 +291,15 @@ export function detachFrom(entry: HeldBinding, key: InjectionToken): HeldBinding
  * Decides the held bindings, in three steps.
  *
  * 1. What depends on no binding still held is checked first: a `present` or `missing` condition on a key a registered
- *    binding answers to already, then the `env` and `config` conditions, in the order written. A binding that fails
- *    one is dropped. A `@Provides` is checked once the binding it follows passed, and is dropped with it. While that
- *    binding still waits on a `present` or `missing` condition, the `env` and `config` of the `@Provides` wait too.
+ *    binding answers to already, then the `env`, `config` and runtime conditions, in the order written. A binding that
+ *    fails one is dropped. A `@Provides` is checked once the binding it follows passed, and is dropped with it. While
+ *    that binding still waits on a `present` or `missing` condition, the `env`, `config` and runtime conditions of the
+ *    `@Provides` wait too.
  * 2. Any other `present` or `missing` condition waits for every other binding still held that answers to its key,
  *    except the `@Provides` that follow its own binding. A `@Provides` waits for the binding it follows.
  * 3. In that order, a binding registers when every `present` and `missing` condition passes and, for a `@Provides`,
- *    the binding it follows registered and any `env` and `config` it waited with pass. It is dropped otherwise.
+ *    the binding it follows registered and any `env`, `config` and runtime conditions it waited with pass. It is
+ *    dropped otherwise.
  *
  * A `@Provides` follows its configuration class while that is held, or the replacement `rebind()` holds in its place.
  * One whose class is registered follows nothing, and one whose class key nothing holds is dropped.
@@ -266,7 +321,7 @@ export function decideConditions(held: readonly HeldBinding[], ops: ConditionOps
 }
 
 // What step 1 leaves to decide: the bindings left, in the order they were held, the binding each @Provides follows, and
-// the @Provides whose env and config wait for step 3.
+// the @Provides whose env, config and runtime conditions wait for step 3.
 interface Pending {
   live: HeldBinding[]
   follows: Map<HeldBinding, HeldBinding>
@@ -294,9 +349,9 @@ function checkFirst(held: readonly HeldBinding[], ops: ConditionOps): Pending {
   return { live: held.filter(entry => live.has(entry)), follows, deferred }
 }
 
-// Adds to `live` the @Provides step 1 leaves, and returns those whose env and config wait for step 3. A @Provides goes
-// with the binding it follows: none of its conditions is checked once that one failed, and its env and config only once
-// that one is sure to register.
+// Adds to `live` the @Provides step 1 leaves, and returns those whose env, config and runtime conditions wait for step
+// 3. A @Provides goes with the binding it follows: none of its conditions is checked once that one failed, and its env,
+// config and runtime conditions only once that one is sure to register.
 function checkProvides(
   follows: ReadonlyMap<HeldBinding, HeldBinding>,
   live: Set<HeldBinding>,
@@ -445,8 +500,8 @@ function waitsOf(
   return waits
 }
 
-// Step 3 for one binding, once everything it waits for is decided. A @Provides that waited checks its env and config
-// first, as step 1 would have.
+// Step 3 for one binding, once everything it waits for is decided. A @Provides that waited checks its env, config and
+// runtime conditions first, as step 1 would have.
 function passesLast(
   entry: HeldBinding,
   { follows, deferred }: Pending,
@@ -486,7 +541,7 @@ function nameOf({ key, binding }: HeldBinding): string {
 }
 
 function isStatic(condition: Condition): boolean {
-  return condition.kind === 'env' || condition.kind === 'config'
+  return condition.kind === 'env' || condition.kind === 'config' || condition.kind === 'runtime'
 }
 
 function isPresence(condition: Condition): condition is Extract<Condition, { kind: 'present' | 'missing' }> {
@@ -525,6 +580,8 @@ function check(condition: Condition, entry: HeldBinding, ops: ConditionOps): boo
       return checkEnv(condition.name, condition.expected, entry)
     case 'config':
       return checkConfig(condition.test, entry, ops)
+    case 'runtime':
+      return hostRuntime() === condition.runtime
   }
 }
 
@@ -606,6 +663,59 @@ function checkConfig(test: (config: never) => boolean, entry: HeldBinding, ops: 
 // The browser bundle has no process.
 function hostEnv(): Record<string, string | undefined> {
   return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+}
+
+// Read on every check, never cached. Bun, Deno and other hosts report a Node.js version, and Cloudflare Workers define
+// worker globals, so Node and a browser worker are told by their user agent.
+function hostRuntime(): Runtime | undefined {
+  const host = globalThis as {
+    Bun?: unknown
+    Deno?: unknown
+    window?: unknown
+    document?: unknown
+    self?: unknown
+    WorkerGlobalScope?: unknown
+    navigator?: { userAgent?: unknown }
+    process?: { versions?: { node?: unknown } }
+  }
+  // First, so a DOM test environment on Bun or Deno reads as a page, and so an element with id="Bun" or id="Deno"
+  // cannot pass for the runtime.
+  if (
+    typeof host.window === 'object' &&
+    host.window !== null &&
+    typeof host.document === 'object' &&
+    host.document !== null
+  ) {
+    return 'browser'
+  }
+  if (host.Bun !== undefined) {
+    return 'bun'
+  }
+  if (host.Deno !== undefined) {
+    return 'deno'
+  }
+
+  const agent = host.navigator?.userAgent
+  if (typeof agent === 'string') {
+    if (agent.startsWith('Node.js/')) {
+      return 'node'
+    }
+    if (
+      agent.startsWith('Mozilla/') &&
+      typeof host.WorkerGlobalScope === 'function' &&
+      host.self instanceof host.WorkerGlobalScope
+    ) {
+      return 'worker'
+    }
+
+    return undefined
+  }
+  // Node.js started with --no-experimental-global-navigator.
+  if (typeof host.process?.versions?.node === 'string') {
+    return 'node'
+  }
+
+  return undefined
 }
 
 function messageOf(err: unknown): string {

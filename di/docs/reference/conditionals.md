@@ -37,6 +37,13 @@ const $cond: ConditionHelpers
 | `config(test)`        | `test` returns `true` for the values bound with `bindConfig()`                                       |
 | `env(name)`           | the environment variable reads as true: `1`, `t`, `true`, `on` or `yes`, in any letter case          |
 | `env(name, expected)` | the environment variable equals `expected`                                                           |
+| `bun()`               | the code runs on Bun                                                                                 |
+| `deno()`              | the code runs on Deno, a Deno worker included                                                        |
+| `node()`              | the code runs on Node.js, not on Bun, Deno or another host reporting a Node.js version               |
+| `browser()`           | the code runs on a browser page, where `window` and `document` exist                                 |
+| `worker()`            | the code runs in a browser's dedicated, shared or service worker                                     |
+
+`bun()`, `deno()`, `node()`, `browser()` and `worker()` build the runtime conditions.
 
 ```ts
 di.bind(Cache, t => t.toClass(InMemoryCache).conditional($cond.missing(Cache)))
@@ -45,12 +52,15 @@ di.bind(Mailer, t => t.toClass(SmtpMailer).conditional([$cond.env('SMTP_ENABLED'
 
 - A condition never sees its own binding.
 - A `present(key)` or `missing(key)` on a key a binding without conditions answers to is decided first, then the
-  `env` and `config` conditions. Any other `present(key)` or `missing(key)` is decided after every other binding that
-  could answer to `key`, and bindings that wait for each other fail the compilation with `ErrCircularCondition`. See
+  `env`, `config` and runtime conditions. Any other `present(key)` or `missing(key)` is decided after every other
+  binding that could answer to `key`, and bindings that wait for each other fail the compilation with
+  `ErrCircularCondition`. See
   [When conditions are decided](../guides/conditional-bindings.md#when-conditions-are-decided).
 - A `@Provides` method's conditions are decided after its `@Configuration` class: none of them when the class fails,
-  and its `env` and `config` only once the class is sure to register.
-- `env` and `config` are read when the container compiles, not when the condition is written.
+  and its `env`, `config` and runtime conditions only once the class is sure to register.
+- `env`, `config` and runtime conditions are read when the container compiles, not when the condition is written.
+- A DOM test environment such as jsdom, which defines `window` and `document`, reads as a browser page: `browser()`
+  passes there, and `bun()`, `deno()` and `node()` fail.
 - `env(name)` fails on `0`, `f`, `false`, `off`, `no` or an unset variable. Any other value fails the compilation with
   `ErrInvalidBinding`, which names the variable but not its value. `env(name, expected)` compares the value exactly.
 - A `config` condition needs values. Without `bindConfig()`, compiling fails with `ErrNoValuesProvider`.
@@ -69,6 +79,7 @@ type Condition =
   | { readonly kind: 'missing'; readonly key: InjectionToken }
   | { readonly kind: 'config'; readonly test: (config: never) => boolean }
   | { readonly kind: 'env'; readonly name: string; readonly expected?: string }
+  | { readonly kind: 'runtime'; readonly runtime: 'browser' | 'bun' | 'deno' | 'node' | 'worker' }
 
 type Conditions = Condition | readonly Condition[]
 ```
@@ -87,6 +98,11 @@ interface ConditionHelpers<C = unknown> {
   missing(key: InjectionToken): Condition
   config<T = C>(test: (config: T) => boolean): Condition
   env(name: string, expected?: string): Condition
+  bun(): Condition
+  deno(): Condition
+  node(): Condition
+  browser(): Condition
+  worker(): Condition
 }
 ```
 

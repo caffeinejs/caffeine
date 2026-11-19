@@ -14,7 +14,7 @@ setting in the configuration, or the presence of another binding.
 import { $cond, Conditional } from '@caffeinejs/di'
 ```
 
-There are four kinds of condition:
+There are five kinds of condition:
 
 | Condition                   | Passes when                                                                              |
 | --------------------------- | ---------------------------------------------------------------------------------------- |
@@ -22,6 +22,13 @@ There are four kinds of condition:
 | `$cond.missing(key)`        | no binding answers to `key`                                                              |
 | `$cond.config(test)`        | `test` returns `true` for the values bound with `bindConfig()`                           |
 | `$cond.env(name, expected)` | the environment variable equals `expected`, or reads as true when `expected` is left out |
+| `$cond.bun()`               | the code runs on Bun                                                                     |
+| `$cond.deno()`              | the code runs on Deno, a Deno worker included                                            |
+| `$cond.node()`              | the code runs on Node.js, not on Bun, Deno or another host reporting a Node.js version   |
+| `$cond.browser()`           | the code runs on a browser page, where `window` and `document` exist                     |
+| `$cond.worker()`            | the code runs in a browser's dedicated, shared or service worker                         |
+
+`bun()`, `deno()`, `node()`, `browser()` and `worker()` are the runtime conditions.
 
 `@Conditional` takes one condition, a list, or a callback handed `$cond` that returns either. These three are the
 same:
@@ -134,14 +141,15 @@ conditions are then decided when the container compiles:
 
 1. A `present(key)` or `missing(key)` condition on a key a binding without conditions answers to is settled from the
    start, so it is decided first. A binding that fails one is dropped before any other of its conditions is checked.
-2. `env` and `config` conditions are checked next, in the order they are written. They depend on no other binding.
-   A binding that fails one is dropped.
+2. `env`, `config` and runtime conditions are checked next, in the order they are written. They depend on no other
+   binding. A binding that fails one is dropped.
 3. Any other `present(key)` or `missing(key)` condition is decided after every other binding that could answer to
    `key`. So a default sees a conditional replacement whatever order the two were declared or bound in, and
    `present()` sees a binding a `missing()` default registers.
 4. A `@Provides` method is decided after its `@Configuration` class, and is dropped with it, whatever else binds the
    class key. Once `rebind()` replaced the class, the method goes with the replacement instead. While the class waits
-   on a condition of step 3, the method's `env` and `config` wait with it, and run only once the class registered.
+   on a condition of step 3, the method's `env`, `config` and runtime conditions wait with it, and run only once the
+   class registered.
 
 Bindings that do not check each other keep the order they were declared in. A condition never sees its own binding,
 nor the `@Provides` that go with it, so a `@Configuration` class that provides a key when `missing()` finds it unbound
@@ -155,8 +163,8 @@ other's key. Which one should register is not decidable, so `init()` fails with 
 Bind the key yourself, and neither has to wait.
 
 A `@Provides` method of a class that waits counts as an answer to its key until the class is decided, whatever its own
-`env` and `config` would say. Two `@Configuration` classes that each provide a key they check is `missing()` wait for
-each other, even when the `env` of one of the methods fails.
+`env`, `config` and runtime conditions would say. Two `@Configuration` classes that each provide a key they check is
+`missing()` wait for each other, even when the `env` of one of the methods fails.
 
 ---
 
@@ -306,7 +314,8 @@ conditions. In the example above:
 - `taxCalc` is provided when `REGION` is `eu` AND `TAX_SERVICE_ENABLED` is true
 
 When the class fails any of its conditions, its methods are dropped with it, and none of their conditions is decided.
-While the class waits on a `present()` or `missing()` condition, their `env` and `config` wait with it.
+While the class waits on a `present()` or `missing()` condition, their `env`, `config` and runtime conditions wait
+with it.
 
 The methods go with the class, not with its key: a binding of the class key made by hand, with conditions or without,
 does not keep them when the class fails. `rebind()` replaces the class, conditions included. Its methods then go with
