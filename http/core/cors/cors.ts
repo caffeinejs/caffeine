@@ -391,6 +391,12 @@ function resolve(config: CORSConfig, where: string): ResolvedCORS {
       ? undefined
       : config.exposedHeaders.join(', ')
   const seconds = maxAge === undefined ? undefined : String(Math.floor(maxAge / Second))
+  const sortedOrigins = [...origins].sort((left, right) => {
+    if (left === right) {
+      return 0
+    }
+    return left < right ? -1 : 1
+  })
 
   return {
     any,
@@ -401,7 +407,7 @@ function resolve(config: CORSConfig, where: string): ResolvedCORS {
     maxAge: seconds,
     key: JSON.stringify([
       any,
-      [...origins].sort(),
+      sortedOrigins,
       credentials,
       allowHeaders ?? null,
       exposeHeaders ?? null,

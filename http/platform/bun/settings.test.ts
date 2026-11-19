@@ -62,7 +62,7 @@ describe('resolveBunServerSettings', () => {
 
     expect(message.split('\n')[0]).toBe('Cannot build the server: "http2" is not a setting of the Bun application')
     expect(message).toContain(
-      'Pass adapter: node() from "@caffeinejs/http/node" to createWebApplication() to serve on a Node server',
+      'Pass adapter: node() from "@caffeinejs/http-node" to createWebApplication() to serve on a Node server',
     )
     expect(message).toContain(
       'Return only handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler, multipart, listen, https from ".server(...)"',

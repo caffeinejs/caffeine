@@ -11,7 +11,7 @@ import {
   Use,
   type WebApplication,
 } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * Scenario: a controller's `@Use(...)` taking an `HTTPPlugin`. Its middleware runs in front of the controller's

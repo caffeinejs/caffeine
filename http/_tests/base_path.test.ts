@@ -17,7 +17,7 @@ import {
   type NodeMiddleware,
   type WebApplication,
 } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /** A plugin that does nothing, where a factory must return one. */
 class NoopPlugin extends HTTPPlugin {

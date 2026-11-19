@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Controller, Get, HTTPPlugin, Responder, Router, type HTTPSetupContext } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * A handler that outlives its timeout is answered with a 503. An `onSend` hook that is asynchronous — a

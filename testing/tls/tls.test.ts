@@ -3,7 +3,7 @@ import { createServer, get, type Server } from 'node:https'
 import type { AddressInfo } from 'node:net'
 
 import { type WebApplication, Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { testTLS, testTLSCertificate } from './index.js'

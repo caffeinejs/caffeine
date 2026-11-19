@@ -29,7 +29,7 @@
     "!dist/**/_spectypes"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "^24.22.0 || >=26.10.0"
   },
   "publishConfig": {
     "access": "public"
@@ -55,6 +55,7 @@
   },
   "devDependencies": {
     "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/http-node": "0.0.0",
     "@scalar/api-reference": "^1.68.0",
     "jose": "^6.2.10"
   }

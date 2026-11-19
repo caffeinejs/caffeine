@@ -15,7 +15,7 @@ import {
   CookieAuthenticationOptionsBuilder,
   ErrAuthenticationCookies,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
 import { healthProbes } from '../../health/index.js'
 import { Router } from '../../routing/programmatic/programmatic.js'

@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import { Attachment, Router } from '../../index.js'
-import { node } from '../../platform/node/index.js'
+import { node } from '../../platform/node.testkit.js'
 
 /**
  * That a large download is streamed rather than held: the server's memory stays far below the size of what it

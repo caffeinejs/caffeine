@@ -4,7 +4,7 @@ import { expectTypeOf } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { type IContext } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * What `.basePath(...)` accepts, and what a handler reads back. Nothing at run time fails when a callback stops

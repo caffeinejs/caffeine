@@ -41,6 +41,17 @@ import type { ResolvedServerSettings } from './settings.js'
 /** The engine's preflight lookup on a context: see {@link ServerShared.routeOf}. */
 export const kRouteOf = Symbol('caffeine.http.route-of')
 
+/** The request's {@link BodyDecoder}, on `ContextRequest`: what `decompression()` sets to decode a coded body. */
+export const kDecodeBody = Symbol('caffeine.http.decode-body')
+
+/** How a request body sent with a `Content-Encoding` is decoded as the route reads it. */
+export interface BodyDecoder {
+  /** The decoded bytes of `encoded`, at most `limit` of them: past it, rejects with a 413. */
+  bytes(encoded: Uint8Array, limit: ByteSize): Promise<Uint8Array>
+  /** `encoded` decoded as it is read, only as far as the reader pulls. */
+  stream(encoded: ReadableStream<Uint8Array>): ReadableStream<Uint8Array>
+}
+
 /** The engine's `Set-Cookie` writer on a context: see {@link Context}. */
 export const kAppendCookies = Symbol('caffeine.http.cookies.append')
 
@@ -692,7 +703,13 @@ export class ContextRequest implements IRequest<
   /** The headers validation produced, by lower-case name: read in place of the platform's once set. */
   #validatedHeaders?: Record<string, string>
   /** The header names `withholdValidators` hides, while it does. */
-  #withheld?: ReadonlySet<string>
+  #withheld?: ReadonlySet<string>;
+
+  /**
+   * Decodes the body as the route reads it, when set: the limit then holds the encoded bytes and the decoded ones.
+   * `raw` stays the request as received.
+   */
+  [kDecodeBody]: BodyDecoder | undefined
 
   constructor(
     shared: ServerShared,
@@ -745,7 +762,10 @@ export class ContextRequest implements IRequest<
       return Promise.reject(err)
     }
 
-    return this.#platform.readBody(this.#native, this.#limit)
+    const read = this.#platform.readBody(this.#native, this.#limit)
+    const decoder = this[kDecodeBody]
+
+    return decoder === undefined ? read : read.then(bytes => decoder.bytes(bytes, this.#limit))
   }
 
   /**
@@ -756,7 +776,10 @@ export class ContextRequest implements IRequest<
    */
   bodyStream(): ReadableStream<Uint8Array> {
     this.#assertReadable()
-    return limitStream(this.raw.body, this.#limit)
+    const body = limitStream(this.raw.body, this.#limit)
+    const decoder = this[kDecodeBody]
+
+    return decoder === undefined ? body : limitStream(decoder.stream(body), this.#limit)
   }
 
   /** What the body was read as, or what validation produced for `slot`: read in place of what the request carried. */
@@ -853,6 +876,11 @@ export class ContextRequest implements IRequest<
     }
 
     return value === undefined ? undefined : [value]
+  }
+
+  /** The field as the client sent it: never what a route schema made of it, nor withheld. */
+  wireHeader(key: string): string | undefined {
+    return this.#platform.header(this.#native, key)
   }
 
   header(): Record<string, string>

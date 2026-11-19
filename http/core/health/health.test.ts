@@ -14,7 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import { Health, WebApplication } from '../../index.js'
-import { node } from '../../platform/node/index.js'
+import { node } from '../../platform/node.testkit.js'
 import { ErrHealthConfiguration } from './errors.js'
 import type { HealthConfig } from './options.js'
 import { healthProbes } from './plugin.js'

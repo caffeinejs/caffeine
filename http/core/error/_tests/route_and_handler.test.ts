@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { createWebApplication } from '../../../application.js'
 import { Catch, Controller, ErrConfiguration, ErrHTTPNotFound, Get, type ActionResult } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 // Isolated: a single method is both a route (@Get) and an error handler (@Catch). buildRouting
 // rejects at bootstrap(), poisoning every app build in the module — so it lives alone.

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Attachment, Router } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 import { expectRangeAnswer, extendedName, NAMED_DOWNLOAD, type RangeAnswer } from './bodies.js'
 import { patterned } from './patterned.js'
 

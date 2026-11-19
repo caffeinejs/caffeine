@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createWebApplication } from '../application.js'
 import { $p } from '../core/routing/picker.js'
 import { type IContext, Controller, Get, Header, Args, Post } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 describe('Redirect', () => {
   describe('given a router with different redirect strategies', () => {

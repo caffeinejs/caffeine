@@ -13,8 +13,8 @@ import { $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
-import { bindTo, type WebApplication, Router } from '../../index.js'
-import { type NodeServerSettings, node } from '../../platform/node/index.js'
+import { bindTo, type AdapterSettings, type WebApplication, Router } from '../../index.js'
+import { node, type NodeAdapter } from '../../platform/node.testkit.js'
 import { listenersOf, type ListenerConfigurer } from './listener.js'
 
 /**
@@ -30,16 +30,16 @@ class Probe<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'probe'
 
   readonly #name: string
-  readonly #listener: ListenerConfigurer<C, NodeServerSettings> | undefined
+  readonly #listener: ListenerConfigurer<C, AdapterSettings<NodeAdapter>> | undefined
 
-  constructor(name: string, listener?: ListenerConfigurer<C, NodeServerSettings>) {
+  constructor(name: string, listener?: ListenerConfigurer<C, AdapterSettings<NodeAdapter>>) {
     super()
     this.#name = name
     this.#listener = listener
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    listenersOf<C, NodeServerSettings>(kit).add(this.#name, this.#listener)
+    listenersOf<C, AdapterSettings<NodeAdapter>>(kit).add(this.#name, this.#listener)
   }
 }
 

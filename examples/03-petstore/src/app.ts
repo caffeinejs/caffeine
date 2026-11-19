@@ -13,7 +13,7 @@ import {
   healthProbes,
   createWebApplication,
 } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { OpenAPI, openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
 import { Second } from '@caffeinejs/std/duration'

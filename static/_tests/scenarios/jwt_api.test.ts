@@ -1,5 +1,5 @@
 import { JWTService, Authentication, authentication, Router, type WebApplication } from '@caffeinejs/http'
-import { type NodeAdapter } from '@caffeinejs/http/node'
+import { type NodeAdapter } from '@caffeinejs/http-node'
 import { Minute } from '@caffeinejs/std/duration'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 

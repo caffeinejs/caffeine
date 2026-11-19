@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { createWebApplication } from '../application.js'
 import { healthProbes } from '../core/health/index.js'
 import { Router, version } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * Version is a routing key: the request must select one of two same-URL handlers *before* a handler runs.

@@ -1,6 +1,6 @@
 import { CaffeineIoC, Configuration, Injectable, Profile, Provides } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get, Post, Put, Router, Status, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 

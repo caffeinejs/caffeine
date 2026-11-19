@@ -4,11 +4,12 @@
 - Coding conventions: [`CONVENTIONS.md`](CONVENTIONS.md)
 - Writing features and plugins: [`FEATURES.md`](FEATURES.md)
 - AI-assisted contributions: [`AI_POLICY.md`](AI_POLICY.md)
+- Agent coordination setup: [`docs/agent-coordination.md`](docs/agent-coordination.md)
 - MCP servers: [`.mcp.json`](.mcp.json). Export the environment variables it names in the shell that launches the client.
 
 ## Prerequisites
 
-- Node.js 24 or later (CI runs 24 and 26)
+- Node.js 24.22 or later on 24, or 26.10 or later (CI runs 24 and 26)
 - npm >= 10
 - [Bun](https://bun.sh), at the version root `package.json` names in `engines.bun`: it builds and tests the CLI
   (`cli/`), and `make check` runs those tests

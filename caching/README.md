@@ -25,7 +25,7 @@ plugin fails at `app.bootstrap()`. There is no default store: you pass one.
 import { CacheControl, CacheInvalidate, HTTPCaching } from '@caffeinejs/caching/http'
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
 import { Controller, Get, Put, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { Minute } from '@caffeinejs/std/duration'
 
 @Controller('/pets')
@@ -325,13 +325,20 @@ It installs on the whole application, or on one route group with `router.with(HT
 `@Use(HTTPCaching(...))`, each install with its own store and settings. A group that declares caching and
 installs nothing, under an application that installs nothing, fails at `app.bootstrap()`.
 
-Order matters in one place:
+Order matters in two places:
 
 - Install it after the authentication gate, `.with(authentication())`. Guards run before the cache, on a hit as
   well as on a miss, so a cached response never skips authorization.
+- Install it before `compression()`, in the same slot or an outer one, so the store holds identity bytes and each
+  answer is compressed for the client asking, hit or miss. Installed after it, it stores none of the answers
+  `compression()` coded, unless the route's key varies on `Accept-Encoding`.
 
-The default `ETag` is a strong tag hashed from the payload before any content-coding. Behind a compressor, the
-one tag goes out with every coding; if that matters, pass an `etagGenerator` that returns weak tags (`W/"..."`).
+A response that carries a `Content-Encoding` other than `identity` is stored only when the key tells codings apart:
+`vary: ['Accept-Encoding']`, or a `key` function. An entry stored in a coding is served only to a request whose
+`Accept-Encoding` accepts that coding; any other request is a miss.
+
+The default `ETag` is a strong tag hashed from the payload before any content-coding. Behind `compression()`, the one
+tag goes out with every coding.
 
 ## Stores
 
@@ -506,16 +513,16 @@ const metrics: CacheObserver = {
 HTTPCaching((b, { logger }) => b.store(store).observer(composeObservers(metrics, loggingCacheObserver(logger))))
 ```
 
-| Method           | When                                                                                                                                                                                         |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onHit`          | Answered from the store. `revalidated` for a `304`, `stale` for an entry past its `ttl`, `coalesced` for a request served what another's handler run stored.                                 |
-| `onMiss`         | Nothing to serve: `absent`, `expired`, `stale-for-request`, `only-if-cached` (answered `504`), or `not-coalesced` (waited on a handler run that stored nothing it could use).                |
-| `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `range`, `precondition`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`. |
-| `onStore`        | A response was stored, with its `size` in bytes and its tags.                                                                                                                                |
-| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `entry-too-large`, `stream`, or `empty` (no body at all).                                                                   |
-| `onInvalidate`   | An eviction went through, with its tags.                                                                                                                                                     |
-| `onStaleIfError` | A `5xx` was replaced by a stale entry. The miss was already reported; this is not a second hit.                                                                                              |
-| `onError`        | A store call rejected or timed out: `get`, `put` or `evict`.                                                                                                                                 |
+| Method           | When                                                                                                                                                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onHit`          | Answered from the store. `revalidated` for a `304`, `stale` for an entry past its `ttl`, `coalesced` for a request served what another's handler run stored.                                                                                                  |
+| `onMiss`         | Nothing to serve: `absent`, `expired`, `stale-for-request`, `only-if-cached` (answered `504`), `not-coalesced` (waited on a handler run that stored nothing it could use), or `unacceptable-coding` (stored in a content coding the request does not accept). |
+| `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `range`, `precondition`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`.                                                                  |
+| `onStore`        | A response was stored, with its `size` in bytes and its tags.                                                                                                                                                                                                 |
+| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `uncovered-vary`, `entry-too-large`, `stream`, or `empty` (no body at all).                                                                                                                  |
+| `onInvalidate`   | An eviction went through, with its tags.                                                                                                                                                                                                                      |
+| `onStaleIfError` | A `5xx` was replaced by a stale entry. The miss was already reported; this is not a second hit.                                                                                                                                                               |
+| `onError`        | A store call rejected or timed out: `get`, `put` or `evict`.                                                                                                                                                                                                  |
 
 `event.key` holds the query string and the value of every `vary` header, credentials included when a route
 varies on one. Do not use it as a metric attribute. `loggingCacheObserver` leaves keys out unless

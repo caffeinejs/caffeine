@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Controller, Get, HTTPPlugin, type HTTPSetupContext, Router, Use } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * Scenario: a controller's plugin trying to mount. A class has no children to nest routers under, so the start is

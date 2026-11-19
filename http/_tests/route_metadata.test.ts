@@ -11,7 +11,7 @@ import {
   type IRouteGroup,
   type WebApplication,
 } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * A plugin learns the application's routes from `onRoute`, and finds what Caffeine compiled on the route and its

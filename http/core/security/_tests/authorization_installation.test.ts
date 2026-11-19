@@ -15,7 +15,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 // Kept in its own file, protected-route cases last: `WebApplication` snapshots the global `@Controller`
 // registry at construction, and that registry only ever grows within a test file — so an `@Authorize`-

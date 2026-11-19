@@ -132,14 +132,15 @@ function runFrom<X extends Answerable>(entries: readonly HookEntry<X>[], ctx: X,
 
 /**
  * Hands `payload` through `entries` in order, sync-first: an entry returning `undefined` keeps it. A throw or a
- * rejection is left to the caller.
+ * rejection is left to the caller, which holds `payload` alone: a stream an earlier entry returned in its place, often
+ * piped from it, is cancelled first, so its source is released.
  */
 export function runSendHooks<X>(
   entries: readonly SendEntry<X>[],
   ctx: X,
   payload: SendPayload,
 ): SendPayload | Promise<SendPayload> {
-  return sendFrom(entries, ctx, payload, 0)
+  return sendFrom(entries, ctx, payload, 0, payload)
 }
 
 function sendFrom<X>(
@@ -147,15 +148,28 @@ function sendFrom<X>(
   ctx: X,
   payload: SendPayload,
   from: number,
+  origin: SendPayload,
 ): SendPayload | Promise<SendPayload> {
   let current = payload
 
   for (let i = from; i < entries.length; i++) {
-    const result = entries[i](ctx, current)
+    let result: ReturnType<SendEntry<X>>
+    try {
+      result = entries[i](ctx, current)
+    } catch (err) {
+      abandon(current, origin, err)
+      throw err
+    }
 
     if (isThenable(result)) {
       const before = current
-      return Promise.resolve(result).then(next => sendFrom(entries, ctx, next === undefined ? before : next, i + 1))
+      return Promise.resolve(result).then(
+        next => sendFrom(entries, ctx, next === undefined ? before : next, i + 1, origin),
+        (err: unknown) => {
+          abandon(before, origin, err)
+          throw err
+        },
+      )
     }
 
     if (result !== undefined) {
@@ -164,6 +178,13 @@ function sendFrom<X>(
   }
 
   return current
+}
+
+// A stream an entry returned in place of the caller's payload, which nothing will read now.
+function abandon(current: SendPayload, origin: SendPayload, reason: unknown): void {
+  if (current !== origin && current instanceof ReadableStream) {
+    current.cancel(reason).catch(() => undefined)
+  }
 }
 
 /**

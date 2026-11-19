@@ -202,7 +202,7 @@ describe('resolveServerSettings', () => {
     const resolve = () => resolveServerSettings({ listen: { port: 3000 } })
 
     expect(resolve).toThrow('"listen" is not a setting of the fetch application')
-    expect(resolve).toThrow('"@caffeinejs/http/node"')
+    expect(resolve).toThrow('"@caffeinejs/http-node"')
   })
 
   it('lists every setting the application takes when refusing an unknown one', () => {

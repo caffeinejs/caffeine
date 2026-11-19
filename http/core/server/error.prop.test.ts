@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import { ProblemSchema, type Problem, type ProblemIssue, type WebApplication, Router } from '../../index.js'
-import { node } from '../../platform/node/index.js'
+import { node } from '../../platform/node.testkit.js'
 
 /**
  * The validation problem a client gets, over violations, keys and counts no one wrote down, checked against what was

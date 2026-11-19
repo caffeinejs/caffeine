@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Router } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 // QUERY is in the default matcher's method set, so a route declaring it needs nothing opted into.
 describe('Router.query()', () => {
