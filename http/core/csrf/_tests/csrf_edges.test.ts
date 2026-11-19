@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../../application.js'
 import { bindTo, csrfExempt, type OriginPredicate, type WebApplication, Router } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 import { corsPolicy } from '../../cors/cors.js'
 import { csrf } from '../csrf.js'
 

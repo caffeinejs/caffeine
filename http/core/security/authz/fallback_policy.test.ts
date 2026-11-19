@@ -17,7 +17,7 @@ import {
   Authentication,
   Authorization,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 /**
  * `fallbackPolicy` — the posture switch that makes an undecorated route protected rather than public.

@@ -13,7 +13,7 @@ import {
   type RouteDefinition,
   Router,
 } from '../index.js'
-import { node, type NodeAdapter } from '../platform/node/index.js'
+import { node, type NodeAdapter } from '../platform/node.testkit.js'
 
 // The lifecycle as every application runs it: this file is in the Node and fetch projects alike.
 

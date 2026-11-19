@@ -2,7 +2,7 @@ import { connect } from 'node:net'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Controller, Get, Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { type Duration, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 

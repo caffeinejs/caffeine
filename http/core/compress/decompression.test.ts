@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import { bodyAsBuffer, bodyAsStream } from '../../index.js'
-import { node } from '../../platform/node/node.js'
+import { node } from '../../platform/node.testkit.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTP } from '../error/http.js'
 import { Router } from '../routing/programmatic/programmatic.js'

@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
 import { $p, Args, Controller, Post, Schema, Router, createWebApplication, type WebApplication } from '@caffeinejs/http'
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'

@@ -17,7 +17,7 @@ import {
   createWebApplication,
   type WebApplication,
 } from '@caffeinejs/http'
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { isDocumentRequest, sendFile, staticFiles } from '../../index.js'

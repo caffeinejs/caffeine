@@ -9,7 +9,7 @@ import {
   Controller,
   Get,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 /**
  * The whole-table scheme check: a route naming a scheme the feature never registered is a start-up failure,

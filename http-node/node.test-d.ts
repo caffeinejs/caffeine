@@ -2,15 +2,18 @@ import type { ListenOptions } from 'node:net'
 
 import type { FeatureConfigureKit } from '@caffeinejs/application'
 import type { ConfigDefinition, ConfigSnapshot } from '@caffeinejs/application/config'
-import { expectTypeOf } from 'vitest'
-
 import {
+  type ContextPlatform,
   createWebApplication,
+  listenersOf,
+  type NodeContextPlatform,
+  Router,
   type WebApplication,
   type WebApplicationOptions,
   type WebRunInfo,
-} from '../../application.js'
-import { listenersOf, Router, type ContextPlatform, type NodeContextPlatform } from '../../index.js'
+} from '@caffeinejs/http'
+import { expectTypeOf } from 'vitest'
+
 import type { NodeHTTPServer } from './connections.js'
 import { node, type NodeAdapter } from './node.js'
 import type { NodeServerSettings } from './settings.js'

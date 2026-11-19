@@ -11,7 +11,7 @@ import {
   Get,
   type ActionResult,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 // Both handlers cover ErrAmbiguous, and one @CatchWith names them both.
 class ErrAmbiguous extends Error {}

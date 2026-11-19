@@ -7,19 +7,26 @@ import { Readable } from 'node:stream'
 
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
+import {
+  $p,
+  type ActionResult,
+  type AnyRouter,
+  Args,
+  bodyAsStream,
+  Catch,
+  Controller,
+  createWebApplication,
+  ErrHTTPContentTooLarge,
+  type ErrorHandler,
+  Get,
+  type IContext,
+  type Next,
+  Router,
+  type WebApplication,
+} from '@caffeinejs/http'
 import { Byte, MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createWebApplication, type WebApplication } from '../../application.js'
-import type { IContext } from '../../context.js'
-import type { ErrorHandler } from '../../core/error/handler.js'
-import { ErrHTTPContentTooLarge } from '../../core/error/http.js'
-import type { Next } from '../../core/middleware/middleware.js'
-import { $p } from '../../core/routing/picker.js'
-import { bodyAsStream } from '../../decorators/body_as_stream.js'
-import { Args, Catch, Controller, Get } from '../../decorators/index.js'
-import { Router, type AnyRouter } from '../../index.js'
-import type { ActionResult } from '../../response.js'
 import { node, type NodeAdapter } from './node.js'
 
 @Controller('/peer')

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Router } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 import { expectPatternedBody, streamOf } from './bodies.js'
 import { firstMismatch, patterned } from './patterned.js'
 

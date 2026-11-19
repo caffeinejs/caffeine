@@ -10,7 +10,7 @@ import {
   type WebApplication,
   Router,
 } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * What a group's prefix and a route at `/` compose to.

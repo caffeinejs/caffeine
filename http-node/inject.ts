@@ -1,10 +1,9 @@
 import { Readable } from 'node:stream'
 import { buffer } from 'node:stream/consumers'
 
+import { connectionFields } from '@caffeinejs/http/platform'
 import { errMessage } from '@caffeinejs/std/err'
 import type { InjectOptions, Response as InjectedResponse } from 'light-my-request'
-
-import { connectionFields } from '../../core/server/answer.js'
 
 // The statuses a `Response` is built without a body for: its constructor refuses one.
 const NULL_BODY_STATUSES = new Set([204, 205, 304])

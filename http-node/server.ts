@@ -2,11 +2,10 @@ import type { ListenOptions, Server as NetServer } from 'node:net'
 
 import { ErrApplicationClosed } from '@caffeinejs/application'
 import type { Logger } from '@caffeinejs/application/logger'
+import type { ServerAddress } from '@caffeinejs/http'
+import { type HostedServer, type HTTPServer, logListening } from '@caffeinejs/http/platform'
 import inject from 'light-my-request'
 
-import { logListening, type HostedServer } from '../../core/server/hosting.js'
-import type { HTTPServer } from '../../core/server/server.js'
-import type { ServerAddress } from '../../server.js'
 import {
   closeServer,
   destroyConnections,

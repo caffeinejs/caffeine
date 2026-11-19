@@ -17,8 +17,8 @@ import {
   createWebApplication,
   type WebApplication,
 } from '@caffeinejs/http'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 import { bun } from '@caffeinejs/http/bun'
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DevTools, devTools, type DevToolsBuilder, type DevToolsRoutes } from './devtools.js'

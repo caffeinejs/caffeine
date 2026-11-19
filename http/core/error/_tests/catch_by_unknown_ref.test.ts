@@ -10,7 +10,7 @@ import {
   Get,
   type ActionResult,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 // Isolated: the unresolvable reference poisons every app build in its module, so it must be the only
 // error-handler concern in this file.

@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { healthProbes, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 // A minimal application used by health_signals.test.ts. Runs as a real child process, because signal delivery
 // and process exit codes cannot be exercised in-process with any fidelity.
 

@@ -1,7 +1,7 @@
 import { brewer } from '@caffeinejs/brewer'
 import { CaffeineIoC, mod, token } from '@caffeinejs/di'
 import { createWebApplication, type WebApplication } from '@caffeinejs/http'
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 import { testClient } from '@caffeinejs/testing/http'
 import { afterEach, describe, expect, it } from 'vitest'
 

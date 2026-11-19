@@ -17,7 +17,7 @@ import {
   UseGuards,
   type WebApplication,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 /**
  * A controller bound with `@BindTo(...)`: the controller counterpart of `router.extend(bindTo(...))`, carrying its

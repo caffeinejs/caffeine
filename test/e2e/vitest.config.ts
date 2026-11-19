@@ -28,7 +28,8 @@ export default defineConfig({
   resolve: {
     alias: {
       // Test the working-tree source, not a built dist. A string alias matches by prefix, so the subpath goes first.
-      '@caffeinejs/http/node': fileURLToPath(new URL('../../http/platform/node/index.ts', import.meta.url)),
+      '@caffeinejs/http-node': fileURLToPath(new URL('../../http-node/index.ts', import.meta.url)),
+      '@caffeinejs/http/platform': fileURLToPath(new URL('../../http/platform/index.ts', import.meta.url)),
       '@caffeinejs/http/compress': fileURLToPath(new URL('../../http/core/compress/index.ts', import.meta.url)),
       // One copy of the route registry: the resilience HTTP check reads the routes the source decorators wrote.
       '@caffeinejs/http/decorators/registrar': fileURLToPath(

@@ -3,9 +3,9 @@ import { fileURLToPath } from 'node:url'
 import swc from 'unplugin-swc'
 import { defineConfig } from 'vitest/config'
 
-// The suites that also run under no adapter: each imports `node` from the Node entry, which this project resolves to
-// one that hands back the fetch adapter. A copy of `vitest.config.ts`'s options, not a merge, which would
-// concatenate `include`. A suite joins `include` once it passes here.
+// The suites that also run under no adapter: each imports `node` from `platform/node.testkit.ts`, which this
+// project resolves to one that hands back the fetch adapter. A copy of `vitest.config.ts`'s options, not a merge,
+// which would concatenate `include`. A suite joins `include` once it passes here.
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   plugins: [
@@ -24,7 +24,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^(?:\.\.?\/)+platform\/node\/index\.js$/,
+        find: /^(?:\.\.?\/)+platform\/node\.testkit\.js$/,
         replacement: fileURLToPath(new URL('./_tests/engine_entry.ts', import.meta.url)),
       },
     ],

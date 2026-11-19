@@ -6,8 +6,8 @@ import type { Server as HTTPSServer } from 'node:https'
 import type { Server as NetServer, Socket } from 'node:net'
 import { Server as TLSServer, type TLSSocket } from 'node:tls'
 
-import { addressOf } from '../../core/server/hosting.js'
-import type { ServerAddress } from '../../server.js'
+import type { ServerAddress } from '@caffeinejs/http'
+import { addressOf } from '@caffeinejs/http/platform'
 
 /** Every server the Node adapter builds: what `app.instance` is under `node()`. */
 export type NodeHTTPServer = Server | HTTPSServer | Http2Server | Http2SecureServer

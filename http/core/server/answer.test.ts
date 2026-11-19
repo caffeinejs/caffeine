@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import { ErrResponseBodyConsumed } from '../../index.js'
-import { node } from '../../platform/node/index.js'
+import { node } from '../../platform/node.testkit.js'
 import { Responder } from '../../response.js'
 import { ErrHTTPUnprocessableContent } from '../error/http.js'
 import { Router } from '../routing/programmatic/programmatic.js'

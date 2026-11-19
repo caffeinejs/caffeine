@@ -1,6 +1,6 @@
 import type { Logger } from '@caffeinejs/application/logger'
 import { Controller, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 

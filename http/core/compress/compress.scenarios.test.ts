@@ -5,7 +5,7 @@ import { KiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
-import { node } from '../../platform/node/node.js'
+import { node } from '../../platform/node.testkit.js'
 import { Attachment } from '../attachment/attachment.js'
 import { ErrHTTPNotFound } from '../error/http.js'
 import { Router } from '../routing/programmatic/programmatic.js'

@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
 import { Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'

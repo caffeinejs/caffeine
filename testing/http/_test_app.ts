@@ -8,7 +8,7 @@ import {
   type ObjectInjections,
 } from '@caffeinejs/di'
 import { createWebApplication, type AnyRouter } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 import { ErrTestClientAlreadyReady } from './error.js'
 import type { TestApplication } from './types.js'

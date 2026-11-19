@@ -1,6 +1,6 @@
 import { ErrFeatureNotInstalled } from '@caffeinejs/application'
 import { createWebApplication, type WebApplication } from '@caffeinejs/http'
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIDocumentNotFound } from './errors.js'

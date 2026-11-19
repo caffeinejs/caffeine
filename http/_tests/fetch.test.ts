@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Controller, Get, Header, Router } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 describe('Fetch API Response Support', () => {
   it('maps status, headers, and body to the response', async () => {

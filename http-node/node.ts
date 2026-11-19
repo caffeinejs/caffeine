@@ -1,6 +1,8 @@
 import type { ListenOptions } from 'node:net'
 
-import { kHosting, type ServerAdapter } from '../../core/server/hosting.js'
+import type { ServerAdapter } from '@caffeinejs/http'
+import { kHosting } from '@caffeinejs/http/platform'
+
 import { destroyConnections, trackConnections, type NodeHTTPServer } from './connections.js'
 import { createNodePlatform, serveNode } from './platform.js'
 import { NodeServer, stopListening } from './server.js'

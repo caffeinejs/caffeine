@@ -10,7 +10,7 @@ import {
   type IContext,
   createWebApplication,
 } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { inject } from 'vitest'
 
 import { isDocumentRequest, sendFile } from '../../index.js'

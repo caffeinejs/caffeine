@@ -23,6 +23,7 @@
     "std",
     "application",
     "http",
+    "http-node",
     "caching",
     "html",
     "static",

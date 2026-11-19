@@ -7,7 +7,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { type MiddlewareFn, Router } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 const schema = $t.Object({
   catalog: $t.Object({ pageSize: $t.Number() }),

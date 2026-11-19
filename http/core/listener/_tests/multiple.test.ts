@@ -19,7 +19,7 @@ import {
   bindTo,
   Router,
 } from '../../../index.js'
-import { node, type NodeAdapter } from '../../../platform/node/index.js'
+import { node, type NodeAdapter } from '../../../platform/node.testkit.js'
 import { healthProbes } from '../../health/index.js'
 import { authentication } from '../../security/security.js'
 

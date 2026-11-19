@@ -12,7 +12,7 @@ import { healthProbes } from '../core/health/index.js'
 import { Router } from '../core/routing/programmatic/programmatic.js'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { HTTPPlugin, type WebApplication } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 import type { HTTPSetupContext } from '../plugin.js'
 
 /**

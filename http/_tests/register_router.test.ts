@@ -13,7 +13,7 @@ import { createWebApplication } from '../application.js'
 import { authentication } from '../core/security/security.js'
 import { registerRouteGroup } from '../decorators/registrar/index.js'
 import { $p, Keys, type RouteAuthzOptions, RouteBuilder, WebApplication, Authentication } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 

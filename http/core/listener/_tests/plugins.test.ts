@@ -10,7 +10,7 @@ import {
   type WebApplication,
   Router,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 /**
  * A listener's own plugins and middleware: registered on its builder, `l.with(...)`, `l.use(...)` and

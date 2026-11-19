@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { staticFiles } from '@caffeinejs/static'
 import { buildStatic } from '@caffeinejs/static/build'
 import { MiB } from '@caffeinejs/std/bytes'

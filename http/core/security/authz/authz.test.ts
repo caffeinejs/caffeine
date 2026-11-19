@@ -13,7 +13,7 @@ import {
   Authentication,
   Router,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 /**
  * What the authorization builder refuses. No controller is declared here, routers only: a controller registers

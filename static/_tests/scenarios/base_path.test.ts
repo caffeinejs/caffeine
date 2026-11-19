@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { WebApplication } from '@caffeinejs/http'
-import type { NodeAdapter } from '@caffeinejs/http/node'
+import type { NodeAdapter } from '@caffeinejs/http-node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'

@@ -14,17 +14,19 @@ import {
 import { createServer as createHTTPSServer, type ServerOptions as HTTPSServerOptions } from 'node:https'
 import type { ListenOptions } from 'node:net'
 
-import { configurationError, kindOf } from '../../core/server/error.js'
-import { IDLE_TIMEOUT } from '../../core/server/hosting.js'
 import {
-  assertObjectSections,
-  isOptions,
-  NODE_SECTIONS,
-  resolveServerSettings,
   type ApplicationKind,
+  assertObjectSections,
+  configurationError,
+  IDLE_TIMEOUT,
+  isOptions,
+  kindOf,
   type ListeningServerSettings,
+  NODE_SECTIONS,
   type ResolvedServerSettings,
-} from '../../core/server/settings.js'
+  resolveServerSettings,
+} from '@caffeinejs/http/platform'
+
 import type { NodeHTTPServer } from './connections.js'
 import type { NodeResponse } from './platform.js'
 

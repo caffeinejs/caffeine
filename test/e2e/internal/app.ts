@@ -1,7 +1,7 @@
 import type { ConfigDefinition } from '@caffeinejs/application/config'
 import type { Container } from '@caffeinejs/di'
 import { type WebApplicationOptions, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 /**
  * Starts an application on a real socket for the authentication e2e specs.

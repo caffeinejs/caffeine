@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Controller, ErrHTTPNotFound, Get, type ActionResult } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 @Controller('/pets')
 class PetsController {
