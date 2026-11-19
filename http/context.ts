@@ -17,10 +17,11 @@ export interface ServerContext {
   /**
    * Registers work for graceful shutdown without delaying the response. The Node and Bun server adapters and
    * in-process `app.request()` calls provide it for requests admitted before shutdown. An adapter-free
-   * `app.fetch()` omits it. A rejection is logged with the request ID.
+   * `app.fetch()` provides it when `fetchWaitUntil` supplies a host binding for the invocation.
    *
    * The request scope ends with the response. Use application-owned services for work that may outlive it.
-   * A forced shutdown stops waiting for the work.
+   * A forced shutdown stops waiting for the work. A rejected task is logged with the request ID. If the
+   * host throws during registration, the call throws that error and Caffeine still observes the task.
    *
    * @throws ErrWaitUntilClosed when called after response handoff, request expiry or forced shutdown.
    */

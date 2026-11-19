@@ -3,6 +3,7 @@ import type { Http2ServerRequest, Http2ServerResponse } from 'node:http2'
 
 import type { ByteSize } from '@caffeinejs/std/bytes'
 
+import type { ServerContext } from '../../context.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
 import type { Next, NodeMiddleware } from '../middleware/middleware.js'
 import type { FetchContextPlatform } from './fetch.js'
@@ -49,8 +50,8 @@ export interface SendHooks {
  */
 export interface ServerPlatform<N, P extends ContextPlatform, R> {
   readonly name: P['name']
-  /** The engine can keep work registered by this platform's requests in its graceful drain. */
-  readonly requestLifetime?: 'local'
+  /** Local work drains with this engine. A host resolver supplies the binding for this invocation. */
+  readonly requestLifetime?: 'local' | ((extra: unknown) => ServerContext['waitUntil'])
   method(native: N): string
   /** Path and query as sent, before the base path is taken off. */
   target(native: N): string

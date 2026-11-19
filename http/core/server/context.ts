@@ -62,7 +62,7 @@ export interface ServerShared extends Pick<
   readonly store: ConfigStore<unknown>
   readonly logger: Logger
   /** Observes the promise immediately. Only an open registration counts toward shutdown. */
-  readonly trackWork: (work: Promise<unknown>, reqId: string, open: boolean) => void
+  readonly trackWork: (work: Promise<unknown>, reqId: string, open: boolean, host?: ServerContext['waitUntil']) => void
   readonly errors: ErrorHandlerProvider
   readonly options: Required<GlobalErrorHandlerOptions>
   readonly encodeProblem: ProblemEncoder
@@ -77,19 +77,24 @@ export interface ServerShared extends Pick<
 
 type Params = Readonly<Record<string, string | undefined>>
 
-function serverView(ctx: Context, trackWork: ServerShared['trackWork'] | undefined): ServerContext {
+function serverView(
+  ctx: Context,
+  trackWork: ServerShared['trackWork'],
+  lifetime: 'local' | ServerContext['waitUntil'],
+): ServerContext {
   const view = {
     get remoteAddress() {
       return ctx.remoteAddress
     },
   }
-  if (trackWork === undefined) {
+  if (lifetime === undefined) {
     return view
   }
 
+  const host = lifetime === 'local' ? undefined : lifetime
   return Object.assign(view, {
     waitUntil(work: Promise<unknown>): void {
-      trackWork(work, ctx.req.id, !ctx.responded && !ctx.expired)
+      trackWork(work, ctx.req.id, !ctx.responded && !ctx.expired, host)
     },
   })
 }
@@ -126,6 +131,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   #req?: ContextRequest
   #server?: ServerContext
+  #serverFailure?: { reason: unknown }
   #normalized?: { path: string; error: Error | undefined }
   #context?: ContextPlatform
   #state?: ContextState
@@ -204,10 +210,33 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   }
 
   get server(): ServerContext {
-    return (this.#server ??= serverView(
-      this,
-      this.#acceptsWork && this.#platform.requestLifetime === 'local' ? this.#shared.trackWork : undefined,
-    ))
+    if (this.#serverFailure !== undefined) {
+      throw this.#serverFailure.reason
+    }
+    if (this.#server === undefined) {
+      const lifetime = this.#acceptsWork ? this.#platform.requestLifetime : undefined
+      try {
+        let binding: 'local' | ServerContext['waitUntil']
+        if (typeof lifetime === 'function') {
+          binding = lifetime(this.#extra)
+          if (binding !== undefined && typeof binding !== 'function') {
+            // An async resolver may already have started work. Observe its rejection before refusing the result.
+            void Promise.resolve(binding).catch(() => undefined)
+            throw configurationError(
+              'Cannot resolve fetchWaitUntil: expected a function or undefined',
+              'Return a bound host method or undefined',
+            )
+          }
+        } else {
+          binding = lifetime
+        }
+        this.#server = serverView(this, this.#shared.trackWork, binding)
+      } catch (reason) {
+        this.#serverFailure = { reason }
+        throw reason
+      }
+    }
+    return this.#server
   }
 
   get state(): ContextState {

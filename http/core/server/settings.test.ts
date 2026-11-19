@@ -31,6 +31,19 @@ describe('resolveServerSettings', () => {
     expect(resolveServerSettings({ constraints: list }).constraints).toBe(list)
   })
 
+  it('leaves the optional Fetch host resolver out of shared engine settings', () => {
+    expect(resolveServerSettings({ fetchWaitUntil: undefined })).not.toHaveProperty('fetchWaitUntil')
+    expect(resolveServerSettings({ fetchWaitUntil: () => undefined })).not.toHaveProperty('fetchWaitUntil')
+  })
+
+  it.each([null, false, 0, '', {}])('refuses %o as the Fetch host resolver', fetchWaitUntil => {
+    const resolve = () => resolveServerSettings({ fetchWaitUntil })
+
+    expect(resolve).toThrow(ErrConfiguration)
+    expect(resolve).toThrow('Cannot set fetchWaitUntil: expected a function')
+    expect(resolve).toThrow('Pass a function that returns the host binding or undefined')
+  })
+
   it.each<[string, unknown]>([
     ['a string', 'x'],
     ['an object with a name alone', [{ name: 'x' }]],
@@ -177,7 +190,7 @@ describe('resolveServerSettings', () => {
 
   it('lists every setting the application takes when refusing an unknown one', () => {
     expect(() => resolveServerSettings({ port: 3000 })).toThrow(
-      'Return only handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler from ".server(...)"',
+      'Return only handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler, fetchWaitUntil from ".server(...)"',
     )
   })
 })

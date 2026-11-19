@@ -20,8 +20,31 @@ expectTypeOf<ServerContext>().toEqualTypeOf<{
   readonly waitUntil?: (work: Promise<unknown>) => void
 }>()
 expectTypeOf<ErrWaitUntilClosed>().toExtend<Error>()
-expectTypeOf(app.fetch(new Request('http://localhost'), {}, {})).toEqualTypeOf<Response | Promise<Response>>()
-expectTypeOf(app.request('/y', { method: 'GET' })).toEqualTypeOf<Promise<Response>>()
+expectTypeOf(app.fetch).toEqualTypeOf<(request: Request, ...runtime: unknown[]) => Response | Promise<Response>>()
+expectTypeOf(app.request).toEqualTypeOf<(input: Request | string | URL, init?: RequestInit) => Promise<Response>>()
+
+app.server(() => ({
+  fetchWaitUntil: runtime => {
+    expectTypeOf(runtime).toEqualTypeOf<readonly unknown[]>()
+
+    if (runtime.length === 0) {
+      return undefined
+    }
+
+    return work => {
+      expectTypeOf(work).toEqualTypeOf<Promise<unknown>>()
+    }
+  },
+}))
+
+// @ts-expect-error The resolver returns a host binding or undefined.
+app.server(() => ({ fetchWaitUntil: () => true }))
+
+// @ts-expect-error The Node listener owns its background work.
+createWebApplication({ adapter: node() }).server(() => ({ fetchWaitUntil: () => undefined }))
+
+// @ts-expect-error The Bun listener owns its background work.
+createWebApplication({ adapter: bun() }).server(() => ({ fetchWaitUntil: () => undefined }))
 
 // Naming the configuration's type keeps the no-adapter types.
 expectTypeOf(createWebApplication<{ a: 1 }>().instance).toEqualTypeOf<undefined>()

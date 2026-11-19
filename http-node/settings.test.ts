@@ -16,6 +16,10 @@ const noop = (): void => undefined
 
 describe('resolveNodeServerSettings', () => {
   it.each([
+    [
+      { fetchWaitUntil: () => undefined },
+      'Cannot build the server: "fetchWaitUntil" is not a setting of the Node application',
+    ],
     [{ listen: 3000 }, 'Cannot set listen: it must be an object of node:net options, not a number'],
     [{ http: [] }, 'Cannot set http: it must be an object of node:http options, not an array'],
     [{ https: 'tls' }, 'Cannot set https: it must be an object of node:https options, not a string'],

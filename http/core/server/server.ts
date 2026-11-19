@@ -6,7 +6,7 @@ import { ContextStorage, ExecutionContext, type Container, type ContextKey, type
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
 import { stripBasePath } from '../../base_path.js'
-import { ErrWaitUntilClosed } from '../../context.js'
+import { ErrWaitUntilClosed, type ServerContext } from '../../context.js'
 import { CACHING_PLUGIN } from '../../plugin_marks.js'
 import { compileConstraints, type CompiledConstraints } from '../constraints/derive.js'
 import { kCookieSettings } from '../cookie/keys.js'
@@ -145,7 +145,7 @@ export class HTTPServer {
     this.#shared = {
       store: container.get(ConfigStore),
       logger: input.logger,
-      trackWork: (work, reqId, open) => this.#trackWork(work, reqId, open),
+      trackWork: (work, reqId, open, host) => this.#trackWork(work, reqId, open, host),
       errors: container.get(ErrorHandlerProvider),
       options,
       encodeProblem: problemEncoder(options),
@@ -400,12 +400,19 @@ export class HTTPServer {
     this.#resolveDrained?.()
   }
 
-  #trackWork(work: Promise<unknown>, reqId: string, open: boolean): void {
-    const accepted = open && !this.#closed
-    if (accepted) {
+  #trackWork(work: Promise<unknown>, reqId: string, open: boolean, host?: ServerContext['waitUntil']): void {
+    let reserved = open && !this.#closed
+    if (reserved) {
       this.#pendingWork++
     }
 
+    const release = (): void => {
+      if (reserved) {
+        reserved = false
+        this.#pendingWork--
+        this.#settleDrain()
+      }
+    }
     const observe = async (): Promise<void> => {
       try {
         await work
@@ -416,22 +423,20 @@ export class HTTPServer {
           // A failing log transport must not produce an unhandled rejection from the observer.
         }
       } finally {
-        if (accepted) {
-          this.#pendingWork--
-          this.#settleDrain()
-        }
+        release()
       }
     }
 
     // The response may release its request scope while the work is pending.
-    if (this.#storage === undefined) {
-      void observe()
-    } else {
-      void this.#storage.run(ExecutionContext.ROOT, observe)
-    }
-
-    if (!accepted) {
+    const observed = this.#storage === undefined ? observe() : this.#storage.run(ExecutionContext.ROOT, observe)
+    if (!reserved) {
       throw new ErrWaitUntilClosed()
+    }
+    try {
+      host?.(observed)
+    } catch (err) {
+      release()
+      throw err
     }
   }
 
