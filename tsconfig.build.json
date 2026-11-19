@@ -17,9 +17,6 @@
       "path": "./static/tsconfig.build.json"
     },
     {
-      "path": "./static-cli/tsconfig.build.json"
-    },
-    {
       "path": "./openapi/tsconfig.build.json"
     },
     {

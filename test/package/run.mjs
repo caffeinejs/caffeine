@@ -13,6 +13,7 @@
 import { spawnSync } from 'node:child_process'
 import {
   copyFileSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -262,13 +263,18 @@ process.exit(failed === 0 ? 0 : 1)
     }
   })
 
-  check('caffeine-static builds and verifies a staged release', () => {
-    const directory = 'staged'
-    mkdirSync(join(project, directory))
-    writeFileSync(join(project, directory, 'app.js'), 'hello')
+  check('caffeine static verifies a staged copy and rejects a changed asset', () => {
+    mkdirSync(join(project, 'public'))
+    writeFileSync(join(project, 'public', 'app.js'), 'hello')
+    run(project, ...bin('caffeine', ['static', 'build', '--root', 'public']))
 
-    for (const command of ['build', 'verify']) {
-      run(project, ...bin('caffeine-static', [command, '--root', directory]))
+    cpSync(join(project, 'public'), join(project, 'staged'), { recursive: true })
+    const verify = bin('caffeine', ['static', 'verify', '--root', 'staged'])
+    run(project, ...verify)
+    writeFileSync(join(project, 'staged', 'app.js'), 'stale')
+    const failed = spawn(project, ...verify, true)
+    if (failed.status !== 1 || failed.stdout !== '') {
+      throw new Error(`Expected verification of the changed asset to fail, got exit code ${failed.status}`)
     }
   })
 

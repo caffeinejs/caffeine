@@ -26,7 +26,6 @@
     "caching",
     "html",
     "static",
-    "static-cli",
     "openapi",
     "messaging",
     "kafka",

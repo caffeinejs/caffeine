@@ -19,12 +19,15 @@ await buildStatic({ root: 'web/dist' })
 const { files, variants, bytes } = await verifyStatic({ root: 'staged/web' })
 ```
 
-`verifyStatic` reads the release without modifying it. It checks each stored object's length and SHA-256, then checks that each gzip or Brotli representation decodes to its identity's length and SHA-256. Its byte count includes the stored variants. A failure rejects with `ErrStaticManifest` and identifies the failing object. Use `@caffeinejs/static-cli` to run the same operations from a build tool.
+`verifyStatic` reads the release without modifying it. It checks each stored object's length and SHA-256, then checks that each gzip or Brotli representation decodes to its identity's length and SHA-256. Its byte count includes the stored variants. A failure rejects with `ErrStaticManifest` and identifies the failing object. Install `@caffeinejs/cli` as a development dependency to run the same operations from a build tool. The command loads the selected project's `@caffeinejs/static/build` implementation.
 
 ```sh
-caffeine-static build --root web/dist
-caffeine-static verify --root staged/web
+caffeine static build --root web/dist
+caffeine static verify --root staged/web
 ```
+
+Use `--cwd PROJECT` to select another project. A relative `--root` resolves from that directory.
+Build reports the uncompressed bytes. Verify reports all stored bytes checked, including compressed variants.
 
 ## Verify a source with Web Streams
 

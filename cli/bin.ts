@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util'
 
 import { run as generate } from './command/generate/index.js'
 import { run as scaffold } from './command/scaffold/index.js'
+import { run as runStatic } from './command/static/index.js'
 
 interface CommandOpts {
   cwd: string
@@ -29,6 +30,10 @@ const commands: Record<string, CommandRunner> = {
 
 const aliases: Record<string, string> = {
   g: 'generate',
+}
+
+if (process.argv[2] === 'static') {
+  process.exit(await runStatic(process.argv.slice(3)))
 }
 
 const { values, positionals } = parseArgs({
@@ -55,7 +60,7 @@ const command = commands[aliases[commandName] ?? commandName]
 
 if (!command) {
   console.error('Usage: caffeine <command> [options]')
-  console.error('Commands: generate (g), scaffold')
+  console.error('Commands: generate (g), scaffold, static')
   process.exit(1)
 }
 
