@@ -275,3 +275,7 @@ A test that sleeps for something to happen fails once the machine is busy: a ful
 - A new workflow declares `permissions:` per job, `contents: read` unless a step needs more, and checks out with `persist-credentials: false`.
 - Never disable, skip, narrow or loosen a security workflow (CodeQL, Scorecard, dependency review, license check, pin check) to make CI pass. Report the failure instead.
 - Secrets never enter the repository, a prompt, or a log line. Tokens are fine-grained and read-only.
+
+## Global State
+
+- Global state must be avoided. In a scenario where a global state might be the best option, ask for confirmation before proceeding.
