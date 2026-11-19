@@ -14,10 +14,10 @@
     "@caffeinejs/http-node": "0.0.0",
     "@caffeinejs/openapi": "0.0.0",
     "@platformatic/globals": "^3.70.0",
-    "@platformatic/node": "^3.70.0",
-    "wattpm": "^3.70.0"
+    "@platformatic/node": "^3.79.0",
+    "wattpm": "^3.79.0"
   },
   "devDependencies": {
-    "@platformatic/runtime": "^3.70.0"
+    "@platformatic/runtime": "^3.79.0"
   }
 }
