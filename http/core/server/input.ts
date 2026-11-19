@@ -15,6 +15,7 @@ import { BODY_METHODS, parseBody, parsedMediaType } from './body.js'
 import { isBodyLimit } from './body_limit.js'
 import type { Context } from './context.js'
 import { configurationError } from './error.js'
+import { HEADER_NAME } from './header_fields.js'
 import type { ResolvedServerSettings } from './settings.js'
 
 /** The slots in the order a request is validated: Fastify's. */
@@ -187,12 +188,7 @@ function readBody(ctx: Context, input: RouteInput): void | Promise<void> {
     if (type.length > input.multipart.limits.maxHeaderSize) {
       throw new ErrHTTPContentTooLarge('The multipart Content-Type exceeds the header size limit')
     }
-    const essence = mediaTypeEssence(type)
-    if (
-      input.multipart.subtype === '*'
-        ? !essence.startsWith('multipart/')
-        : essence !== `multipart/${input.multipart.subtype}`
-    ) {
+    if (!admitsMultipartType(type, input.multipart.subtype)) {
       throw new ErrHTTPUnsupportedMediaType('This route does not accept the supplied Content-Type')
     }
   }
@@ -208,6 +204,15 @@ function readBody(ctx: Context, input: RouteInput): void | Promise<void> {
       return req.readBodyBytes().then(bytes => req.setSlot('body', parseBody(parsed, bytes)))
     }
   }
+}
+
+function admitsMultipartType(contentType: string, subtype: string): boolean {
+  if (subtype !== '*') {
+    return mediaTypeEssence(contentType) === `multipart/${subtype}`
+  }
+  // Only HTTP whitespace can separate the subtype token from its parameters.
+  const match = /^multipart\/([^; \t]+)[ \t]*(?:;|$)/i.exec(contentType)
+  return match !== null && HEADER_NAME.test(match[1])
 }
 
 // Each slot in turn; a validator that answers with a promise holds the rest until it settles.

@@ -1,10 +1,18 @@
-import { validateSchema } from '@caffeinejs/application/schema'
+import { compileEncoder, validateSchema } from '@caffeinejs/application/schema'
 import { KiB } from '@caffeinejs/std/bytes'
 import { describe, expect, it } from 'vitest'
 
 import { MultipartConfigSchema } from './multipart.js'
 
 describe('MultipartConfigSchema', () => {
+  it('round-trips byte sizes and preserves numeric counts, including a zero file budget', () => {
+    const limits = { maxFieldSize: 8 * KiB, maxFiles: 0, maxParts: 12 }
+    const encoded = compileEncoder(MultipartConfigSchema)?.(limits)
+
+    expect(encoded).toEqual({ maxFieldSize: '8kb', maxFiles: 0, maxParts: 12 })
+    expect(validateSchema(MultipartConfigSchema, encoded, { decode: true })).toEqual({ ok: true, value: limits })
+  })
+
   it('decodes byte sizes and counts without filling in route-dependent defaults', () => {
     expect(
       validateSchema(

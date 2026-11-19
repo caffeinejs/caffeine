@@ -37,6 +37,11 @@ describe('multipart limits', () => {
     expect(Object.isFrozen(limits)).toBe(true)
   })
 
+  it('inherits the server limit when the route supplies an undefined override', () => {
+    const limits = resolveMultipartLimits(1 * MiB, { maxParts: 3 }, { maxParts: undefined, maxFiles: 0 })
+    expect(limits).toMatchObject({ maxParts: 3, maxFiles: 0 })
+  })
+
   it.each([
     null,
     [],
@@ -76,6 +81,15 @@ describe('multipart limits', () => {
 })
 
 describe('finite multipart budgets', () => {
+  it.each([-1, 0.5])('rejects an invalid wire charge of %s without changing the remaining allowance', bytes => {
+    const tree = new MultipartBudget(4 * Byte, resolveMultipartLimits(4 * Byte))
+    tree.chargeWire(3 * Byte)
+
+    expect(() => tree.chargeWire(bytes)).toThrow(TypeError)
+    tree.chargeWire(1 * Byte)
+    expect(() => tree.chargeWire(1 * Byte)).toThrow(/"bodyLimit"/)
+  })
+
   it('charges wire bytes once, counts parts across levels, and bounds each payload separately', () => {
     const cap = 8 * Byte
     const limits = resolveMultipartLimits(cap, { maxParts: 2, maxDepth: 1, maxPartSize: 20 * Byte })

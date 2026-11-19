@@ -219,6 +219,23 @@ describe('multipart route admission', () => {
     await expect(app.bootstrap()).rejects.toThrow('its multipart input requires an HTTP method')
   })
 
+  it.each(['buffer', 'stream'] as const)(
+    'rejects a compiled route that claims both multipart and %s input',
+    async bodyAs => {
+      const served = await serve(
+        new Router('/upload')
+          .post('/')
+          .extend(multipartBody())
+          .handler(() => 'ok'),
+      )
+      const route = served.routeGroups.flatMap(group => group.routes).find(route => route.multipart !== undefined)!
+
+      expect(() => compileRouteInput({ ...route, bodyAs }, 'POST /upload', resolveServerSettings({}))).toThrow(
+        'Cannot serve "POST /upload": multipart and raw body modes both claim its body',
+      )
+    },
+  )
+
   it('refuses a multipart body on a method that cannot read one', async () => {
     app = createWebApplication().mount(
       new Router('/upload')
@@ -253,6 +270,40 @@ describe('multipart route admission', () => {
     expect(body.pulled()).toBe(false)
     expect(handler).not.toHaveBeenCalled()
     expect((await post(served, '/upload', null)).status).toBe(415)
+  })
+
+  it.each([
+    'multipart/',
+    'multipart/form data',
+    'multipart/form-data, text/plain',
+    'multipart/mixed/extra',
+    'multipart/mixed\u00a0; boundary=b',
+  ])('rejects %j at wildcard admission before pulling the upload', async type => {
+    const served = await serve(
+      new Router('/upload')
+        .post('/')
+        .extend(multipartBody('*'))
+        .handler(() => 'ok'),
+    )
+    const body = counted(1)
+    const res = await streamed(served, '/upload', body.stream, { 'content-type': type })
+
+    expect(res.status).toBe(415)
+    expect((await problem(res)).detail).toBe('This route does not accept the supplied Content-Type')
+    expect(body.pulled()).toBe(false)
+  })
+
+  it('admits a mixed-case extension subtype with parameters to body parser selection', async () => {
+    const served = await serve(
+      new Router('/upload')
+        .post('/')
+        .extend(multipartBody('*'))
+        .handler(() => 'ok'),
+    )
+    const res = await post(served, '/upload', '--b--\r\n', { 'content-type': 'MultiPart/X-Report+Zip \t; boundary=b' })
+
+    // Phase 1 admits the subtype. The body parser reports which media type reached it.
+    expect((await problem(res)).detail).toBe('Unsupported media type "multipart/x-report+zip"')
   })
 
   it('checks the outer Content-Type byte limit before pulling the upload', async () => {

@@ -62,6 +62,17 @@ describe('resolveServerSettings', () => {
     expect(Object.isFrozen(settings.multipart)).toBe(true)
   })
 
+  it('propagates the original error when a server limit cannot be loaded', () => {
+    const cause = new Error('Upload quota unavailable')
+    const multipart = {
+      get maxParts(): number {
+        throw cause
+      },
+    }
+
+    expect(() => resolveServerSettings({ multipart })).toThrow(expect.toSatisfy((error: unknown) => error === cause))
+  })
+
   it.each([null, [], { maxFields: 1 }, { maxDepth: 17 }, { maxPartSize: 0 }].map(multipart => ({ multipart })))(
     'refuses invalid multipart settings at startup: %o',
     ({ multipart }) => {
