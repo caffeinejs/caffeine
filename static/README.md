@@ -45,6 +45,12 @@ if (release.has('index.html')) {
 }
 ```
 
+Node and Bun use their built-in SHA-256 implementation. For a browser worker or another runtime that uses the portable SHA-256 implementation, install the optional peer in your project before bundling. It hashes each chunk as the verifier reads it.
+
+```sh
+npm install -E @noble/hashes@2.0.1
+```
+
 A `StaticAssetSource` binds one release version. `readManifest(signal?)` opens its UTF-8 v1 manifest. `open(key, { signal, range })` opens the raw stored bytes for a release-relative key. Each call returns a fresh, unlocked `ReadableStream<Uint8Array>` in a promise. With a range, return bytes from `start` inclusive to `endExclusive` exclusive. Preserve compressed bytes exactly as stored. Honor cancellation during acquisition and reading, and release the underlying resource on cancellation, error or EOF.
 
 The verifier reads one object at a time, checks stored lengths and SHA-256 digests and exposes exact identity-key membership only after every representation passes. A shared representation counts once per manifest reference. The default limits are 8 MiB of manifest text and 20,000 identity keys. Set `maxManifestSize` (in bytes) and `maxEntries` on either verifier when qualifying a larger release. An aborted verification rejects with the signal's reason.
