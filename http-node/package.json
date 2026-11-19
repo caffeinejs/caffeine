@@ -1,0 +1,54 @@
+{
+  "name": "@caffeinejs/http-node",
+  "version": "0.0.0",
+  "description": "Caffeine HTTP on node:http, node:https and node:http2",
+  "license": "MIT",
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/http-node#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "http-node"
+  },
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
+  ],
+  "engines": {
+    "node": "^24.22.0 || >=26.10.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "light-my-request": "^6.6.0"
+  },
+  "peerDependencies": {
+    "@caffeinejs/application": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/std": "0.0.0"
+  },
+  "devDependencies": {
+    "@caffeinejs/di": "0.0.0",
+    "@caffeinejs/testing": "0.0.0"
+  }
+}

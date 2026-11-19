@@ -1,6 +1,8 @@
 import swc from 'unplugin-swc'
 import { defineConfig } from 'vitest/config'
 
+import { sourceAliases } from './vitest.config.js'
+
 export default defineConfig({
   plugins: [
     swc.vite({
@@ -15,6 +17,7 @@ export default defineConfig({
   ],
   // @ts-expect-error — oxc is an experimental Vitest option not yet in Vite's types
   oxc: false,
+  resolve: { alias: sourceAliases },
   test: {
     name: 'http-memory',
     include: ['_tests/memory/**/*.test.ts'],

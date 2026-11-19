@@ -3,7 +3,7 @@ import type { InferConfig } from '@caffeinejs/application/config'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { createWebApplication, type WebApplication } from '@caffeinejs/http'
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPI } from '../feature.js'

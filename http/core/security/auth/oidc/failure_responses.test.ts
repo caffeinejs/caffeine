@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../../../../application.js'
 import { type IContext, Authentication, Router } from '../../../../index.js'
-import { node } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node.testkit.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../../../plugin.js'
 import { authentication } from '../../security.js'
 import { ErrOAuthCallback } from '../internal/remote/errors.js'

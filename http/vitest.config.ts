@@ -1,5 +1,15 @@
+import { fileURLToPath } from 'node:url'
+
 import swc from 'unplugin-swc'
 import { configDefaults, defineConfig } from 'vitest/config'
+
+// One copy of this package, its source: @caffeinejs/http-node's source imports it by name and must share its modules
+// with the suites, kHosting among them. A subpath precedes the bare package, which matches it as a prefix.
+export const sourceAliases = [
+  { find: '@caffeinejs/http-node', replacement: fileURLToPath(new URL('../http-node/index.ts', import.meta.url)) },
+  { find: '@caffeinejs/http/platform', replacement: fileURLToPath(new URL('./platform/index.ts', import.meta.url)) },
+  { find: '@caffeinejs/http', replacement: fileURLToPath(new URL('./index.ts', import.meta.url)) },
+]
 
 export default defineConfig({
   plugins: [
@@ -15,6 +25,7 @@ export default defineConfig({
   ],
   // @ts-expect-error — oxc is an experimental Vitest option not yet in Vite's types
   oxc: false,
+  resolve: { alias: sourceAliases },
   test: {
     name: 'http',
     pool: 'threads',

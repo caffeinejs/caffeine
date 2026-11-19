@@ -79,7 +79,7 @@ export interface WebApplicationOptions<
   A extends AnyServerAdapter = FetchAdapter,
 > extends ApplicationOptions<TConfig> {
   /**
-   * What serves the application: `node()` from `@caffeinejs/http/node`, `bun()` from `@caffeinejs/http/bun`. Unset:
+   * What serves the application: `node()` from `@caffeinejs/http-node`, `bun()` from `@caffeinejs/http/bun`. Unset:
    * none, and the runtime is handed {@link WebApplication.fetch}.
    */
   adapter?: A
@@ -148,6 +148,7 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
       throw configurationError(
         'Cannot create the application: "adapter" is not a server adapter',
         USE_ADAPTER,
+        'Install @caffeinejs/http and @caffeinejs/http-node at the same exact version, so both load one copy of @caffeinejs/http',
         'Leave adapter out to answer through app.fetch',
       )
     }
@@ -707,7 +708,7 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
  * once `run()` is called:
  *
  * ```ts
- * import { node } from '@caffeinejs/http/node'
+ * import { node } from '@caffeinejs/http-node'
  *
  * const app = createWebApplication({ config, adapter: node() }).mount(pets)
  * const { address } = await app.run({ port: 3000 })

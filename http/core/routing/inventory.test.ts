@@ -18,7 +18,7 @@ import {
   type ServerRoutes,
   type WebApplication,
 } from '../../index.js'
-import { node } from '../../platform/node/index.js'
+import { node } from '../../platform/node.testkit.js'
 import type { HTTPSetupContext } from '../../plugin.js'
 import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../security/exempt.js'
 

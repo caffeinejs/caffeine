@@ -1,5 +1,5 @@
 import { Router, type WebApplication } from '@caffeinejs/http'
-import { type NodeAdapter } from '@caffeinejs/http/node'
+import { type NodeAdapter } from '@caffeinejs/http-node'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../../index.js'

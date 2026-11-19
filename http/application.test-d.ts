@@ -5,7 +5,7 @@ import { createWebApplication, type WebApplication } from './application.js'
 import type { FetchAdapter } from './core/server/hosting.js'
 import { Router, type ServerAddress } from './index.js'
 import { bun } from './platform/bun/index.js'
-import { node } from './platform/node/index.js'
+import { node } from './platform/node.testkit.js'
 
 /** What an application under no adapter is typed as: no server, no listen options. */
 const app = createWebApplication()

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../application.js'
 import type { IContext } from '../context.js'
-import { node, type NodeAdapter } from '../platform/node/index.js'
+import { node, type NodeAdapter } from '../platform/node.testkit.js'
 import { Keys } from '../symbols.js'
 import { Controller } from './controller.js'
 import { OnRequest, OnSend } from './hooks.js'

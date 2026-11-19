@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 
 import { createWebApplication } from '../../../application.js'
 import { type IContext, ErrConfiguration, ErrorHandler } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 // Bound, and shaped like a handler, but it never declared which errors it renders.
 @Injectable()

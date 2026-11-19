@@ -1,6 +1,6 @@
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { configuration } from '../../app.config.js'

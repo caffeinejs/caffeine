@@ -4,7 +4,7 @@ import { KiB, MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
-import { node } from '../../platform/node/node.js'
+import { node } from '../../platform/node.testkit.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { send } from './compress.testkit.js'
 import { decompression } from './decompression.js'

@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Router } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * The request scope has to live as long as the response, not as long as the handler's promise. Everything here

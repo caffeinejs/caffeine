@@ -24,7 +24,7 @@ import {
   Authentication,
   type ActionResult,
 } from '../../../../index.js'
-import { node } from '../../../../platform/node/index.js'
+import { node } from '../../../../platform/node.testkit.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthSchemeDescriptors } from '../keys.js'
 

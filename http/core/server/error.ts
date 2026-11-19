@@ -207,11 +207,11 @@ function asIContext(ctx: Context): IContext {
 }
 
 /** The solution that sends a reader to the Node adapter. */
-export const USE_NODE = 'Pass adapter: node() from "@caffeinejs/http/node" to createWebApplication()'
+export const USE_NODE = 'Pass adapter: node() from "@caffeinejs/http-node" to createWebApplication()'
 
 /** The solution that sends a reader to an adapter that listens. */
 export const USE_ADAPTER =
-  'Pass adapter: node() from "@caffeinejs/http/node" or adapter: bun() from "@caffeinejs/http/bun" to createWebApplication()'
+  'Pass adapter: node() from "@caffeinejs/http-node" or adapter: bun() from "@caffeinejs/http/bun" to createWebApplication()'
 
 /**
  * What `value` is, for a message that refuses it: `a string`, `an array`, `null`. Never the value itself, which may be a

@@ -14,7 +14,7 @@ import { healthProbes } from '../core/health/index.js'
 import type { HealthProbesBuilder } from '../core/health/probes_builder.js'
 import { authentication } from '../core/security/security.js'
 import { Authentication, Authorize, Controller, Get, Health } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 class DownIndicator extends HealthIndicator {
   get name(): string {

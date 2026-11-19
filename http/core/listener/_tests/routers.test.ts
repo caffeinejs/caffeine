@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../../application.js'
 import {
+  type AdapterSettings,
   type ActionResult,
   Catch,
   type IContext,
@@ -18,7 +19,7 @@ import {
   type WebApplication,
   Router,
 } from '../../../index.js'
-import { type NodeServerSettings, node } from '../../../platform/node/index.js'
+import { node, type NodeAdapter } from '../../../platform/node.testkit.js'
 
 /**
  * Scenario: routers on a listener with middleware, guards and plugins.
@@ -89,7 +90,7 @@ describe('routers on a listener with middleware, guards and plugins', () => {
     app = undefined
   })
 
-  const admin: ListenerConfigurer<unknown, NodeServerSettings> = l => l.server(() => ({ listen: listener }))
+  const admin: ListenerConfigurer<unknown, AdapterSettings<NodeAdapter>> = l => l.server(() => ({ listen: listener }))
 
   function at(server: 'main' | 'admin', path: string, headers?: Record<string, string>): Promise<Response> {
     const origin = server === 'main' ? app!.address!.origin : app!.listeners.get('admin')!.address!.origin

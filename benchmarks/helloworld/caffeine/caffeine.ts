@@ -1,5 +1,5 @@
 import { Controller, Get, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 

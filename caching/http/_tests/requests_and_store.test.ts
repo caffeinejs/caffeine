@@ -11,7 +11,7 @@ import {
   corsPolicy,
   createWebApplication,
 } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
 import { afterEach, describe, expect, it, vi } from 'vitest'

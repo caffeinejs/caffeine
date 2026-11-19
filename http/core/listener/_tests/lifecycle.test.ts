@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../../application.js'
 import { bindTo, HTTPPlugin, type HTTPSetupContext, Router } from '../../../index.js'
-import { node, type NodeAdapter } from '../../../platform/node/index.js'
+import { node, type NodeAdapter } from '../../../platform/node.testkit.js'
 import { healthProbes } from '../../health/index.js'
 
 /**

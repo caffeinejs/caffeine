@@ -139,7 +139,7 @@ export async function close(): Promise<void> {
 ```
 
 `create()` returns the node:http server the `node()` adapter built, typed `NodeHTTPServer`, which
-`@caffeinejs/http/node` exports beside `node`. Watt serves it through its request listener, listening on it for the
+`@caffeinejs/http-node` exports beside `node`. Watt serves it through its request listener, listening on it for the
 entrypoint and sending it requests in process otherwise.
 
 `markStarted().acceptTraffic()` is not optional. Without it the application stays "starting", readiness never

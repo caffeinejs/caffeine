@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { createWebApplication } from '../../../application.js'
 import { Catch, type IContext, ErrConfiguration, ErrHTTPNotFound, ErrorHandler } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 // Two handlers for the same error type. Declaring both is fine — enrolling both is what the application
 // cannot mean, because nothing then decides which one renders an ErrHTTPNotFound.

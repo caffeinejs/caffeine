@@ -11,7 +11,7 @@ import {
   Router,
   type Guard,
 } from '../../index.js'
-import { node } from '../../platform/node/node.js'
+import { node } from '../../platform/node.testkit.js'
 import { ErrHealthConfiguration } from './errors.js'
 import { healthProbes } from './plugin.js'
 

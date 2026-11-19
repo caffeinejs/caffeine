@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Args, Catch, type IContext, Controller, ContextState, Get, type MiddlewareFn, Router, $p } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 // Controllers are registered globally at decoration time and a container snapshots them when it is
 // constructed, so every controller in this file is declared up front rather than inside the test that uses

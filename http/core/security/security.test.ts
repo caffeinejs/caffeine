@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
-import { node } from '../../platform/node/node.js'
+import { node } from '../../platform/node.testkit.js'
 import type { Guard, GuardInput } from '../guards/guard.js'
 import { Guards } from '../guards/guards.js'
 import { Router } from '../routing/programmatic/programmatic.js'

@@ -1,5 +1,5 @@
 import { Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIConfiguration } from './errors.js'

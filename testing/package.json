@@ -51,6 +51,7 @@
     "@caffeinejs/brewer": "0.0.0",
     "@caffeinejs/di": "0.0.0",
     "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/http-node": "0.0.0",
     "@caffeinejs/std": "0.0.0"
   },
   "peerDependenciesMeta": {
@@ -58,6 +59,9 @@
       "optional": true
     },
     "@caffeinejs/http": {
+      "optional": true
+    },
+    "@caffeinejs/http-node": {
       "optional": true
     },
     "@caffeinejs/std": {
@@ -69,6 +73,7 @@
     "@caffeinejs/brewer": "0.0.0",
     "@caffeinejs/di": "0.0.0",
     "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/http-node": "0.0.0",
     "@caffeinejs/std": "0.0.0"
   }
 }

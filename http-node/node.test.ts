@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { get as httpGet } from 'node:http'
 import { connect as http2Connect } from 'node:http2'
 import { get as httpsGet } from 'node:https'
@@ -11,14 +10,13 @@ import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
+import { type AnyRouter, bindTo, createWebApplication, Router, type WebApplication } from '@caffeinejs/http'
+import { testTLS } from '@caffeinejs/testing/tls'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createWebApplication, type WebApplication } from '../../application.js'
-import { bindTo, Router, type AnyRouter } from '../../index.js'
 import { node, type NodeAdapter } from './node.js'
 
-const key = readFileSync(new URL('../../_tests/_testdata/tls/localhost.key', import.meta.url))
-const cert = readFileSync(new URL('../../_tests/_testdata/tls/localhost.crt', import.meta.url))
+const { key, cert } = testTLS()
 
 type App = WebApplication<never, never, unknown, NodeAdapter>
 

@@ -27,7 +27,7 @@ import {
   HTTPPlugin,
   type RequestHookName,
 } from '../../index.js'
-import { node as nodeAdapter } from '../../platform/node/index.js'
+import { node as nodeAdapter } from '../../platform/node.testkit.js'
 
 @Controller('/mw')
 class MiddlewareController {

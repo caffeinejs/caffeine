@@ -5,7 +5,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 import { createWebApplication } from '../application.js'
 import type { DepsOf, PathParams, ResponsesOf, RoutesOf } from '../core/routing/programmatic/types.js'
 import { Router, blend } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 class Greeter {}
 class Audit {}

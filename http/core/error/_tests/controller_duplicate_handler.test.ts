@@ -10,7 +10,7 @@ import {
   Get,
   type ActionResult,
 } from '../../../index.js'
-import { node } from '../../../platform/node/index.js'
+import { node } from '../../../platform/node.testkit.js'
 
 // Isolated: two controller methods handling the same error type. buildRouting rejects at bootstrap(),
 // which poisons every app build in the module — so it lives alone.

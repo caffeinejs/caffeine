@@ -1,7 +1,7 @@
 import type { Requestable } from '@caffeinejs/brewer'
 import { Injectable } from '@caffeinejs/di'
 import { Controller, Get, Post, Args, $p, createWebApplication, type WebApplication } from '@caffeinejs/http'
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 
 import { ErrFetchFailed, controllerTypedClient } from './index.js'

@@ -25,7 +25,7 @@ plugin fails at `app.bootstrap()`. There is no default store: you pass one.
 import { CacheControl, CacheInvalidate, HTTPCaching } from '@caffeinejs/caching/http'
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
 import { Controller, Get, Put, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { Minute } from '@caffeinejs/std/duration'
 
 @Controller('/pets')

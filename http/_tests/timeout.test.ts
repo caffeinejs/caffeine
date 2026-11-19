@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { createWebApplication } from '../application.js'
 import { Controller, Get, Timeout } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 describe('Timeout', () => {
   it('method-level @Timeout overrides class-level timeout', async () => {

@@ -1,19 +1,17 @@
-import { readFileSync } from 'node:fs'
 import { connect as http2Connect, type ClientHttp2Session } from 'node:http2'
 import { connect as netConnect, type Server as NetServer, type Socket } from 'node:net'
 import { connect as tlsConnect, type TLSSocket } from 'node:tls'
 
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
+import { type AnyRouter, createWebApplication, Router, type WebApplication } from '@caffeinejs/http'
 import { Second } from '@caffeinejs/std/duration'
+import { testTLS } from '@caffeinejs/testing/tls'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createWebApplication, type WebApplication } from '../../application.js'
-import { Router, type AnyRouter } from '../../index.js'
 import { node, type NodeAdapter } from './node.js'
 
-const key = readFileSync(new URL('../../_tests/_testdata/tls/localhost.key', import.meta.url))
-const cert = readFileSync(new URL('../../_tests/_testdata/tls/localhost.crt', import.meta.url))
+const { key, cert } = testTLS()
 
 type App = WebApplication<never, never, unknown, NodeAdapter>
 

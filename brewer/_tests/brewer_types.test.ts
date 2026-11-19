@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/application/schema'
 import { Responder, Router, blend, type RouteDef, type RoutesOf, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import type { Authenticator } from '../authenticator.js'

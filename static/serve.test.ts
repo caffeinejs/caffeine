@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 
 import { ErrHTTPPreconditionFailed, Router, createWebApplication, type WebApplication } from '@caffeinejs/http'
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 import { afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest'
 
 import { buildStatic } from './build/build.js'

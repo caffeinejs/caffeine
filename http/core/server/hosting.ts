@@ -20,7 +20,10 @@ import { requestInProcess } from './in_process.js'
 import { HTTPServer } from './server.js'
 import { resolveServerSettings, type ResolvedServerSettings, type ServerSettings } from './settings.js'
 
-/** The key of an adapter's hosting function: how it hosts each server. Kept out of every barrel. */
+/**
+ * The key of an adapter's hosting function: how it hosts each server. Kept out of the root barrel: an adapter takes it
+ * from `@caffeinejs/http/platform`.
+ */
 export const kHosting: unique symbol = Symbol('@caffeinejs/http:hosting')
 
 /** A server the application runs: the engine behind it, and its lifecycle. `L` is what its `run` listens with. */
@@ -52,7 +55,7 @@ export interface ServerHosting<I = unknown, L = unknown> {
 }
 
 /**
- * What serves an application on a runtime: `node()` from `@caffeinejs/http/node`, `bun()` from `@caffeinejs/http/bun`.
+ * What serves an application on a runtime: `node()` from `@caffeinejs/http-node`, `bun()` from `@caffeinejs/http/bun`.
  * `S` is what `.server(...)` returns under it, `I` what `app.instance` is, `L` what `run(options)` takes. An
  * application given none answers through `fetch` alone.
  */

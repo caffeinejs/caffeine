@@ -22,7 +22,7 @@ import {
   type ActionResult,
   Router,
 } from '../../index.js'
-import { node } from '../../platform/node/index.js'
+import { node } from '../../platform/node.testkit.js'
 import { ErrConfiguration } from './common.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 

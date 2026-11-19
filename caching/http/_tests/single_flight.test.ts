@@ -3,7 +3,7 @@ import { gzipSync } from 'node:zlib'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Controller, Get, Head, Header, type NodeMiddleware, Router, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { type Duration, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 

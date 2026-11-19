@@ -1,17 +1,16 @@
-import { readFileSync } from 'node:fs'
 import { Server as HTTPServer } from 'node:http'
 import { Server as HTTPSServer } from 'node:https'
 import { Server as NetServer } from 'node:net'
 import { Server as TLSServer } from 'node:tls'
 
+import { ErrConfiguration } from '@caffeinejs/http'
 import { Second } from '@caffeinejs/std/duration'
+import { testTLS } from '@caffeinejs/testing/tls'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ErrConfiguration } from '../../core/error/common.js'
 import { resolveNodeServerSettings } from './settings.js'
 
-const key = readFileSync(new URL('../../_tests/_testdata/tls/localhost.key', import.meta.url))
-const cert = readFileSync(new URL('../../_tests/_testdata/tls/localhost.crt', import.meta.url))
+const { key, cert } = testTLS()
 
 const noop = (): void => undefined
 

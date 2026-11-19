@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 import { rootModule } from './root.gen.mod.js'
 

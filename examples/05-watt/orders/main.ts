@@ -1,5 +1,5 @@
 import { Router, createWebApplication } from '@caffeinejs/http'
-import { type NodeHTTPServer, node } from '@caffeinejs/http/node'
+import { type NodeHTTPServer, node } from '@caffeinejs/http-node'
 import { OpenAPI, OpenAPIProvider, openapi } from '@caffeinejs/openapi'
 import { setOpenapiSchema } from '@platformatic/globals'
 

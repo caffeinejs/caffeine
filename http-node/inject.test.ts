@@ -3,12 +3,16 @@ import { once } from 'node:events'
 
 import { ErrApplicationClosed } from '@caffeinejs/application'
 import { newNoopLogger } from '@caffeinejs/application/logger'
+import {
+  type AnyRouter,
+  createWebApplication,
+  ErrHTTPServiceUnavailable,
+  Router,
+  type WebApplication,
+} from '@caffeinejs/http'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createWebApplication, type WebApplication } from '../../application.js'
-import { ErrHTTPServiceUnavailable } from '../../core/error/http.js'
-import { Router, type AnyRouter } from '../../index.js'
 import { node, type NodeAdapter } from './node.js'
 
 type App = WebApplication<never, never, unknown, NodeAdapter>

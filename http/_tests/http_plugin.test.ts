@@ -17,7 +17,7 @@ import {
   bindTo,
   type WebApplication,
 } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 /**
  * Scenario: a plugin written against Caffeine alone. An `HTTPPlugin` registers in its `.with(...)` slot, and

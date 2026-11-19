@@ -1,5 +1,5 @@
 import { Router, bindTo, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../brewer.js'

@@ -2,7 +2,7 @@ import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Router, type AnyRouter, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 

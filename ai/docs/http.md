@@ -1,7 +1,7 @@
 # HTTP
 
 Package: `@caffeinejs/http`. One application, `createWebApplication()` from `@caffeinejs/http`, serves on the
-web-standards engine, and a server adapter runs it on a runtime. `adapter: node()`, from `@caffeinejs/http/node`,
+web-standards engine, and a server adapter runs it on a runtime. `adapter: node()`, from `@caffeinejs/http-node`,
 listens on a node:http, node:https or node:http2 server. `adapter: bun()`, from `@caffeinejs/http/bun`, listens with
 `Bun.serve`. With no adapter the application has no socket of its own: the runtime calls `app.fetch`, as Deno and
 workers do. `authentication()`, `csrf()`, `cors()`, `corsPolicy()`, `healthProbes()`, cookies and error handling are
@@ -10,7 +10,7 @@ decorators are imported from `@caffeinejs/http/compress`.
 
 ```ts
 import { Controller, Get, Post, Args, $p, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 
 @Controller('/examples')
 export class ExampleController {
@@ -57,7 +57,7 @@ any type argument does, so name the adapter's type too. With the configuration's
 adapter's settings and types `app.instance` as `unknown`:
 
 ```ts
-import { node, type NodeAdapter } from '@caffeinejs/http/node'
+import { node, type NodeAdapter } from '@caffeinejs/http-node'
 
 const app = createWebApplication<AppConfig, NodeAdapter>({ config, adapter: node() })
 ```
@@ -722,7 +722,7 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
 - **From a feature.** A feature adds a listener from its configure step with `listenersOf(kit).add(name, configure)`,
   which takes the same arguments; `listenersOf` refuses an application that is not a web application. A feature does
   not know which application installs it, so it names the settings type it writes: `NodeServerSettings`, from
-  `@caffeinejs/http/node`, for a `listen` section, which an application under no adapter refuses at start-up.
+  `@caffeinejs/http-node`, for a `listen` section, which an application under no adapter refuses at start-up.
 
   ```ts
   protected configure(kit: FeatureConfigureKit<C>): void {

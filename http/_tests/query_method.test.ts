@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { createWebApplication } from '../application.js'
 import { $p } from '../core/routing/picker.js'
 import { Controller, Args, Query } from '../index.js'
-import { node } from '../platform/node/index.js'
+import { node } from '../platform/node.testkit.js'
 
 // Isolated file: registering a @Query controller forces a QUERY route onto every app built in the
 // same module, the decorator registry being module-global.

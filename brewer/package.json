@@ -43,6 +43,7 @@
     "@caffeinejs/application": "0.0.0",
     "@caffeinejs/di": "0.0.0",
     "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/http-node": "0.0.0",
     "@caffeinejs/std": "0.0.0"
   }
 }

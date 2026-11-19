@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { Router, bodyAsBuffer, bodyAsStream, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { MiB } from '@caffeinejs/std/bytes'
 import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'

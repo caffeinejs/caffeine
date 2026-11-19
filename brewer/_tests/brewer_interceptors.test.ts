@@ -2,7 +2,7 @@ import { createHash, createHmac } from 'node:crypto'
 
 import { $t } from '@caffeinejs/application/schema'
 import { Router, bodyAsBuffer, bodyAsStream, createWebApplication } from '@caffeinejs/http'
-import { node } from '@caffeinejs/http/node'
+import { node } from '@caffeinejs/http-node'
 import { KiB } from '@caffeinejs/std/bytes'
 import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
