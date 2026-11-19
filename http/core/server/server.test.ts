@@ -2,7 +2,7 @@ import { Readable } from 'node:stream'
 
 import { newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
-import { CaffeineIoC, Injectable, Lifetime, Scopes } from '@caffeinejs/di'
+import { CaffeineIoC, ContextStorage, Injectable, Lifetime, Scopes } from '@caffeinejs/di'
 import { Day, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -21,6 +21,7 @@ import { Router } from '../routing/programmatic/programmatic.js'
 import { Context } from './context.js'
 import { fetchPlatform } from './fetch.js'
 import { type FetchAdapter, fetchAdapter, kHosting } from './hosting.js'
+import type { SendHooks } from './platform.js'
 import type { HTTPServer } from './server.js'
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
@@ -96,6 +97,25 @@ async function serve(router: AnyRouter, configure: (app: FetchApp) => FetchApp =
 
 function fetchOn(served: FetchApp, path: string, init?: RequestInit) {
   return served.fetch(new Request(`http://localhost${path}`, init))
+}
+
+async function serveEngine(router: AnyRouter): Promise<HTTPServer> {
+  let engine!: HTTPServer
+  const adapter: FetchAdapter = {
+    [kHosting](settings) {
+      const hosting = fetchAdapter[kHosting](settings)
+      return {
+        ...hosting,
+        serve(server, context, customize) {
+          engine = server
+          return hosting.serve(server, context, customize)
+        },
+      }
+    },
+  }
+  app = createWebApplication({ adapter }).mount(router)
+  await app.bootstrap()
+  return engine
 }
 
 function latch(): { promise: Promise<void>; release: () => void } {
@@ -755,6 +775,44 @@ describe('HTTPServer', () => {
     }
   })
 
+  it('drains and reports rejected work when the container does not expose context storage', async () => {
+    // The request scope owns its storage. This container exposes neither the storage nor its dependent Context binding.
+    const container = new CaffeineIoC().overrides(ops => {
+      ops.unbind(Context)
+      ops.unbind(ContextStorage)
+    })
+    const work = Promise.withResolvers<void>()
+    const logger = capturing()
+    const onClose = vi.fn()
+    app = createWebApplication({ container })
+      .logger(b => b.use(logger))
+      .shutdown(s => s.drainDelay(0))
+      .hook('onClose', onClose)
+      .mount(
+        new Router('/s').get('/').handler(ctx => {
+          ctx.server.waitUntil!(work.promise)
+          return ctx.req.id
+        }),
+      )
+    await app.bootstrap()
+
+    try {
+      const response = await app.request('/s')
+      expect(response.status).toBe(200)
+      const reqId = await response.text()
+      const closing = app.close()
+      await tick()
+      expect(onClose).not.toHaveBeenCalled()
+      const err = new Error('task failed')
+      work.reject(err)
+      await closing
+      expect(logger.error).toHaveBeenCalledExactlyOnceWith({ reqId, err }, 'Background work failed')
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      work.resolve()
+    }
+  })
+
   it('finishes shutdown when reporting a rejected background task throws', async () => {
     const work = Promise.withResolvers<void>()
     const logger = capturing()
@@ -822,23 +880,9 @@ describe('HTTPServer', () => {
             cancelWith: cut => void register.promise.then(() => hooks.cancelWith(cut)),
           }),
       }
-      let engine!: HTTPServer
-      const adapter: FetchAdapter = {
-        [kHosting](settings) {
-          const hosting = fetchAdapter[kHosting](settings)
-          return {
-            ...hosting,
-            serve(server, context, customize) {
-              engine = server
-              return hosting.serve(server, context, customize)
-            },
-          }
-        },
-      }
-      app = createWebApplication({ adapter }).mount(
+      const engine = await serveEngine(
         new Router('/s').get('/').handler(() => new ReadableStream<Uint8Array>({ cancel })),
       )
-      await app.bootstrap()
       const response = await engine.serve(platform, new Request('http://localhost/s'), [], true)
 
       try {
@@ -858,6 +902,46 @@ describe('HTTPServer', () => {
       }
     },
   )
+
+  it('cancels only the unread stream and cancels it once when graceful shutdown becomes forced', async () => {
+    const router = new Router('/s')
+    router.get('/finished').handler(() => new Response('done').body)
+    router.get('/unread').handler(() => new ReadableStream<Uint8Array>())
+    const engine = await serveEngine(router)
+    let hooks!: SendHooks
+    const cancel = vi.fn()
+    const platform: typeof fetchPlatform = {
+      ...fetchPlatform,
+      respond(native, head, payload, current) {
+        hooks = current
+        return fetchPlatform.respond(native, head, payload, {
+          sent: current.sent,
+          cancelWith: cut =>
+            current.cancelWith(reason => {
+              cancel(reason)
+              cut(reason)
+            }),
+        })
+      },
+    }
+
+    const finished = await engine.serve(platform, new Request('http://localhost/s/finished'), [], true)
+    expect(await finished.text()).toBe('done')
+    const afterFinish = vi.fn()
+    hooks.cancelWith(afterFinish)
+
+    const unread = await engine.serve(platform, new Request('http://localhost/s/unread'), [], true)
+    const closing = engine.close()
+    const afterCut = vi.fn()
+    hooks.cancelWith(afterCut)
+    engine.forceClose()
+    await closing
+
+    await expect(unread.text()).rejects.toBeInstanceOf(ErrHTTPServiceUnavailable)
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(expect.any(ErrHTTPServiceUnavailable))
+    expect(afterFinish).not.toHaveBeenCalled()
+    expect(afterCut).not.toHaveBeenCalled()
+  })
 
   it('keeps registered work pending after the caller aborts its injected response stream', async () => {
     const held = latch()
