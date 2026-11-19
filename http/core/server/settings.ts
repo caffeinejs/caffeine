@@ -4,10 +4,12 @@ import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS, type RouteMatcherFactory, type RouterFlags } from '../matcher/matcher.js'
+import { snapshotMultipartLimits, type MultipartLimits } from '../multipart/limits.js'
 import { typeBoxSchemaCompiler } from '../validation/typebox.js'
 import type { SchemaCompiler } from '../validation/validation.js'
-import { DEFAULT_BODY_LIMIT, isBodyLimit } from './body.js'
+import { DEFAULT_BODY_LIMIT, isBodyLimit } from './body_limit.js'
 import { configurationError, kindOf, USE_ADAPTER, USE_NODE } from './error.js'
+import { HEADER_NAME } from './header_fields.js'
 import { compileTrustProxy, type TrustProxy } from './trust.js'
 
 /** What `.server(...)` returns under no adapter, and what every adapter's settings start from. */
@@ -44,6 +46,8 @@ export interface ServerSettings {
    * Schema slot validates itself whatever this is.
    */
   schemaCompiler?: SchemaCompiler
+  /** Limits for routes that declare multipart input. A route may override each limit individually. */
+  multipart?: MultipartLimits
 }
 
 /** What every adapter that listens takes besides {@link ServerSettings}: it knows each request's peer. */
@@ -71,6 +75,8 @@ export interface ResolvedServerSettings {
   readonly application: string
   readonly bodyLimit: ByteSize
   readonly schemaCompiler: SchemaCompiler
+  /** The supplied limits. Each route resolves its defaults against its effective body limit. */
+  readonly multipart: Readonly<MultipartLimits>
 }
 
 /** One kind of application: its name, the settings sections only it takes, and whether its runtime knows the peer. */
@@ -99,6 +105,7 @@ const SETTINGS = [
   'requestIDHeader',
   'bodyLimit',
   'schemaCompiler',
+  'multipart',
 ]
 /** The settings sections only the Node adapter takes: what Node itself configures. */
 export const NODE_SECTIONS: ReadonlySet<string> = new Set(['listen', 'http', 'https', 'http2'])
@@ -132,9 +139,6 @@ export function isOptions(value: unknown): value is object {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** A header name, as RFC 9110 writes a token. */
-export const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
-
 /**
  * What `.server(...)` resolved to, checked and with its defaults. The sections only `application` takes are left to
  * its caller.
@@ -142,7 +146,7 @@ export const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
  * @throws ErrConfiguration for a section that is not a setting, a `handlerTimeout` not above 0, a `router` that is
  *   not an object of boolean router flags, a `matcher` that is not a function, a `constraints` setting that is not an
  *   array of strategies or names one twice, a `trustProxy` the application cannot apply, or a `requestIDHeader` that
- *   is not a header name.
+ *   is not a header name, or invalid multipart limits.
  */
 export function resolveServerSettings(
   settings: object,
@@ -163,17 +167,27 @@ export function resolveServerSettings(
   }
 
   // `trustProxy` and `requestIDHeader` are read as given: an adapter that listens takes a wider `trustProxy`.
-  const { handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler } =
-    settings as Omit<
-      ServerSettings,
-      'constraints' | 'trustProxy' | 'requestIDHeader' | 'bodyLimit' | 'schemaCompiler'
-    > & {
-      constraints?: unknown
-      trustProxy?: unknown
-      requestIDHeader?: unknown
-      bodyLimit?: unknown
-      schemaCompiler?: unknown
-    }
+  const {
+    handlerTimeout,
+    router,
+    matcher,
+    constraints,
+    trustProxy,
+    requestIDHeader,
+    bodyLimit,
+    schemaCompiler,
+    multipart,
+  } = settings as Omit<
+    ServerSettings,
+    'constraints' | 'trustProxy' | 'requestIDHeader' | 'bodyLimit' | 'schemaCompiler' | 'multipart'
+  > & {
+    constraints?: unknown
+    trustProxy?: unknown
+    requestIDHeader?: unknown
+    bodyLimit?: unknown
+    schemaCompiler?: unknown
+    multipart?: unknown
+  }
 
   if (handlerTimeout !== undefined && !isTimeout(handlerTimeout)) {
     throw configurationError(
@@ -243,6 +257,19 @@ export function resolveServerSettings(
     application: application.name,
     bodyLimit: bodyLimit ?? DEFAULT_BODY_LIMIT,
     schemaCompiler: schemaCompiler ?? typeBoxSchemaCompiler,
+    multipart: serverMultipartLimits(multipart),
+  }
+}
+
+/** Validates one server's multipart settings before its limits are merged with other settings. */
+export function serverMultipartLimits(value: unknown): Readonly<MultipartLimits> {
+  try {
+    return snapshotMultipartLimits(value === undefined ? {} : value)
+  } catch (err) {
+    if (!(err instanceof TypeError)) {
+      throw err
+    }
+    throw configurationError(err.message, 'Set multipart to an object of limits, such as { maxParts: 32 }')
   }
 }
 

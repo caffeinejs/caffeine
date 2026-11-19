@@ -21,6 +21,7 @@ import {
 } from '../security/authz/index.js'
 import { isAccessControlExempt } from '../security/exempt.js'
 import { mergeAuthz } from './inherit.js'
+import { compileMultipartDeclaration } from './multipart.js'
 import {
   IRoute,
   IRouteGroup,
@@ -106,6 +107,10 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
       const hasHeader = !!spec.header || !!route.header
 
       const owner = `${meta.name}.${String(route.name)}`
+      const multipart =
+        route.multipart === undefined
+          ? undefined
+          : compileMultipartDeclaration(route.multipart, route.accept, `route "${owner}"`)
       // A route the framework serves on the application's behalf: no global guard and no authorization reach it.
       const exempt = isAccessControlExempt(config)
 
@@ -114,7 +119,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         method: route.method,
         // `??` cannot express this: `toRoute()` defaults these to `[]` and `''`, never nullish, so a
         // group-level @Consumes/@Produces would never reach a route that declares none of its own.
-        accept: route.accept.length > 0 ? route.accept : spec.accept,
+        accept: multipart?.accept ?? (route.accept.length > 0 ? route.accept : spec.accept),
         contentType: route.contentType !== '' ? route.contentType : spec.contentType,
         parameters: route.parameters,
         name: route.name,
@@ -126,6 +131,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         hasHeader,
         statusCode: route.statusCode,
         bodyAs: route.bodyAs,
+        multipart: multipart?.multipart,
         config: config,
         // Copied, not shared: a plugin enriching the compiled route's detail from an `onRoute` hook must not
         // write back into the spec the route was authored from.

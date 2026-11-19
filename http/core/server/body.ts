@@ -1,4 +1,4 @@
-import { formatBytes, MiB, type ByteSize } from '@caffeinejs/std/bytes'
+import { formatBytes, type ByteSize } from '@caffeinejs/std/bytes'
 import { errMessage } from '@caffeinejs/std/err'
 import sjson from 'secure-json-parse'
 
@@ -9,9 +9,6 @@ import { parseQuery } from './query.js'
 
 /** The methods whose request body is read, as Fastify reads it: never a GET, HEAD or TRACE body. */
 export const BODY_METHODS: ReadonlySet<string> = new Set(['DELETE', 'OPTIONS', 'PATCH', 'POST', 'PUT', 'QUERY'])
-
-/** The largest body a route reads unless the server or the route says otherwise. */
-export const DEFAULT_BODY_LIMIT: ByteSize = 1 * MiB
 
 /** The media types a route parses a body of. */
 export type ParsedMediaType = 'application/json' | 'text/plain' | 'application/x-www-form-urlencoded'
@@ -70,11 +67,6 @@ export class ErrRequestBodyDiscarded extends ErrCaffeineWebApplication {
     )
     this.name = 'ErrRequestBodyDiscarded'
   }
-}
-
-/** Whether `value` is a body limit: a whole number of bytes above 0. */
-export function isBodyLimit(value: unknown): value is ByteSize {
-  return Number.isSafeInteger(value) && (value as number) > 0
 }
 
 /**

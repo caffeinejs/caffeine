@@ -1,3 +1,5 @@
+import { CaffeineIoC } from '@caffeinejs/di'
+import { KiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
@@ -10,11 +12,13 @@ import {
   ErrConfiguration,
   Guards,
   HTTPPlugin,
+  multipartBody,
   Router,
   type Guard,
   type HTTPSetupContext,
 } from '../../index.js'
 import { ACCESS_CONTROL_EXEMPT, accessControlExempt, kAccessControlExempt } from '../security/exempt.js'
+import { buildRouting, type RouteSource } from './routing.js'
 
 class NobodyScheme extends BaseAuthenticationHandler<object> {
   constructor() {
@@ -43,6 +47,82 @@ const forged = () =>
     .get('/')
     .handler(() => 'ok')
 const plain = () => new Router('/plain').get('/').handler(() => 'ok')
+
+describe('a multipart RouteSpec from a custom route source', () => {
+  async function routes(accept: string[]) {
+    const source: RouteSource = {
+      name: 'bundles',
+      collect: () => [
+        {
+          name: 'Bundles',
+          meta: () => ({ name: 'Bundles' }),
+          spec: {
+            path: '/bundles',
+            accept: ['application/json'],
+            contentType: '',
+            routes: [
+              {
+                path: '/',
+                method: ['POST'],
+                accept,
+                contentType: '',
+                parameters: [],
+                name: 'upload',
+                handle: () => 'ok',
+                multipart: { subtype: 'RELATED' },
+              },
+            ],
+          },
+        },
+      ],
+    }
+    const container = new CaffeineIoC({ decorators: false })
+    await container.init()
+    return buildRouting([source], container).select(() => true)[0].routes
+  }
+
+  it('publishes the normalized subtype in place of its group’s default media type', async () => {
+    const [route] = await routes([])
+    expect(route.accept).toEqual(['multipart/related'])
+    expect(route.multipart?.subtype).toBe('related')
+  })
+
+  it('rejects contradictory consumes on the source’s own route and identifies the owner', async () => {
+    await expect(routes(['application/json'])).rejects.toThrow(/Bundles\.upload.*consumes declarations disagree/)
+  })
+})
+
+it('compiles a route’s multipart policy over group defaults and inherits the group body limit', async () => {
+  const seen: unknown[] = []
+  const app = createWebApplication()
+    .with(
+      () =>
+        new (class extends HTTPPlugin {
+          register({ app }: HTTPSetupContext): void {
+            app.hook('onRoute', ({ route }) => {
+              seen.push([route.accept, route.multipart, route.bodyLimit])
+            })
+          }
+        })(),
+    )
+    .mount(
+      new Router('/uploads')
+        .consumes('application/json')
+        .bodyLimit(2 * KiB)
+        .mount(
+          new Router('/nested')
+            .post('/')
+            .extend(multipartBody('RELATED', { maxParts: 2 }))
+            .handler(() => 'ok'),
+        ),
+    )
+  try {
+    await app.bootstrap()
+    expect(seen).toEqual([[['multipart/related'], { subtype: 'related', limits: { maxParts: 2 } }, 2 * KiB]])
+  } finally {
+    await app.close()
+  }
+})
 
 /**
  * A route the framework serves on the application's behalf, a health probe, carries the access-control mark: the

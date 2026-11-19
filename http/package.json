@@ -84,6 +84,10 @@
       "types": "./dist/core/middleware/index.d.ts",
       "default": "./dist/core/middleware/index.js"
     },
+    "./multipart": {
+      "types": "./dist/core/multipart/index.d.ts",
+      "default": "./dist/core/multipart/index.js"
+    },
     "./platform": {
       "types": "./dist/platform/index.d.ts",
       "default": "./dist/platform/index.js"

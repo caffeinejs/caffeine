@@ -3,9 +3,11 @@ import { Byte } from '@caffeinejs/std/bytes'
 import { describe, expect, it } from 'vitest'
 
 import { createWebApplication, type WebApplication } from './application.js'
+import { ErrConfiguration } from './core/error/common.js'
 import { findMyWayMatcher } from './core/matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS } from './core/matcher/matcher.js'
 import { Router } from './core/routing/programmatic/programmatic.js'
+import { fetchAdapter, kHosting, type FetchAdapter } from './core/server/hosting.js'
 import { node } from './platform/node.testkit.js'
 import { HTTPPlugin, type HTTPSetupContext } from './plugin.js'
 import { ServerDefinition } from './server_definition.js'
@@ -38,6 +40,43 @@ describe('ServerSet', () => {
       })
 
       expect(res.status).toBe(413)
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('keeps an earlier multipart cap when the next layer supplies undefined for that key', async () => {
+    const seen: unknown[] = []
+    const adapter: FetchAdapter = {
+      [kHosting](settings) {
+        const hosting = fetchAdapter[kHosting](settings)
+        seen.push(hosting.settings.multipart)
+        return hosting
+      },
+    }
+    const app = createWebApplication({ adapter })
+      .server(() => ({ multipart: { maxFiles: 0, maxParts: 8 } }))
+      .server(() => ({ multipart: { maxFiles: undefined, maxParts: 4 } }))
+
+    try {
+      await app.bootstrap()
+      expect(seen).toEqual([{ maxFiles: 0, maxParts: 4 }])
+    } finally {
+      await app.close()
+    }
+  })
+
+  it.each([
+    { multipart: new Map([['maxFiles', 0]]) },
+    { multipart: Object.defineProperty({}, 'maxPart', { value: 8 }) },
+    { multipart: { maxParts: -1 } },
+  ])('refuses an invalid multipart layer before later server settings can hide it: %o', async settings => {
+    const app = createWebApplication()
+      .server(() => settings as never)
+      .server(() => ({ multipart: { maxParts: 4 } }))
+
+    try {
+      await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
     } finally {
       await app.close()
     }

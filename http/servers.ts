@@ -22,6 +22,7 @@ import {
   type kHosting,
 } from './core/server/hosting.js'
 import type { HTTPServer } from './core/server/server.js'
+import { serverMultipartLimits } from './core/server/settings.js'
 import type { HTTPPluginFactory, HTTPSetupContext } from './plugin.js'
 import { PluginSlot } from './plugin_slot.js'
 import type { ServerConfigurer } from './server.js'
@@ -219,11 +220,12 @@ async function resolveServerOptions(
   const merged: Record<string, unknown> = {}
 
   for (const configure of configurers) {
-    for (const [section, value] of Object.entries(await configure(context))) {
-      if (value === undefined) {
+    for (const [section, supplied] of Object.entries(await configure(context))) {
+      if (supplied === undefined) {
         continue
       }
 
+      const value = section === 'multipart' ? serverMultipartLimits(supplied) : supplied
       const current = merged[section]
       merged[section] = isPlainObject(value) ? { ...(isPlainObject(current) ? current : {}), ...value } : value
     }

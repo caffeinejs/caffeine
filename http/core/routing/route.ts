@@ -7,6 +7,7 @@ import type { IContext } from '../../context.js'
 import type { ErrorHandler } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
+import type { MultipartInput } from '../multipart/multipart.js'
 import { AuthzRouteService } from '../security/authz/index.js'
 import type {
   BodyMode,
@@ -107,6 +108,8 @@ export interface IRoute<R = unknown> {
   statusCode?: number
   /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
   bodyAs?: BodyMode
+  /** The multipart body this route admits. An absent declaration uses the existing body mode. */
+  multipart?: MultipartInput
   config: Map<string, unknown>
   /**
    * What packages annotated this route with.

@@ -22,6 +22,7 @@ describe('resolveServerSettings', () => {
       application: 'fetch application',
       bodyLimit: 1 * MiB,
       schemaCompiler: typeBoxSchemaCompiler,
+      multipart: {},
     })
   })
 
@@ -51,6 +52,35 @@ describe('resolveServerSettings', () => {
   it('takes a body limit in bytes', () => {
     expect(resolveServerSettings({ bodyLimit: 10 * KiB }).bodyLimit).toBe(10 * KiB)
   })
+
+  it('snapshots the supplied multipart limits and leaves unspecified limits to the route', () => {
+    const multipart = { maxFieldSize: 2 * KiB, maxFiles: 0 }
+    const settings = resolveServerSettings({ bodyLimit: 4 * KiB, multipart })
+
+    multipart.maxFieldSize = 3 * KiB
+    expect(settings.multipart).toEqual({ maxFieldSize: 2 * KiB, maxFiles: 0 })
+    expect(Object.isFrozen(settings.multipart)).toBe(true)
+  })
+
+  it('propagates the original error when a server limit cannot be loaded', () => {
+    const cause = new Error('Upload quota unavailable')
+    const multipart = {
+      get maxParts(): number {
+        throw cause
+      },
+    }
+
+    expect(() => resolveServerSettings({ multipart })).toThrow(expect.toSatisfy((error: unknown) => error === cause))
+  })
+
+  it.each([null, [], { maxFields: 1 }, { maxDepth: 17 }, { maxPartSize: 0 }].map(multipart => ({ multipart })))(
+    'refuses invalid multipart settings at startup: %o',
+    ({ multipart }) => {
+      const resolve = () => resolveServerSettings({ multipart })
+      expect(resolve).toThrow(ErrConfiguration)
+      expect(resolve).toThrow('Set multipart to an object of limits')
+    },
+  )
 
   // No magic value: 0 does not mean "no limit", and text is read by configuration, never here.
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '1mb'])('refuses a body limit of %o', bodyLimit => {
@@ -177,7 +207,7 @@ describe('resolveServerSettings', () => {
 
   it('lists every setting the application takes when refusing an unknown one', () => {
     expect(() => resolveServerSettings({ port: 3000 })).toThrow(
-      'Return only handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler from ".server(...)"',
+      'Return only handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler, multipart from ".server(...)"',
     )
   })
 })
