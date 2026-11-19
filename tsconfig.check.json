@@ -23,6 +23,9 @@
       "path": "./html"
     },
     {
+      "path": "./templating"
+    },
+    {
       "path": "./static"
     },
     {
