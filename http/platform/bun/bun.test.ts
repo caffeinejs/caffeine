@@ -70,16 +70,17 @@ afterEach(async () => {
   )
 })
 
-/** What the fixture adds besides its routes: an `admin` listener, a `serverCallback` that throws. */
+/** Optional behaviors exercised by the fixture. */
 interface FixtureFlags {
   readonly listener?: boolean
   readonly failCallback?: boolean
+  readonly backgroundWork?: boolean
 }
 
 /** Starts the fixture with `settings`, `run(options)` and `flags`. */
 function start(settings: object, options: object = {}, flags: FixtureFlags = {}): Fixture {
   const child = spawn('bun', [fixture, JSON.stringify(settings), JSON.stringify(options), JSON.stringify(flags)], {
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [flags.backgroundWork === true ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   })
   children.push(child)
 
@@ -179,13 +180,36 @@ function chunked(...parts: string[]): ReadableStream<Uint8Array> {
 
 // A real `bun` process starts in well under a second; the budget covers a busy machine.
 describe('bun() on Bun', { timeout: 30_000 }, () => {
-  it("answers over Bun's socket with the peer address, on the fetch platform", async () => {
-    const { origin } = await serve({ listen: { host: '127.0.0.1', port: 0 } })
+  it("reports Bun's socket peer through ctx.server and the address picker with a trusted proxy", async () => {
+    const { origin } = await serve({ listen: { host: '127.0.0.1', port: 0 }, trustProxy: '127.0.0.1' })
 
-    const res = await fetch(`${origin}/who`)
+    const res = await fetch(`${origin}/who`, { headers: { 'x-forwarded-for': '203.0.113.1' } })
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ platform: 'fetch', ip: '127.0.0.1' })
+    expect(await res.json()).toEqual({ platform: 'fetch', ip: '127.0.0.1', remoteAddress: '127.0.0.1' })
+  })
+
+  it('lets registered work outlive a live response and drains it before onClose', async () => {
+    const { child, origin, line, before } = await serve(
+      { listen: { host: '127.0.0.1', port: 0 } },
+      {},
+      { backgroundWork: true },
+    )
+    const response = await fetch(`${origin}/work`)
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe('answered')
+
+    child.stdin!.write('close\n')
+    const closing = (printed: Line): boolean => 'closingStatus' in printed
+    expect(await line(closing)).toEqual({ closingStatus: 503 })
+    const lifecycle = (printed: Line): boolean => 'workCompleted' in printed || 'onClose' in printed
+    expect(before(closing).filter(lifecycle)).toEqual([])
+
+    child.stdin!.end('release\n')
+    const closed = (printed: Line): boolean => printed.closed === true
+    await line(closed)
+    expect(before(closed).filter(lifecycle)).toEqual([{ workCompleted: true }, { onClose: true }])
+    expect(await exited(child)).toBe(0)
   })
 
   it('listens on localhost on a port the OS assigns when nothing is set', async () => {

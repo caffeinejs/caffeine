@@ -57,6 +57,64 @@ describe('the lifecycle of a listener', () => {
     expect(events).toEqual(['main listening', 'admin listening', 'main closed', 'admin closed'])
   })
 
+  it('drains background work on its owning listener before each close hook', async () => {
+    const mainWork = Promise.withResolvers<void>()
+    const adminWork = Promise.withResolvers<void>()
+    const mainStopped = Promise.withResolvers<void>()
+    const adminStopped = Promise.withResolvers<void>()
+    const events: string[] = []
+
+    app = createWebApplication({ adapter: node() })
+      .listener('admin', l =>
+        l.server(() => ({ listen: listener })).hook('onClose', () => void events.push('admin closed')),
+      )
+      .server(() => ({ listen: listener }))
+      .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+      .hook('onClose', () => void events.push('main closed'))
+      .mount(
+        jobs(),
+        new Router('/background').get('/').handler(ctx => {
+          ctx.server.waitUntil!(mainWork.promise)
+          return 'main'
+        }),
+        new Router('/background')
+          .extend(bindTo('admin'))
+          .get('/')
+          .handler(ctx => {
+            ctx.server.waitUntil!(adminWork.promise)
+            return 'admin'
+          }),
+      ) as WebApplication<never, never, unknown, NodeAdapter>
+
+    await app.run()
+    const admin = app.listeners.get('admin')!
+    app.instance.once('close', () => mainStopped.resolve())
+    admin.instance.once('close', () => adminStopped.resolve())
+    let closing: Promise<void> | undefined
+
+    try {
+      expect(await (await app.request('/background')).text()).toBe('main')
+      expect(await (await admin.request('/background')).text()).toBe('admin')
+      closing = app.close()
+
+      await Promise.race([mainStopped.promise, closing])
+      expect(events).toEqual([])
+      expect(admin.instance.listening).toBe(true)
+      expect(await (await admin.request('/jobs')).json()).toEqual({ jobs: true })
+
+      mainWork.resolve()
+      await Promise.race([adminStopped.promise, closing])
+      expect(events).toEqual(['main closed'])
+    } finally {
+      mainWork.resolve()
+      adminWork.resolve()
+      await (closing ?? app.close())
+    }
+
+    expect(events).toEqual(['main closed', 'admin closed'])
+    app = undefined
+  })
+
   it("keeps a listener answering while the application's own server drains, its readiness turning 503", async () => {
     app = createWebApplication({ adapter: node() })
       .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))

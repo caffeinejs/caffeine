@@ -63,6 +63,7 @@ const bodies = new WeakMap<NodeResponse, BodyState>()
 export function createNodePlatform(logger: Logger): NodePlatform {
   const platform: NodePlatform = {
     name: 'node',
+    requestLifetime: 'local',
     method: res => res.req.method!,
     target: res => res.req.url!,
     protocol: res => (socketField(res, 'encrypted') === true ? 'https' : 'http'),

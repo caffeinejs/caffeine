@@ -66,6 +66,7 @@ export const fetchPlatform: ServerPlatform<Request, FetchContextPlatform, Respon
 /** As {@link fetchPlatform}, for `request()`: no socket, so seen as `http` from `127.0.0.1`. */
 export const inProcessPlatform: ServerPlatform<Request, FetchContextPlatform, Response> = {
   ...fetchPlatform,
+  requestLifetime: 'local',
   protocol: () => 'http',
   remoteAddress: () => '127.0.0.1',
   // `request()` is the one caller whose abort must fail a body already handed over: its signal cuts the stream.

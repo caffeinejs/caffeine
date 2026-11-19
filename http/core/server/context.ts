@@ -3,7 +3,7 @@ import type { Logger } from '@caffeinejs/application/logger'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 
 import { resolveAppURL } from '../../base_path.js'
-import { ContextState, type IContext } from '../../context.js'
+import { ContextState, type IContext, type ServerContext } from '../../context.js'
 import type { InferBody, IRequest, UnsignedCookie } from '../../request.js'
 import type { CookieSerializeOptions } from '../cookie/options.js'
 import type { CookieOperation } from '../cookie/serialize.js'
@@ -61,6 +61,8 @@ export interface ServerShared extends Pick<
 > {
   readonly store: ConfigStore<unknown>
   readonly logger: Logger
+  /** Observes the promise immediately. Only an open registration counts toward shutdown. */
+  readonly trackWork: (work: Promise<unknown>, reqId: string, open: boolean) => void
   readonly errors: ErrorHandlerProvider
   readonly options: Required<GlobalErrorHandlerOptions>
   readonly encodeProblem: ProblemEncoder
@@ -74,6 +76,23 @@ export interface ServerShared extends Pick<
 }
 
 type Params = Readonly<Record<string, string | undefined>>
+
+function serverView(ctx: Context, trackWork: ServerShared['trackWork'] | undefined): ServerContext {
+  const view = {
+    get remoteAddress() {
+      return ctx.remoteAddress
+    },
+  }
+  if (trackWork === undefined) {
+    return view
+  }
+
+  return Object.assign(view, {
+    waitUntil(work: Promise<unknown>): void {
+      trackWork(work, ctx.req.id, !ctx.responded && !ctx.expired)
+    },
+  })
+}
 
 /**
  * The {@link IContext} the engine builds for every request. Also what routes compile against, and what a group's
@@ -103,8 +122,10 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   readonly #params: Params
   readonly #query: string
   readonly #store: RouteStore
+  readonly #acceptsWork: boolean
 
   #req?: ContextRequest
+  #server?: ServerContext
   #normalized?: { path: string; error: Error | undefined }
   #context?: ContextPlatform
   #state?: ContextState
@@ -139,6 +160,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     params: Params,
     query: string,
     store: RouteStore,
+    acceptsWork = true,
   ) {
     this.#shared = shared
     this.#platform = platform
@@ -151,6 +173,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     this.#params = params
     this.#query = query
     this.#store = store
+    this.#acceptsWork = acceptsWork
   }
 
   get req(): ContextRequest {
@@ -178,6 +201,13 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   /** Where the request came from. See {@link IContext.platform}. */
   get platform(): ContextPlatform {
     return (this.#context ??= this.#platform.context(this.#native, this.#extra))
+  }
+
+  get server(): ServerContext {
+    return (this.#server ??= serverView(
+      this,
+      this.#acceptsWork && this.#platform.requestLifetime === 'local' ? this.#shared.trackWork : undefined,
+    ))
   }
 
   get state(): ContextState {

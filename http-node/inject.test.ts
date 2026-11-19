@@ -130,6 +130,8 @@ describe('request() on the Node application', () => {
       return {
         platform: ctx.platform.name,
         address: ctx.platform.incoming.socket.remoteAddress,
+        remoteAddress: ctx.server.remoteAddress,
+        waitUntil: typeof ctx.server.waitUntil,
         host: ctx.req.host,
       }
     })
@@ -138,6 +140,8 @@ describe('request() on the Node application', () => {
     expect(await (await app.request('/who')).json()).toEqual({
       platform: 'node',
       address: '127.0.0.1',
+      remoteAddress: '127.0.0.1',
+      waitUntil: 'function',
       host: 'localhost',
     })
   })

@@ -149,6 +149,45 @@ describe('request scope lifetime', () => {
     await app.close()
   })
 
+  it('runs onResponse and destroys the request scope while registered work is pending', async () => {
+    const { Session, teardowns, newApp, nextTeardown } = fixture()
+    const gate = Promise.withResolvers<void>()
+    const events: string[] = []
+    const work = gate.promise.then(() => void events.push('background settled'))
+    const router = new Router('/scope-background')
+    router
+      .get('/')
+      .inject(i => ({ session: i.provide(Session) }))
+      .handler((ctx, deps) => {
+        const waitUntil = ctx.server.waitUntil!
+        waitUntil(work)
+        return { id: deps.session.get().id }
+      })
+
+    const app = newApp()
+      .hook('onResponse', () => void events.push('response'))
+      .hook('onClose', () => void events.push('closed'))
+      .mount(router)
+    await app.bootstrap()
+
+    try {
+      const teardown = nextTeardown()
+      const res = await app.request('/scope-background')
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ id: 1 })
+      await teardown
+      expect(teardowns).toEqual([1])
+      expect(events).toEqual(['response'])
+    } finally {
+      gate.resolve()
+      await app.close()
+    }
+
+    expect(events).toEqual(['response', 'background settled', 'closed'])
+    expect(teardowns).toEqual([1])
+  })
+
   it('destroys the request scope when the handler throws', async () => {
     const { Session, teardowns, newApp, nextTeardown } = fixture()
 

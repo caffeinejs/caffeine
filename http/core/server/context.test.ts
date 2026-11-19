@@ -1,9 +1,9 @@
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, assert, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
-import type { IContext } from '../../context.js'
+import type { IContext, ServerContext } from '../../context.js'
 import { bodyAsStream } from '../../decorators/body_as_stream.js'
 import { Catch } from '../../decorators/index.js'
 import type { ActionResult } from '../../response.js'
@@ -42,6 +42,15 @@ routes.get('/promise').handler(ctx => {
 })
 routes.get('/status').handler(ctx => ctx.status(101))
 routes.get('/config').handler(ctx => ({ same: ctx.config === ctx.config }))
+routes.get('/plain-fetch').handler(() => 'ok')
+routes.get('/fetch-peer').handler(ctx => ctx.server.remoteAddress ?? 'no peer')
+
+const inspectServer =
+  vi.fn<(server: ServerContext, repeated: ServerContext, raw: unknown, platform: IContext['platform']) => void>()
+routes.get('/server').handler(ctx => {
+  inspectServer(ctx.server, ctx.server, ctx.req.raw, ctx.platform)
+  return ctx.server.remoteAddress ?? 'no peer'
+})
 
 // The body shared between `ctx.req.raw` and the route, read in either order. A plain router types `raw` for every
 // application; the fetch application's is the web `Request`.
@@ -174,6 +183,58 @@ describe('Context', () => {
 
   it('keeps one config snapshot for the context', async () => {
     expect(await (await get('/config')).json()).toEqual({ same: true })
+  })
+
+  it.each([
+    ['/plain-fetch', 'ok'],
+    ['/fetch-peer', 'no peer'],
+  ])('returns a synchronous Fetch response from %s', async (path, body) => {
+    const response = app.fetch(new Request(`http://localhost/api/c${path}`))
+
+    expect(response).toBeInstanceOf(Response)
+    expect(await (await response).text()).toBe(body)
+  })
+
+  it('keeps one server view per raw Fetch request and preserves the runtime arguments', async () => {
+    inspectServer.mockClear()
+    const request = new Request('http://localhost/api/c/server')
+    const nextRequest = new Request(request)
+    const env = { region: 'eu' }
+    const host = { waitUntil: vi.fn() }
+
+    const response = app.fetch(request, env, host)
+    const nextResponse = app.fetch(nextRequest)
+
+    expect(response).toBeInstanceOf(Response)
+    expect(await (await response).text()).toBe('no peer')
+    expect(await (await nextResponse).text()).toBe('no peer')
+    expect(inspectServer).toHaveBeenCalledTimes(2)
+
+    const [server, repeated, raw, platform] = inspectServer.mock.calls[0]!
+    const [nextServer, nextRepeated] = inspectServer.mock.calls[1]!
+    expect(server).toBe(repeated)
+    expect(nextServer).toBe(nextRepeated)
+    expect(nextServer).not.toBe(server)
+    expect(server.remoteAddress).toBeUndefined()
+    expect('waitUntil' in server).toBe(false)
+    expect(raw).toBe(request)
+    assert(platform.name === 'fetch')
+    expect(platform.runtime).toHaveLength(2)
+    expect(platform.runtime[0]).toBe(env)
+    expect(platform.runtime[1]).toBe(host)
+    expect(host.waitUntil).not.toHaveBeenCalled()
+  })
+
+  it('exposes the loopback peer and local registration on an injected request', async () => {
+    inspectServer.mockClear()
+
+    const response = await app.request('/api/c/server')
+
+    expect(await response.text()).toBe('127.0.0.1')
+    expect(inspectServer).toHaveBeenCalledTimes(1)
+    const [server, repeated] = inspectServer.mock.calls[0]!
+    expect(server).toBe(repeated)
+    expect(typeof server.waitUntil).toBe('function')
   })
 })
 

@@ -1,11 +1,44 @@
 import type { ConfigSnapshot } from '@caffeinejs/application/config'
+import { errMessage } from '@caffeinejs/std/err'
 
 import type { CookieSerializeOptions } from './core/cookie/options.js'
+import { ErrCaffeineWebApplication } from './core/error/common.js'
 import type { RouteDefinition } from './core/lifecycle/route_definition.js'
 import type { AuthenticationState } from './core/security/auth/authentication_state.js'
 import { type Principal } from './core/security/identity.js'
 import type { ContextPlatform } from './core/server/platform.js'
 import type { IRequest } from './request.js'
+
+/** The server capabilities available to this request. */
+export interface ServerContext {
+  /** The peer as reported by the adapter, or `undefined` if unknown. An in-process request uses loopback. */
+  readonly remoteAddress: string | undefined
+
+  /**
+   * Registers work for graceful shutdown without delaying the response. The Node and Bun server adapters and
+   * in-process `app.request()` calls provide it for requests admitted before shutdown. An adapter-free
+   * `app.fetch()` omits it. A rejection is logged with the request ID.
+   *
+   * The request scope ends with the response. Use application-owned services for work that may outlive it.
+   * A forced shutdown stops waiting for the work.
+   *
+   * @throws ErrWaitUntilClosed when called after response handoff, request expiry or forced shutdown.
+   */
+  readonly waitUntil?: (work: Promise<unknown>) => void
+}
+
+export class ErrWaitUntilClosed extends ErrCaffeineWebApplication {
+  constructor() {
+    super(
+      errMessage('Cannot register background work: the request is no longer accepting work')
+        .solutions('Call ctx.server.waitUntil before the request expires or the response is handed off')
+        .reference('@caffeinejs/http', ErrWaitUntilClosed)
+        .build(),
+      'ERR_WAIT_UNTIL_CLOSED',
+    )
+    this.name = 'ErrWaitUntilClosed'
+  }
+}
 
 /**
  * The values a request carries between the middlewares, guards and handler that serve it.
@@ -46,6 +79,9 @@ export interface IContext<
   TBody = unknown,
 > {
   get req(): IRequest<TParams, TQuery, THeaders, TBody>
+
+  /** The peer and server capabilities for this exchange. */
+  get server(): ServerContext
 
   /**
    * The runtime's own objects behind this request: the escape hatch for what the context does not cover. Narrow on

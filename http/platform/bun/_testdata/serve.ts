@@ -2,6 +2,7 @@
 // `run(...)` options and the fixture's own flags from argv say. Prints a line for each `serverCallback`, then one with
 // where the application and its listener listen.
 import { readFileSync } from 'node:fs'
+import { createInterface } from 'node:readline'
 
 import {
   $p,
@@ -18,7 +19,11 @@ import { bun } from '../../../dist/platform/bun/index.js'
 
 const settings = JSON.parse(process.argv[2] ?? '{}') as Record<string, unknown>
 const runOptions = JSON.parse(process.argv[3] ?? '{}') as Record<string, unknown>
-const flags = JSON.parse(process.argv[4] ?? '{}') as { listener?: boolean; failCallback?: boolean }
+const flags = JSON.parse(process.argv[4] ?? '{}') as {
+  listener?: boolean
+  failCallback?: boolean
+  backgroundWork?: boolean
+}
 
 if (settings.https === true) {
   settings.https = {
@@ -32,7 +37,7 @@ class WhoController {
   @Get('/')
   @Args([$p.context(), $p.address()])
   who(ctx: IContext, ip: string | undefined) {
-    return { platform: ctx.platform.name, ip }
+    return { platform: ctx.platform.name, ip, remoteAddress: ctx.server.remoteAddress }
   }
 }
 void WhoController
@@ -81,6 +86,20 @@ app.mount(
   }),
 )
 
+const work = Promise.withResolvers<void>()
+if (flags.backgroundWork === true) {
+  app
+    .shutdown(s => s.drainDelay(0))
+    .hook('onClose', () => console.log(JSON.stringify({ onClose: true })))
+    .mount(
+      new Router('/work').get('/').handler(ctx => {
+        const waitUntil = ctx.server.waitUntil!
+        waitUntil(work.promise.then(() => console.log(JSON.stringify({ workCompleted: true }))))
+        return 'answered'
+      }),
+    )
+}
+
 try {
   await app.run(runOptions)
 } catch (err) {
@@ -100,3 +119,30 @@ try {
 const { host, origin, path } = app.address!
 const admin = flags.listener === true ? app.listeners.get('admin')!.address!.origin : undefined
 console.log(JSON.stringify({ host, origin, path, admin }))
+
+if (flags.backgroundWork === true) {
+  const input = createInterface({ input: process.stdin })
+  const commands = input[Symbol.asyncIterator]()
+
+  try {
+    if ((await commands.next()).value !== 'close') {
+      throw new Error('Expected close command')
+    }
+    const closing = app.close()
+    // Let teardown start, then read the closing engine's response before acknowledging shutdown.
+    await new Promise<void>(resolve => setImmediate(resolve))
+    const response = await app.request('/who')
+    await response.text()
+    console.log(JSON.stringify({ closingStatus: response.status }))
+
+    if ((await commands.next()).value !== 'release') {
+      throw new Error('Expected release command')
+    }
+    work.resolve()
+    await closing
+    console.log(JSON.stringify({ closed: true }))
+  } finally {
+    work.resolve()
+    input.close()
+  }
+}

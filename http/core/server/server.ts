@@ -6,6 +6,7 @@ import { ContextStorage, ExecutionContext, type Container, type ContextKey, type
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
 import { stripBasePath } from '../../base_path.js'
+import { ErrWaitUntilClosed } from '../../context.js'
 import { CACHING_PLUGIN } from '../../plugin_marks.js'
 import { compileConstraints, type CompiledConstraints } from '../constraints/derive.js'
 import { kCookieSettings } from '../cookie/keys.js'
@@ -115,6 +116,8 @@ export class HTTPServer {
 
   /** Each request still in flight, to cut: abort its handler, or its answer once it has one. */
   readonly #inFlight = new Set<InFlight>()
+  /** Injected answers handed to the caller whose bodies may still need cancelling during shutdown. */
+  readonly #unread = new Set<InFlight>()
   /** Stops counting one request toward the drain. */
   readonly #uncountOne = (): void => {
     this.#count--
@@ -123,10 +126,10 @@ export class HTTPServer {
   readonly #settle = (): void => this.#settleDrain()
   #ids = 0
   #count = 0
+  #pendingWork = 0
   #closing = false
   #closed = false
   #cutting = false
-  #drained: Promise<void> | undefined
   #closedOnce: Promise<void> | undefined
   #resolveDrained: (() => void) | undefined
 
@@ -142,6 +145,7 @@ export class HTTPServer {
     this.#shared = {
       store: container.get(ConfigStore),
       logger: input.logger,
+      trackWork: (work, reqId, open) => this.#trackWork(work, reqId, open),
       errors: container.get(ErrorHandlerProvider),
       options,
       encodeProblem: problemEncoder(options),
@@ -235,7 +239,13 @@ export class HTTPServer {
     this.#count++
     const id = ++this.#ids
 
-    const flight = new InFlight(this.#inFlight, this.#uncountOne, this.#settle, drainAtRespond, this.#storage)
+    const flight = new InFlight(
+      this.#inFlight,
+      this.#uncountOne,
+      this.#settle,
+      drainAtRespond ? this.#unread : undefined,
+      this.#storage,
+    )
     this.#inFlight.add(flight)
 
     try {
@@ -277,6 +287,7 @@ export class HTTPServer {
         match?.params ?? EMPTY_PARAMS,
         match?.query ?? queryAfter(url),
         store,
+        !this.#closing,
       )
       flight.ctx = current
       flight.onResponse = store.hooks.onResponse
@@ -337,25 +348,20 @@ export class HTTPServer {
 
   /**
    * Answers 503 from now on; resolves once every request in flight has been answered and, on `fetch`, its body has
-   * been sent, and every `onClose` has run. Every `onClose` runs; the first that failed rejects.
+   * been sent, registered work has settled, and every `onClose` has run. Every `onClose` runs; the first that failed rejects.
    */
   close(): Promise<void> {
     // A second call waits for what the first started, `onClose` included.
-    if (this.#closed) {
+    if (this.#closedOnce !== undefined || this.#closed) {
       return this.#closedOnce ?? Promise.resolve()
     }
 
     this.#closing = true
-    this.#drained ??= new Promise<void>(resolve => {
+    const drained = new Promise<void>(resolve => {
       this.#resolveDrained = resolve
     })
+    this.#closedOnce = drained.then(() => this.#runOnClose())
     this.#settleDrain()
-
-    this.#closedOnce ??= this.#drained.then(async () => {
-      this.#closed = true
-      await this.#runOnClose()
-    })
-
     return this.#closedOnce
   }
 
@@ -394,23 +400,65 @@ export class HTTPServer {
     this.#resolveDrained?.()
   }
 
-  // Once nothing counts toward the drain, what is still in flight is an in-process answer nobody read: it is cut, so its
-  // request scope ends before the container does, and the drain settles as the last one finishes.
+  #trackWork(work: Promise<unknown>, reqId: string, open: boolean): void {
+    const accepted = open && !this.#closed
+    if (accepted) {
+      this.#pendingWork++
+    }
+
+    const observe = async (): Promise<void> => {
+      try {
+        await work
+      } catch (err) {
+        try {
+          this.#shared.logger.error({ reqId, err }, 'Background work failed')
+        } catch {
+          // A failing log transport must not produce an unhandled rejection from the observer.
+        }
+      } finally {
+        if (accepted) {
+          this.#pendingWork--
+          this.#settleDrain()
+        }
+      }
+    }
+
+    // The response may release its request scope while the work is pending.
+    if (this.#storage === undefined) {
+      void observe()
+    } else {
+      void this.#storage.run(ExecutionContext.ROOT, observe)
+    }
+
+    if (!accepted) {
+      throw new ErrWaitUntilClosed()
+    }
+  }
+
+  // Cut unread in-process bodies as soon as the counted requests finish, even while background work is pending.
   #settleDrain(): void {
     if (!this.#closing || this.#count > 0) {
       return
     }
 
     if (this.#inFlight.size === 0) {
-      this.#resolveDrained?.()
+      if (this.#pendingWork === 0) {
+        // Stop admitting requests before another promise callback can enter the closing 503 pipeline.
+        this.#closed = true
+        this.#resolveDrained?.()
+      }
       return
     }
 
-    if (!this.#cutting) {
+    if (this.#unread.size > 0 && !this.#cutting) {
       this.#cutting = true
-      const reason = new ErrHTTPServiceUnavailable('The server was closed')
-      for (const flight of [...this.#inFlight]) {
-        flight.cut(reason)
+      try {
+        const reason = new ErrHTTPServiceUnavailable('The server was closed')
+        for (const flight of this.#unread) {
+          flight.cut(reason)
+        }
+      } finally {
+        this.#cutting = false
       }
     }
   }
@@ -586,9 +634,10 @@ class InFlight implements SendHooks {
   readonly #flights: Set<InFlight>
   readonly #uncountOne: () => void
   readonly #settle: () => void
-  readonly #drainAtRespond: boolean
+  readonly #unread: Set<InFlight> | undefined
   #cancel: ((reason: Error) => void) | undefined
   #finished = false
+  #cutReason: Error | undefined
   #uncounted = false
 
   readonly #storage: ContextStorage | undefined
@@ -597,14 +646,14 @@ class InFlight implements SendHooks {
     flights: Set<InFlight>,
     uncountOne: () => void,
     settle: () => void,
-    drainAtRespond: boolean,
+    unread: Set<InFlight> | undefined,
     storage: ContextStorage | undefined,
   ) {
     this.#storage = storage
     this.#flights = flights
     this.#uncountOne = uncountOne
     this.#settle = settle
-    this.#drainAtRespond = drainAtRespond
+    this.#unread = unread
   }
 
   /**
@@ -617,6 +666,8 @@ class InFlight implements SendHooks {
     }
 
     this.#finished = true
+    this.#unread?.delete(this)
+    this.ctx?.markResponded()
 
     const ran = this.#runOnResponse()
     if (isThenable(ran)) {
@@ -652,12 +703,28 @@ class InFlight implements SendHooks {
   }
 
   cancelWith(cancel: (reason: Error) => void): void {
+    if (this.#finished) {
+      return
+    }
+    if (this.#cutReason !== undefined) {
+      if (this.#cancel === undefined) {
+        this.#cancel = cancel
+        cancel(this.#cutReason)
+      }
+      return
+    }
     this.#cancel = cancel
+    if (this.#unread !== undefined) {
+      this.#unread.add(this)
+      if (this.#uncounted) {
+        this.#settle()
+      }
+    }
   }
 
   /** For `request()`: stops counting toward `close()` at respond. A no-op otherwise. */
   uncountEarly(): void {
-    if (this.#drainAtRespond) {
+    if (this.#unread !== undefined) {
       this.#uncount()
     }
   }
@@ -665,6 +732,12 @@ class InFlight implements SendHooks {
   // A forced close cuts the request as Fastify's destroys its socket: an answer being sent fails its reader, and a
   // request not yet answered fails its caller and aborts its handler, whose late result then goes nowhere.
   cut(reason: Error): void {
+    if (this.#cutReason !== undefined) {
+      return
+    }
+    this.#cutReason = reason
+    this.#unread?.delete(this)
+
     if (this.#cancel !== undefined) {
       this.#cancel(reason)
       return
