@@ -196,7 +196,7 @@ process.exit(failed === 0 ? 0 : 1)
   })
 
   check('the static verifier type-checks and bundles for a Web Worker', () => {
-    copyFileSync(join(root, 'test/package/worker.mts'), join(project, 'worker.mts'))
+    copyFileSync(join(root, 'static/_tests/_testdata/worker.mts'), join(project, 'worker.mts'))
     writeJSON(join(project, 'tsconfig.worker.json'), {
       compilerOptions: {
         target: 'ES2023',
