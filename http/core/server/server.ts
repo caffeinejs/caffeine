@@ -413,30 +413,47 @@ export class HTTPServer {
         this.#settleDrain()
       }
     }
-    const observe = async (): Promise<void> => {
+    const observed = this.#outsideRequest(async () => {
       try {
         await work
       } catch (err) {
-        try {
-          this.#shared.logger.error({ reqId, err }, 'Background work failed')
-        } catch {
-          // A failing log transport must not produce an unhandled rejection from the observer.
-        }
+        this.#logWorkError(reqId, err, 'Background work failed')
       } finally {
         release()
       }
-    }
+    })
 
-    // The response may release its request scope while the work is pending.
-    const observed = this.#storage === undefined ? observe() : this.#storage.run(ExecutionContext.ROOT, observe)
     if (!reserved) {
       throw new ErrWaitUntilClosed()
     }
     try {
-      host?.(observed)
+      const registration: unknown = host?.(observed)
+      if (isThenable(registration)) {
+        void this.#outsideRequest(async () => {
+          try {
+            await registration
+          } catch (err) {
+            release()
+            this.#logWorkError(reqId, err, 'Host rejected background work registration')
+          }
+        })
+      }
     } catch (err) {
       release()
       throw err
+    }
+  }
+
+  // Both the task and the host's registration can outlive the request scope.
+  #outsideRequest(observe: () => Promise<void>): Promise<void> {
+    return this.#storage === undefined ? observe() : this.#storage.run(ExecutionContext.ROOT, observe)
+  }
+
+  #logWorkError(reqId: string, err: unknown, message: string): void {
+    try {
+      this.#shared.logger.error({ reqId, err }, message)
+    } catch {
+      // A failing log transport must not produce an unhandled rejection from the observer.
     }
   }
 

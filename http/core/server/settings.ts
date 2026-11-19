@@ -255,8 +255,9 @@ export function resolveServerSettings(
   }
 
   if (fetchWaitUntil !== undefined && typeof fetchWaitUntil !== 'function') {
+    void Promise.resolve(fetchWaitUntil).catch(() => undefined)
     throw configurationError(
-      'Cannot set fetchWaitUntil: expected a function',
+      `Cannot set fetchWaitUntil: expected a function, received ${kindOf(fetchWaitUntil)}`,
       'Pass a function that returns the host binding or undefined',
     )
   }

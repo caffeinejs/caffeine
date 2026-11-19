@@ -20,8 +20,12 @@ export interface ServerContext {
    * `app.fetch()` provides it when `fetchWaitUntil` supplies a host binding for the invocation.
    *
    * The request scope ends with the response. Use application-owned services for work that may outlive it.
-   * A forced shutdown stops waiting for the work. A rejected task is logged with the request ID. If the
-   * host throws during registration, the call throws that error and Caffeine still observes the task.
+   * A forced shutdown stops waiting for the work. Caffeine logs task rejections with the request ID.
+   *
+   * If the host binding throws, the caller receives that error. If the binding returns a promise that
+   * rejects, Caffeine logs the host error with the request ID. Either failure releases this registration
+   * from graceful shutdown while Caffeine continues to observe the task. If the binding's promise fulfills
+   * first, graceful shutdown still waits for the task.
    *
    * @throws ErrWaitUntilClosed when called after response handoff, request expiry or forced shutdown.
    */

@@ -128,12 +128,16 @@ Graceful shutdown waits for accepted work before `onClose` and application dispo
 
 ### Bind a Fetch host
 
-Configure the host at the deployment entry point. In a Cloudflare Worker, `app.fetch(request, env, execution)`
-passes `[env, execution]` to the resolver when the handler first reads `ctx.server`. Bind the method to that
-invocation’s execution context. Returning `undefined` leaves the capability absent for that request.
-The snippet shows the lifetime setting to add to an application's existing server configuration.
+In a Cloudflare Worker with `nodejs_compat`, bootstrap the application at module scope. The default matcher can
+register the schema-free `/ready` route above during module initialization. The Worker calls
+`app.fetch(request, env, execution)` for each request. On the request’s first access to `ctx.server`, Caffeine
+calls the resolver with `[env, execution]`. Bind the method to that invocation’s execution context.
+Returning `undefined` leaves the capability absent for that request.
 
 ```ts
+import { createWebApplication } from '@caffeinejs/http'
+
+const app = createWebApplication().mount(routes)
 app.server(() => ({
   fetchWaitUntil: ([, execution]) => {
     if (
@@ -152,13 +156,17 @@ export default { fetch: app.fetch }
 ```
 
 Caffeine calls the binding synchronously with a promise that fulfills after the task settles and any rejection has
-been logged. If the host throws during registration, the caller receives that error and shutdown releases that
-registration immediately. The host still sets the invocation’s execution limits. [Cloudflare Workers context](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil)
+been logged. If the binding throws, `waitUntil` throws that error to its caller. If the binding returns a promise
+that rejects, Caffeine logs the host error with the request ID. In either case, shutdown stops waiting for that
+registration and Caffeine continues to observe the task. If the binding’s promise fulfills while the task is
+pending, shutdown still waits for the task. The host sets the invocation’s execution limits. [Cloudflare Workers context](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil)
 
-The local `workerd` integration test uses `nodejs_compat`, schema-free routes, and an exact-path matcher supplied
-through `.server(() => ({ matcher }))`. The default matcher generates code from strings during route registration,
-which this runtime rejects. The test reads the entire response before releasing the registered task and observing
-its completion through a service binding. [Worker fixture](../../test/fixtures/http-wait-until/worker.mjs)
+If you bootstrap inside the Worker’s `fetch` handler, `workerd` rejects the default matcher’s attempt to generate
+code during route registration. For request-time bootstrap, configure a matcher that can register those routes
+without generating code. A matcher supplied by an earlier `.server(() => ({ matcher }))` call stays in effect
+when you add `fetchWaitUntil` as shown above. The local integration test uses an exact-path matcher for its
+schema-free routes. It reads the entire response before releasing the registered task and observing its
+completion through a service binding. [Worker fixture](../../test/fixtures/http-wait-until/worker.mjs)
 
 ## HTTPS and HTTP/2
 

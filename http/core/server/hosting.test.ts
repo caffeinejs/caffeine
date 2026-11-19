@@ -276,9 +276,12 @@ describe('Fetch host background work', () => {
       expect(failures[1]).toBe(failures[0])
       if (kind === 'invalid return' || kind === 'rejected promise') {
         expect(failures[0]).toBeInstanceOf(ErrConfiguration)
+        const received = kind === 'rejected promise' ? 'a promise' : 'a number'
         expect(failures[0]).toMatchObject({
           code: 'ERR_CONFIGURATION',
-          message: expect.stringContaining('Cannot resolve fetchWaitUntil: expected a function or undefined'),
+          message: expect.stringContaining(
+            `Cannot resolve fetchWaitUntil: expected a function or undefined, received ${received}`,
+          ),
         })
       } else {
         expect(failures[0]).toBe(failure)
@@ -317,12 +320,13 @@ describe('Fetch host background work', () => {
     }
   })
 
-  it('drains accepted work when the host starts close and logs its rejection before the host promise fulfills', async () => {
+  it('drains accepted work after the host starts close and fulfills its registration', async () => {
     const error = vi.fn()
     const closed = vi.fn()
     const held = Promise.withResolvers<void>()
     const host = vi.fn((_work: Promise<unknown>) => {
       void app!.close().then(closed)
+      return Promise.resolve()
     })
     let waitUntil: ServerContext['waitUntil']
     app = createWebApplication()
@@ -361,6 +365,55 @@ describe('Fetch host background work', () => {
       expect(closed).toHaveBeenCalledTimes(1)
     } finally {
       held.resolve()
+    }
+  })
+
+  it('completes shutdown on async host refusal while the registered task is still pending', async () => {
+    const task = Promise.withResolvers<void>()
+    const registration = Promise.withResolvers<void>()
+    const error = vi.fn()
+    const refusal = new Error('host refused registration')
+    app = createWebApplication()
+      .shutdown(s => s.drainDelay(0))
+      .logger(b => b.use({ ...newNoopLogger(), error }))
+      .server(() => ({
+        fetchWaitUntil: () => async () => {
+          await registration.promise
+          throw refusal
+        },
+      }))
+      .mount(
+        new Router('/').get('/').handler(ctx => {
+          ctx.server.waitUntil!(task.promise)
+          return ctx.req.id
+        }),
+      )
+    await app.bootstrap()
+
+    try {
+      const response = await app.fetch(new Request('http://example.test/'))
+      expect(response.status).toBe(200)
+      const reqId = await response.text()
+      const closed = vi.fn()
+      const closing = app.close().then(closed)
+      await setImmediate()
+      expect(closed).not.toHaveBeenCalled()
+
+      registration.resolve()
+      await vi.waitFor(() => expect(closed).toHaveBeenCalledTimes(1))
+      await closing
+      expect(error).toHaveBeenCalledExactlyOnceWith(
+        { reqId, err: refusal },
+        'Host rejected background work registration',
+      )
+
+      const failure = new Error('task failed after shutdown')
+      task.reject(failure)
+      await vi.waitFor(() => expect(error).toHaveBeenCalledWith({ reqId, err: failure }, 'Background work failed'))
+      expect(error).toHaveBeenCalledTimes(2)
+    } finally {
+      registration.resolve()
+      task.resolve()
     }
   })
 

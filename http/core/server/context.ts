@@ -31,7 +31,7 @@ import type { Principal } from '../security/identity.js'
 import type { CompiledSerializer } from '../validation/validation.js'
 import { HeldStream, isHopByHop, REPRESENTATION_HEADERS, shapeAnswer } from './answer.js'
 import { contentTooLarge, declaredOver, ErrRequestBodyConsumed, limitStream } from './body.js'
-import { configurationError, sendProblem } from './error.js'
+import { configurationError, kindOf, sendProblem } from './error.js'
 import type { ContextPlatform, ServerPlatform } from './platform.js'
 import { parseQuery } from './query.js'
 import type { RouteStore } from './server.js'
@@ -223,7 +223,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
             // An async resolver may already have started work. Observe its rejection before refusing the result.
             void Promise.resolve(binding).catch(() => undefined)
             throw configurationError(
-              'Cannot resolve fetchWaitUntil: expected a function or undefined',
+              `Cannot resolve fetchWaitUntil: expected a function or undefined, received ${kindOf(binding)}`,
               'Return a bound host method or undefined',
             )
           }

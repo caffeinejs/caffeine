@@ -36,12 +36,22 @@ describe('resolveServerSettings', () => {
     expect(resolveServerSettings({ fetchWaitUntil: () => undefined })).not.toHaveProperty('fetchWaitUntil')
   })
 
-  it.each([null, false, 0, '', {}])('refuses %o as the Fetch host resolver', fetchWaitUntil => {
+  it.each<[string, () => unknown]>([
+    ['null', () => null],
+    ['a boolean', () => false],
+    ['a number', () => 0],
+    ['a string', () => 'private value'],
+    ['an object', () => ({ token: 'private value' })],
+    ['an array', () => ['private value']],
+    ['a promise', () => Promise.reject(new Error('private value'))],
+  ])('names %s passed as the Fetch host resolver', (kind, value) => {
+    const fetchWaitUntil = value()
     const resolve = () => resolveServerSettings({ fetchWaitUntil })
 
     expect(resolve).toThrow(ErrConfiguration)
-    expect(resolve).toThrow('Cannot set fetchWaitUntil: expected a function')
+    expect(resolve).toThrow(`Cannot set fetchWaitUntil: expected a function, received ${kind}`)
     expect(resolve).toThrow('Pass a function that returns the host binding or undefined')
+    expect(resolve).not.toThrow(/private value/)
   })
 
   it.each<[string, unknown]>([
