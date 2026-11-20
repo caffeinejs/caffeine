@@ -1,6 +1,7 @@
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
+import type { ServerContext } from '../../context.js'
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
 import { DEFAULT_ROUTER_FLAGS, type RouteMatcherFactory, type RouterFlags } from '../matcher/matcher.js'
@@ -44,10 +45,17 @@ export interface ServerSettings {
    * Schema slot validates itself whatever this is.
    */
   schemaCompiler?: SchemaCompiler
+  /**
+   * Resolves the host's `waitUntil` binding for an adapter-free `app.fetch(request, ...runtime)` invocation.
+   *
+   * On first access to `ctx.server`, receives the arguments after the request in their original order. Return a
+   * bound method or closure, or `undefined` when this invocation has no binding. Unset by default.
+   */
+  fetchWaitUntil?: (runtime: readonly unknown[]) => ServerContext['waitUntil']
 }
 
-/** What every adapter that listens takes besides {@link ServerSettings}: it knows each request's peer. */
-export interface ListeningServerSettings extends Omit<ServerSettings, 'trustProxy'> {
+/** Settings shared by listening adapters, which know each request's peer and own its background work. */
+export interface ListeningServerSettings extends Omit<ServerSettings, 'trustProxy' | 'fetchWaitUntil'> {
   /**
    * Which peers' `X-Forwarded-Host` and `X-Forwarded-Proto` decide `ctx.req.host` and `ctx.req.protocol`.
    *
@@ -58,7 +66,7 @@ export interface ListeningServerSettings extends Omit<ServerSettings, 'trustProx
   trustProxy?: boolean | string | readonly string[]
 }
 
-/** {@link ServerSettings} with every default filled in. */
+/** The settings shared by all server engines, with every default filled in. */
 export interface ResolvedServerSettings {
   readonly handlerTimeout: Duration | undefined
   readonly router: RouterFlags
@@ -80,7 +88,11 @@ export interface ApplicationKind {
   readonly peerAddress: boolean
 }
 
-const FETCH_APPLICATION: ApplicationKind = { name: 'fetch application', sections: new Set(), peerAddress: false }
+const FETCH_APPLICATION: ApplicationKind = {
+  name: 'fetch application',
+  sections: new Set(['fetchWaitUntil']),
+  peerAddress: false,
+}
 
 /** The longest a timer waits: a timer set for longer fires at once. */
 export const MAX_TIMEOUT: Duration = 2_147_483_647
@@ -141,8 +153,8 @@ export const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
  *
  * @throws ErrConfiguration for a section that is not a setting, a `handlerTimeout` not above 0, a `router` that is
  *   not an object of boolean router flags, a `matcher` that is not a function, a `constraints` setting that is not an
- *   array of strategies or names one twice, a `trustProxy` the application cannot apply, or a `requestIDHeader` that
- *   is not a header name.
+ *   array of strategies or names one twice, a `trustProxy` the application cannot apply, a `requestIDHeader` that
+ *   is not a header name, or a `fetchWaitUntil` that is not a function.
  */
 export function resolveServerSettings(
   settings: object,
@@ -163,17 +175,26 @@ export function resolveServerSettings(
   }
 
   // `trustProxy` and `requestIDHeader` are read as given: an adapter that listens takes a wider `trustProxy`.
-  const { handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler } =
-    settings as Omit<
-      ServerSettings,
-      'constraints' | 'trustProxy' | 'requestIDHeader' | 'bodyLimit' | 'schemaCompiler'
-    > & {
-      constraints?: unknown
-      trustProxy?: unknown
-      requestIDHeader?: unknown
-      bodyLimit?: unknown
-      schemaCompiler?: unknown
-    }
+  const {
+    handlerTimeout,
+    router,
+    matcher,
+    constraints,
+    trustProxy,
+    requestIDHeader,
+    bodyLimit,
+    schemaCompiler,
+    fetchWaitUntil,
+  } = settings as Omit<
+    ServerSettings,
+    'constraints' | 'trustProxy' | 'requestIDHeader' | 'bodyLimit' | 'schemaCompiler'
+  > & {
+    constraints?: unknown
+    trustProxy?: unknown
+    requestIDHeader?: unknown
+    bodyLimit?: unknown
+    schemaCompiler?: unknown
+  }
 
   if (handlerTimeout !== undefined && !isTimeout(handlerTimeout)) {
     throw configurationError(
@@ -230,6 +251,14 @@ export function resolveServerSettings(
     throw configurationError(
       'Cannot use the schemaCompiler setting: it must have validator and serializer functions',
       'Pass a SchemaCompiler, such as typeBoxSchemaCompiler, or leave schemaCompiler out',
+    )
+  }
+
+  if (fetchWaitUntil !== undefined && typeof fetchWaitUntil !== 'function') {
+    void Promise.resolve(fetchWaitUntil).catch(() => undefined)
+    throw configurationError(
+      `Cannot set fetchWaitUntil: expected a function, received ${kindOf(fetchWaitUntil)}`,
+      'Pass a function that returns the host binding or undefined',
     )
   }
 

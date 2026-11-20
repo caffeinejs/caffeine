@@ -6,7 +6,7 @@ import { ContextStorage, ExecutionContext, type Container, type ContextKey, type
 import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
 import { stripBasePath } from '../../base_path.js'
-import { ErrWaitUntilClosed } from '../../context.js'
+import { ErrWaitUntilClosed, type ServerContext } from '../../context.js'
 import { CACHING_PLUGIN } from '../../plugin_marks.js'
 import { compileConstraints, type CompiledConstraints } from '../constraints/derive.js'
 import { kCookieSettings } from '../cookie/keys.js'
@@ -145,7 +145,7 @@ export class HTTPServer {
     this.#shared = {
       store: container.get(ConfigStore),
       logger: input.logger,
-      trackWork: (work, reqId, open) => this.#trackWork(work, reqId, open),
+      trackWork: (work, reqId, open, host) => this.#trackWork(work, reqId, open, host),
       errors: container.get(ErrorHandlerProvider),
       options,
       encodeProblem: problemEncoder(options),
@@ -400,38 +400,60 @@ export class HTTPServer {
     this.#resolveDrained?.()
   }
 
-  #trackWork(work: Promise<unknown>, reqId: string, open: boolean): void {
-    const accepted = open && !this.#closed
-    if (accepted) {
+  #trackWork(work: Promise<unknown>, reqId: string, open: boolean, host?: ServerContext['waitUntil']): void {
+    let reserved = open && !this.#closed
+    if (reserved) {
       this.#pendingWork++
     }
 
-    const observe = async (): Promise<void> => {
+    const release = (): void => {
+      if (reserved) {
+        reserved = false
+        this.#pendingWork--
+        this.#settleDrain()
+      }
+    }
+    const observed = this.#outsideRequest(async () => {
       try {
         await work
       } catch (err) {
-        try {
-          this.#shared.logger.error({ reqId, err }, 'Background work failed')
-        } catch {
-          // A failing log transport must not produce an unhandled rejection from the observer.
-        }
+        this.#logWorkError(reqId, err, 'Background work failed')
       } finally {
-        if (accepted) {
-          this.#pendingWork--
-          this.#settleDrain()
-        }
+        release()
       }
-    }
+    })
 
-    // The response may release its request scope while the work is pending.
-    if (this.#storage === undefined) {
-      void observe()
-    } else {
-      void this.#storage.run(ExecutionContext.ROOT, observe)
-    }
-
-    if (!accepted) {
+    if (!reserved) {
       throw new ErrWaitUntilClosed()
+    }
+    try {
+      const registration: unknown = host?.(observed)
+      if (isThenable(registration)) {
+        void this.#outsideRequest(async () => {
+          try {
+            await registration
+          } catch (err) {
+            release()
+            this.#logWorkError(reqId, err, 'Host rejected background work registration')
+          }
+        })
+      }
+    } catch (err) {
+      release()
+      throw err
+    }
+  }
+
+  // Both the task and the host's registration can outlive the request scope.
+  #outsideRequest(observe: () => Promise<void>): Promise<void> {
+    return this.#storage === undefined ? observe() : this.#storage.run(ExecutionContext.ROOT, observe)
+  }
+
+  #logWorkError(reqId: string, err: unknown, message: string): void {
+    try {
+      this.#shared.logger.error({ reqId, err }, message)
+    } catch {
+      // A failing log transport must not produce an unhandled rejection from the observer.
     }
   }
 

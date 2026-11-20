@@ -62,7 +62,7 @@ import { node, type NodeAdapter } from '@caffeinejs/http-node'
 const app = createWebApplication<AppConfig, NodeAdapter>({ config, adapter: node() })
 ```
 
-With no adapter, the application takes the engine settings alone. Start it, then hand `app.fetch` to the runtime:
+With no adapter, start the application and hand `app.fetch` to the runtime:
 
 ```ts
 import { createWebApplication } from '@caffeinejs/http'
@@ -79,6 +79,94 @@ Side-effect-import the controller file from `main.ts` so `@Controller` registers
 - `@Args` / `$p` pick body, params, query — same idea as Kafka `$k`.
 - `@Prefix` goes before the controller's path; `@Controller('/api/pets')` is the URL path, not a 404-scoped `/api` bubble.
 - Errors: throw `ErrHTTPNotFound` (etc.). Render with `@Catch(ErrType)` on an `ErrorHandler` class, then enrol it with `.errorHandling(e => e.globalHandlers(H))`; or leave it unenrolled and name it with `@CatchWith`, or use a `@Catch` method on the controller. Enrolling two handlers for the same class fails at boot. See [errors.md](errors.md).
+
+## Server capabilities and background work
+
+Every request has a stable `ctx.server`. Its `remoteAddress` reads the current peer reported by the adapter, the
+same address as `$p.address()`. Use `ctx.platform` for native request objects and Fetch runtime arguments.
+
+| Entry point                                                    | `ctx.server.remoteAddress`  | Who owns `ctx.server.waitUntil`                                                             |
+| -------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------- |
+| Node or Bun socket                                             | Socket peer, when available | The serving listener                                                                        |
+| `app.request(input, init?)` on any adapter                     | Synthetic loopback          | The local engine                                                                            |
+| Direct `app.fetch(request)` on a Node or Bun listening adapter | Synthetic loopback          | The local engine                                                                            |
+| Adapter-free `app.fetch(request, ...runtime)`                  | `undefined`                 | Absent by default. A configured `fetchWaitUntil` can supply this invocation’s host binding. |
+
+Register an already-started promise before handing off the response. Registration is allowed during `onSend`.
+A saved method called after handoff, expiry, or forced shutdown throws `ErrWaitUntilClosed`. Caffeine observes
+the supplied promise even when registration fails. Task rejections are logged with the request ID. If the response
+depends on the result, await the operation in the handler.
+
+This route skips optional telemetry when background work is unavailable. Its task captures only the request ID and
+has a one-second timeout independent of the client connection.
+
+```ts
+import { Router } from '@caffeinejs/http'
+import { Second } from '@caffeinejs/std/duration'
+
+const routes = new Router('/')
+routes.get('/ready').handler(ctx => {
+  const waitUntil = ctx.server.waitUntil
+  if (waitUntil) {
+    const task = fetch('https://telemetry.example/events', {
+      method: 'POST',
+      body: ctx.req.id,
+      signal: AbortSignal.timeout(Second),
+    }).then(async response => {
+      await response.body?.cancel()
+      if (!response.ok) throw new Error(`Telemetry returned HTTP ${response.status}`)
+    })
+    waitUntil(task)
+  }
+  return 'ready'
+})
+```
+
+The response and request-scoped dependencies finish on their normal lifecycle. Use application-owned services for
+work that can outlive the request. A disconnect can end the response stream while registered work continues.
+Graceful shutdown waits for accepted work before `onClose` and application disposal. Forced shutdown stops waiting.
+
+### Bind a Fetch host
+
+In a Cloudflare Worker with `nodejs_compat`, bootstrap the application at module scope. The default matcher can
+register the schema-free `/ready` route above during module initialization. The Worker calls
+`app.fetch(request, env, execution)` for each request. On the request’s first access to `ctx.server`, Caffeine
+calls the resolver with `[env, execution]`. Bind the method to that invocation’s execution context.
+Returning `undefined` leaves the capability absent for that request.
+
+```ts
+import { createWebApplication } from '@caffeinejs/http'
+
+const app = createWebApplication().mount(routes)
+app.server(() => ({
+  fetchWaitUntil: ([, execution]) => {
+    if (
+      typeof execution === 'object' &&
+      execution !== null &&
+      'waitUntil' in execution &&
+      typeof execution.waitUntil === 'function'
+    ) {
+      return execution.waitUntil.bind(execution)
+    }
+    return undefined
+  },
+}))
+await app.bootstrap()
+export default { fetch: app.fetch }
+```
+
+Caffeine calls the binding synchronously with a promise that fulfills after the task settles and any rejection has
+been logged. If the binding throws, `waitUntil` throws that error to its caller. If the binding returns a promise
+that rejects, Caffeine logs the host error with the request ID. In either case, shutdown stops waiting for that
+registration and Caffeine continues to observe the task. If the binding’s promise fulfills while the task is
+pending, shutdown still waits for the task. The host sets the invocation’s execution limits. [Cloudflare Workers context](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil)
+
+If you bootstrap inside the Worker’s `fetch` handler, `workerd` rejects the default matcher’s attempt to generate
+code during route registration. For request-time bootstrap, configure a matcher that can register those routes
+without generating code. A matcher supplied by an earlier `.server(() => ({ matcher }))` call stays in effect
+when you add `fetchWaitUntil` as shown above. The local integration test uses an exact-path matcher for its
+schema-free routes. It reads the entire response before releasing the registered task and observing its
+completion through a service binding. [Worker fixture](../../test/fixtures/http-wait-until/worker.mjs)
 
 ## HTTPS and HTTP/2
 

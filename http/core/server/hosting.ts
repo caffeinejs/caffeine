@@ -83,11 +83,15 @@ export type FetchAdapter = ServerAdapter<ServerSettings, undefined, never>
 
 /** The adapter an application gets when given none. */
 export const fetchAdapter: FetchAdapter = {
-  [kHosting]: settings => ({
-    settings: resolveServerSettings(settings),
-    nodeMiddleware: false,
-    serve: engine => Promise.resolve(new FetchServer(engine)),
-  }),
+  [kHosting]: settings => {
+    const resolved = resolveServerSettings(settings)
+    const { fetchWaitUntil } = settings as ServerSettings
+    return {
+      settings: resolved,
+      nodeMiddleware: false,
+      serve: engine => Promise.resolve(new FetchServer(engine, fetchWaitUntil)),
+    }
+  },
 }
 
 /** How long an adapter that listens keeps an idle connection open: 72 seconds. */
@@ -239,15 +243,23 @@ export function buildEngine(input: EngineInput): HTTPServer {
 /** One server under no adapter: no socket of its own, answering what the runtime hands `fetch`. */
 export class FetchServer implements HostedServer<undefined, never> {
   readonly #server: HTTPServer
+  readonly #platform: typeof fetchPlatform
   // Set once the teardown is over: a request() then rejects, while the runtime's fetch keeps the engine's 503.
   #closed = false
 
-  constructor(server: HTTPServer) {
+  constructor(server: HTTPServer, fetchWaitUntil?: ServerSettings['fetchWaitUntil']) {
     this.#server = server
+    this.#platform =
+      fetchWaitUntil === undefined
+        ? fetchPlatform
+        : {
+            ...fetchPlatform,
+            requestLifetime: extra => fetchWaitUntil(extra as readonly unknown[]),
+          }
   }
 
   readonly fetch = (request: Request, ...runtime: unknown[]): Response | Promise<Response> =>
-    this.#server.serve(fetchPlatform, request, runtime)
+    this.#server.serve(this.#platform, request, runtime)
 
   get address(): ServerAddress | undefined {
     return undefined

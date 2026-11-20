@@ -57,6 +57,12 @@ describe('bunListenOptions', () => {
 })
 
 describe('resolveBunServerSettings', () => {
+  it('refuses the Fetch-only host resolver', () => {
+    expect(refusal({ fetchWaitUntil: () => undefined }).split('\n')[0]).toBe(
+      'Cannot build the server: "fetchWaitUntil" is not a setting of the Bun application',
+    )
+  })
+
   it('refuses http2, pointing at the Node adapter', () => {
     const message = refusal({ http2: true })
 

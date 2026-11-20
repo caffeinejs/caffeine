@@ -222,7 +222,13 @@ export function kindOf(value: unknown): string {
     return 'null'
   }
 
-  return Array.isArray(value) ? 'an array' : `a ${typeof value}`
+  if (Array.isArray(value)) {
+    return 'an array'
+  }
+  if (typeof value === 'object') {
+    return value instanceof Promise ? 'a promise' : 'an object'
+  }
+  return `a ${typeof value}`
 }
 
 /** An `ErrConfiguration` with its solutions and reference, as the engine writes every start-up refusal. */
