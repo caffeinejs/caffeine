@@ -41,8 +41,6 @@ export interface HostedServer<I = unknown, L = unknown> extends IServer<I> {
 /** How an application hosts one server: the settings its engine runs with, and what serves the ready engine. */
 export interface ServerHosting<I = unknown, L = unknown> {
   readonly settings: ResolvedServerSettings
-  /** Whether the platform runs a Node middleware: one is refused at start-up otherwise. */
-  readonly nodeMiddleware: boolean
   /**
    * `customize` runs the `serverCallback`s on the server: the adapter awaits it as soon as its server exists, and on a
    * failure closes what it built and rethrows.
@@ -88,7 +86,6 @@ export const fetchAdapter: FetchAdapter = {
     const { fetchWaitUntil } = settings as ServerSettings
     return {
       settings: resolved,
-      nodeMiddleware: false,
       serve: engine => Promise.resolve(new FetchServer(engine, fetchWaitUntil)),
     }
   },
@@ -177,7 +174,6 @@ export interface EngineInput {
   }
   readonly basePath: string | undefined
   readonly settings: ResolvedServerSettings
-  readonly nodeMiddleware: boolean
   recordRoutes(routes: readonly RouteRecord[]): void
 }
 
@@ -232,7 +228,6 @@ export function buildEngine(input: EngineInput): HTTPServer {
     contextKey: input.contextKey,
     logger: input.context.logger,
     levels,
-    nodeMiddleware: input.nodeMiddleware,
   })
 
   input.recordRoutes(server.routes)

@@ -9,6 +9,5 @@ export type {
   MiddlewareResolvable,
   MiddlewareTarget,
   Next,
-  NodeMiddleware,
 } from './middleware.js'
 export { MiddlewarePipeline, type ResolvedMiddleware } from './pipeline.js'

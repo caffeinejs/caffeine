@@ -1,5 +1,3 @@
-import type { IncomingMessage, ServerResponse } from 'node:http'
-
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
 
 import type { IContext } from '../../context.js'
@@ -7,7 +5,7 @@ import type { HTTPSetupContext } from '../../plugin.js'
 import type { RequestHookName } from '../lifecycle/lifecycle.js'
 
 /**
- * Optional preferred hook for a Caffeine middleware, when `use()` does not pass `{ hook }`: a request hook point
+ * Optional preferred hook for a middleware, when `use()` does not pass `{ hook }`: a request hook point
  * (`RequestHookName`).
  *
  * Omit it and the middleware runs at `onRequest`. On a class, declare it as a static getter. On a function, set it as a
@@ -26,22 +24,13 @@ export const kMiddlewareHook = Symbol('@caffeinejs/http:middlewareHook')
 export type Next = (err?: Error) => void
 
 /**
- * A connect-style Node `(req, res, next)` middleware, run on the raw request and response.
- *
- * Registered under a path, it sees `req.url` with that path stripped, as connect mounts it.
- */
-export type NodeMiddleware = (req: IncomingMessage, res: ServerResponse, next: Next) => void
-
-/**
  * Builds a middleware once at start-up, from the same context a plugin factory gets: the configuration, the
  * container and the logger.
  *
  * `config` is the live handle, so `config.someSetting` reads the current tree. A later refresh does not rebuild
  * the middleware.
  */
-export type MiddlewareFactory<C = unknown> = (
-  context: HTTPSetupContext<C>,
-) => NodeMiddleware | MiddlewareFn | Middleware
+export type MiddlewareFactory<C = unknown> = (context: HTTPSetupContext<C>) => MiddlewareFn | Middleware
 
 export type MiddlewarePath = string | readonly string[]
 
@@ -94,7 +83,6 @@ export interface Middleware<V = Record<never, never>, C = Record<never, never>> 
 
 /** Anything `use()` accepts as its middleware argument. */
 export type MiddlewareTarget<C = unknown> =
-  | NodeMiddleware
   | MiddlewareFn
   | Middleware
   | InjectionToken<Middleware>
@@ -121,8 +109,8 @@ export function isMiddlewareOptions(value: unknown): value is MiddlewareOptions 
  *   a path.
  */
 export function parseUse<C>(
-  pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
-  targetOrOptions: MiddlewareTarget<C> | MiddlewareOptions | ((req: never, res: never, next: Next) => void) | undefined,
+  pathOrTarget: MiddlewarePath | MiddlewareTarget<C>,
+  targetOrOptions: MiddlewareTarget<C> | MiddlewareOptions | undefined,
   options: MiddlewareOptions | undefined,
   argCount: number,
 ): { path: MiddlewarePath | undefined; target: unknown; hook?: RequestHookName } {

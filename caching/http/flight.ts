@@ -8,7 +8,7 @@ export type FlightTable = Map<string, Flight>
  * One handler run that concurrent misses for the same key wait on.
  *
  * The leader settles it from its store hook. The timer is the settlement for a leader whose store hook never
- * runs — a hijacked reply, a handler that never returns — and bounds every follower at once: followers hold no
+ * runs — a handler that never returns — and bounds every follower at once: followers hold no
  * timer of their own. Settling is first-wins, and a flight only ever removes itself from the table, never a
  * newer flight under the same key.
  */

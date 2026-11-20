@@ -16,8 +16,6 @@ import {
   type MiddlewarePath,
   type MiddlewareResolvable,
   type MiddlewareTarget,
-  type Next,
-  type NodeMiddleware,
 } from '../middleware/middleware.js'
 import type { ServerSettings } from '../server/settings.js'
 
@@ -99,20 +97,16 @@ export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
     target: MiddlewareFn<V, Conf>,
     options?: MiddlewareOptions,
   ): this
-  use(target: NodeMiddleware, options?: MiddlewareOptions): this
-  use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
   use(target: MiddlewareResolvable, options?: MiddlewareOptions): this
   use<V = Record<never, never>, Conf = Record<never, never>>(
     path: MiddlewarePath,
     target: MiddlewareFn<V, Conf>,
     options?: MiddlewareOptions,
   ): this
-  use(path: MiddlewarePath, target: NodeMiddleware, options?: MiddlewareOptions): this
-  use(path: MiddlewarePath, target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
   use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions): this
   use(
-    pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
-    targetOrOptions?: MiddlewareTarget<C> | MiddlewareOptions | ((req: never, res: never, next: Next) => void),
+    pathOrTarget: MiddlewarePath | MiddlewareTarget<C>,
+    targetOrOptions?: MiddlewareTarget<C> | MiddlewareOptions,
     options?: MiddlewareOptions,
   ): this {
     const parsed = parseUse<C>(pathOrTarget, targetOrOptions, options, arguments.length)

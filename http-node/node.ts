@@ -31,7 +31,6 @@ export function node(): NodeAdapter {
 
       return {
         settings: engine,
-        nodeMiddleware: true,
         serve: async (server, context, customize) => {
           const platform = createNodePlatform(context.logger)
           const http = createServer((_req, res) => serveNode(server, platform, res, false))

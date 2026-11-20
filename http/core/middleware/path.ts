@@ -7,7 +7,7 @@ import type { RouterFlags } from '../matcher/matcher.js'
 import type { MiddlewarePath } from './middleware.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
-// Path matching for middleware mounted under a path. It normalizes the URL the way the router does, so a path-scoped
+// Path matching for middleware registered under a path. It normalizes the URL the way the router does, so a path-scoped
 // middleware cannot be skipped by a request the router still sends to the guarded route.
 
 /** The router flags path matching follows. */
@@ -67,45 +67,6 @@ export function normalizePath(url: string, flags: PathFlags): { path: string; er
   }
 
   return { path, error: undefined }
-}
-
-/**
- * What a Node middleware mounted at `prefix` sees as its URL: the rest of the path after the prefix, as sent where it
- * can be found in `url`, else as normalized, followed by the query.
- *
- * @param url - The URL as sent, query included.
- * @param normalized - Its path as {@link normalizePath} returned it.
- * @param match - What `prefix` matched in `normalized`.
- */
-export function mountedURL(
-  prefix: RegExp,
-  url: string,
-  normalized: string,
-  match: RegExpExecArray,
-  flags: PathFlags,
-): string {
-  const sanitized = sanitizeURL(url)
-  const suffix = url.slice(sanitized.length)
-  let rest: string
-
-  const original = prefix.exec(sanitized)
-  if (original !== null) {
-    rest = sanitized.slice(original[0].length)
-    if (flags.ignoreDuplicateSlashes) {
-      rest = removeDuplicateSlashes(rest)
-    }
-    if (flags.ignoreTrailingSlash) {
-      rest = trimLastSlash(rest)
-    }
-  } else {
-    rest = normalized.slice(match[0].length)
-  }
-
-  if (rest[0] !== '/') {
-    rest = '/' + rest
-  }
-
-  return rest + suffix
 }
 
 /**

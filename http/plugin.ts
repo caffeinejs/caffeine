@@ -9,8 +9,6 @@ import type {
   MiddlewareOptions,
   MiddlewarePath,
   MiddlewareResolvable,
-  Next,
-  NodeMiddleware,
 } from './core/middleware/middleware.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
 
@@ -50,16 +48,12 @@ export interface WebApplicationOps<C = unknown> {
     target: MiddlewareFn<V, Conf>,
     options?: MiddlewareOptions,
   ): this
-  use(target: NodeMiddleware, options?: MiddlewareOptions): this
-  use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
   use(target: MiddlewareResolvable, options?: MiddlewareOptions): this
   use<V = Record<never, never>, Conf = Record<never, never>>(
     path: MiddlewarePath,
     target: MiddlewareFn<V, Conf>,
     options?: MiddlewareOptions,
   ): this
-  use(path: MiddlewarePath, target: NodeMiddleware, options?: MiddlewareOptions): this
-  use(path: MiddlewarePath, target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
   use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions): this
 
   /** Adds a factory that builds a middleware once at start-up, as `app.useFn(...)` does, where `use` would put it. */

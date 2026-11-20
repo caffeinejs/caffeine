@@ -5,7 +5,6 @@ import type { ByteSize } from '@caffeinejs/std/bytes'
 
 import type { ServerContext } from '../../context.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
-import type { Next, NodeMiddleware } from '../middleware/middleware.js'
 import type { FetchContextPlatform } from './fetch.js'
 
 /** What `ctx.platform` is under `node()`: Node's request and response. */
@@ -22,18 +21,6 @@ export type ContextPlatform = FetchContextPlatform | NodeContextPlatform
 export interface ResponseHead {
   readonly status: number
   readonly headers: Readonly<Record<string, string | readonly string[]>>
-}
-
-/**
- * What a Node middleware finds on the request beside Node's own members, as a Node framework's middleware expects:
- * read off the context. A body, a logger and the list of forwarded addresses are not set.
- */
-export interface NodeMiddlewareStamp {
-  readonly id: string
-  readonly hostname: string
-  readonly protocol: string
-  readonly ip: string | undefined
-  readonly query: Readonly<Record<string, string | string[]>>
 }
 
 /** What the engine hands `respond`: how to say the answer has left, and how to cut it while it streams. */
@@ -104,17 +91,4 @@ export interface ServerPlatform<N, P extends ContextPlatform, R> {
    * stream. Absent on a platform that cannot: the engine then hands `respond` the stream as web bytes.
    */
   respondStream?(native: N, head: ResponseHead, stream: object, hooks: SendHooks): R
-  /**
-   * Runs a Node `(req, res, next)` middleware on the native request, with `req.url` set to `url` until it calls `next`.
-   * `answered` is called when the response closed, by the middleware or the client, without `next`; a `next` after
-   * that is ignored. Absent on a runtime with no Node request: a Node middleware is then refused at start-up.
-   */
-  runNodeMiddleware?(
-    native: N,
-    fn: NodeMiddleware,
-    url: string,
-    stamp: NodeMiddlewareStamp,
-    next: Next,
-    answered: () => void,
-  ): void
 }

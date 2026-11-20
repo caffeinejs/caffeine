@@ -24,7 +24,6 @@ import { newProblem } from '../error/problem.js'
 import type { ValidationSlot } from '../error/validation.js'
 import { isThenable, type SendPayload } from '../lifecycle/lifecycle.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
-import type { Next, NodeMiddleware } from '../middleware/middleware.js'
 import { normalizePath, sanitizeURL } from '../middleware/path.js'
 import type { AuthenticationState } from '../security/auth/authentication_state.js'
 import type { Principal } from '../security/identity.js'
@@ -149,7 +148,6 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   #connectionFields = false
   /** While `onSend` runs: the status and headers may still be written. */
   #sending = false
-  #outside = false
 
   #signal?: AbortController
   #abortReason?: Error
@@ -541,46 +539,6 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     }
   }
 
-  /** Sets what `req.url` reads while a middleware mounted under a path runs; `undefined` restores the request's own. */
-  mount(url: string | undefined): void {
-    this.req.mount(url)
-  }
-
-  /** Runs a Node middleware through the platform. See {@link ServerPlatform.runNodeMiddleware}. */
-  runNodeMiddleware(fn: NodeMiddleware, url: string, next: Next, answered: () => void): void {
-    const req = this.req
-
-    this.#platform.runNodeMiddleware!(
-      this.#native,
-      fn,
-      url,
-      {
-        id: req.id,
-        hostname: req.host,
-        protocol: req.protocol,
-        ip: this.remoteAddress,
-        query: req.query() as Record<string, string | string[]>,
-      },
-      next,
-      () => {
-        this.answeredOutside()
-        answered()
-      },
-    )
-  }
-
-  /** A Node middleware ended the response itself: the request is answered, and the engine sends nothing. */
-  answeredOutside(): void {
-    this.#outside = true
-    this.#responded = true
-    this.#markAnswered()
-  }
-
-  /** Whether a Node middleware ended the response itself. */
-  get outside(): boolean {
-    return this.#outside
-  }
-
   /** Calls `callback` once the request is answered, at once if it already is. */
   onAnswered(callback: () => void): void {
     if (this.#answered) {
@@ -629,8 +587,6 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   #markAnswered(): void {
     this.#answered = true
-    // An answer ends a mounted middleware's view: what runs after it sees the request's own URL.
-    this.#req?.mount(undefined)
     const callback = this.#onAnswered
     this.#onAnswered = undefined
     callback?.()
@@ -748,7 +704,6 @@ export class ContextRequest implements IRequest<
   #requestID?: string
   #trusted?: boolean
   #raw?: Request
-  #mounted?: string
   #body?: unknown
   #validatedParams?: Record<string, string>
   /** The headers validation produced, by lower-case name: read in place of the platform's once set. */
@@ -869,14 +824,8 @@ export class ContextRequest implements IRequest<
     return this.#requestID
   }
 
-  /** The URL as routed; while a middleware mounted under a path runs, the rest of it, as that middleware is mounted. */
   get url(): string {
-    return this.#mounted ?? this.#url
-  }
-
-  /** See {@link Context.mount}. */
-  mount(url: string | undefined): void {
-    this.#mounted = url
+    return this.#url
   }
 
   get basePath(): string {

@@ -84,7 +84,7 @@ describe('composeRouteHooks', () => {
     await a.request('/a/r/jobs')
     await a.request('/b/r/jobs')
 
-    // Once per request, each seeing the rest of its URL under the mount: `/`.
-    expect(trace).toEqual(['/', '/'])
+    // Once per request under each parent, reading the request's whole URL.
+    expect(trace).toEqual(['/a/r/jobs', '/b/r/jobs'])
   })
 })

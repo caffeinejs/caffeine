@@ -703,8 +703,6 @@ Hooks:
 - `app.hook(name, fn)` adds one to the application's own server, `l.hook(...)` to a listener's, and `context.app.hook(...)`
   to a plugin's slot. The names are `onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`, `onRoute`, `onReady`
   and `onClose`. A request hook has no path and no `next`: it answers with `ctx.body(...)` and fails by throwing.
-- `app.use(fn)` also takes a Node `(req, res, next)` middleware, under `node()` only: any other adapter refuses one at
-  start-up.
 - Plugin hooks run in the order the plugins are installed, and all of them run before the middleware chain. Headers
   that must reach a 401 the gate answers go in an `onRequest` hook of a plugin installed before `authentication()`:
   `examples/04-spa-dashboard/api/spa/security.ts` writes `helmet`'s headers that way: it checks that

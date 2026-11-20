@@ -39,10 +39,9 @@ export interface LevelInput {
  * Compiles one level once: each batch's request hooks in batch order, then, per point, one chain of the level's
  * middleware registered at that point.
  *
- * @throws ErrConfiguration for a middleware at a point that is not a request hook, and for a Node middleware when the
- *   runtime has none.
+ * @throws ErrConfiguration for a middleware at a point that is not a request hook.
  */
-export function compileLevel(level: LevelInput, settings: ResolvedServerSettings, nodeMiddleware: boolean): StoreHooks {
+export function compileLevel(level: LevelInput, settings: ResolvedServerSettings): StoreHooks {
   const hooks = empty()
 
   for (const batch of level.batches) {
@@ -65,13 +64,7 @@ export function compileLevel(level: LevelInput, settings: ResolvedServerSettings
   }
 
   for (const point of REQUEST_HOOK_NAMES) {
-    const chain = compileChain<Context>(
-      byPoint.get(point) ?? [],
-      point,
-      settings.router,
-      nodeMiddleware,
-      settings.application,
-    )
+    const chain = compileChain<Context>(byPoint.get(point) ?? [], point)
 
     if (chain !== undefined) {
       // A chain at a later point ignores the payload or the error, and keeps the payload.

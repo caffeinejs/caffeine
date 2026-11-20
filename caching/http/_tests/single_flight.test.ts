@@ -2,7 +2,7 @@ import { connect } from 'node:net'
 import { gzipSync } from 'node:zlib'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Get, Head, Header, type NodeMiddleware, Router, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get, Head, Header, Router, createWebApplication } from '@caffeinejs/http'
 import { node } from '@caffeinejs/http-node'
 import { type Duration, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -20,13 +20,6 @@ import {
   type HTTPCacheStore,
 } from '../index.js'
 import { WatchedStore, counter, gate, turn, whenAborted } from './_latch.js'
-
-// What a reply ended outside the server looks like on the engine: a Node middleware after the cache's `onRequest` ends
-// the response itself, and no `onSend` runs. All three parameters are declared: a shorter function is taken for a
-// `(ctx, next)` middleware.
-const hijack: NodeMiddleware = (_req, res, _next) => {
-  res.end('raw')
-}
 
 class Recording {
   readonly hits: CacheHitEvent[] = []
@@ -651,8 +644,8 @@ describe('a HEAD and the flight', () => {
 })
 
 /**
- * A leader reports back from its store hook. When that hook never runs — a reply ended outside the server, a handler
- * that never returns — `lockTimeout` alone releases the requests waiting on its run.
+ * A leader reports back from its store hook. When that hook never runs — a handler that never returns, or one slower
+ * than `lockTimeout` — `lockTimeout` alone releases the requests waiting on its run.
  */
 describe('a handler run its leader does not report back on in time', () => {
   let close: (() => Promise<unknown>) | undefined
@@ -665,7 +658,6 @@ describe('a handler run its leader does not report back on in time', () => {
 
   async function start(options: {
     lockTimeout: Duration
-    hijack?: boolean
     handler?: (ctx: { signal: AbortSignal }) => Promise<unknown>
   }) {
     const store = new WatchedStore()
@@ -688,22 +680,30 @@ describe('a handler run its leader does not report back on in time', () => {
         }),
       )
       .mount(router)
-    if (options.hijack) {
-      app.use('/data', hijack, { hook: 'preHandler' })
-    }
     close = () => app.close()
     await app.bootstrap()
 
     return { app, store, recording }
   }
 
-  // No hook runs after a reply is ended outside the server, so nothing but lockTimeout releases the requests waiting
-  // on the run.
-  it('releases the requests waiting on a leader that hijacked its reply at lockTimeout, and no sooner', async () => {
-    const { app, store, recording } = await start({ lockTimeout: 50 * Millisecond, hijack: true })
+  // A leader held past lockTimeout has not run its store hook: lockTimeout alone releases the requests behind it.
+  it('releases the requests waiting on a held leader at lockTimeout, and no sooner', async () => {
+    const g = gate()
+    let calls = 0
+    const { app, store, recording } = await start({
+      lockTimeout: 50 * Millisecond,
+      handler: async () => {
+        calls++
+        if (calls === 1) {
+          await g.hold()
+        }
+        return { arrival: calls }
+      },
+    })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    expect(await (await app.request('/data')).text()).toBe('raw')
+    const leader = app.request('/data')
+    await g.seen
     let answered = false
     const follower = app.request('/data').then(res => {
       answered = true
@@ -716,12 +716,11 @@ describe('a handler run its leader does not report back on in time', () => {
     expect(answered).toBe(false)
 
     await vi.advanceTimersByTimeAsync(1)
-    expect(await (await follower).text()).toBe('raw')
+    expect(await (await follower).json()).toEqual({ arrival: 2 })
     expect(recording.reasons()).toEqual(['absent', 'not-coalesced'])
 
-    // The run is over for good: a request arriving now finds nothing to wait on, and leads.
-    await app.request('/data')
-    expect(recording.reasons()).toEqual(['absent', 'not-coalesced', 'absent'])
+    g.open()
+    await leader
   })
 
   it('still stores what a leader produces after lockTimeout released the requests behind it', async () => {
@@ -834,12 +833,7 @@ describe('a follower whose request is over', () => {
     close = undefined
   })
 
-  async function start(options: {
-    lockTimeout: Duration
-    handlerTimeout?: Duration
-    hijack?: boolean
-    handler?: () => Promise<unknown>
-  }) {
+  async function start(options: { lockTimeout: Duration; handler?: () => Promise<unknown> }) {
     const store = new WatchedStore()
     const recording = new Recording()
     const router = new Router('')
@@ -849,7 +843,6 @@ describe('a follower whose request is over', () => {
       .handler(() => (options.handler === undefined ? { ok: true } : options.handler()))
 
     const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => (options.handlerTimeout === undefined ? {} : { handlerTimeout: options.handlerTimeout }))
       .with(() =>
         cachePlugin({
           store,
@@ -861,9 +854,6 @@ describe('a follower whose request is over', () => {
         }),
       )
       .mount(router)
-    if (options.hijack) {
-      app.use('/data', hijack, { hook: 'preHandler' })
-    }
     close = () => app.close()
     await app.bootstrap()
 
@@ -972,32 +962,6 @@ describe('a follower whose request is over', () => {
     expect(errors).toEqual([])
     expect(recording.reasons()).toEqual(['absent'])
     expect(recording.hits).toEqual([])
-  })
-
-  // The server answers the follower 503 at its handler timeout. The follower's wait ends there: when the flight
-  // settles later it is not there to re-read the store, nor to report a miss on a reply already sent.
-  it('stops waiting at the handler timeout, and is not heard from when the flight settles', async () => {
-    const { app, store, recording } = await start({
-      lockTimeout: 200 * Millisecond,
-      handlerTimeout: 40 * Millisecond,
-      hijack: true,
-    })
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-
-    // The leader's reply is ended outside the server, which clears its own timeout and settles its flight only at
-    // lockTimeout.
-    const leader = await app.request('/data')
-    expect(await leader.text()).toBe('raw')
-
-    const follower = app.request('/data')
-    await store.reads.reached(2)
-    await turn()
-    await vi.advanceTimersByTimeAsync(40)
-    expect((await follower).status).toBe(503)
-
-    await vi.advanceTimersByTimeAsync(160)
-    expect(store.reads.count).toBe(2)
-    expect(recording.reasons()).toEqual(['absent'])
   })
 })
 

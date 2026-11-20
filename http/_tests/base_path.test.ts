@@ -1,5 +1,3 @@
-import type { IncomingMessage } from 'node:http'
-
 import { ErrApplicationStarted, newConfiguration } from '@caffeinejs/application'
 import type { InferConfig } from '@caffeinejs/application/config'
 import { $t } from '@caffeinejs/application/schema'
@@ -14,7 +12,6 @@ import {
   HTTPPlugin,
   Router,
   type HTTPSetupContext,
-  type NodeMiddleware,
   type WebApplication,
 } from '../index.js'
 import { node } from '../platform/node.testkit.js'
@@ -382,31 +379,7 @@ describe('an application under a base path', () => {
   })
 
   describe('what the application declared stays relative to it', () => {
-    it('runs a path middleware for its path under the base, with the full URL still on the request', async () => {
-      const seen: Array<{ url: string | undefined; originalUrl: string | undefined }> = []
-
-      app = createWebApplication({ adapter: node() })
-        .basePath('/api')
-        .mount(echo('/admin/x'), echo('/other')) as WebApplication
-      app.use('/admin', ((req, _res, next) => {
-        seen.push({ url: req.url, originalUrl: (req as IncomingMessage & { originalUrl?: string }).originalUrl })
-        next()
-      }) as NodeMiddleware)
-      await app.bootstrap()
-
-      // The handler reads the full URL after the middleware ran over the request: it must not have been replaced
-      // by the path the base was taken off.
-      expect(await get(app, '/api/admin/x')).toMatchObject({
-        status: 200,
-        body: { url: '/admin/x', originalUrl: '/api/admin/x' },
-      })
-      expect(seen).toEqual([{ url: '/x', originalUrl: '/api/admin/x' }])
-
-      await get(app, '/api/other')
-      expect(seen).toHaveLength(1)
-    })
-
-    it('runs a Caffeine middleware registered under a path for that path under the base', async () => {
+    it('runs a middleware registered under a path for that path under the base', async () => {
       const seen: Array<{ basePath: string; url: string }> = []
 
       app = createWebApplication({ adapter: node() })
@@ -418,11 +391,11 @@ describe('an application under a base path', () => {
       })
       await app.bootstrap()
 
-      await get(app, '/api/admin/x')
+      expect(await get(app, '/api/admin/x')).toMatchObject({ status: 200, body: { url: '/admin/x' } })
       await get(app, '/api/other')
 
-      // Mounted under `/admin`, it sees that taken off as well, the same as a Node middleware does.
-      expect(seen).toEqual([{ basePath: '/api', url: '/x' }])
+      // Under `/admin`, it reads the URL the application routes: the base path alone is taken off.
+      expect(seen).toEqual([{ basePath: '/api', url: '/admin/x' }])
     })
 
     it('still refuses a route that takes a probe path, both being relative to the application', async () => {

@@ -100,16 +100,19 @@ class RequestContext {
 }
 ```
 
-To start a new request context, run code through
-`container.requestScopeManager.run()`:
+`@caffeinejs/http` opens one around every request it serves. Anywhere else, run
+code through `container.requestScopeManager.run()` to start a new request
+context, here around each request of a plain Node server:
 
 ```ts
-app.use((req, res, next) => {
+import { createServer } from 'node:http'
+
+createServer((req, res) => {
   void container.requestScopeManager.run(
     () =>
       new Promise<void>(resolve => {
         res.once('close', () => resolve())
-        next()
+        handle(req, res)
       }),
   )
 })
@@ -119,7 +122,7 @@ Any code running within that callback — regardless of how deeply nested — wi
 resolve the same `RequestContext` instance.
 
 The scope ends when the callback settles, which is why the callback waits for the
-response to close rather than returning as soon as `next()` hands control on. See
+response to close rather than returning as soon as `handle` does. See
 [request scope manager](./request-scope-manager.md) for the full contract.
 
 ---

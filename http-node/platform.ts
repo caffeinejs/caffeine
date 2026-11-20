@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'node:events'
-import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from 'node:http'
+import type { IncomingMessage, OutgoingHttpHeaders } from 'node:http'
 import { Http2ServerResponse, type Http2ServerRequest } from 'node:http2'
 import { Socket } from 'node:net'
 import { pipeline, Readable } from 'node:stream'
@@ -10,19 +10,15 @@ import type { Logger } from '@caffeinejs/application/logger'
 import {
   ErrHTTPBadRequest,
   ErrHTTPServiceUnavailable,
-  ErrNextCalledTwice,
   ErrRequestBodyConsumed,
   ErrRequestBodyDiscarded,
-  type Next,
   type NodeContextPlatform,
-  type NodeMiddleware,
 } from '@caffeinejs/http'
 import {
   contentTooLarge,
   declaredOver,
   type HTTPServer,
   isThenable,
-  type NodeMiddlewareStamp,
   type SendHooks,
   type ServerPlatform,
 } from '@caffeinejs/http/platform'
@@ -103,7 +99,6 @@ export function createNodePlatform(logger: Logger): NodePlatform {
       writeHead(res, head.status, head.headers as OutgoingHttpHeaders)
       pipeTo(res, stream as NodeJS.ReadableStream, hooks, logger)
     },
-    runNodeMiddleware,
   }
 
   return platform
@@ -130,87 +125,6 @@ function pipeTo(res: NodeResponse, source: NodeJS.ReadableStream, hooks: SendHoo
 }
 
 /**
- * Runs a Node middleware on the request with `url` as `req.url`, stamped with what a Node framework's middleware reads.
- * The end is told as `signalOf` tells it, by `close`: `finish` is not reported for an in-process response before it
- * closes, and is reported for an HTTP/2 stream the client cancelled.
- */
-function runNodeMiddleware(
-  res: NodeResponse,
-  fn: NodeMiddleware,
-  url: string,
-  stamp: NodeMiddlewareStamp,
-  next: Next,
-  answered: () => void,
-): void {
-  const req = res.req as IncomingMessage & Record<string, unknown>
-  const own = req.url
-
-  // Kept when already set: the first middleware saw the URL as received.
-  req.originalUrl ??= own
-  req.id = stamp.id
-  req.hostname = stamp.hostname
-  req.protocol = stamp.protocol
-  req.ip = stamp.ip
-  req.query = stamp.query
-
-  // The answer has already left, as at `onResponse`: nothing the middleware does can answer the request. It runs, and
-  // the chain goes on once it returns, whatever it does with its own `next`.
-  if (res.writableEnded || destroyed(res)) {
-    req.url = url
-    try {
-      fn(req, res as ServerResponse, () => undefined)
-    } finally {
-      req.url = own
-    }
-    next()
-    return
-  }
-
-  let called = false
-  let ended = false
-
-  const onClose = (): void => {
-    if (!called) {
-      ended = true
-      answered()
-    }
-  }
-
-  // The middleware is done with the request: its URL back, and its end no longer the middleware's answer.
-  const release = (): void => {
-    called = true
-    req.url = own
-    ;(res as EventEmitter).off('close', onClose)
-  }
-
-  onceClose(res, onClose)
-  req.url = url
-
-  try {
-    fn(req, res as ServerResponse, err => {
-      if (called) {
-        throw new ErrNextCalledTwice()
-      }
-
-      release()
-
-      // An answer the middleware wrote stands, whatever it then hands on: the rest of the chain must not run over it.
-      if (!ended && (res.writableEnded || destroyed(res))) {
-        ended = true
-        answered()
-      } else if (!ended) {
-        next(err)
-      }
-    })
-  } catch (err) {
-    if (!called) {
-      release()
-    }
-    throw err
-  }
-}
-
-/**
  * Serves one Node request on `engine`. A failure that escapes the engine, which logged it, is answered 500 while the
  * head has not gone out; otherwise, and for a request a forced close cut, the response is destroyed.
  */
@@ -223,8 +137,8 @@ export function serveNode(
   let answer: void | Promise<void>
 
   // A body nobody reads to its end would stay on a kept-alive connection: closed until the body has been read whole, or
-  // until an answer the engine sends drops what is left ({@link keepWhileRead}). A Node middleware answering, or a
-  // failure no answer follows, leaves it closed.
+  // until an answer the engine sends drops what is left ({@link keepWhileRead}). A failure no answer follows leaves it
+  // closed.
   if (declaresBody(res.req)) {
     if (res instanceof Http2ServerResponse) {
       bodies.set(res, {})

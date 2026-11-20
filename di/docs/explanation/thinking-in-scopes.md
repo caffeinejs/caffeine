@@ -90,15 +90,19 @@ context storage. Two concurrent requests each get their own instance of a
 request-scoped binding, even though they resolve the same key. Under Node each
 container has an `AsyncLocalStorage` of its own as that storage; off Node,
 register a factory with `bindContextStorageFactory()` before constructing the
-container. Open a scope around each request:
+container. `@caffeinejs/http` opens a scope around every request it serves;
+anywhere else, open one around each request yourself, here on a plain Node
+server:
 
 ```ts
-app.use((req, res, next) => {
+import { createServer } from 'node:http'
+
+createServer((req, res) => {
   void container.requestScopeManager.run(
     () =>
       new Promise<void>(resolve => {
         res.once('close', () => resolve())
-        next()
+        handle(req, res)
       }),
   )
 })
@@ -109,8 +113,8 @@ calls — resolves the same request-scoped instances. Outside that callback,
 request-scoped resolution throws.
 
 The callback is what decides how long the scope lives, so it has to stay pending
-until the request really is over. `next()` returns as soon as the framework hits an
-await, and a response that is still streaming resolves long after that.
+until the request really is over. `handle` returns as soon as it hits an await,
+and a response that is still streaming resolves long after that.
 
 ---
 

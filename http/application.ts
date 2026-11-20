@@ -23,8 +23,6 @@ import {
   type MiddlewarePath,
   type MiddlewareResolvable,
   type MiddlewareTarget,
-  type Next,
-  type NodeMiddleware,
 } from './core/middleware/index.js'
 import { parseUse } from './core/middleware/middleware.js'
 import { ControllerRouteSource } from './core/routing/decorated.js'
@@ -246,15 +244,13 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * Adds a middleware to the request pipeline. Order matters, and it is the order these calls are written
    * in — within a hook.
    *
-   * The first argument may be a path (`string` or `string[]`); `'*'` means every request. The middleware may
-   * be a Node `(req, res, next)` function, a Caffeine `(ctx, next)` function, an instance, a class, or a
-   * container key.
+   * The first argument may be a path (`string` or `string[]`); `'*'` means every request. The path only decides
+   * whether the middleware runs: `ctx.req.url` reads the same as anywhere else in the request. The middleware may
+   * be a `(ctx, next)` function, an instance, a class, or a container key.
    *
    * `{ hook }` is a request hook point (`onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`); `onRequest` by
-   * default. A
-   * Caffeine middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call
-   * overrides that hint. Answer the request with `ctx.body()` and do not call `next`. A Node `(req, res, next)`
-   * middleware runs under `node()`; any other adapter, which has no Node request, refuses one at start-up.
+   * default. A middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call overrides
+   * that hint. Answer the request with `ctx.body()` and do not call `next`.
    *
    * ```ts
    * app.use(RequestLogger)
@@ -271,20 +267,16 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
     target: MiddlewareFn<V, Conf>,
     options?: MiddlewareOptions,
   ): this
-  use(target: NodeMiddleware, options?: MiddlewareOptions): this
-  use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
   use(target: MiddlewareResolvable, options?: MiddlewareOptions): this
   use<V = Record<never, never>, Conf = Record<never, never>>(
     path: MiddlewarePath,
     target: MiddlewareFn<V, Conf>,
     options?: MiddlewareOptions,
   ): this
-  use(path: MiddlewarePath, target: NodeMiddleware, options?: MiddlewareOptions): this
-  use(path: MiddlewarePath, target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
   use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions): this
   use(
-    pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
-    targetOrOptions?: MiddlewareTarget<C> | MiddlewareOptions | ((req: never, res: never, next: Next) => void),
+    pathOrTarget: MiddlewarePath | MiddlewareTarget<C>,
+    targetOrOptions?: MiddlewareTarget<C> | MiddlewareOptions,
     options?: MiddlewareOptions,
   ): this {
     const parsed = parseUse<C>(pathOrTarget, targetOrOptions, options, arguments.length)
@@ -295,9 +287,8 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
   /**
    * Adds a factory that builds middleware once at start-up from the configuration, container and logger.
    *
-   * This is separate from {@link use} because both a factory and a Caffeine middleware are functions. The distinct
-   * method keeps the factory's setup context inferred without weakening inference for `use`'s Caffeine and Node
-   * middleware signatures.
+   * This is separate from {@link use} because both a factory and a middleware are functions. The distinct
+   * method keeps the factory's setup context inferred without weakening inference for `use`'s middleware signatures.
    *
    * ```ts
    * app.useFn('*', ({ config }) => rateLimit(config.limits))
@@ -715,7 +706,7 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
  * ```
  *
  * Under no adapter it has no socket of its own: hand `app.fetch` to the runtime once it is ready, as
- * `export default { fetch: app.fetch }`. What it cannot serve, such as a Node middleware, is refused at start-up.
+ * `export default { fetch: app.fetch }`. A setting only a listening adapter takes is refused at start-up.
  *
  * The adapter's type is inferred from `adapter`. Naming `TConfig` alone turns that inference off, as naming any type
  * argument does: the application then takes any adapter's settings and types `app.instance` as `unknown`. Name the

@@ -4,19 +4,16 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import type { RequestHookName } from '../lifecycle/lifecycle.js'
-import { ErrNextCalledTwice, ErrPipelineSealed } from './errors.js'
+import { ErrPipelineSealed } from './errors.js'
 import {
   type Middleware,
   type MiddlewareFactory,
   type MiddlewareFn,
   type MiddlewarePath,
-  type Next,
-  type NodeMiddleware,
   isMiddlewareClass,
   isMiddlewareInstance,
   kMiddlewareHook,
 } from './middleware.js'
-import { rawContext } from './raw_context.js'
 
 interface Entry {
   readonly path: MiddlewarePath | undefined
@@ -25,15 +22,9 @@ interface Entry {
   readonly factory: boolean
 }
 
-/** A middleware in both forms: Node's, which the Node platform runs, and the context form the engine runs. */
-interface Forms {
-  readonly fn: NodeMiddleware
-  readonly handle: MiddlewareFn | undefined
-}
+type Resolved = { readonly handle: MiddlewareFn; readonly hint: unknown }
 
-type Resolved = Forms & { readonly hint: unknown }
-
-/** One middleware as the engine installs it: resolved, adapted to the Node signature, and placed. */
+/** One middleware as the engine installs it: resolved, and placed. */
 export interface ResolvedMiddleware {
   /** Where it applies, or `undefined` for every request. */
   readonly path: MiddlewarePath | undefined
@@ -42,9 +33,7 @@ export interface ResolvedMiddleware {
    * default, `onRequest`. The engine refuses a hint that is not a request hook point.
    */
   readonly hook: string | undefined
-  readonly fn: NodeMiddleware
-  /** The context form, `(ctx, next)`; `undefined` for a Node `(req, res, next)` middleware, which `fn` is as written. */
-  readonly handle: MiddlewareFn | undefined
+  readonly handle: MiddlewareFn
 }
 
 /**
@@ -87,7 +76,7 @@ export class MiddlewarePipeline {
       const resolved = resolve(entry.target, context, entry.factory)
       const hook = entry.hook ?? (resolved.hint === undefined ? undefined : String(resolved.hint))
 
-      return { path: entry.path, hook, fn: resolved.fn, handle: resolved.handle }
+      return { path: entry.path, hook, handle: resolved.handle }
     })
   }
 }
@@ -95,18 +84,15 @@ export class MiddlewarePipeline {
 function resolve(target: unknown, context: HTTPSetupContext, factory: boolean): Resolved {
   if (factory) {
     const produced = (target as MiddlewareFactory)(context)
-    return { ...fromFactory(produced), hint: hintOn(target as object) }
+    return { handle: fromFactory(produced), hint: hintOn(target as object) }
   }
 
   if (isMiddlewareInstance(target)) {
-    return { ...caffeine((ctx, next) => target.handle(ctx, next)), hint: hintOn(target.constructor) }
+    return { handle: (ctx, next) => target.handle(ctx, next), hint: hintOn(target.constructor) }
   }
 
   if (typeof target === 'function' && !isMiddlewareClass(target)) {
-    if (target.length >= 3) {
-      return { fn: target as NodeMiddleware, handle: undefined, hint: undefined }
-    }
-    return { ...caffeine(target as MiddlewareFn), hint: hintOn(target) }
+    return { handle: target as MiddlewareFn, hint: hintOn(target) }
   }
 
   const container = context.container
@@ -115,24 +101,22 @@ function resolve(target: unknown, context: HTTPSetupContext, factory: boolean): 
   if (container.hasScopeInGraph(key, Scopes.REQUEST)) {
     const provider = container.wrap<Middleware>(key)
     return {
-      ...caffeine((ctx, next) => provider.get().handle(ctx, next)),
+      handle: (ctx, next) => provider.get().handle(ctx, next),
       hint: typeof key === 'function' ? hintOn(key) : undefined,
     }
   }
 
   const instance = container.get<Middleware>(key)
-  return { ...caffeine((ctx, next) => instance.handle(ctx, next)), hint: hintOn(instance.constructor) }
+  return { handle: (ctx, next) => instance.handle(ctx, next), hint: hintOn(instance.constructor) }
 }
 
-function fromFactory(produced: unknown): Forms {
+function fromFactory(produced: unknown): MiddlewareFn {
   if (isMiddlewareInstance(produced)) {
-    return caffeine((ctx, next) => produced.handle(ctx, next))
+    return (ctx, next) => produced.handle(ctx, next)
   }
 
   if (typeof produced === 'function' && !isMiddlewareClass(produced)) {
-    return produced.length >= 3
-      ? { fn: produced as NodeMiddleware, handle: undefined }
-      : caffeine(produced as MiddlewareFn)
+    return produced as MiddlewareFn
   }
 
   throw new ErrConfiguration(
@@ -142,51 +126,6 @@ function fromFactory(produced: unknown): Forms {
   )
 }
 
-/** A context-form middleware with its Node form. */
-function caffeine(handle: MiddlewareFn): Forms {
-  return { fn: adaptCaffeine(handle), handle }
-}
-
 function hintOn(holder: object): unknown {
   return (holder as { [kMiddlewareHook]?: unknown })[kMiddlewareHook]
-}
-
-function adaptCaffeine(handle: MiddlewareFn): NodeMiddleware {
-  return (req, _res, next) => {
-    const ctx = rawContext(req)
-    if (ctx == null) {
-      next()
-      return
-    }
-
-    let called = false
-    const wrapped: Next = err => {
-      if (called) {
-        throw new ErrNextCalledTwice()
-      }
-      called = true
-      next(err)
-    }
-
-    try {
-      const result: unknown = handle(ctx, wrapped)
-      if (!called && isThenable(result)) {
-        result.then(undefined, (err: unknown) => {
-          if (!called) {
-            wrapped(err as Error)
-          }
-        })
-      }
-    } catch (err) {
-      if (!called) {
-        next(err as Error)
-      } else {
-        throw err
-      }
-    }
-  }
-}
-
-function isThenable(value: unknown): value is PromiseLike<unknown> {
-  return typeof (value as PromiseLike<unknown> | undefined)?.then === 'function'
 }

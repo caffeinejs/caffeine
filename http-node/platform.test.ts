@@ -1,6 +1,5 @@
 import assert from 'node:assert'
 import { once } from 'node:events'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import { connect as http2Connect, constants as http2Constants } from 'node:http2'
 import { connect as netConnect, type Socket } from 'node:net'
 import { Readable } from 'node:stream'
@@ -20,7 +19,6 @@ import {
   type ErrorHandler,
   Get,
   type IContext,
-  type Next,
   Router,
   type WebApplication,
 } from '@caffeinejs/http'
@@ -727,7 +725,7 @@ describe('the Node platform', () => {
   })
 })
 
-describe('Node middleware', () => {
+describe('hooks on Node', () => {
   async function run(app: {
     run(options: { host: string; port: number }): Promise<{ address: { origin: string } }>
     close(): Promise<void>
@@ -743,85 +741,12 @@ describe('Node middleware', () => {
     return { promise, release }
   }
 
-  // Mounted under a path, a Node middleware sees the rest of the URL, as connect mounts it; the request gets its own
-  // URL back once it calls next.
-  it('hands a mounted middleware the rest of the URL and gives it back', async () => {
-    const seen: string[] = []
+  it('keeps the headers an onRequest hook set on the Node response', async () => {
     const origin = await run(
       createWebApplication({ adapter: node() })
-        .use('/admin', (req: IncomingMessage, _res: ServerResponse, next: Next) => {
-          seen.push(req.url!)
-          next()
-        })
-        .mount(
-          new Router('/admin').get('/users', ctx => {
-            assert(ctx.platform.name === 'node')
-            return ctx.platform.incoming.url ?? ''
-          }),
-        ),
-    )
-
-    const res = await fetch(`${origin}/admin/users?page=2`)
-
-    expect(seen).toEqual(['/users?page=2'])
-    expect(await res.text()).toBe('/admin/users?page=2')
-  })
-
-  // A middleware that answers on the response itself ends the request: nothing more is written, no onSend runs over
-  // what it sent, and onResponse still sees the request end.
-  it('answers the request when a middleware ends the response itself', async () => {
-    const onSend = vi.fn()
-    const ended = latch()
-    const origin = await run(
-      createWebApplication({ adapter: node() })
-        .use((_req: IncomingMessage, res: ServerResponse, _next: Next) => {
-          res.statusCode = 401
-          res.end('no')
-        })
-        .hook('onSend', onSend)
-        .hook('onResponse', () => ended.release())
-        .mount(new Router('/x').get('/', () => 'handler')),
-    )
-
-    const res = await fetch(`${origin}/x`)
-
-    expect(res.status).toBe(401)
-    expect(await res.text()).toBe('no')
-    await ended.promise
-    expect(onSend).toHaveBeenCalledTimes(0)
-  })
-
-  // An answer the middleware wrote stands even when it calls next anyway: the handler behind it must not run.
-  it('runs no handler after a middleware ended the response and called next', async () => {
-    let handled = 0
-    const origin = await run(
-      createWebApplication({ adapter: node() })
-        .use((_req: IncomingMessage, res: ServerResponse, next: Next) => {
-          res.statusCode = 401
-          res.end('no')
-          next()
-        })
-        .mount(
-          new Router('/x').get('/', () => {
-            handled += 1
-            return 'handler'
-          }),
-        ),
-    )
-
-    const res = await fetch(`${origin}/x`)
-
-    expect(res.status).toBe(401)
-    expect(await res.text()).toBe('no')
-    expect(handled).toBe(0)
-  })
-
-  it('keeps the headers a middleware set on the response', async () => {
-    const origin = await run(
-      createWebApplication({ adapter: node() })
-        .use((_req: IncomingMessage, res: ServerResponse, next: Next) => {
-          res.setHeader('x-frame-options', 'DENY')
-          next()
+        .hook('onRequest', ctx => {
+          assert(ctx.platform.name === 'node')
+          ctx.platform.outgoing.setHeader('x-frame-options', 'DENY')
         })
         .mount(new Router('/x').get('/', () => 'x')),
     )
@@ -830,64 +755,6 @@ describe('Node middleware', () => {
 
     expect(res.headers.get('x-frame-options')).toBe('DENY')
     expect(await res.text()).toBe('x')
-  })
-
-  // A client that leaves while a middleware waits must not keep the request in flight: close() would never drain.
-  it('settles the request when the client leaves during a middleware', async () => {
-    const entered = latch()
-    const app = createWebApplication({ adapter: node() })
-      .use((_req: IncomingMessage, _res: ServerResponse, _next: Next) => entered.release())
-      .mount(new Router('/x').get('/', () => 'x'))
-    const origin = await run(app)
-    const controller = new AbortController()
-
-    const pending = fetch(`${origin}/x`, { signal: controller.signal }).catch(() => undefined)
-    await entered.promise
-    controller.abort()
-    await pending
-
-    await expect(app.close()).resolves.toBe(undefined)
-  })
-
-  // At onResponse the answer has left, a streamed one included: a Node middleware there still runs, as a logger would.
-  it('runs a Node middleware at onResponse after a streamed answer', async () => {
-    const ran = latch()
-    const origin = await run(
-      createWebApplication({ adapter: node() })
-        .use(
-          (_req: IncomingMessage, res: ServerResponse, next: Next) => {
-            ran.release()
-            next()
-            void res
-          },
-          { hook: 'onResponse' },
-        )
-        .mount(new Router('/x').get('/', () => Readable.toWeb(Readable.from(['a'])))),
-    )
-
-    expect(await (await fetch(`${origin}/x`)).text()).toBe('a')
-    await ran.promise
-  })
-
-  // A Node middleware that throws hands the request its URL back, as one that calls next does.
-  it('gives the request its URL back when a mounted Node middleware throws', async () => {
-    const seen = latch()
-    let url: string | undefined
-    const origin = await run(
-      createWebApplication({ adapter: node() })
-        .use('/admin', (_req: IncomingMessage, _res: ServerResponse, _next: Next) => {
-          throw new Error('boom')
-        })
-        .hook('onResponse', ctx => {
-          url = (ctx.platform as { incoming: IncomingMessage }).incoming.url
-          seen.release()
-        })
-        .mount(new Router('/admin').get('/users', () => 'users')),
-    )
-
-    expect((await fetch(`${origin}/admin/users`)).status).toBe(500)
-    await seen.promise
-    expect(url).toBe('/admin/users')
   })
 
   // A streamed answer ends in a `close` event, outside the request's own continuation: onResponse is run inside it.
@@ -933,6 +800,25 @@ describe('the request body on Node', () => {
 
   const text = (body: string, extra = '') =>
     `POST /b/echo HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\n${extra}Content-Length: ${body.length}\r\n\r\n${body}`
+
+  // An onRequest hook that starts reading the body through Node's own request, ahead of the route, and stops at the
+  // first chunk: it goes on, or fails with `failure`.
+  function readFirstChunk(failure?: Error): (ctx: IContext) => Promise<void> {
+    return ctx => {
+      assert(ctx.platform.name === 'node')
+      const req = ctx.platform.incoming
+      return new Promise<void>((resolve, reject) => {
+        req.once('data', () => {
+          req.pause()
+          if (failure === undefined) {
+            resolve()
+          } else {
+            reject(failure)
+          }
+        })
+      })
+    }
+  }
 
   it('reads a body whole and keeps the connection', async () => {
     const { port } = await serve(echo())
@@ -1277,18 +1163,13 @@ describe('the request body on Node', () => {
 
   // A body something other than the route's stream started reading is left as it is: a kept connection would hold it
   // half-read, and the next request on it would never be served.
-  it('closes the connection after a Node middleware read part of the body and stopped', async () => {
+  it('closes the connection after an onRequest hook read part of the body and stopped', async () => {
     const routes = new Router('/b')
     routes.post('/partial').handler(() => 'never')
     const port = await listen(
       createWebApplication({ adapter: node() })
         .logger(b => b.use(newNoopLogger()))
-        .use((req: IncomingMessage, _res: ServerResponse, next: Next) => {
-          req.once('data', () => {
-            req.pause()
-            next(new Error('stopped'))
-          })
-        })
+        .hook('onRequest', readFirstChunk(new Error('stopped')))
         .mount(routes),
     )
     const socket = await connected(port)
@@ -1367,23 +1248,6 @@ describe('the request body on Node', () => {
 
     expect((await refused).startsWith('HTTP/1.1 401')).toBe(true)
     await closed
-  })
-
-  it('closes the connection after a Node middleware answered without reading the body', async () => {
-    const port = await listen(
-      createWebApplication({ adapter: node() })
-        .logger(b => b.use(newNoopLogger()))
-        .use((_req: IncomingMessage, res: ServerResponse, _next: Next) => {
-          res.statusCode = 401
-          res.end('no')
-        })
-        .mount(echo()),
-    )
-
-    const answer = await raw(port, text('ping'))
-
-    expect(answer.startsWith('HTTP/1.1 401')).toBe(true)
-    expect(answer).toMatch(/\r\nConnection: close\r\n/i)
   })
 
   it('reads a body over HTTP/2', async () => {
@@ -1472,7 +1336,7 @@ describe('the request body on Node', () => {
     expect(await outcome.promise).toBe('refused 413')
   })
 
-  it('refuses ctx.req.raw a body a Node middleware started reading', async () => {
+  it('refuses ctx.req.raw a body an onRequest hook started reading', async () => {
     const outcome = Promise.withResolvers<string>()
     const routes = new Router('/b')
     routes
@@ -1488,12 +1352,7 @@ describe('the request body on Node', () => {
     const port = await listen(
       createWebApplication({ adapter: node() })
         .logger(b => b.use(newNoopLogger()))
-        .use((req: IncomingMessage, _res: ServerResponse, next: Next) => {
-          req.once('data', () => {
-            req.pause()
-            next()
-          })
-        })
+        .hook('onRequest', readFirstChunk())
         .mount(routes),
     )
 
@@ -1539,19 +1398,14 @@ describe('the request body on Node', () => {
           .extend(bodyAsStream())
           .handler(() => 'never'),
     ],
-  ])('answers 500 to %s a Node middleware started reading', async (_case, declare) => {
+  ])('answers 500 to %s an onRequest hook started reading', async (_case, declare) => {
     const error = vi.fn()
     const routes = new Router('/b')
     declare(routes)
     const port = await listen(
       createWebApplication({ adapter: node() })
         .logger(b => b.use({ ...newNoopLogger(), error }))
-        .use((req: IncomingMessage, _res: ServerResponse, next: Next) => {
-          req.once('data', () => {
-            req.pause()
-            next()
-          })
-        })
+        .hook('onRequest', readFirstChunk())
         .mount(routes),
     )
 

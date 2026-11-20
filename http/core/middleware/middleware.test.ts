@@ -1,4 +1,3 @@
-import type { IncomingMessage } from 'node:http'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import { newConfiguration } from '@caffeinejs/application'
@@ -6,7 +5,6 @@ import type { InferConfig } from '@caffeinejs/application/config'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
-import cors from 'cors'
 import { afterEach, describe, it, expect } from 'vitest'
 
 import {
@@ -19,7 +17,6 @@ import {
   type HTTPSetupContext,
   type Middleware,
   type MiddlewareFn,
-  type NodeMiddleware,
   type WebApplication,
   type Next,
   Router,
@@ -286,35 +283,6 @@ describe('middleware pipeline', () => {
     await app.close()
   })
 
-  it('answers with CORS headers from Node cors() and still runs the handler', async () => {
-    const app = newApp()
-    app.use(cors({ origin: 'http://example.com' }))
-    await app.bootstrap()
-
-    const res = await app.request('/mw/echo', { headers: { Origin: 'http://example.com' } })
-
-    expect(res.status).toBe(200)
-    expect(res.headers.get('access-control-allow-origin')).toBe('http://example.com')
-    expect(await res.json()).toEqual({ ok: true })
-    await app.close()
-  })
-
-  it('restricts Node cors() to a path prefix', async () => {
-    const app = newApp()
-    app.mount(new Router('/api').get('/echo', () => ({ ok: true })))
-    app.use('/api', cors({ origin: 'http://example.com' }))
-    await app.bootstrap()
-
-    const inside = await app.request('/api/echo', { headers: { Origin: 'http://example.com' } })
-    const outside = await app.request('/mw/echo', { headers: { Origin: 'http://example.com' } })
-
-    expect(inside.status).toBe(200)
-    expect(inside.headers.get('access-control-allow-origin')).toBe('http://example.com')
-    expect(outside.status).toBe(200)
-    expect(outside.headers.get('access-control-allow-origin')).toBeNull()
-    await app.close()
-  })
-
   it('refuses a registration after the application is ready', async () => {
     const app = newApp()
     await app.bootstrap()
@@ -382,24 +350,6 @@ describe('middleware pipeline', () => {
     expect(order).toEqual(['hinted', 'second'])
     await app.close()
   })
-
-  // One scheme per request: a Node middleware reads what `ctx.req.protocol` answers, however a proxy spelled it.
-  it('hands a Node middleware the scheme ctx.req.protocol answers', async () => {
-    let protocol: unknown
-    const node: NodeMiddleware = (req, _res, next) => {
-      protocol = (req as IncomingMessage & { protocol: unknown }).protocol
-      next()
-    }
-
-    const app = newApp().server(() => ({ trustProxy: true }))
-    app.use(node)
-    await app.bootstrap()
-
-    await app.request('/mw/echo', { headers: { 'x-forwarded-proto': 'HTTPS' } })
-
-    expect(protocol).toBe('https')
-    await app.close()
-  })
 })
 
 describe('application middleware registration with a path', () => {
@@ -421,8 +371,8 @@ describe('application middleware registration with a path', () => {
   }
 
   for (const hook of ['onRequest', 'preHandler'] as const) {
-    it.each(['function', 'node', 'instance', 'class', 'symbol', 'string', 'factory'] as const)(
-      `mounts a %s target with the ${hook} option without affecting sibling paths`,
+    it.each(['function', 'instance', 'class', 'symbol', 'string', 'factory'] as const)(
+      `runs a path-scoped %s target with the ${hook} option without affecting sibling paths`,
       async kind => {
         const server = newPathApp()
         const order: string[] = []
@@ -439,10 +389,6 @@ describe('application middleware registration with a path', () => {
           ctx.header('x-tag', 'function')
           next()
         }
-        const node: NodeMiddleware = (_req, res, next) => {
-          res.setHeader('x-tag', 'node')
-          next()
-        }
         const factory = ({ container }: HTTPSetupContext): Middleware => {
           factoryCalls++
           return new Tagger(container.get(Tag))
@@ -451,9 +397,6 @@ describe('application middleware registration with a path', () => {
         switch (kind) {
           case 'function':
             server.use('/api', fn, { hook })
-            break
-          case 'node':
-            server.use('/api', node, { hook })
             break
           case 'instance':
             server.use('/api', new Tagger(new Tag('instance')), { hook })
@@ -493,7 +436,6 @@ describe('application middleware registration with a path', () => {
           expect(response.headers.get('x-tag')).toBe(
             {
               function: 'function',
-              node: 'node',
               instance: 'instance',
               class: 'injected',
               symbol: 'symbol',
@@ -501,7 +443,7 @@ describe('application middleware registration with a path', () => {
               factory: 'injected',
             }[kind],
           )
-          expect(order).toEqual(['onRequest', `${hook}:/orders`, 'handler'])
+          expect(order).toEqual(['onRequest', `${hook}:/api/orders`, 'handler'])
         }
         const sibling = await server.request('/apiary/orders')
         expect(sibling.status).toBe(200)
@@ -524,35 +466,33 @@ describe('application middleware registration with a path', () => {
       })
       await server.bootstrap()
 
-      for (const [url, mounted] of [
-        ['/api', '/'],
-        ['/api/', '/'],
-        ['/api?next=/outside', '/?next=/outside'],
-        ['/api/orders/42?expand=items', '/orders/42?expand=items'],
-        ['/api/hello%20world%2Fitem?q=a%2Fb', '/hello%20world%2Fitem?q=a%2Fb'],
-        ['/apiary', undefined],
-        ['/api-v2/orders', undefined],
-        ['/outside?next=/api', undefined],
-        ['/', undefined],
+      for (const [url, runs] of [
+        ['/api', true],
+        ['/api/', true],
+        ['/api?next=/outside', true],
+        ['/api/orders/42?expand=items', true],
+        ['/api/hello%20world%2Fitem?q=a%2Fb', true],
+        ['/apiary', false],
+        ['/api-v2/orders', false],
+        ['/outside?next=/api', false],
+        ['/', false],
       ] as const) {
         seen.length = 0
         const response = await server.request(url)
         expect(response.status, url).toBe(200)
         expect(await response.json(), url).toEqual({ url })
-        expect(seen, url).toEqual(mounted === undefined ? [] : [mounted])
+        expect(seen, url).toEqual(runs ? [url] : [])
       }
     },
   )
 
-  it('runs overlapping array prefixes once and composes mounts against the original URL', async () => {
+  it("runs overlapping array prefixes once, on the request's whole URL", async () => {
     const server = newPathApp()
     const seen: string[] = []
-    const node: NodeMiddleware = (req, _res, next) => {
-      const originalURL = (req as IncomingMessage & { originalUrl: string }).originalUrl
-      seen.push(`node:${req.url}:${originalURL}`)
+    server.use(['/api', '/api/orders', '/internal'] as const, (ctx, next) => {
+      seen.push(`array:${ctx.req.url}`)
       next()
-    }
-    server.use(['/api', '/api/orders', '/internal'] as const, node)
+    })
     server.use('/api/orders/:id', (ctx, next) => {
       seen.push(`parameter:${ctx.req.url}`)
       next()
@@ -570,11 +510,8 @@ describe('application middleware registration with a path', () => {
     await server.bootstrap()
 
     for (const [url, expected] of [
-      [
-        '/api/orders/a%2Fb/items?q=1',
-        ['node:/orders/a%2Fb/items?q=1:/api/orders/a%2Fb/items?q=1', 'parameter:/items?q=1'],
-      ],
-      ['/internal/jobs', ['node:/jobs:/internal/jobs']],
+      ['/api/orders/a%2Fb/items?q=1', ['array:/api/orders/a%2Fb/items?q=1', 'parameter:/api/orders/a%2Fb/items?q=1']],
+      ['/internal/jobs', ['array:/internal/jobs']],
       ['/internalized/jobs', []],
     ] as const) {
       seen.length = 0
@@ -585,7 +522,7 @@ describe('application middleware registration with a path', () => {
     }
   })
 
-  it('keeps state and mounted URLs isolated while concurrent middleware waits to call next', async () => {
+  it('keeps state isolated while concurrent middleware waits to call next', async () => {
     const server = newPathApp()
     type State = { tenant: string }
     const barrier = Promise.withResolvers<void>()
@@ -597,7 +534,6 @@ describe('application middleware registration with a path', () => {
         barrier.resolve()
       }
       await barrier.promise
-      ctx.header('x-mounted-url', ctx.req.url)
       next()
     }
     server.use('/tenants/:tenant', tenancy)
@@ -618,14 +554,13 @@ describe('application middleware registration with a path', () => {
     for (const [index, response] of responses.entries()) {
       const tenant = tenants[index]
       expect(response.status).toBe(200)
-      expect(response.headers.get('x-mounted-url')).toBe(`/orders?tenant=${tenant}`)
       expect(await response.json()).toEqual({ tenant, url: `/tenants/${tenant}/orders?tenant=${tenant}` })
     }
     expect(arrivals).toBe(2)
   })
 
   it.each(['next', 'throw', 'reject'] as const)(
-    'propagates a mounted middleware failure via %s and keeps subsequent requests usable',
+    'propagates a path-scoped middleware failure via %s and keeps subsequent requests usable',
     async mode => {
       const server = newPathApp()
       const reached: string[] = []
@@ -674,44 +609,33 @@ describe('application middleware registration with a path', () => {
     },
   )
 
-  it.each(['context', 'node'] as const)(
-    'stops same-hook middleware, later hooks and the handler after a mounted %s response',
-    async kind => {
-      const server = newPathApp()
-      const reached: string[] = []
-      if (kind === 'context') {
-        server.use('/private', (ctx, _next) => {
-          ctx.status(401).body('blocked')
-        })
-      } else {
-        const deny: NodeMiddleware = (_req, res, _next) => {
-          res.statusCode = 401
-          res.end('blocked')
-        }
-        server.use('/private', deny)
-      }
-      for (const hook of ['onRequest', 'preHandler'] as const) {
-        server.use(
-          '/private',
-          (_ctx, next) => {
-            reached.push(hook)
-            next()
-          },
-          { hook },
-        )
-      }
-      server.mount(
-        new Router().get('/private/data', () => {
-          reached.push('handler')
-          return { secret: true }
-        }),
+  it('stops same-hook middleware, later hooks and the handler after a path-scoped response', async () => {
+    const server = newPathApp()
+    const reached: string[] = []
+    server.use('/private', (ctx, _next) => {
+      ctx.status(401).body('blocked')
+    })
+    for (const hook of ['onRequest', 'preHandler'] as const) {
+      server.use(
+        '/private',
+        (_ctx, next) => {
+          reached.push(hook)
+          next()
+        },
+        { hook },
       )
-      await server.bootstrap()
+    }
+    server.mount(
+      new Router().get('/private/data', () => {
+        reached.push('handler')
+        return { secret: true }
+      }),
+    )
+    await server.bootstrap()
 
-      const response = await server.request('/private/data')
-      expect(response.status).toBe(401)
-      expect(await response.text()).toBe('blocked')
-      expect(reached).toEqual([])
-    },
-  )
+    const response = await server.request('/private/data')
+    expect(response.status).toBe(401)
+    expect(await response.text()).toBe('blocked')
+    expect(reached).toEqual([])
+  })
 })

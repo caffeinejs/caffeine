@@ -28,7 +28,6 @@ export function bun(): BunAdapter {
 
       return {
         settings: resolved.engine,
-        nodeMiddleware: false,
         serve: (engine, context, customize) =>
           Promise.resolve(new BunHostedServer(engine, serve, resolved, customize, context.logger)),
       }

@@ -262,7 +262,7 @@ leader stored nothing — a private response, an error, a cookie, a write that f
 themselves. A `HEAD` never leads, since its response is never stored, but it does wait. The wait is in this
 process: with several replicas, each runs the handler once.
 
-`@CacheControl({ lock: false })` takes a route out of it. A route whose handler hijacks the reply or streams
+`@CacheControl({ lock: false })` takes a route out of it. A route whose handler streams
 should: such a response stores nothing and settles nothing before the timeout, so its followers would wait
 `lockTimeout` for nothing.
 

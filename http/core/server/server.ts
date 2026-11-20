@@ -78,8 +78,6 @@ export interface HTTPServerInput {
   readonly logger: Logger
   /** What sits in front of the routes: the server's root level, and each scope's at one path. */
   readonly levels: { readonly root: LevelInput; of(scope: RouteGroupScope): LevelInput }
-  /** Whether the platform runs Node middleware: a Node middleware is refused at start-up otherwise. */
-  readonly nodeMiddleware: boolean
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, string | undefined>> = Object.freeze({})
@@ -186,7 +184,7 @@ export class HTTPServer {
     this.#preflight =
       this.#constraints.derives && settings.matcher === findMyWayMatcher ? preflightTable(settings.router) : undefined
     this.#matcher = settings.matcher<RouteStore>(settings.router, settings.constraints)
-    const root = compileLevel(input.levels.root, settings, input.nodeMiddleware)
+    const root = compileLevel(input.levels.root, settings)
     const vary = this.#constraints.vary
     this.#root = vary === undefined ? root : { ...root, onSend: [vary, ...root.onSend] }
     for (const batch of input.levels.root.batches) {
@@ -625,7 +623,7 @@ export class HTTPServer {
     let level = byPath.get(scope.path)
     if (level === undefined) {
       const input = this.#input.levels.of(scope)
-      level = { hooks: compileLevel(input, this.#settings, this.#input.nodeMiddleware), batches: input.batches }
+      level = { hooks: compileLevel(input, this.#settings), batches: input.batches }
       byPath.set(scope.path, level)
 
       for (const batch of input.batches) {
@@ -1022,12 +1020,6 @@ class Pipeline<N, R> {
   // The cookies, then `onSend`, then the answer the context holds goes out.
   #respond(): R | Promise<R> {
     const ctx = this.#ctx
-
-    // A Node middleware ended the response itself: nothing more goes out, and the request is done.
-    if (ctx.outside) {
-      this.#hooks.sent()
-      return undefined as R
-    }
 
     if (ctx.responded) {
       return undefined as R

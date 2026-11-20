@@ -5,5 +5,4 @@ export const Keys = {
    * that must find them, such as `@caffeinejs/resilience`, reads it without importing the transport.
    */
   ENTRYPOINT: Symbol.for('@caffeinejs:entrypoint'),
-  CONTEXT: Symbol.for('@caffeinejs/http:context'),
 }

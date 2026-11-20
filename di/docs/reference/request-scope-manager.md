@@ -53,11 +53,15 @@ runs, even when `fn` throws. Async work started in `fn` stays in the scope
 until then.
 
 ```ts
-container.requestScopeManager.enter(end => {
-  res.once('close', () => {
-    Promise.resolve(end()).catch(err => logger.error({ err }, 'Cannot tear down the request scope'))
+import { createServer } from 'node:http'
+
+createServer((req, res) => {
+  container.requestScopeManager.enter(end => {
+    res.once('close', () => {
+      Promise.resolve(end()).catch(err => logger.error({ err }, 'Cannot tear down the request scope'))
+    })
+    handle(req, res)
   })
-  next()
 })
 ```
 

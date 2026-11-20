@@ -23,6 +23,9 @@ expectTypeOf<ErrWaitUntilClosed>().toExtend<Error>()
 expectTypeOf(app.fetch).toEqualTypeOf<(request: Request, ...runtime: unknown[]) => Response | Promise<Response>>()
 expectTypeOf(app.request).toEqualTypeOf<(input: Request | string | URL, init?: RequestInit) => Promise<Response>>()
 
+// @ts-expect-error A Node (req, res, next) middleware is not a middleware.
+app.use((_req: { url?: string }, _res: { end(): void }, next: () => void) => next())
+
 app.server(() => ({
   fetchWaitUntil: runtime => {
     expectTypeOf(runtime).toEqualTypeOf<readonly unknown[]>()

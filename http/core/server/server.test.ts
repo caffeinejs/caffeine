@@ -1363,27 +1363,6 @@ describe('HTTPServer hooks', () => {
   })
 })
 
-describe('HTTPServer middleware', () => {
-  // A middleware mounted under a path sees the rest of the URL; once it answers, what runs after it sees the request's.
-  it('hands the request its URL back when a mounted middleware answers without next', async () => {
-    const seen: string[] = []
-    const served = await serve(
-      new Router('/admin').get('/users').handler(() => 'handler'),
-      a =>
-        a
-          .use('/admin', ctx => {
-            ctx.body('denied')
-          })
-          .hook('onSend', ctx => void seen.push(ctx.req.url)),
-    )
-
-    const res = await fetchOn(served, '/admin/users')
-
-    expect(await res.text()).toBe('denied')
-    expect(seen).toEqual(['/admin/users'])
-  })
-})
-
 /**
  * What the caching package does to a server and a route, without the package: a plugin registered under its name, and
  * a `cache` entry in the route's config. The plugin adds a hook, as the real one does, so its batch is kept.

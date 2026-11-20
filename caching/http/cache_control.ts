@@ -112,8 +112,8 @@ export interface CacheControlOptions {
   etag?: boolean
   /**
    * `false` lets every concurrent miss run the handler. On by default: the first miss for a key runs the handler
-   * and the others wait, up to the install's `lockTimeout`, for what it stores. A route whose response is ended
-   * outside the server, or streams, should turn it off, since such a response settles nothing before the timeout.
+   * and the others wait, up to the install's `lockTimeout`, for what it stores. A route whose response streams
+   * should turn it off, since such a response settles nothing before the timeout.
    */
   lock?: boolean
   /**

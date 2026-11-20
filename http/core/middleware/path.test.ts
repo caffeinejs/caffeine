@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
-import { compilePrefix, mountedURL, normalizePath, rebaseMiddlewares } from './path.js'
+import { compilePrefix, normalizePath, rebaseMiddlewares } from './path.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
 const noop = (): void => undefined
@@ -32,21 +32,10 @@ describe('normalizePath', () => {
   })
 })
 
-describe('mountedURL', () => {
-  it('hands the rest of the path after the prefix, and keeps the query', () => {
-    const prefix = compilePrefix('/admin')
-    const url = '/admin/users?page=2'
-    const normalized = normalizePath('/admin/users', {}).path
-
-    expect(mountedURL(prefix, url, normalized, prefix.exec(normalized)!, {})).toBe('/users?page=2')
-  })
-})
-
 describe('rebaseMiddlewares', () => {
   const middleware = (path: string | undefined): ResolvedMiddleware => ({
     path,
     hook: undefined,
-    fn: noop,
     handle: noop,
   })
 

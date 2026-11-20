@@ -152,7 +152,6 @@ export class ServerSet {
       scoped: input.plugins,
       basePath,
       settings: hosting.settings,
-      nodeMiddleware: hosting.nodeMiddleware,
       recordRoutes: routes =>
         input.inventory[kRecordServer]({ server: definition.name, basePath: basePath ?? '', routes }),
     })

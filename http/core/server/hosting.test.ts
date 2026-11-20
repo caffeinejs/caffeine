@@ -40,14 +40,6 @@ describe('the fetch application', () => {
         ),
       'Cannot install a server plugin',
     ],
-    [
-      'a Node middleware',
-      a =>
-        a.use(function helmet(_req: unknown, _res: unknown, next: () => void) {
-          next()
-        } as never),
-      'Cannot install the Node middleware "helmet" on the fetch application: it has no Node request',
-    ],
   ])('refuses %s at start-up', async (_what, configure, message) => {
     app = createWebApplication()
     configure(app)
@@ -58,7 +50,6 @@ describe('the fetch application', () => {
     await expect(booting).rejects.toThrow(message)
   })
 
-  // The fetch application has no Node request, but a context middleware needs none.
   it('runs a context middleware, from the application and from a plugin', async () => {
     app = createWebApplication()
       .use((ctx, next) => {
