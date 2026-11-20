@@ -3,7 +3,7 @@ import type { Logger } from '@caffeinejs/application/logger'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 
 import { resolveAppURL } from '../../base_path.js'
-import { ContextState, type IContext, type ServerContext } from '../../context.js'
+import { ContextState, type HeaderOptions, type IContext, type ServerContext } from '../../context.js'
 import type { InferBody, IRequest, UnsignedCookie } from '../../request.js'
 import type { CookieSerializeOptions } from '../cookie/options.js'
 import type { CookieOperation } from '../cookie/serialize.js'
@@ -335,15 +335,16 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     return this
   }
 
-  header(key: string, value: string): this {
+  header(key: string, value: string, opts?: HeaderOptions): this {
     if (this.#late('header')) {
       return this
     }
 
     const name = key.toLowerCase()
 
-    // A cookie is a value of its own, never a replacement for another, as Fastify's `reply.header` treats it.
-    if (name === 'set-cookie' && this.#headers[name] !== undefined) {
+    // An append adds a value, and so does a cookie: it is a value of its own, never a replacement for another, as
+    // Fastify's `reply.header` treats it.
+    if (opts?.append || (name === 'set-cookie' && this.#headers[name] !== undefined)) {
       return this.#append(name, value)
     }
 
@@ -353,14 +354,6 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
     this.#headers[name] = value
     return this
-  }
-
-  appendHeader(key: string, value: string): this {
-    if (this.#late('appendHeader')) {
-      return this
-    }
-
-    return this.#append(key.toLowerCase(), value)
   }
 
   headers(headers: Record<string, string>): this {

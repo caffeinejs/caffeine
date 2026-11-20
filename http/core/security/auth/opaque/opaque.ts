@@ -89,7 +89,9 @@ export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<
 
     const error = this.#isBearer && previous?.error !== undefined ? 'invalid_token' : undefined
 
-    ctx.status(401).appendHeader('WWW-Authenticate', challenge(this.#scheme, { realm: this.options.realm, error }))
+    ctx
+      .status(401)
+      .header('WWW-Authenticate', challenge(this.#scheme, { realm: this.options.realm, error }), { append: true })
   }
 
   /** Answers 403, under the `Bearer` keyword with RFC 6750 §3.1 `insufficient_scope`: a good token, not enough. */
@@ -101,9 +103,10 @@ export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<
     ctx.status(403)
 
     if (this.#isBearer) {
-      ctx.appendHeader(
+      ctx.header(
         'WWW-Authenticate',
         challenge(this.#scheme, { realm: this.options.realm, error: 'insufficient_scope' }),
+        { append: true },
       )
     }
   }

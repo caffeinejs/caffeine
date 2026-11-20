@@ -366,7 +366,7 @@ describe('HTTPPlugin', () => {
       const order =
         (value: string): MiddlewareFn =>
         (ctx, next) => {
-          ctx.appendHeader('x-order', value)
+          ctx.header('x-order', value, { append: true })
           next()
         }
 

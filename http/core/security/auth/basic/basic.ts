@@ -57,7 +57,9 @@ export class BasicAuthenticationHandler extends BaseAuthenticationHandler<BasicA
     // and a client only knows to encode them so when the challenge says it.
     ctx
       .status(401)
-      .appendHeader('WWW-Authenticate', challenge('Basic', { realm: this.options.realm ?? '', charset: 'UTF-8' }))
+      .header('WWW-Authenticate', challenge('Basic', { realm: this.options.realm ?? '', charset: 'UTF-8' }), {
+        append: true,
+      })
   }
 
   override async forbid(ctx: IContext): Promise<void> {

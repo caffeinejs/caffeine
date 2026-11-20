@@ -164,7 +164,7 @@ describe('the Node platform', () => {
   it('sends each value of a list-valued header on a line of its own', async () => {
     const routes = new Router('/a')
     routes.get('/cookies').handler(ctx => {
-      ctx.appendHeader('set-cookie', 'a=1').appendHeader('set-cookie', 'b=2')
+      ctx.header('set-cookie', 'a=1', { append: true }).header('set-cookie', 'b=2', { append: true })
       return 'ok'
     })
     const { origin } = await serve(routes)

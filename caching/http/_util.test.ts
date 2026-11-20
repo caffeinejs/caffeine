@@ -1,6 +1,7 @@
 import {
   ErrConfiguration,
   kRouteConstraints,
+  type HeaderOptions,
   type IContext,
   type IRequest,
   type RouteDefinition,
@@ -120,14 +121,11 @@ describe('the headers kept with an entry', () => {
         getHeaders: () => set,
         getHeader: (name: string) => set[name],
         hasHeader: (name: string) => set[name] !== undefined,
-        header: (name: string, value: unknown) => {
-          set[name] = value
-        },
-        appendHeader: (name: string, value: unknown) => {
+        header: (name: string, value: unknown, opts?: HeaderOptions) => {
           const current = set[name]
-          set[name] = current === undefined ? value : [current, value].flat()
+          set[name] = opts?.append && current !== undefined ? [current, value].flat() : value
         },
-      } as unknown as Pick<IContext, 'getHeaders' | 'getHeader' | 'hasHeader' | 'header' | 'appendHeader'>,
+      } as unknown as Pick<IContext, 'getHeaders' | 'getHeader' | 'hasHeader' | 'header'>,
     }
   }
 

@@ -876,7 +876,7 @@ class Pipeline<N, R> {
         ctx.header(name, value)
       } else {
         for (const item of value) {
-          ctx.appendHeader(name, item)
+          ctx.header(name, item, { append: true })
         }
       }
     }

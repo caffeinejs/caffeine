@@ -72,6 +72,16 @@ export class ContextState<V = Record<never, never>> {
   }
 }
 
+/** How {@link IContext.header} writes a response header. */
+export interface HeaderOptions {
+  /**
+   * Adds the value to the header instead of replacing what it holds, so the header goes out once per value. For a
+   * header several parties contribute to: each authentication scheme a route names adds its own `WWW-Authenticate`
+   * challenge.
+   */
+  append?: boolean
+}
+
 /**
  * What a middleware, a guard, an error handler and a route handler see of the request they serve.
  */
@@ -148,18 +158,17 @@ export interface IContext<
 
   status(code: number): this
 
-  header(key: string, value: string): this
   /**
-   * Adds a value to a response header instead of replacing what it holds, so the header goes out once per value.
-   * For a header several parties contribute to: each authentication scheme a route names adds its own
-   * `WWW-Authenticate` challenge.
+   * Writes a response header, replacing what it holds unless `opts.append` is set. `Set-Cookie` is always added to:
+   * one cookie never replaces another.
    */
-  appendHeader(key: string, value: string): this
+  header(key: string, value: string, opts?: HeaderOptions): this
   headers(headers: Record<string, string>): this
   hasHeader(key: string): boolean
   /**
    * Reads back a response header written so far, by the route, a hook or the handler. A header holding several
-   * values, from {@link IContext.appendHeader} or a list, comes back as one field line, its values joined with `, `.
+   * values, from {@link IContext.header} with `append` or a list, comes back as one field line, its values joined
+   * with `, `.
    *
    * Not for `Set-Cookie`, whose values cannot be joined: cookies set with {@link IContext.cookie} are written only as
    * the response goes out.

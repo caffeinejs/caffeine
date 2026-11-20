@@ -28,8 +28,8 @@ async function serve(controller: Ctor): Promise<App> {
 
 describe('hook decorators', () => {
   it('runs a class-level hook for every route of the controller, in the order written', async () => {
-    @OnRequest(ctx => void ctx.appendHeader('x-order', 'first'))
-    @OnRequest(ctx => void ctx.appendHeader('x-order', 'second'))
+    @OnRequest(ctx => void ctx.header('x-order', 'first', { append: true }))
+    @OnRequest(ctx => void ctx.header('x-order', 'second', { append: true }))
     @Controller('/class')
     class ClassHooks {
       @Get('/a')
@@ -72,10 +72,10 @@ describe('hook decorators', () => {
   })
 
   it('runs a route-level hook on that route alone, after the class-level one', async () => {
-    @OnRequest(ctx => void ctx.appendHeader('x-order', 'class'))
+    @OnRequest(ctx => void ctx.header('x-order', 'class', { append: true }))
     @Controller('/route')
     class RouteHooks {
-      @OnRequest(ctx => void ctx.appendHeader('x-order', 'route'))
+      @OnRequest(ctx => void ctx.header('x-order', 'route', { append: true }))
       @Get('/a')
       a() {
         return 'a'

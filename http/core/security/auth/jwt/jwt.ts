@@ -72,7 +72,7 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
       return this.options.onChallenge(ctx)
     }
 
-    ctx.status(401).appendHeader('WWW-Authenticate', this.#challengeHeader(previous?.error))
+    ctx.status(401).header('WWW-Authenticate', this.#challengeHeader(previous?.error), { append: true })
   }
 
   #challengeHeader(error: Error | undefined): string {
@@ -93,7 +93,7 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
       return this.options.onForbid(ctx)
     }
 
-    ctx.status(403).appendHeader('WWW-Authenticate', challenge('Bearer', { error: 'insufficient_scope' }))
+    ctx.status(403).header('WWW-Authenticate', challenge('Bearer', { error: 'insufficient_scope' }), { append: true })
   }
 }
 

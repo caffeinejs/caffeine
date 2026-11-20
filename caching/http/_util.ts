@@ -255,7 +255,7 @@ function connectionFieldsOf(connection: string | string[] | undefined): Set<stri
 export type StoredHeadersMode = 'hit' | 'revalidation' | 'replacement'
 
 export function applyStoredHeaders(
-  ctx: Pick<IContext, 'hasHeader' | 'header' | 'appendHeader' | 'getHeader'>,
+  ctx: Pick<IContext, 'hasHeader' | 'header' | 'getHeader'>,
   headers: Record<string, string | string[]>,
   mode: StoredHeadersMode,
 ): void {
@@ -288,7 +288,7 @@ export function applyStoredHeaders(
 }
 
 // A list goes out as one field line per value, as it was stored.
-function writeHeader(ctx: Pick<IContext, 'header' | 'appendHeader'>, name: string, value: string | string[]): void {
+function writeHeader(ctx: Pick<IContext, 'header'>, name: string, value: string | string[]): void {
   if (typeof value === 'string') {
     ctx.header(name, value)
     return
@@ -296,7 +296,7 @@ function writeHeader(ctx: Pick<IContext, 'header' | 'appendHeader'>, name: strin
 
   ctx.header(name, value[0])
   for (let i = 1; i < value.length; i++) {
-    ctx.appendHeader(name, value[i])
+    ctx.header(name, value[i], { append: true })
   }
 }
 

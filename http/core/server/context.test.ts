@@ -26,7 +26,7 @@ routes.get('/response-case').handler(ctx => {
 })
 routes.get('/request-case').handler(ctx => ({ trace: ctx.req.header('X-Trace') ?? null }))
 routes.get('/appended').handler(ctx => {
-  ctx.appendHeader('x-step', 'parse').appendHeader('x-step', 'render')
+  ctx.header('x-step', 'parse', { append: true }).header('x-step', 'render', { append: true })
   return { step: ctx.getHeader('x-step') }
 })
 routes.get('/not-found').handler(ctx => ctx.notFound())
@@ -768,7 +768,7 @@ describe('response headers', () => {
     })
     .handler(ctx => {
       ctx.header('x-a', 'a')
-      ctx.appendHeader('x-b', '1').appendHeader('x-b', '2')
+      ctx.header('x-b', '1', { append: true }).header('x-b', '2', { append: true })
       return 'ok'
     })
   headers

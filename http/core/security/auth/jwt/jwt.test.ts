@@ -17,7 +17,7 @@ function makeCtx(authHeader?: string) {
   const ctx = {
     req: { header: (name: string) => (name === 'authorization' ? authHeader : undefined) },
     status,
-    appendHeader: header,
+    header,
   } as unknown as IContext
   return { ctx, status, header }
 }
@@ -235,7 +235,7 @@ describe('JWTAuthenticationHandler', () => {
       await makeHandler().challenge(ctx)
 
       expect(status).toHaveBeenCalledWith(401)
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer', { append: true })
     })
 
     it('calls custom onChallenge and skips the default behaviour', async () => {
@@ -258,7 +258,7 @@ describe('JWTAuthenticationHandler', () => {
       await makeHandler().forbid(ctx)
 
       expect(status).toHaveBeenCalledWith(403)
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="insufficient_scope"')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="insufficient_scope"', { append: true })
     })
 
     it('calls custom onForbid and skips the default behaviour', async () => {
@@ -337,7 +337,7 @@ describe('JWTAuthenticationHandler', () => {
       await handler.challenge(ctx, undefined, result)
 
       expect(result.succeeded).toBe(false)
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="invalid_token"')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="invalid_token"', { append: true })
     })
 
     it('stays a bare challenge when no credential was presented', async () => {
@@ -349,7 +349,7 @@ describe('JWTAuthenticationHandler', () => {
       const result = await handler.authenticate(ctx)
       await handler.challenge(ctx, undefined, result)
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer', { append: true })
     })
 
     it('omits the description when includeErrorDetails is off', async () => {
@@ -359,7 +359,7 @@ describe('JWTAuthenticationHandler', () => {
       const result = await handler.authenticate(ctx)
       await handler.challenge(ctx, undefined, result)
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="invalid_token"')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="invalid_token"', { append: true })
     })
 
     it('names the reason when the coordinator drives authenticate and challenge', async () => {
@@ -389,7 +389,7 @@ describe('JWTAuthenticationHandler', () => {
 
       await coordinator.challenge(ctx, 'Bearer')
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer', { append: true })
     })
   })
 

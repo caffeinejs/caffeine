@@ -19,7 +19,7 @@ function makeCtx(authHeader?: string) {
   const ctx = {
     req: { header: (name: string) => (name === 'authorization' ? authHeader : undefined) },
     status,
-    appendHeader: header,
+    header,
   } as unknown as IContext
   return { ctx, status, header }
 }
@@ -163,7 +163,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
       await makeHandler(storeReturning(null)).challenge(ctx)
 
       expect(status).toHaveBeenCalledWith(401)
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer', { append: true })
     })
 
     // A client that reads `invalid_token` refreshes or signs in again; one that reads a bare challenge has no way
@@ -174,7 +174,9 @@ describe('OpaqueTokenAuthenticationHandler', () => {
 
       await makeHandler(storeReturning(null), { realm: 'api' }).challenge(ctx, undefined, refused)
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="api", error="invalid_token"')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="api", error="invalid_token"', {
+        append: true,
+      })
     })
 
     it('faults no token when none was presented', async () => {
@@ -182,7 +184,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
 
       await makeHandler(storeReturning(null), { realm: 'api' }).challenge(ctx, undefined, AuthenticateResult.none())
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="api"')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="api"', { append: true })
     })
 
     // `error` is a parameter RFC 6750 registers for Bearer. Another keyword has none to say it with.
@@ -192,21 +194,21 @@ describe('OpaqueTokenAuthenticationHandler', () => {
 
       await makeHandler(storeReturning(null), { scheme: 'Token' }).challenge(ctx, undefined, refused)
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Token')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Token', { append: true })
     })
 
     it('writes the realm as a quoted-string', async () => {
       const { ctx, header } = makeCtx()
       await makeHandler(storeReturning(null), { realm: 'The "API"' }).challenge(ctx)
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="The \\"API\\""')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="The \\"API\\""', { append: true })
     })
 
     it('includes the configured realm and scheme', async () => {
       const { ctx, header } = makeCtx()
       await makeHandler(storeReturning(null), { scheme: 'Token', realm: 'My App' }).challenge(ctx)
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Token realm="My App"')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Token realm="My App"', { append: true })
     })
 
     it('delegates to onChallenge and skips default behaviour', async () => {
@@ -231,7 +233,9 @@ describe('OpaqueTokenAuthenticationHandler', () => {
     it('says the token is not enough, under the Bearer keyword only', async () => {
       const bearer = makeCtx()
       await makeHandler(storeReturning(null), { realm: 'api' }).forbid(bearer.ctx)
-      expect(bearer.header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="api", error="insufficient_scope"')
+      expect(bearer.header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="api", error="insufficient_scope"', {
+        append: true,
+      })
 
       const custom = makeCtx()
       await makeHandler(storeReturning(null), { scheme: 'Token' }).forbid(custom.ctx)

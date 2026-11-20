@@ -25,7 +25,7 @@ routes.get('/written').handler(ctx => {
   const written = ctx.getHeader('x-trace')
   ctx.header('x-trace', 'second')
   const replaced = ctx.getHeader('x-trace')
-  ctx.appendHeader('x-step', 'parse').appendHeader('x-step', 'render')
+  ctx.header('x-step', 'parse', { append: true }).header('x-step', 'render', { append: true })
 
   return { unset: unset ?? null, written, replaced, appended: ctx.getHeader('x-step') }
 })

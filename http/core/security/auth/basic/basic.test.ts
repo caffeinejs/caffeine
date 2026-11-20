@@ -16,7 +16,7 @@ function makeCtx(authHeader?: string) {
   const ctx = {
     req: { header: (name: string) => (name === 'authorization' ? authHeader : undefined) },
     status,
-    appendHeader: header,
+    header,
   } as unknown as IContext
   return { ctx, status, header }
 }
@@ -151,7 +151,7 @@ describe('BasicAuthenticationHandler', () => {
 
       expect(status).toHaveBeenCalledWith(401)
       // RFC 7617 §2 requires the parameter, so an unset realm is sent empty rather than left out.
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Basic realm="", charset="UTF-8"')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Basic realm="", charset="UTF-8"', { append: true })
     })
 
     it('includes the configured realm in WWW-Authenticate', async () => {
@@ -161,7 +161,7 @@ describe('BasicAuthenticationHandler', () => {
         realm: 'My App',
       }).challenge(ctx)
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Basic realm="My App", charset="UTF-8"')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Basic realm="My App", charset="UTF-8"', { append: true })
     })
 
     it('delegates to onChallenge and skips default behaviour', async () => {
