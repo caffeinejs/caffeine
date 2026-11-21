@@ -1,0 +1,102 @@
+{
+  "name": "@caffeinejs/templating",
+  "version": "0.0.0",
+  "description": "Portable templates and ahead-of-time template compilation",
+  "license": "MIT",
+  "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
+  "homepage": "https://github.com/caffeinejs/caffeine/tree/main/templating#readme",
+  "bugs": {
+    "url": "https://github.com/caffeinejs/caffeine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caffeinejs/caffeine.git",
+    "directory": "templating"
+  },
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./html": {
+      "types": "./dist/html/index.d.ts",
+      "default": "./dist/html/index.js"
+    },
+    "./caffeine": {
+      "types": "./dist/caffeine/index.d.ts",
+      "default": "./dist/caffeine/index.js"
+    },
+    "./file/node": {
+      "types": "./dist/file/node/index.d.ts",
+      "default": "./dist/file/node/index.js"
+    },
+    "./handlebars/node": {
+      "types": "./dist/handlebars/node/index.d.ts",
+      "default": "./dist/handlebars/node/index.js"
+    },
+    "./ejs/node": {
+      "types": "./dist/ejs/node/index.d.ts",
+      "default": "./dist/ejs/node/index.js"
+    },
+    "./build/node": {
+      "types": "./dist/build/node/index.d.ts",
+      "default": "./dist/build/node/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "!dist/**/*.d.ts.map",
+    "!dist/**/_spectypes"
+  ],
+  "engines": {
+    "node": "^24.22.0 || >=26.10.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "parse5": "8.1.1"
+  },
+  "peerDependencies": {
+    "@caffeinejs/application": "0.0.0",
+    "@caffeinejs/std": "0.0.0",
+    "ejs": "6.0.1",
+    "es-module-lexer": "2.3.2",
+    "esbuild": "0.28.2",
+    "handlebars": "4.7.10"
+  },
+  "peerDependenciesMeta": {
+    "@caffeinejs/application": {
+      "optional": true
+    },
+    "ejs": {
+      "optional": true
+    },
+    "es-module-lexer": {
+      "optional": true
+    },
+    "esbuild": {
+      "optional": true
+    },
+    "handlebars": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@caffeinejs/application": "0.0.0",
+    "@types/ejs": "^3.1.5",
+    "ejs": "6.0.1",
+    "es-module-lexer": "2.3.2",
+    "esbuild": "0.28.2",
+    "handlebars": "4.7.10"
+  }
+}

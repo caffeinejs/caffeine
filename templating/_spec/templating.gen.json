@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TemplatingConfigSchema",
+  "type": "object",
+  "properties": {
+    "default": {
+      "type": "object",
+      "properties": {
+        "layout": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "cache": {
+          "anyOf": [
+            {
+              "const": false,
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "maxEntries": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          ]
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "maxAssetSize": {
+              "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+              "type": "string"
+            },
+            "maxBundleSize": {
+              "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+              "type": "string"
+            },
+            "maxPartials": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxOutputSize": {
+              "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "named": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z][a-z0-9-]{0,63}$": {
+          "type": "object",
+          "properties": {
+            "layout": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": false,
+                  "type": "boolean"
+                }
+              ]
+            },
+            "cache": {
+              "anyOf": [
+                {
+                  "const": false,
+                  "type": "boolean"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "maxEntries": {
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  }
+                }
+              ]
+            },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "maxAssetSize": {
+                  "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+                  "type": "string"
+                },
+                "maxBundleSize": {
+                  "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+                  "type": "string"
+                },
+                "maxPartials": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "maxOutputSize": {
+                  "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
