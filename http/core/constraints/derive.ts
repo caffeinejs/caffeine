@@ -5,7 +5,7 @@ import { ErrConfiguration } from '../error/common.js'
 import type { DerivedConstraints } from '../matcher/matcher.js'
 import type { IRoute, IRouteGroup } from '../routing/route.js'
 import type { ConstraintRequest, ConstraintStrategy } from './constraints.js'
-import { kRouteConstraints, kVersionHeader, VERSION_CONSTRAINT, type ResolvedRouteConstraint } from './keys.js'
+import { kVersionHeader, VERSION_CONSTRAINT } from './keys.js'
 
 // The constraints find-my-way matches without a strategy, and the header each reads.
 const BUILT_IN: ReadonlyMap<string, string> = new Map([
@@ -46,12 +46,12 @@ export function compileConstraints(
 
   for (const group of groups) {
     for (const route of group.routes) {
-      const declared = route.config.get(kRouteConstraints)
+      const declared = route.options.constraints
       if (!(declared instanceof Map)) {
         continue
       }
 
-      for (const [name, { header }] of declared as Map<string, ResolvedRouteConstraint>) {
+      for (const [name, { header }] of declared) {
         names.add(name)
         if (header !== undefined && !headers.has(header.toLowerCase())) {
           headers.set(header.toLowerCase(), header)
@@ -93,7 +93,7 @@ export function compileConstraints(
     },
 
     of(route, methods, url) {
-      const declared = route.config.get(kRouteConstraints)
+      const declared = route.options.constraints
       if (declared === undefined || (declared instanceof Map && declared.size === 0)) {
         return undefined
       }
@@ -102,14 +102,14 @@ export function compileConstraints(
       if (!(declared instanceof Map)) {
         throw new ErrConfiguration(
           errMessage(`Cannot serve "${where}": its constraints are not declared with constraint() or version()`)
-            .solutions(`Declare them with ".extend(constraint(name, value))" or ".extend(version('1.0.0'))"`)
+            .solutions(`Declare them with ".options(constraint(name, value))" or ".options(version('1.0.0'))"`)
             .reference('@caffeinejs/http', ErrConfiguration)
             .build(),
         )
       }
 
       const constraints: Record<string, unknown> = {}
-      for (const [name, { value }] of declared as Map<string, ResolvedRouteConstraint>) {
+      for (const [name, { value }] of declared) {
         if (!known.has(name)) {
           throw new ErrConfiguration(
             errMessage(`Cannot serve "${where}": no constraint strategy is named "${name}"`)

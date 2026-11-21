@@ -1,6 +1,6 @@
 import { REQUEST_HOOK_NAMES } from '../lifecycle/lifecycle.js'
 import type { AuthoredHooks } from '../lifecycle/route_definition.js'
-import { mergeValue } from './_merge.js'
+import { mergeInto } from './_merge.js'
 import type { RouteAuthz, RouteAuthzOptions, RouteGroupDetail, RouteGroupSpec } from './spec.js'
 
 /**
@@ -90,7 +90,7 @@ export function inheritGroupSpec<R>(outer: RouteGroupSpec<R>, inner: RouteGroupS
     bodyLimit: inner.bodyLimit ?? outer.bodyLimit,
     timeout: inner.timeout ?? outer.timeout,
     authz: mergeAuthz(outer.authz, inner.authz),
-    config: mergeMap(outer.config, inner.config),
+    options: concat(outer.options, inner.options),
     detail: mergeDetail(outer.detail, inner.detail),
     guards: concat(outer.guards, inner.guards),
     hooks: concatHooks(outer.hooks, inner.hooks),
@@ -117,9 +117,7 @@ function mergeDetail(
   }
 
   const merged: Record<string, unknown> = { ...outer }
-  for (const [key, value] of Object.entries(inner)) {
-    merged[key] = mergeValue(merged[key], value)
-  }
+  mergeInto(merged, inner)
 
   return merged as RouteGroupDetail
 }

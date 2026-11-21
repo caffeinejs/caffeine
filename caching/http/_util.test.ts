@@ -1,6 +1,5 @@
 import {
   ErrConfiguration,
-  kRouteConstraints,
   type HeaderOptions,
   type IContext,
   type IRequest,
@@ -172,7 +171,7 @@ describe('assertConstraintsKeyed', () => {
     ({
       methods: ['GET'],
       url: '/pets',
-      config: new Map([[kRouteConstraints, new Map(Object.entries(constraints))]]),
+      options: { constraints: new Map(Object.entries(constraints)) },
     }) as unknown as RouteDefinition
 
   // A host constraint is two sites on one URL: without `Host` in the key, one is served the other's pages.

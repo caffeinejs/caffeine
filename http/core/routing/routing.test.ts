@@ -2,6 +2,7 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
 import { bindTo } from '../../decorators/bind_to.js'
+import type { HTTPSetupContext } from '../../plugin.js'
 import { RouteBuilder, RouteGroupBuilder } from './builder.js'
 import { buildRouting, type DeclaredRouteGroup, type RouteSource } from './routing.js'
 
@@ -33,10 +34,10 @@ function source(...groups: DeclaredRouteGroup<unknown>[]): RouteSource<unknown> 
 }
 
 /** Initialized, as the compiler's lookups need, and without the process-wide decorated bindings. */
-async function container(): Promise<CaffeineIoC> {
+async function context(): Promise<HTTPSetupContext> {
   const ioc = new CaffeineIoC({ decorators: false })
   await ioc.init()
-  return ioc
+  return { container: ioc } as unknown as HTTPSetupContext
 }
 
 describe('route selection', () => {
@@ -44,7 +45,7 @@ describe('route selection', () => {
     const gold = declared('gold', g => g.label(kTier, 'gold'))
     const free = declared('free', g => g.label(kTier, 'free'))
 
-    const routing = buildRouting([source(gold.group, free.group)], await container())
+    const routing = buildRouting([source(gold.group, free.group)], await context())
     const selected = routing.select(labels => labels.get(kTier) === 'gold')
 
     expect(selected.map(group => group.name)).toEqual(['gold'])
@@ -57,14 +58,14 @@ describe('route selection', () => {
     const gold = declared('gold', g => g.label(kTier, 'gold'))
     const free = declared('free')
 
-    const routing = buildRouting([source(gold.group, free.group)], await container())
+    const routing = buildRouting([source(gold.group, free.group)], await context())
     routing.select(labels => labels.has(kTier))
 
     expect(routing.unselected().map(group => group.name)).toEqual(['free'])
   })
 
   it('refuses a group two selections both take: two servers would serve it', async () => {
-    const routing = buildRouting([source(declared('shared').group)], await container())
+    const routing = buildRouting([source(declared('shared').group)], await context())
     routing.select(() => true)
 
     expect(() => routing.select(() => true)).toThrow(
@@ -75,7 +76,7 @@ describe('route selection', () => {
   it('selects from every source, in the order they declared their groups', async () => {
     const routing = buildRouting(
       [source(declared('a').group, declared('b').group), source(declared('c').group)],
-      await container(),
+      await context(),
     )
 
     expect(routing.select(() => true).map(group => group.name)).toEqual(['a', 'b', 'c'])
@@ -85,7 +86,7 @@ describe('route selection', () => {
     const bound = declared('bound', bindTo('admin'))
     const own = declared('own')
 
-    const groups = buildRouting([source(bound.group, own.group)], await container()).select(() => true)
+    const groups = buildRouting([source(bound.group, own.group)], await context()).select(() => true)
 
     expect(groups.map(group => [group.name, group.boundTo])).toEqual([
       ['bound', 'admin'],
@@ -114,7 +115,7 @@ describe('route hooks', () => {
       meta: () => ({ name: 'pets' }),
     }
 
-    const [compiled] = buildRouting([source(declaredGroup)], await container()).select(() => true)
+    const [compiled] = buildRouting([source(declaredGroup)], await context()).select(() => true)
     const hooks = compiled.routes[0].hooks!.onRequest
     for (const hook of hooks) {
       await hook('req', 'ctx' as never)

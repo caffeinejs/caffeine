@@ -8,7 +8,6 @@ import {
   ErrRouteConflict,
   findMyWayMatcher,
   HTTPPlugin,
-  kRouteConstraints,
   Router,
   type HTTPPluginFactory,
   type HTTPPluginConfigurer,
@@ -58,9 +57,15 @@ export const mountsByRoute = new WeakMap<RouteDefinition, ServedMounts>()
 /** Where the plugin logs: a failed open, and one line per mount at start-up. */
 type StaticLog = FileLog & { info(fields: object, message: string): void }
 
-// Marks the plugin's own routes, so its checks pass over them.
-const kStaticRoute = 'caffeine:static-route'
 const STATIC_ROUTE: unique symbol = Symbol('caffeine.static.route')
+
+declare module '@caffeinejs/http' {
+  interface RouteOptions {
+    /** Marks the plugin's own routes, so its checks pass over them. */
+    staticRoute?: typeof STATIC_ROUTE
+  }
+}
+
 // What the private matcher holds for a route that is not the plugin's.
 const OTHER: unique symbol = Symbol('caffeine.static.other-route')
 
@@ -400,7 +405,7 @@ class StaticFiles extends HTTPPlugin {
     context.app.hook('onRoute', route => {
       mountsByRoute.set(route, served)
 
-      if (route.config.get(kStaticRoute) === STATIC_ROUTE || route.config.get(kRouteConstraints) !== undefined) {
+      if (route.options.staticRoute === STATIC_ROUTE || route.options.constraints !== undefined) {
         return
       }
 
@@ -484,7 +489,7 @@ class StaticFiles extends HTTPPlugin {
       others.length = 0
     })
 
-    const open = staticRouter().extend(accessControlExempt())
+    const open = staticRouter().routeOptions(accessControlExempt())
     const guarded = staticRouter()
     const mounted = new Set<Router>()
     let n = 0
@@ -495,7 +500,7 @@ class StaticFiles extends HTTPPlugin {
         const root = staticRouter().extend((group: { prefix(prefix: string): unknown }) => {
           group.prefix(target.mount.prefix.slice(0, -1))
         })
-        ;(target.mount.anonymous ? root.extend(accessControlExempt()) : root)
+        ;(target.mount.anonymous ? root.routeOptions(accessControlExempt()) : root)
           .get('/')
           .name('static_index')
           .handler(fileHandler(target.file, log))
@@ -531,7 +536,7 @@ class StaticFiles extends HTTPPlugin {
 
 /** A router for the plugin's routes: kept out of a generated document, and marked as the plugin's. */
 function staticRouter(): Router {
-  return new Router().detail('http', { internal: true }).config(kStaticRoute, STATIC_ROUTE)
+  return new Router().detail('http', { internal: true }).routeOptions({ staticRoute: STATIC_ROUTE })
 }
 
 /** The parameters of the route `matcher` hands `url` to, or `undefined` for none or a spelling it cannot decode. */

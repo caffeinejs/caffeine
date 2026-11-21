@@ -11,7 +11,6 @@ import { ErrWaitUntilClosed, type IContext } from '../../context.js'
 import { bindTo } from '../../decorators/bind_to.js'
 import { Catch, Controller, Get, Prefix } from '../../decorators/index.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
-import { kRouteConstraints } from '../constraints/keys.js'
 import { ErrConfiguration } from '../error/common.js'
 import type { ErrorHandler } from '../error/handler.js'
 import { ErrHTTPServiceUnavailable } from '../error/http.js'
@@ -566,7 +565,7 @@ describe('HTTPServer', () => {
       r =>
         void r
           .get('/x')
-          .config(kRouteConstraints, { version: '1.0.0' })
+          .options({ constraints: { version: '1.0.0' } } as never)
           .handler(() => 'x'),
     ],
     [
@@ -1251,15 +1250,21 @@ describe('HTTPServer', () => {
   })
 })
 
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    testGreeting?: string
+  }
+}
+
 describe('HTTPServer hooks', () => {
-  // A plugin reads a route's config through `ctx.route`: the engine serves a key it does not know itself.
-  it("serves a route whose config key is a plugin's own", async () => {
+  // A plugin reads a route's options through `ctx.route`: the engine serves a key it does not know itself.
+  it("serves a route whose options key is a plugin's own", async () => {
     const served = await serve(
       new Router('/s')
         .get('/')
-        .config('greeting', 'hello')
+        .options({ testGreeting: 'hello' })
         .handler(() => 'ok'),
-      a => a.hook('onSend', ctx => void ctx.header('x-greeting', String(ctx.route?.config.get('greeting')))),
+      a => a.hook('onSend', ctx => void ctx.header('x-greeting', String(ctx.route?.options.testGreeting))),
     )
 
     const res = await fetchOn(served, '/s')
@@ -1365,7 +1370,7 @@ describe('HTTPServer hooks', () => {
 
 /**
  * What the caching package does to a server and a route, without the package: a plugin registered under its name, and
- * a `cache` entry in the route's config. The plugin adds a hook, as the real one does, so its batch is kept.
+ * a `cache` entry in the route's options. The plugin adds a hook, as the real one does, so its batch is kept.
  */
 describe('a route that declares caching', () => {
   class Caching extends HTTPPlugin {
@@ -1380,7 +1385,7 @@ describe('a route that declares caching', () => {
   function cached<R extends AnyRouter>(router: R): R {
     router
       .get('/x')
-      .config('cache', { ttl: 60 * Second })
+      .options({ cache: { ttl: 60 * Second } } as never)
       .handler(() => 'x')
     return router
   }

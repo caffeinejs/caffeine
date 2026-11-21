@@ -15,6 +15,7 @@ import type { Guard } from '../../guards/guard.js'
 import type { RequestHookName, RequestHooks } from '../../lifecycle/lifecycle.js'
 import { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteGroupExtension } from '../extension.js'
+import type { RouteOptionsInput } from '../options.js'
 import type { RouteAuthzOptions, RouteGroupDetail, RouteValidationSchema } from '../spec.js'
 import { RouteChain } from './route_chain.js'
 import { attachState, stateOf, type RouterState } from './state.js'
@@ -115,8 +116,8 @@ export class Router<
    * pets.get('/').handler(ctx => ctx.config.catalog.pageSize)
    * ```
    *
-   * Only the type: the values come from the application's own configuration either way. Named apart from
-   * {@link config}, which writes the group's per-route configuration.
+   * Only the type: the values come from the application's own configuration either way. A function handed to
+   * {@link routeOptions} reads the same type.
    */
   configType<C2>(): Router<V, C2, GD, GP, R> {
     return this as unknown as Router<V, C2, GD, GP, R>
@@ -415,11 +416,24 @@ export class Router<
     return this
   }
 
-  /** The group's per-route configuration, as `@Config` writes it. */
-  config<K extends string>(key: K, value: unknown): this
-  config<K extends string>(config: Map<K, unknown>): this
-  config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
-    this.#state.builder.config(keyOrConfig as K, value)
+  /**
+   * Sets route options for every route of this router and of the routers nested under it. A nested router's key, or a
+   * route's own `options(...)` key, replaces what is set here, except a Map, which merges by key; within this router,
+   * objects merge key by key, in the order written. A function runs while routes compile, handed the setup context
+   * and its start-up configuration.
+   *
+   * Named apart from {@link options}, which registers an OPTIONS route.
+   *
+   * ```ts
+   * new Router('/hooks')
+   *   .configType<{ webhooks: { strict: boolean } }>()
+   *   .routeOptions(cors(false), (o, { config }) => {
+   *     o.csrf = { exempt: !config.webhooks.strict }
+   *   })
+   * ```
+   */
+  routeOptions(...inputs: RouteOptionsInput<C>[]): this {
+    this.#state.builder.options(...inputs)
     return this
   }
 

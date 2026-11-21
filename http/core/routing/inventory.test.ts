@@ -20,7 +20,7 @@ import {
 } from '../../index.js'
 import { node } from '../../platform/node.testkit.js'
 import type { HTTPSetupContext } from '../../plugin.js'
-import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../security/exempt.js'
+import { accessControlExempt } from '../security/exempt.js'
 
 // Any router and any fetch application, as `mount` takes them: the route types each carries are not under test here.
 type AnyRouter = Router<any, any, any, any, any>
@@ -128,7 +128,7 @@ describe('routeRecord on the fetch application', () => {
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
       .mount(
         new Router('/marked')
-          .config(kAccessControlExempt, ACCESS_CONTROL_EXEMPT)
+          .routeOptions(accessControlExempt())
           .get('/')
           .handler(() => 'x'),
         new Router('/plain').get('/').handler(() => 'x'),

@@ -625,7 +625,7 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
     await this.#controllerPlugins(context)
 
     const listeners = this.#listeners.build(context as HTTPSetupContext<C>)
-    const routing = buildRouting<Context>(this.routeSources(), this.container)
+    const routing = buildRouting<Context>(this.routeSources(), context)
     const servers = new ServerSet([this.#own as ServerDefinition, ...(listeners as unknown as ServerDefinition[])])
     this.#servers = servers
 

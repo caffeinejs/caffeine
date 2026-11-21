@@ -1,17 +1,18 @@
-import type { AnyRouteExtension } from '../routing/extension.js'
+import type { RouteOptions } from '../routing/options.js'
 
-/**
- * The route config key of a route the framework serves on the application's behalf, outside its access control: no
- * authentication gate, no global guard, no authorization. Set by the health probes.
- */
-export const kAccessControlExempt = 'caffeine:access-control-exempt'
+/** The one value that marks a route: configuration data and an application's own object cannot produce it. */
+const ACCESS_CONTROL_EXEMPT: unique symbol = Symbol('caffeine.http.access-control-exempt')
 
-/** The one value that marks a route: an application's `.config(...)` or `@Config(...)` cannot produce it. */
-export const ACCESS_CONTROL_EXEMPT: unique symbol = Symbol('caffeine.http.access-control-exempt')
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    /** Marks a route the framework serves on the application's behalf, outside its access control. */
+    accessControlExempt?: typeof ACCESS_CONTROL_EXEMPT
+  }
+}
 
-/** Whether a route's config carries the framework's access-control mark. */
-export function isAccessControlExempt(config: ReadonlyMap<string, unknown>): boolean {
-  return config.get(kAccessControlExempt) === ACCESS_CONTROL_EXEMPT
+/** Whether a route's options carry the framework's access-control mark. */
+export function isAccessControlExempt(options: Readonly<Partial<RouteOptions>>): boolean {
+  return options.accessControlExempt === ACCESS_CONTROL_EXEMPT
 }
 
 /**
@@ -22,8 +23,6 @@ export function isAccessControlExempt(config: ReadonlyMap<string, unknown>): boo
  *
  * @throws ErrConfiguration at start-up for a route that declares `authorize(...)` itself.
  */
-export function accessControlExempt(): AnyRouteExtension {
-  return (target: { config(key: string, value: unknown): unknown }) => {
-    target.config(kAccessControlExempt, ACCESS_CONTROL_EXEMPT)
-  }
+export function accessControlExempt(): Partial<RouteOptions> {
+  return { accessControlExempt: ACCESS_CONTROL_EXEMPT }
 }

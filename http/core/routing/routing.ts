@@ -1,6 +1,7 @@
 import { Container } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
+import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { createRouteGroupCompiler, type RouteGroupCompiler, type RouteGroupMeta } from './compile.js'
 import type { IRouteGroup, RouteGroupScope } from './route.js'
@@ -70,9 +71,9 @@ const kNoLabels: RouteGroupLabels = new Map()
  * guard instance per key and the same policies. Two sources claiming the same path on one server is left to the
  * server to reject at registration, which it does with the path in the message.
  */
-export function buildRouting<R>(sources: readonly RouteSource<R>[], container: Container): Routing<R> {
-  const compileRouteGroup = createRouteGroupCompiler(container)
-  const declared = sources.flatMap(source => source.collect(container))
+export function buildRouting<R>(sources: readonly RouteSource<R>[], context: HTTPSetupContext): Routing<R> {
+  const compileRouteGroup = createRouteGroupCompiler(context)
+  const declared = sources.flatMap(source => source.collect(context.container))
   const taken = new Set<DeclaredRouteGroup<R>>()
 
   return {

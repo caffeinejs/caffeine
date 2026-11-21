@@ -4,15 +4,20 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import { Router } from '../routing/programmatic/programmatic.js'
-import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../security/exempt.js'
+import { accessControlExempt } from '../security/exempt.js'
 import { ErrHealthConfiguration } from './errors.js'
 import type { HealthOptions } from './options.js'
 import { renderProbe, type ProbeQuery } from './probes.js'
 import { HealthProbesBuilder } from './probes_builder.js'
 
-// Marks the probes' own routes, so the collision check passes over them.
-const kProbe = 'caffeine:health-probe'
 const PROBE: unique symbol = Symbol('caffeine.http.health-probe')
+
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    /** Marks the probes' own routes, so the collision check passes over them. */
+    healthProbe?: typeof PROBE
+  }
+}
 
 interface ProbeRequestQuery {
   verbose?: string | string[]
@@ -67,7 +72,7 @@ class HealthProbes extends HTTPPlugin {
     const taken = new Set([live, ready, startup])
 
     context.app.hook('onRoute', route => {
-      if (!taken.has(route.url) || route.config.get(kProbe) === PROBE) {
+      if (!taken.has(route.url) || route.options.healthProbe === PROBE) {
         return
       }
 
@@ -82,8 +87,7 @@ class HealthProbes extends HTTPPlugin {
     context.app.mount(
       new Router()
         .detail('http', { internal: true })
-        .config(kAccessControlExempt, ACCESS_CONTROL_EXEMPT)
-        .config(kProbe, PROBE)
+        .routeOptions(accessControlExempt(), { healthProbe: PROBE })
         .get(live)
         .handler(probe('livez', options, p => health.liveness(p)))
         .get(ready)

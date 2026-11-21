@@ -79,11 +79,11 @@ function routes(calls: { n: number }) {
   const pets = new Router('/pets')
   pets
     .get('/')
-    .extend(cacheControl({ ttl: 60 * Second, tags: ['pets'], staleWhileRevalidate: 30 * Second }))
+    .options(cacheControl({ ttl: 60 * Second, tags: ['pets'], staleWhileRevalidate: 30 * Second }))
     .handler(() => ({ calls: ++calls.n }))
   pets
     .put('/:id')
-    .extend(cacheInvalidate({ tags: ['pets'] }))
+    .options(cacheInvalidate({ tags: ['pets'] }))
     .handler(() => ({ ok: true }))
 
   const plain = new Router('/plain')

@@ -61,6 +61,12 @@ async function boot(build: (app: App) => unknown): Promise<App> {
   return app
 }
 
+declare module '../core/routing/options.js' {
+  interface RouteOptions {
+    testFlag?: string
+  }
+}
+
 describe('lifecycle hooks', () => {
   // The program's fixed order: the application's own hooks, then a router plugin's, then the guards, then the router's,
   // then the route's, then what onRoute added.
@@ -366,7 +372,7 @@ describe('lifecycle hooks', () => {
         .mount(
           new Router('/pets')
             .get('/:id')
-            .config('flag', 'on')
+            .options({ testFlag: 'on' })
             .handler(() => 'pet'),
         ),
     )
@@ -377,7 +383,7 @@ describe('lifecycle hooks', () => {
     expect(seen).toHaveLength(2)
     expect(seen[0]?.url).toBe('/pets/:id')
     expect(seen[0]?.methods).toEqual(['GET'])
-    expect(seen[0]?.config.get('flag')).toBe('on')
+    expect(seen[0]?.options.testFlag).toBe('on')
     expect(seen[1]).toBe(undefined)
   })
 })

@@ -308,7 +308,7 @@ class WebhooksController {
 }
 
 // On a controller, @CSRFExempt() exempts every method, one added later included; @CSRFExempt(false) keeps one checked
-new Router('/hooks').extend(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
+new Router('/hooks').routeOptions(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
 ```
 
 - `GET`, `HEAD`, `OPTIONS`, `TRACE` and `QUERY` are never checked: a safe method changes nothing, so an application
@@ -463,9 +463,13 @@ app.mount(pets) // before app.bootstrap()
   is refused at start-up.
 - Route names default to method + path (`get_pets_id`) and are what the OpenAPI operationId is built from.
   `.name('find')` pins one.
-- `.extend(ext, ...)` applies extensions — how a package configures a route it does not own. http ships
-  `bodyAsBuffer()`, `bodyAsStream()`, `bindTo(name)`, `csrfExempt()` and `cors(options)`; openapi ships
-  `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
+- `.options(...)` on a route and `.routeOptions(...)` on a router set the options a plugin reads for it:
+  `cors(options)`, `csrfExempt()`, `compress(options)`, `decompress(codings)`, `version(v)`, `constraint(name, value)`
+  and, from the caching package, `cacheControl(options)` and `cacheInvalidate(options)`. Each is the same
+  implementation as its decorator, and `@RouteOptions(...)` sets them on a controller or a method.
+- `.extend(ext, ...)` applies the other extensions — how a package configures a route it does not own. http ships
+  `bodyAsBuffer()`, `bodyAsStream()` and `bindTo(name)`; openapi ships `operation(detail)` and `apiGroup(detail)`.
+  Each is the same implementation as its decorator.
 - `.with(factory)` registers a plugin in front of that router's routes and the groups nested under it, taking what
   the application's `.with(...)` takes: a factory that returns an `HTTPPlugin` ([Plugins](#plugins)). A router from
   `new Router(path)` mounts on either application; a handler narrows `ctx.platform` on `name === 'node'` to reach

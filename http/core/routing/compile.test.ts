@@ -14,7 +14,7 @@ import {
   type Guard,
   type HTTPSetupContext,
 } from '../../index.js'
-import { ACCESS_CONTROL_EXEMPT, accessControlExempt, kAccessControlExempt } from '../security/exempt.js'
+import { accessControlExempt } from '../security/exempt.js'
 
 class NobodyScheme extends BaseAuthenticationHandler<object> {
   constructor() {
@@ -34,12 +34,12 @@ class DenyAll implements Guard {
 
 const marked = () =>
   new Router('/marked')
-    .config(kAccessControlExempt, ACCESS_CONTROL_EXEMPT)
+    .routeOptions(accessControlExempt())
     .get('/')
     .handler(() => 'ok')
 const forged = () =>
   new Router('/forged')
-    .config(kAccessControlExempt, true)
+    .routeOptions({ accessControlExempt: true as never })
     .get('/')
     .handler(() => 'ok')
 const plain = () => new Router('/plain').get('/').handler(() => 'ok')
@@ -96,7 +96,7 @@ describe('the access-control mark', () => {
       .mount(
         new Router('/open')
           .name('open')
-          .extend(accessControlExempt())
+          .routeOptions(accessControlExempt())
           .get('/')
           .name('index')
           .authorize({ roles: ['admin'] })
@@ -129,7 +129,7 @@ describe('the access-control mark', () => {
       .mount(
         new Router('/outer').authorize({ roles: ['admin'] }).mount(
           new Router('/inner')
-            .extend(accessControlExempt())
+            .routeOptions(accessControlExempt())
             .get('/')
             .handler(() => 'ok'),
         ),
