@@ -277,7 +277,7 @@ describe('csrf() in front of a webhook receiver', () => {
     const exempt = await ready(
       createWebApplication({ adapter: node() })
         .with(csrf())
-        .mount(new Router('/payments').post('/return').options(csrfExempt()).handler(ok)),
+        .mount(new Router('/payments').post('/return').routeOptions(csrfExempt()).handler(ok)),
     )
 
     expect((await deliver(exempt, '/payments/return', payment, THREE_DS_RETURN)).status).toBe(200)

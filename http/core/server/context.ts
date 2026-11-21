@@ -278,7 +278,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   /** @see {@link IContext.options} */
   get options(): Readonly<Partial<RouteOptions>> {
-    return this.#store.route?.options ?? kNoRouteOptions
+    return this.#store.definition?.options ?? kNoRouteOptions
   }
 
   /** The routes this request's path serves under `method`, as a preflight asks: see {@link ServerShared.routeOf}. */

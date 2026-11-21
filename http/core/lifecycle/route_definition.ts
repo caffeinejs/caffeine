@@ -23,7 +23,7 @@ export interface RouteDefinition<R = unknown> {
   readonly url: string
   readonly route: Readonly<IRoute<R>>
   readonly group: Readonly<IRouteGroup<R>>
-  /** What the route and its groups set with `options(...)`. */
+  /** What the route and its groups set with `routeOptions(...)`. */
   readonly options: Readonly<Partial<RouteOptions>>
 
   /**

@@ -432,7 +432,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       router.get('/inherits').handler(read)
       router
         .get('/overrides')
-        .options({ testLevel: { tier: 'route' } })
+        .routeOptions({ testLevel: { tier: 'route' } })
         .handler(read)
 
       const app = createWebApplication({ adapter: node() }).mount(router)

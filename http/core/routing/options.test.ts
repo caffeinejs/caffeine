@@ -53,7 +53,7 @@ describe('route options', () => {
       new Router('/r')
         .routeOptions({ testA: 'group', testB: 'group' })
         .get('/')
-        .options({ testA: 'route' })
+        .routeOptions({ testA: 'route' })
         .handler(echo),
     )
 
@@ -66,7 +66,7 @@ describe('route options', () => {
       new Router('/r')
         .routeOptions({ testObj: { x: 1 } })
         .get('/')
-        .options({ testObj: { y: 2 } })
+        .routeOptions({ testObj: { y: 2 } })
         .handler(echo),
     )
 
@@ -77,7 +77,7 @@ describe('route options', () => {
     const built = await serve(
       new Router('/r')
         .get('/')
-        .options({ testObj: { x: 1 } }, { testObj: { y: 2 } })
+        .routeOptions({ testObj: { x: 1 } }, { testObj: { y: 2 } })
         .handler(echo),
     )
 
@@ -95,7 +95,7 @@ describe('route options', () => {
           ]),
         })
         .get('/')
-        .options({ testMap: new Map([['b', 2]]) })
+        .routeOptions({ testMap: new Map([['b', 2]]) })
         .handler(ctx => Object.fromEntries(ctx.options.testMap ?? [])),
     )
 
@@ -116,7 +116,7 @@ describe('route options', () => {
     const built = await serve(
       new Router('/r')
         .get('/')
-        .options({ testA: '1' }, o => {
+        .routeOptions({ testA: '1' }, o => {
           o.testA = '2'
         })
         .handler(echo),
@@ -131,7 +131,7 @@ describe('route options', () => {
       new Router('/r')
         .routeOptions({ testA: 'group' })
         .get('/')
-        .options(o => {
+        .routeOptions(o => {
           o.testB = String(o.testA)
         })
         .handler(echo),
@@ -262,7 +262,7 @@ describe('route options', () => {
       new Router('/r')
         .routeOptions({ [kTestSymbol]: 7 })
         .get('/')
-        .options({ testA: 'a' })
+        .routeOptions({ testA: 'a' })
         .handler(ctx => ({ symbol: ctx.options[kTestSymbol] ?? null, a: ctx.options.testA })),
     )
 
@@ -276,7 +276,7 @@ describe('route options', () => {
         .name('group')
         .get('/')
         .name('hook')
-        .options(() => {
+        .routeOptions(() => {
           throw thrown
         })
         .handler(echo),
@@ -341,7 +341,7 @@ describe('route options', () => {
     const built = await serve(
       new Router('/r')
         .get('/')
-        .options(JSON.parse('{"__proto__":{"testA":"x"}}') as Partial<RouteOptions>, o => {
+        .routeOptions(JSON.parse('{"__proto__":{"testA":"x"}}') as Partial<RouteOptions>, o => {
           o.testB = o.testA ?? 'none'
         })
         .handler(echo),
@@ -371,7 +371,7 @@ describe('route options', () => {
     const built = await serve(
       new Router('/r')
         .get('/')
-        .options({ testA: 'a' })
+        .routeOptions({ testA: 'a' })
         .handler(ctx => ({ frozen: Object.isFrozen(ctx.options), a: ctx.options.testA })),
     )
 

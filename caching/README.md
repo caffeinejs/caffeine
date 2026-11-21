@@ -53,7 +53,7 @@ answered from the store with `X-Cache: HIT` and an `Age` header, and the handler
 requests for a response that is not stored yet run the handler once, not once each.
 
 `@CacheControl` on a class applies to every route of the controller. The same options are available without
-decorators, as route options set with `.options(...)`:
+decorators, as route options set with `.routeOptions(...)`:
 
 ```ts
 import { cacheControl, cacheInvalidate } from '@caffeinejs/caching/http'
@@ -63,11 +63,11 @@ import { Minute } from '@caffeinejs/std/duration'
 const pets = new Router('/pets')
 pets
   .get('/')
-  .options(cacheControl({ ttl: 5 * Minute, tags: ['pets'] }))
+  .routeOptions(cacheControl({ ttl: 5 * Minute, tags: ['pets'] }))
   .handler(() => petStore.all())
 pets
   .post('/')
-  .options(cacheInvalidate({ tags: ['pets'] }))
+  .routeOptions(cacheInvalidate({ tags: ['pets'] }))
   .handler(() => ({ created: true }))
 ```
 

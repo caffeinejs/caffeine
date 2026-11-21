@@ -27,7 +27,7 @@ describe('a route that declares hooks of its own', () => {
     const router = new Router('')
     router
       .get('/data')
-      .options({ cache: { ttl: 60 * Second } })
+      .routeOptions({ cache: { ttl: 60 * Second } })
       .hook('onRequest', async () => {})
       .hook('onRequest', async () => {})
       .hook('onSend', async () => {})

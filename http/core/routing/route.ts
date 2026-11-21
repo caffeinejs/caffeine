@@ -108,8 +108,10 @@ export interface IRoute<R = unknown> {
   statusCode?: number
   /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
   bodyAs?: BodyMode
-  /** What the route and its groups set with `options(...)`, frozen shallowly: nested values are the inputs' own. */
-  options: Readonly<Partial<RouteOptions>>
+  /**
+   * What the route and its groups set with `routeOptions(...)`, frozen shallowly: nested values are the inputs' own.
+   */
+  readonly options: Readonly<Partial<RouteOptions>>
   /**
    * What packages annotated this route with.
    *

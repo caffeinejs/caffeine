@@ -418,9 +418,9 @@ export class Router<
 
   /**
    * Sets route options for every route of this router and of the routers nested under it. A nested router's key, or a
-   * route's own `options(...)` key, replaces what is set here, except a Map, which merges by key; within this router,
-   * objects merge key by key, in the order written. A function runs while routes compile, handed the setup context
-   * and its start-up configuration.
+   * route's own `routeOptions(...)` key, replaces what is set here, except a Map, which merges by key; within this
+   * router, objects merge key by key, in the order written. A function runs while routes compile, handed the setup
+   * context and its start-up configuration.
    *
    * Named apart from {@link options}, which registers an OPTIONS route.
    *

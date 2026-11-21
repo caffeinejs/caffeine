@@ -40,11 +40,11 @@ function dish() {
   return new Router('/d')
     .get('/')
     .name('spicy')
-    .options(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
+    .routeOptions(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
     .handler(() => 'spicy')
     .get('/')
     .name('mild')
-    .options(constraint('flavor', 'mild', { header: 'X-Flavor' }))
+    .routeOptions(constraint('flavor', 'mild', { header: 'X-Flavor' }))
     .handler(() => 'mild')
 }
 
@@ -138,7 +138,7 @@ describe('route constraints on the engine', () => {
         new Router('/v')
           .routeOptions(version('1.0.0'))
           .get('/')
-          .options(constraint('flavor', 'x', { header: 'X-Flavor' }))
+          .routeOptions(constraint('flavor', 'x', { header: 'X-Flavor' }))
           .handler(() => 'ok'),
       )
     app = built
@@ -153,7 +153,7 @@ describe('route constraints on the engine', () => {
     const built = createWebApplication().mount(
       new Router('/x')
         .get('/')
-        .options(constraint('nope', 1))
+        .routeOptions(constraint('nope', 1))
         .handler(() => 'x'),
     )
     app = built
@@ -168,7 +168,7 @@ describe('route constraints on the engine', () => {
     const built = createWebApplication().mount(
       new Router('/x')
         .get('/')
-        .options({ constraints: { version: '1.0.0' } } as never)
+        .routeOptions({ constraints: { version: '1.0.0' } } as never)
         .handler(() => 'x'),
     )
     app = built
@@ -183,7 +183,7 @@ describe('route constraints on the engine', () => {
     const empty = () =>
       new Router('/e')
         .get('/')
-        .options({ constraints: new Map() })
+        .routeOptions({ constraints: new Map() })
         .handler(() => 'e')
     const built = createWebApplication().mount(empty(), empty())
     app = built
@@ -205,7 +205,7 @@ describe('route constraints on the engine', () => {
     const built = createWebApplication().mount(
       new Router('/h')
         .get('/')
-        .options(constraint('host', 'api.example'))
+        .routeOptions(constraint('host', 'api.example'))
         .handler(() => 'h'),
     )
     app = built
@@ -221,7 +221,7 @@ describe('route constraints on the engine', () => {
       .mount(
         new Router('/api')
           .get('/')
-          .options(constraint('version', 'v7'))
+          .routeOptions(constraint('version', 'v7'))
           .handler(() => 'v7'),
       )
     app = built
@@ -243,7 +243,7 @@ describe('route constraints on the engine', () => {
       .mount(
         new Router('/b')
           .get('/')
-          .options(constraint('boom', 'x'))
+          .routeOptions(constraint('boom', 'x'))
           .handler(() => 'b'),
       )
     app = built

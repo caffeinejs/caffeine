@@ -17,7 +17,7 @@ declare module '../routing/options.js' {
  * whose path is under `exclude(...)`: a route's own mark wins over a path.
  *
  * The programmatic form of `@CSRFExempt()`: `router.routeOptions(csrfExempt())`, or
- * `router.post('/hook').options(csrfExempt())`.
+ * `router.post('/hook').routeOptions(csrfExempt())`.
  */
 export function csrfExempt(exempt = true): Partial<RouteOptions> {
   return { csrf: { exempt } }

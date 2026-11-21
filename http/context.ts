@@ -156,7 +156,7 @@ export interface IContext<
   get route(): RouteDefinition | undefined
 
   /**
-   * The options the matched route and its groups set with `options(...)`, `routeOptions(...)` or `@RouteOptions(...)`:
+   * The options the matched route and its groups set with `routeOptions(...)` or `@RouteOptions(...)`:
    * how a hook or a middleware that covers many routes reads one route's setting, `ctx.options.cors`. An empty object
    * when no route matched.
    */

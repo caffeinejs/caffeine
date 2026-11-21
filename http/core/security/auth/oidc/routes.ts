@@ -6,16 +6,7 @@ import { Router } from '../../../routing/programmatic/programmatic.js'
 import { accessControlExempt } from '../../exempt.js'
 import { ErrAuthConfiguration } from '../errors.js'
 import { isRemoteAuthenticationError } from '../internal/remote/errors.js'
-import type { OIDCMeta } from './oidc.js'
-
-const OIDC_ROUTE: unique symbol = Symbol('caffeine.http.oidc-route')
-
-declare module '../../../routing/options.js' {
-  interface RouteOptions {
-    /** Marks the OIDC routes the engine serves, so the conflict check passes over them. */
-    oidcRoute?: typeof OIDC_ROUTE
-  }
-}
+import { OIDC_ROUTE, type OIDCMeta } from './oidc.js'
 
 /**
  * Where a browser path of the OIDC routes is routed. Both paths are the browser's — the callback's comes from

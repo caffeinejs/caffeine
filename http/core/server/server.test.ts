@@ -565,7 +565,7 @@ describe('HTTPServer', () => {
       r =>
         void r
           .get('/x')
-          .options({ constraints: { version: '1.0.0' } } as never)
+          .routeOptions({ constraints: { version: '1.0.0' } } as never)
           .handler(() => 'x'),
     ],
     [
@@ -1262,7 +1262,7 @@ describe('HTTPServer hooks', () => {
     const served = await serve(
       new Router('/s')
         .get('/')
-        .options({ testGreeting: 'hello' })
+        .routeOptions({ testGreeting: 'hello' })
         .handler(() => 'ok'),
       a => a.hook('onSend', ctx => void ctx.header('x-greeting', String(ctx.route?.options.testGreeting))),
     )
@@ -1385,7 +1385,7 @@ describe('a route that declares caching', () => {
   function cached<R extends AnyRouter>(router: R): R {
     router
       .get('/x')
-      .options({ cache: { ttl: 60 * Second } } as never)
+      .routeOptions({ cache: { ttl: 60 * Second } } as never)
       .handler(() => 'x')
     return router
   }

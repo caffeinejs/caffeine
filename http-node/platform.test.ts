@@ -716,7 +716,7 @@ describe('the Node platform', () => {
     const routes = new Router('/a')
     routes
       .get('/cached')
-      .options({ cache: { maxAge: 1 } } as never)
+      .routeOptions({ cache: { maxAge: 1 } } as never)
       .handler(() => 'never')
     const app = createWebApplication({ adapter: node() }).mount(routes)
     apps.push(app)

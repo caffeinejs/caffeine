@@ -373,7 +373,7 @@ describe('compression() per route', () => {
     router.get('/off').handler(() => PETS)
     router
       .get('/on')
-      .options(compress(true))
+      .routeOptions(compress(true))
       .handler(() => PETS)
     const app = await serve(undefined, router)
 

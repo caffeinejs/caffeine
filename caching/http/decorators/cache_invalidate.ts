@@ -13,7 +13,7 @@ import { cacheInvalidate } from '../helpers/cache_invalidate.js'
  */
 export function CacheInvalidate(
   options: CacheInvalidateOptions,
-): (fn: Function, context: ClassMemberDecoratorContext) => void {
+): (fn: Function, context: ClassMethodDecoratorContext) => void {
   const decorate = RouteOptions(cacheInvalidate(options))
 
   return (fn, context) => {

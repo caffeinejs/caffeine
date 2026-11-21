@@ -463,7 +463,7 @@ app.mount(pets) // before app.bootstrap()
   is refused at start-up.
 - Route names default to method + path (`get_pets_id`) and are what the OpenAPI operationId is built from.
   `.name('find')` pins one.
-- `.options(...)` on a route and `.routeOptions(...)` on a router set the options a plugin reads for it:
+- `.routeOptions(...)` on a route or a router sets the options a plugin reads for it:
   `cors(options)`, `csrfExempt()`, `compress(options)`, `decompress(codings)`, `version(v)`, `constraint(name, value)`
   and, from the caching package, `cacheControl(options)` and `cacheInvalidate(options)`. Each is the same
   implementation as its decorator, and `@RouteOptions(...)` sets them on a controller or a method.

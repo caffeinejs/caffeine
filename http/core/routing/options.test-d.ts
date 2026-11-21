@@ -1,6 +1,6 @@
 import { expectTypeOf } from 'vitest'
 
-import { Controller, cors, csrfExempt, RouteOptions, Router, type IContext } from '../../index.js'
+import { Controller, cors, csrfExempt, Get, RouteOptions, Router, type IContext, type IRoute } from '../../index.js'
 
 // A plugin that declares its field without `?` must not make it required on every route, nor present on a route that
 // never set it.
@@ -17,16 +17,13 @@ declare module './options.js' {
 
 new Router('/a')
   .get('/')
-  .options(cors(false), csrfExempt())
+  .routeOptions(cors(false), csrfExempt())
   .handler(() => 'a')
 
 new Router('/a').routeOptions(cors({ origins: ['https://example.com'] }), { csrf: { exempt: true } })
 
-// @ts-expect-error a path is not an options input
-new Router('/a').get('/').options('x')
-
 // @ts-expect-error a declared field takes its declared type
-new Router('/a').get('/').options({ cors: 1 })
+new Router('/a').get('/').routeOptions({ cors: 1 })
 
 // @ts-expect-error a key no plugin declared is refused
 new Router('/a').routeOptions({ unknownPluginKey: true })
@@ -68,5 +65,27 @@ function closed(o: Partial<RouteOptions>) {
 new Router('/a')
   .routeOptions(closed)
   .get('/')
-  .options(closed)
+  .routeOptions(closed)
   .handler(() => 'a')
+
+// A compiled route's options are what every reader shares: none can replace them.
+declare const compiled: IRoute
+// @ts-expect-error a compiled route's options are read-only
+compiled.options = {}
+
+// Route options decorate a controller or a method, never a getter, which has no handler to dispatch to.
+@Controller('/getter')
+class WithGetter {
+  // @ts-expect-error a getter is not a route
+  @RouteOptions({ cors: false })
+  get value(): string {
+    return 'x'
+  }
+
+  @RouteOptions({ cors: false })
+  @Get('/')
+  read(): string {
+    return this.value
+  }
+}
+void WithGetter

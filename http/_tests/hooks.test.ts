@@ -372,7 +372,7 @@ describe('lifecycle hooks', () => {
         .mount(
           new Router('/pets')
             .get('/:id')
-            .options({ testFlag: 'on' })
+            .routeOptions({ testFlag: 'on' })
             .handler(() => 'pet'),
         ),
     )

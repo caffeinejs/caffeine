@@ -9,10 +9,9 @@ declare module '../routing/options.js' {
 }
 
 /**
- * Route options that select on a registered route constraint, applied with `.options(constraint(name, value))` on a
- * route or `.routeOptions(constraint(name, value))` on a router. The server matches on it by itself. A route's
- * constraint replaces the same name from its router and keeps the others: a route of a versioned router stays
- * versioned.
+ * Route options that select on a registered route constraint, applied with `.routeOptions(constraint(name, value))` on
+ * a route or a router. The server matches on it by itself. A route's constraint replaces the same name from its router
+ * and keeps the others: a route of a versioned router stays versioned.
  */
 export function constraint(name: string, value: unknown, options?: { header?: string }): Partial<RouteOptions> {
   return { constraints: new Map([[name, { value, header: options?.header }]]) }
@@ -23,17 +22,16 @@ export function constraint(name: string, value: unknown, options?: { header?: st
  * constraint `name`.
  *
  * Nothing is installed for it; a name other than `version` and `host` needs its strategy in `.server(...)`'s
- * `constraints`. A route whose constraint the request does not satisfy is not matched, and the
- * request is answered 404. The programmatic form is {@link constraint}, applied with
- * `.options(constraint(name, value))`.
+ * `constraints`. A route whose constraint the request does not satisfy is not matched, and the request is answered
+ * 404. The programmatic form is {@link constraint}, applied with `.routeOptions(constraint(name, value))`.
  */
 export function Constraint(name: string, value: unknown, options?: { header?: string }) {
   return RouteOptions(constraint(name, value, options))
 }
 
 /**
- * Route options binding routes to an API version. One implementation behind {@link Version}, applied
- * with `.options(version(v))` on a route or `.routeOptions(version(v))` on a router.
+ * Route options binding routes to an API version. One implementation behind {@link Version}, applied with
+ * `.routeOptions(version(v))` on a route or a router.
  */
 export function version(version: string): Partial<RouteOptions> {
   return constraint(VERSION_CONSTRAINT, version, { header: kVersionHeader })

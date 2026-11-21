@@ -12,8 +12,16 @@ describe('@CacheInvalidate', () => {
       context: ClassDecoratorContext,
     ) => void
 
-    expect(() =>
-      decorate(class Pets {}, { kind: 'class', name: 'Pets', metadata: {} } as unknown as ClassDecoratorContext),
-    ).toThrow(ErrConfiguration)
+    let failure: unknown
+    try {
+      decorate(class Pets {}, { kind: 'class', name: 'Pets', metadata: {} } as unknown as ClassDecoratorContext)
+    } catch (err) {
+      failure = err
+    }
+
+    expect(failure).toBeInstanceOf(ErrConfiguration)
+    expect((failure as Error).message.split('\n')[0]).toBe(
+      'Cannot apply @CacheInvalidate to the class "Pets": it decorates a method',
+    )
   })
 })

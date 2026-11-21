@@ -24,10 +24,10 @@ import { mergeInto, mergeValue, ownKeys } from './_merge.js'
  *
  * The import keeps the file a module, so the block adds to the package's types instead of replacing them.
  *
- * Set with `.options(...)` on a route, `.routeOptions(...)` on a router, and `@RouteOptions(...)` on a controller or a
- * method. Within one of those levels, settings merge key by key: plain objects member by member, arrays joined, Maps
- * merged by key and Sets united, anything else replaced. A more specific level's key replaces a less specific one's
- * whole value, except a Map, which merges by key: a route's constraint keeps its router's version.
+ * Set with `.routeOptions(...)` on a route or a router, and `@RouteOptions(...)` on a controller or a method. Within
+ * one of those levels, settings merge key by key: plain objects member by member, arrays joined, Maps merged by key and
+ * Sets united, anything else replaced. A more specific level's key replaces a less specific one's whole value, except a
+ * Map, which merges by key: a route's constraint keeps its router's version.
  */
 export interface RouteOptions {
   /** Never set: keeps a route's options checked even where no plugin has declared a field. */
@@ -70,7 +70,7 @@ export type RouteOptionsInput<C = unknown> = Partial<RouteOptions> | RouteOption
  * ```
  */
 export function RouteOptions<C = unknown>(...inputs: RouteOptionsInput<C>[]) {
-  return (target: Function | object, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {
+  return (target: Function | object, context: ClassDecoratorContext | ClassMethodDecoratorContext): void => {
     if (context.kind === 'class') {
       configureRouteGroup(context, target as Function, group => group.options(...inputs))
     } else {

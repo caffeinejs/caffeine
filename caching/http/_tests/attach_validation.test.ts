@@ -30,7 +30,7 @@ describe('what a route may ask of the cache, checked while it registers', () => 
     const router = new Router('/attach')
     router
       .get('/data')
-      .options(cacheControl(options))
+      .routeOptions(cacheControl(options))
       .handler(() => ({ ok: true }))
 
     const app = newApp()
@@ -109,12 +109,12 @@ describe('constrained routes that share a URL', () => {
     pets
       .get('/')
       .name('v1')
-      .options(version('1.0.0'), cacheControl(v1))
+      .routeOptions(version('1.0.0'), cacheControl(v1))
       .handler(() => ({ v: 1 }))
     pets
       .get('/')
       .name('v2')
-      .options(version('2.0.0'), cacheControl(v2))
+      .routeOptions(version('2.0.0'), cacheControl(v2))
       .handler(() => ({ v: 2 }))
 
     return pets
@@ -183,7 +183,7 @@ describe('constrained routes that share a URL', () => {
       const router = new Router('/tenant-data')
       router
         .get('/')
-        .options(constraint('tenant', 'acme'), cacheControl(options))
+        .routeOptions(constraint('tenant', 'acme'), cacheControl(options))
         .handler(() => ({ tenant: 'acme' }))
 
       const app = newApp()

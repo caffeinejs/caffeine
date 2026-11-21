@@ -102,7 +102,9 @@ export function compileConstraints(
       if (!(declared instanceof Map)) {
         throw new ErrConfiguration(
           errMessage(`Cannot serve "${where}": its constraints are not declared with constraint() or version()`)
-            .solutions(`Declare them with ".options(constraint(name, value))" or ".options(version('1.0.0'))"`)
+            .solutions(
+              `Declare them with ".routeOptions(constraint(name, value))" or ".routeOptions(version('1.0.0'))"`,
+            )
             .reference('@caffeinejs/http', ErrConfiguration)
             .build(),
         )

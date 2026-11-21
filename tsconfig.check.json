@@ -20,6 +20,9 @@
       "path": "./http/_tests/subpaths/decorators"
     },
     {
+      "path": "./http/_tests/subpaths/root"
+    },
+    {
       "path": "./http-node"
     },
     {
