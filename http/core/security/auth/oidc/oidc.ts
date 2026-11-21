@@ -20,6 +20,16 @@ import { ErrOIDCCallback, ErrOIDCConfiguration, ErrOIDCDiscovery, ErrOIDCSession
 import { resolveOIDCOptions } from './options.js'
 import type { OIDCAuthenticationOptions, OIDCTokens, ResolvedOIDCAuthenticationOptions } from './options.js'
 
+/** Marks the OIDC routes the engine serves, so their conflict check passes over them. Kept out of the barrel. */
+export const OIDC_ROUTE: unique symbol = Symbol('caffeine.http.oidc-route')
+
+declare module '../../../routing/options.js' {
+  interface RouteOptions {
+    /** Marks the OIDC routes the engine serves, so the conflict check passes over them. */
+    oidcRoute?: typeof OIDC_ROUTE
+  }
+}
+
 /**
  * The callback surface the server needs, satisfied by every OAuth-family handler.
  *

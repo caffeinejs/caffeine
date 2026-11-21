@@ -76,7 +76,7 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
     const app = await serve(r =>
       r
         .get('/file')
-        .config('cache', { ttl: 60 * Second })
+        .config({ cache: { ttl: 60 * Second } })
         .handler(ctx => {
           ctx.header(validator, validator === 'etag' ? '"v1"' : lastModified)
           return streamed.body as never
@@ -103,7 +103,7 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
       const app = await serve(r =>
         r
           .get('/file')
-          .config('cache', { ttl: 60 * Second })
+          .config({ cache: { ttl: 60 * Second } })
           .handler(ctx => {
             ctx.header('etag', '"v1"')
             return streamed.body as never
@@ -127,7 +127,7 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
     const app = await serve(r =>
       r
         .get('/flaky')
-        .config('cache', { ttl: 60 * Second, staleIfError: 300 * Second })
+        .config({ cache: { ttl: 60 * Second, staleIfError: 300 * Second } })
         .handler(ctx => {
           if (++calls === 1) {
             return 'fresh'
@@ -156,7 +156,7 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
     const app = await serve(r =>
       r
         .get('/blob')
-        .config('cache', { ttl: 60 * Second, staleIfError: 300 * Second })
+        .config({ cache: { ttl: 60 * Second, staleIfError: 300 * Second } })
         .handler(ctx => {
           if (++calls === 1) {
             ctx.header('content-type', 'application/octet-stream')
@@ -187,7 +187,7 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
       r =>
         r
           .get('/blob')
-          .config('cache', { ttl: 60 * Second })
+          .config({ cache: { ttl: 60 * Second } })
           .handler(ctx => {
             ctx.header('content-type', 'application/octet-stream')
             return bytes
@@ -220,10 +220,10 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
     let calls = 0
     const app = await serve(r => {
       r.get('/item')
-        .config('cache', { ttl: 60 * Second, tags: ['item'] })
+        .config({ cache: { ttl: 60 * Second, tags: ['item'] } })
         .handler(() => ({ n: ++calls }))
       r.put('/item')
-        .config('cacheInvalidate', { tags: ['item'] })
+        .config({ cacheInvalidate: { tags: ['item'] } })
         .handler(() => ({ ok: true }))
     })
 

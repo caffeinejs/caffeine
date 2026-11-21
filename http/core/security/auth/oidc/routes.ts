@@ -3,14 +3,10 @@ import { errMessage } from '@caffeinejs/std/err'
 import { stripBasePath } from '../../../../base_path.js'
 import type { HTTPSetupContext } from '../../../../plugin.js'
 import { Router } from '../../../routing/programmatic/programmatic.js'
-import { ACCESS_CONTROL_EXEMPT, kAccessControlExempt } from '../../exempt.js'
+import { accessControlExempt } from '../../exempt.js'
 import { ErrAuthConfiguration } from '../errors.js'
 import { isRemoteAuthenticationError } from '../internal/remote/errors.js'
-import type { OIDCMeta } from './oidc.js'
-
-/** Marks the OIDC routes the engine serves, so the conflict check passes over them. */
-const kOIDCRoute = 'caffeine:oidc-route'
-const OIDC_ROUTE: unique symbol = Symbol('caffeine.http.oidc-route')
+import { OIDC_ROUTE, type OIDCMeta } from './oidc.js'
 
 /**
  * Where a browser path of the OIDC routes is routed. Both paths are the browser's — the callback's comes from
@@ -77,7 +73,7 @@ export function mountOIDCRoutes(context: HTTPSetupContext, oidc: OIDCMeta, baseP
   const named = new Set<string>()
 
   context.app.hook('onRoute', route => {
-    if (route.config.get(kOIDCRoute) === OIDC_ROUTE) {
+    if (route.options.oidcRoute === OIDC_ROUTE) {
       return
     }
 
@@ -109,8 +105,7 @@ export function mountOIDCRoutes(context: HTTPSetupContext, oidc: OIDCMeta, baseP
 
   const router = new Router()
     .detail('http', { internal: true })
-    .config(kAccessControlExempt, ACCESS_CONTROL_EXEMPT)
-    .config(kOIDCRoute, OIDC_ROUTE)
+    .config(accessControlExempt(), { oidcRoute: OIDC_ROUTE })
 
   for (const { handler } of oidc.handlers) {
     // A failure here — the provider cannot be reached — goes to the error handlers, which answer with the error's

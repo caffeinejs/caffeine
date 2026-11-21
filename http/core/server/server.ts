@@ -1268,7 +1268,7 @@ function assertCachingCovered(
     )
   }
 
-  if (installs === 0 && (route.config.has('cache') || route.config.has('cacheInvalidate'))) {
+  if (installs === 0 && (Object.hasOwn(route.options, 'cache') || Object.hasOwn(route.options, 'cacheInvalidate'))) {
     throw configurationError(
       `Cannot serve "${name}" on the ${application}: it declares @CacheControl or @CacheInvalidate and no HTTP caching covers it`,
       'Add ".with(HTTPCaching(...))" to the application builder',

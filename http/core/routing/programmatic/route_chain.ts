@@ -12,6 +12,7 @@ import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
 import type { RequestHookName, RequestHooks } from '../../lifecycle/lifecycle.js'
 import type { RouteExtension } from '../extension.js'
+import type { RouteOptionsInput } from '../options.js'
 import type { RouteAuthzOptions, RouteDetail, RouteValidationSchema } from '../spec.js'
 import type { Router } from './programmatic.js'
 import type { RouteState } from './state.js'
@@ -140,10 +141,17 @@ export class RouteChain<
     return this
   }
 
-  config<K extends string>(key: K, value: unknown): this
-  config<K extends string>(config: Map<K, unknown>): this
-  config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
-    this.#state.builder.config(keyOrConfig as K, value)
+  /**
+   * Sets this route's options: its own keys replace its routers', except a Map, which merges by key, and within the
+   * route objects merge key by key, in the order written. A function runs while routes compile, handed the setup
+   * context and its start-up configuration.
+   *
+   * ```ts
+   * pets.post('/import').config(cors(false), csrfExempt())
+   * ```
+   */
+  config(...inputs: RouteOptionsInput<C>[]): this {
+    this.#state.builder.options(...inputs)
     return this
   }
 
@@ -166,12 +174,12 @@ export class RouteChain<
   /**
    * Applies extensions to the route, in the order given.
    *
-   * How a package configures a route it does not own: `@caffeinejs/openapi` documenting an operation, `cors(...)`
-   * setting its cross-origin access. An extension is the same function a decorator passes to `configureRoute`, so a
-   * feature reads the same whichever way the route was declared.
+   * How a package describes a route it does not own: `@caffeinejs/openapi` documenting an operation. An extension is
+   * the same function a decorator passes to `configureRoute`, so a feature reads the same whichever way the route was
+   * declared. A setting a plugin reads goes through {@link config} instead.
    *
    * ```ts
-   * pets.get('/:id').extend(operation({ summary: 'Get a pet' }), cors(false))
+   * pets.get('/:id').extend(operation({ summary: 'Get a pet' }))
    * ```
    */
   extend(extension: RouteExtension, ...rest: RouteExtension[]): this {

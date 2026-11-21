@@ -8,6 +8,7 @@ import type { ErrorHandler } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
 import { AuthzRouteService } from '../security/authz/index.js'
+import type { RouteOptions } from './options.js'
 import type {
   BodyMode,
   RouteAuthz,
@@ -63,7 +64,7 @@ export interface IRouteGroup<R = unknown> {
    * What registered plugins inside this group's context, each with the path it starts at, outermost first.
    *
    * A programmatic group lists its own router and every router it is nested under, so a plugin a parent registered
-   * with `router.with(...)` reaches the groups below it the way `router.extend(...)` configuration does. A
+   * with `router.with(...)` reaches the groups below it the way `router.config(...)` does. A
    * controller group lists the class. Undefined when nothing scoped anything here.
    */
   scopes?: readonly RouteGroupScope[]
@@ -107,7 +108,10 @@ export interface IRoute<R = unknown> {
   statusCode?: number
   /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
   bodyAs?: BodyMode
-  config: Map<string, unknown>
+  /**
+   * What the route and its groups set with `config(...)`, frozen shallowly: nested values are the inputs' own.
+   */
+  readonly options: Readonly<Partial<RouteOptions>>
   /**
    * What packages annotated this route with.
    *

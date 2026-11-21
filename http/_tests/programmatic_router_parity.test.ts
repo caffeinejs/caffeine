@@ -45,6 +45,13 @@ function successTicket(claims: Array<{ type: string; value: string }> = [], sche
   return AuthenticateResult.success(new AuthenticationTicket(new Principal(true, [identity]), scheme))
 }
 
+declare module '../core/routing/options.js' {
+  interface RouteOptions {
+    testLevel?: { level: string } | { tier: string }
+    testTier?: string
+  }
+}
+
 describe('programmatic router parity with the decorator feature set', () => {
   describe('given guards', () => {
     it('should run a group guard and a route guard, and deny like a decorated route', async () => {
@@ -418,15 +425,15 @@ describe('programmatic router parity with the decorator feature set', () => {
   })
 
   describe('given adapter configuration on a group and a route', () => {
-    // What a feature reads per request, as `@Config` writes it. The more specific level wins a key outright.
+    // What a feature reads per request, as `@RouteOptions` writes it. The more specific level wins a key outright.
     it("should give every route the group's entries, a route's own replacing the group's for its key", async () => {
-      const read = (ctx: IContext) => {
-        const config = Object.fromEntries(ctx.route?.config ?? [])
-        return { feature: config.feature, other: config.other }
-      }
-      const router = new Router('/configured').config('feature', { level: 'group' }).config('other', 'kept')
+      const read = (ctx: IContext) => ({ feature: ctx.options.testLevel, other: ctx.options.testTier })
+      const router = new Router('/configured').config({ testLevel: { level: 'group' }, testTier: 'kept' })
       router.get('/inherits').handler(read)
-      router.get('/overrides').config('feature', { tier: 'route' }).handler(read)
+      router
+        .get('/overrides')
+        .config({ testLevel: { tier: 'route' } })
+        .handler(read)
 
       const app = createWebApplication({ adapter: node() }).mount(router)
       await app.bootstrap()
@@ -468,9 +475,9 @@ describe('programmatic router parity with the decorator feature set', () => {
 
   describe('given a version constraint', () => {
     it('should select a programmatic route by Accept-Version exactly as a decorated one', async () => {
-      const v1 = new Router('/pets').name('ParityPetsV1').extend(version('1.0.0'))
+      const v1 = new Router('/pets').name('ParityPetsV1').config(version('1.0.0'))
       v1.get('/').handler(() => ({ v: 1 }))
-      const v2 = new Router('/pets').name('ParityPetsV2').extend(version('2.0.0'))
+      const v2 = new Router('/pets').name('ParityPetsV2').config(version('2.0.0'))
       v2.get('/').handler(() => ({ v: 2 }))
 
       const app = createWebApplication({ adapter: node() }).mount(v1, v2)

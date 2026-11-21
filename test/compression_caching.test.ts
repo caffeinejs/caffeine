@@ -30,7 +30,7 @@ function report(): Router<any, any, any, any, any> {
   const router = new Router('/report')
   router
     .get('/')
-    .extend(cacheControl({ ttl: 10 * Minute }))
+    .config(cacheControl({ ttl: 10 * Minute }))
     .handler(ctx => {
       runs++
       ctx.header('x-runs', String(runs))
@@ -128,7 +128,7 @@ describe('compression() on the server with HTTPCaching on a router, the order it
     const router = new Router('/flaky')
     router
       .get('/')
-      .extend(cacheControl({ ttl: 1 * Minute, staleIfError: 5 * Minute }))
+      .config(cacheControl({ ttl: 1 * Minute, staleIfError: 5 * Minute }))
       .handler(ctx => {
         if (failing) {
           ctx.status(503).header('content-type', 'text/plain')

@@ -3,6 +3,7 @@ import { Container, InjectionToken } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { boundTo } from '../../binding.js'
+import type { HTTPSetupContext } from '../../plugin.js'
 import { buildCatchByMap, ErrConfiguration } from '../error/index.js'
 import type { Guard } from '../guards/index.js'
 import { kGlobalGuards } from '../guards/keys.js'
@@ -21,6 +22,14 @@ import {
 } from '../security/authz/index.js'
 import { isAccessControlExempt } from '../security/exempt.js'
 import { mergeAuthz } from './inherit.js'
+import {
+  applyRouteOptions,
+  kNoRouteOptions,
+  layerRouteOptions,
+  resolveRouteOptionLevels,
+  type RouteOptions,
+  type RouteOptionsLevel,
+} from './options.js'
 import {
   IRoute,
   IRouteGroup,
@@ -57,7 +66,8 @@ export type RouteGroupCompiler = <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMe
  * The guard cache and the authorization configuration are resolved once here rather than per group, so two
  * sources compiling routes into the same application see one guard instance per key and one set of policies.
  */
-export function createRouteGroupCompiler(container: Container): RouteGroupCompiler {
+export function createRouteGroupCompiler(context: HTTPSetupContext): RouteGroupCompiler {
+  const container = context.container
   // Absent when the application never installed authorization — no authentication feature and no explicit
   // `Authorization(...)`. A protected route with authorization absent is refused separately, at start-up, by
   // `assertAuthorizationConfigured` — not here, so the failure names the real cause instead of a missing
@@ -78,19 +88,22 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
   // its own with none.
   const defaultScheme = container.getOptional(AuthenticationSchemeProvider)?.defaultAuthenticateScheme
 
+  // A router's level is one array in every group nested under it: resolved once, its configurers run once.
+  const resolvedLevels = new WeakMap<RouteOptionsLevel, Partial<RouteOptions>>()
+
   return function compileRouteGroup<R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): IRouteGroup<R> {
+    // Once for the group, shared by every route that sets none of its own; a route's own keys replace the group's.
+    const groupOptions =
+      spec.options === undefined
+        ? kNoRouteOptions
+        : Object.freeze(resolveRouteOptionLevels(spec.options, context, meta.name, resolvedLevels))
+
     const compileRoute = (route: RouteSpec<R>): IRoute<R> => {
-      const config = new Map<string, unknown>()
-      if (spec.config) {
-        for (const [k, v] of spec.config) {
-          config.set(k, v)
-        }
-      }
-      if (route.config) {
-        for (const [k, v] of route.config) {
-          config.set(k, v)
-        }
-      }
+      const owner = `${meta.name}.${String(route.name)}`
+      const options =
+        route.options === undefined
+          ? groupOptions
+          : Object.freeze(layerRouteOptions(groupOptions, applyRouteOptions(route.options, context, owner)))
 
       const header = new Map<string, string | string[]>()
       if (spec.header) {
@@ -105,9 +118,8 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
       }
       const hasHeader = !!spec.header || !!route.header
 
-      const owner = `${meta.name}.${String(route.name)}`
       // A route the framework serves on the application's behalf: no global guard and no authorization reach it.
-      const exempt = isAccessControlExempt(config)
+      const exempt = isAccessControlExempt(options)
 
       return {
         path: route.path,
@@ -126,7 +138,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         hasHeader,
         statusCode: route.statusCode,
         bodyAs: route.bodyAs,
-        config: config,
+        options,
         // Copied, not shared: a plugin enriching the compiled route's detail from an `onRoute` hook must not
         // write back into the spec the route was authored from.
         detail: route.detail === undefined ? undefined : { ...route.detail },

@@ -29,7 +29,7 @@ class PlainRoutes extends HTTPPlugin {
     app.mount(
       new Router().get('/admin-ui/users', ok).get('/assets-but-not-really', ok),
       new Router('/assets').authorize({ allowAnonymous: true }).get('/app.js', ok),
-      new Router('/metrics').extend(accessControlExempt()).get('/', ok),
+      new Router('/metrics').config(accessControlExempt()).get('/', ok),
     )
   }
 }

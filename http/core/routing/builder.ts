@@ -10,6 +10,7 @@ import { assertHookName, REQUEST_HOOK_NAMES, type RequestHookName, type RequestH
 import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 import { mergeValue } from './_merge.js'
 import { foldAuthz } from './inherit.js'
+import type { RouteOptionsInput } from './options.js'
 import type {
   BodyMode,
   RouteAuthz,
@@ -32,7 +33,7 @@ export class RouteGroupBuilder {
   #bodyLimit?: ByteSize
   #timeout?: Duration
   #authorize?: RouteAuthz
-  #config?: Map<string, unknown>
+  #options?: RouteOptionsInput[]
   #detail?: RouteGroupDetail
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
@@ -143,17 +144,9 @@ export class RouteGroupBuilder {
     return this
   }
 
-  config<K extends string>(key: K, value: unknown): this
-  config<K extends string>(config: Map<K, unknown>): this
-  config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
-    this.#config ??= new Map()
-    if (typeof keyOrConfig === 'string') {
-      this.#config.set(keyOrConfig, mergeValue(this.#config.get(keyOrConfig), value))
-    } else {
-      for (const [key, value] of keyOrConfig) {
-        this.#config.set(key, mergeValue(this.#config.get(key), value))
-      }
-    }
+  /** Adds route options covering every route of the group, after those already added. */
+  options<C = unknown>(...inputs: RouteOptionsInput<C>[]): this {
+    this.#options = [...(this.#options ?? []), ...(inputs as RouteOptionsInput[])]
     return this
   }
 
@@ -185,7 +178,7 @@ export class RouteGroupBuilder {
       bodyLimit: this.#bodyLimit,
       timeout: this.#timeout,
       authz: this.#authorize,
-      config: this.#config,
+      options: this.#options === undefined ? undefined : [{ inputs: [...this.#options] }],
       detail: this.#detail,
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,
@@ -213,7 +206,7 @@ export class RouteBuilder {
   #statusCode?: number
   #bodyAs?: BodyMode
   #authorize?: RouteAuthz
-  #config?: Map<string, unknown>
+  #options?: RouteOptionsInput[]
   #detail?: RouteDetail
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
@@ -307,17 +300,9 @@ export class RouteBuilder {
     return this
   }
 
-  config<K extends string>(key: K, value: unknown): this
-  config<K extends string>(config: Map<K, unknown>): this
-  config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
-    this.#config ??= new Map()
-    if (typeof keyOrConfig === 'string') {
-      this.#config.set(keyOrConfig, mergeValue(this.#config.get(keyOrConfig), value))
-    } else {
-      for (const [key, value] of keyOrConfig) {
-        this.#config.set(key, mergeValue(this.#config.get(key), value))
-      }
-    }
+  /** Adds route options for this route alone, after those already added. */
+  options<C = unknown>(...inputs: RouteOptionsInput<C>[]): this {
+    this.#options = [...(this.#options ?? []), ...(inputs as RouteOptionsInput[])]
     return this
   }
 
@@ -360,7 +345,7 @@ export class RouteBuilder {
       statusCode: this.#statusCode,
       bodyAs: this.#bodyAs,
       authz: this.#authorize,
-      config: this.#config,
+      options: this.#options === undefined ? undefined : [...this.#options],
       detail: this.#detail,
       catchBy: this.#catchBy,
       guards: this.#guards,

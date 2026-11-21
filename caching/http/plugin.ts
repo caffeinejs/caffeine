@@ -12,8 +12,8 @@ import { type Duration, formatDuration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { guardObserver, storeErrorLogger } from './_observe.js'
-import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache_control.js'
-import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
+import { attachCacheHooks, type CacheDeps, type ETagGenerator } from './cache_control.js'
+import { attachCacheInvalidateHook } from './cache_invalidate.js'
 import type { FlightTable } from './flight.js'
 import { composeObservers, type CacheObserver } from './observer.js'
 import { DEFAULT_STATUS_HEADER, type HTTPCachingOptions } from './options.js'
@@ -44,9 +44,9 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  * Installed on a server and again on a router or a controller under it, it is refused at start-up.
  *
  * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
- * `cacheInvalidate()` route extensions. Wherever it is installed, its hooks run after every hook of the server, its
- * routers and the route's guards, so a request the authentication gate or a guard refuses is never served from the
- * store. A payload an earlier `onSend` hook turned into a stream is neither hashed nor stored.
+ * `cacheInvalidate()` route options, set with `.config(...)`. Wherever it is installed, its hooks run after every
+ * hook of the server, its routers and the route's guards, so a request the authentication gate or a guard refuses is
+ * never served from the store. A payload an earlier `onSend` hook turned into a stream is neither hashed nor stored.
  */
 export function HTTPCaching<C = unknown>(
   options?: HTTPCachingOptions | HTTPCachingConfigurer<C>,
@@ -231,12 +231,12 @@ class CachingPlugin extends HTTPPlugin {
     const deps = this.#deps
 
     context.app.hook('onRoute', route => {
-      const cacheOpts = route.config.get('cache') as CacheControlOptions | false | undefined
+      const cacheOpts = route.options.cache
       if (cacheOpts !== undefined) {
         attachCacheHooks(route, cacheOpts, deps)
       }
 
-      const invalidateOpts = route.config.get('cacheInvalidate') as CacheInvalidateOptions | false | undefined
+      const invalidateOpts = route.options.cacheInvalidate
       if (invalidateOpts !== undefined && invalidateOpts !== false) {
         attachCacheInvalidateHook(route, invalidateOpts, deps)
       }

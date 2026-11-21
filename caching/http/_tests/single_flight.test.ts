@@ -665,7 +665,7 @@ describe('a handler run its leader does not report back on in time', () => {
     const router = new Router('')
     router
       .get('/data')
-      .config('cache', { ttl: 60 * Second })
+      .config({ cache: { ttl: 60 * Second } })
       .handler(ctx => (options.handler === undefined ? Promise.resolve({ ok: true }) : options.handler(ctx)))
 
     const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
@@ -839,7 +839,7 @@ describe('a follower whose request is over', () => {
     const router = new Router('')
     router
       .get('/data')
-      .config('cache', { ttl: 60 * Second })
+      .config({ cache: { ttl: 60 * Second } })
       .handler(() => (options.handler === undefined ? { ok: true } : options.handler()))
 
     const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
@@ -923,7 +923,7 @@ describe('a follower whose request is over', () => {
     const router = new Router('')
     router
       .get('/data')
-      .config('cache', { ttl: 60 * Second })
+      .config({ cache: { ttl: 60 * Second } })
       .handler(async () => {
         calls++
         await g.hold()
@@ -1001,7 +1001,7 @@ describe('a request whose store read outlives it', () => {
     const router = new Router('')
     router
       .get('/data')
-      .config('cache', { ttl: 60 * Second })
+      .config({ cache: { ttl: 60 * Second } })
       .handler(handler)
     const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ handlerTimeout: 50 * Millisecond }))

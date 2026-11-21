@@ -12,4 +12,4 @@ export {
   type OriginVerdict,
 } from './origin.js'
 export { CSRFBuilder, csrf } from './csrf.js'
-export { csrfExempt, kCSRFRoute, type CSRFRouteConfig } from './route.js'
+export { CSRFExempt, csrfExempt, type CSRFRouteConfig } from './route.js'

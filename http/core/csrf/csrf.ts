@@ -11,7 +11,6 @@ import {
   type SecFetchSitePredicate,
 } from './options.js'
 import { checkOrigin, pathOf, questionsOf, SAFE_METHODS, type OriginCheckInput } from './origin.js'
-import { kCSRFRoute, type CSRFRouteConfig } from './route.js'
 
 export const kBuild = Symbol('caffeine.http.csrf.build')
 
@@ -203,7 +202,7 @@ class CSRFProtection extends HTTPPlugin {
       COVERS.set(route, covers)
 
       // A route's own mark is the more specific word: `csrfExempt(false)` keeps it under an excluded prefix.
-      const mark = (route.config.get(kCSRFRoute) as CSRFRouteConfig | undefined)?.exempt
+      const mark = route.options.csrf?.exempt
       if (mark === true || (mark === undefined && isExcluded(route.url, options.exclude))) {
         exempt.add(route)
       }

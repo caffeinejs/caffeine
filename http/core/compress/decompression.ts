@@ -4,7 +4,7 @@ import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import { ErrHTTPUnsupportedMediaType } from '../error/http.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
-import type { AnyRouteExtension } from '../routing/extension.js'
+import type { RouteOptions } from '../routing/options.js'
 import { BODY_METHODS } from '../server/body.js'
 import { kDecodeBody, type BodyDecoder, type Context } from '../server/context.js'
 import { isOptions } from '../server/settings.js'
@@ -18,8 +18,15 @@ export interface DecompressionConfig {
   encodings?: readonly ContentCoding[]
 }
 
-/** The route config key `decompress()` writes: `false`, or `{ codings }`. A method's list replaces its controller's. */
-const kDecompressionRoute = 'caffeine:decompression'
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    /**
+     * Read by `decompression()`: `false`, or the request codings this route decodes. A method's list replaces its
+     * controller's.
+     */
+    decompression?: false | { codings: readonly ContentCoding[] }
+  }
+}
 
 /**
  * Authors one `decompression()`'s settings. The callback runs while the factory builds the plugin, handed the same
@@ -79,11 +86,9 @@ export function decompression<C = unknown>(
  * The request codings a route decodes, or every route's of a group, in place of `decompression()`'s; `false` decodes
  * none. The programmatic form of `@Decompress(...)`.
  */
-export function decompress(encodings: ContentCoding | readonly ContentCoding[] | false): AnyRouteExtension {
-  const value = encodings === false ? false : { codings: typeof encodings === 'string' ? [encodings] : encodings }
-
-  return (target: { config(key: string, value: unknown): unknown }) => {
-    target.config(kDecompressionRoute, value)
+export function decompress(encodings: ContentCoding | readonly ContentCoding[] | false): Partial<RouteOptions> {
+  return {
+    decompression: encodings === false ? false : { codings: typeof encodings === 'string' ? [encodings] : encodings },
   }
 }
 
@@ -123,7 +128,7 @@ class DecompressionPlugin extends HTTPPlugin {
       OWNERS.set(route, this)
       const where = `serve "${route.methods.join('|')} ${route.url}"`
 
-      const decoding = route.config.get(kDecompressionRoute)
+      const decoding = route.options.decompression
       const codings = decoding === undefined ? own : routeCodings(decoding, where)
       // A route that takes no body never decodes one.
       if (codings.length > 0 && route.methods.some(method => BODY_METHODS.has(method))) {

@@ -6,18 +6,24 @@ import type { IRoute, IRouteGroup } from '../routing/route.js'
 import { HookBatch } from './batch.js'
 import { callOnRoute, openDefinition } from './route_definition.js'
 
-const route = { config: new Map([['flag', true]]) } as unknown as IRoute
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    testOpened?: boolean
+  }
+}
+
+const route = { options: { testOpened: true } } as unknown as IRoute
 const group = {} as IRouteGroup
 const kit = {} as HTTPSetupContext
 
 describe('openDefinition', () => {
-  it('hands the route its config and records the hooks added while open', () => {
+  it('hands the route its options and records the hooks added while open', () => {
     const open = openDefinition(route, group, ['GET'], '/pets')
     const hook = (): void => undefined
 
     open.definition.hook('onSend', hook).hook('onSend', hook)
 
-    expect(open.definition.config.get('flag')).toBe(true)
+    expect(open.definition.options.testOpened).toBe(true)
     expect(open.added.onSend).toEqual([hook, hook])
   })
 

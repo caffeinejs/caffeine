@@ -49,7 +49,7 @@ describe('cache plugin wiring', () => {
     const router = new Router('/group-install').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     router
       .get('/data')
-      .extend(cacheControl({ ttl: 60 * Second }))
+      .config(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
     const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) }).mount(
@@ -70,7 +70,7 @@ describe('cache plugin wiring', () => {
       const router = new Router(`/group-own-${name}`).with(HTTPCaching(b => b.store(stores[name])))
       router
         .get('/data')
-        .extend(cacheControl({ ttl: 60 * Second, key: () => 'data' }))
+        .config(cacheControl({ ttl: 60 * Second, key: () => 'data' }))
         .handler(() => ({ name }))
 
       return router
@@ -96,13 +96,13 @@ describe('cache plugin wiring', () => {
     const served = new Router('/group-served').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     served
       .get('/data')
-      .extend(cacheControl({ ttl: 60 * Second }))
+      .config(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
     const unserved = new Router('/group-unserved')
     unserved
       .get('/data')
-      .extend(cacheControl({ ttl: 60 * Second }))
+      .config(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
     const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })

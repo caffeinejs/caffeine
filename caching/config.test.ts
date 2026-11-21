@@ -77,7 +77,7 @@ async function start(
   const router = new Router('/cfg')
   router
     .get('/data')
-    .extend(cacheControl({ ttl: 60 * Second }))
+    .config(cacheControl({ ttl: 60 * Second }))
     .handler(options?.handler ?? (() => options?.body ?? 'payload'))
 
   const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }), config: conf })

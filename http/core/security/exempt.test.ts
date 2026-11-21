@@ -3,20 +3,20 @@ import { describe, expect, it } from 'vitest'
 import { createWebApplication } from '../../application.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { Router } from '../routing/programmatic/programmatic.js'
-import { ACCESS_CONTROL_EXEMPT, accessControlExempt, isAccessControlExempt, kAccessControlExempt } from './exempt.js'
+import { accessControlExempt, isAccessControlExempt } from './exempt.js'
 
 // Only the framework's own value marks a route: a config an application writes in code cannot drop its access control.
 describe('isAccessControlExempt', () => {
   it('is true for the framework mark', () => {
-    expect(isAccessControlExempt(new Map([[kAccessControlExempt, ACCESS_CONTROL_EXEMPT]]))).toBe(true)
+    expect(isAccessControlExempt(accessControlExempt())).toBe(true)
   })
 
   it('is false for a value an application could write under the same key', () => {
-    expect(isAccessControlExempt(new Map([[kAccessControlExempt, true]]))).toBe(false)
+    expect(isAccessControlExempt({ accessControlExempt: true } as never)).toBe(false)
   })
 
   it('is false for a route that carries no mark', () => {
-    expect(isAccessControlExempt(new Map())).toBe(false)
+    expect(isAccessControlExempt({})).toBe(false)
   })
 })
 
@@ -29,14 +29,14 @@ describe('accessControlExempt', () => {
           new (class extends HTTPPlugin {
             register({ app }: HTTPSetupContext): void {
               app.hook('onRoute', route => {
-                seen.push(isAccessControlExempt(route.config))
+                seen.push(isAccessControlExempt(route.options))
               })
             }
           })(),
       )
       .mount(
         new Router('/x')
-          .extend(accessControlExempt())
+          .config(accessControlExempt())
           .get('/')
           .handler(() => 'ok'),
       )

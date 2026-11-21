@@ -1,10 +1,14 @@
-import type { AnyRouteExtension } from '../routing/extension.js'
-
-/** The route config key the `csrf()` plugin reads, holding a {@link CSRFRouteConfig}. */
-export const kCSRFRoute = 'caffeine:csrf'
+import { RouteOptions } from '../routing/options.js'
 
 export interface CSRFRouteConfig {
   exempt: boolean
+}
+
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    /** Read by `csrf()`: whether this route is left out of the cross-origin check. */
+    csrf?: CSRFRouteConfig
+  }
 }
 
 /**
@@ -12,15 +16,21 @@ export interface CSRFRouteConfig {
  * site posts here. `csrfExempt(false)` puts one route of an exempt group back under it, and keeps a route protected
  * whose path is under `exclude(...)`: a route's own mark wins over a path.
  *
- * The programmatic form of `@CSRFExempt()`: `router.extend(csrfExempt())`, or `router.post('/hook').extend(csrfExempt())`.
+ * The programmatic form of `@CSRFExempt()`: `router.config(csrfExempt())`, or
+ * `router.post('/hook').config(csrfExempt())`.
  */
-export function csrfExempt(exempt = true): AnyRouteExtension {
-  return (target: { config(key: string, value: unknown): unknown }) => {
-    target.config(kCSRFRoute, { exempt } satisfies CSRFRouteConfig)
-  }
+export function csrfExempt(exempt = true): Partial<RouteOptions> {
+  return { csrf: { exempt } }
 }
 
-/** What a route's config says of the check: `true` exempt, `false` protected, `undefined` when it says nothing. */
-export function csrfMarkOf(config: unknown): boolean | undefined {
-  return (config as Record<string, CSRFRouteConfig | undefined> | undefined)?.[kCSRFRoute]?.exempt
+/**
+ * Leaves a route, or every route of a controller, out of cross-origin protection: a webhook receiver, a form a
+ * partner's site posts here.
+ *
+ * On a controller it exempts every method, one added later included; on a method it decides for that method whatever
+ * the controller declared. `@CSRFExempt(false)` keeps a method protected in an exempt controller, and under a path
+ * `exclude(...)` leaves alone. The programmatic form is {@link csrfExempt}.
+ */
+export function CSRFExempt(exempt = true) {
+  return RouteOptions(csrfExempt(exempt))
 }

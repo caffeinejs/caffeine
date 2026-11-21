@@ -1,6 +1,6 @@
 import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 import { $t } from '@caffeinejs/application/schema'
-import { $p, kRouteConstraints, type IRoute } from '@caffeinejs/http'
+import { $p, type IRoute } from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIOperationConflict } from '../errors.js'
@@ -944,7 +944,7 @@ describe('parameters', () => {
         ]),
       )
       const [route] = router.routes as IRoute<unknown>[]
-      const withConstraints = { ...route!, config: new Map([[kRouteConstraints, new Map(constraints)]]) }
+      const withConstraints = { ...route!, options: { constraints: new Map(constraints) } }
 
       const document = generateDocument({
         routeGroups: [{ ...router, routes: [withConstraints] }],

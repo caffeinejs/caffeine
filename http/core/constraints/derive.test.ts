@@ -2,15 +2,13 @@ import { Injectable } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
-import { constraint } from '../../decorators/constraint.js'
-import { version } from '../../decorators/version.js'
 import { node } from '../../platform/node.testkit.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrRouteConflict } from '../matcher/matcher.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import type { ConstraintRequest, ConstraintStorage, ConstraintStrategy } from './constraints.js'
-import { kRouteConstraints } from './keys.js'
+import { constraint, version } from './route.js'
 
 let app: { close(): Promise<void> } | undefined
 
@@ -32,7 +30,7 @@ function strategy(name: string, header: string): ConstraintStrategy {
 
 const pets = () =>
   new Router('/pets')
-    .extend(version('1.0.0'))
+    .config(version('1.0.0'))
     .get('/')
     .handler(() => 'v1')
 const plain = () => new Router('/plain').get('/').handler(() => 'plain')
@@ -42,11 +40,11 @@ function dish() {
   return new Router('/d')
     .get('/')
     .name('spicy')
-    .extend(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
+    .config(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
     .handler(() => 'spicy')
     .get('/')
     .name('mild')
-    .extend(constraint('flavor', 'mild', { header: 'X-Flavor' }))
+    .config(constraint('flavor', 'mild', { header: 'X-Flavor' }))
     .handler(() => 'mild')
 }
 
@@ -132,11 +130,30 @@ describe('route constraints on the engine', () => {
     expect(await (await built.request('/d', { headers: { 'x-flavor': 'mild' } })).text()).toBe('mild')
   })
 
+  // A route that narrows a versioned router must stay versioned: dropping the version would serve every version.
+  it('keeps its router’s version on a route that adds a constraint of its own', async () => {
+    const built = createWebApplication()
+      .server(() => ({ constraints: [strategy('flavor', 'X-Flavor')] }))
+      .mount(
+        new Router('/v')
+          .config(version('1.0.0'))
+          .get('/')
+          .config(constraint('flavor', 'x', { header: 'X-Flavor' }))
+          .handler(() => 'ok'),
+      )
+    app = built
+    await built.bootstrap()
+
+    expect((await built.request('/v', { headers: { 'x-flavor': 'x' } })).status).toBe(404)
+    expect((await built.request('/v', { headers: { 'x-flavor': 'x', 'accept-version': '1.x' } })).status).toBe(200)
+    expect((await built.request('/v', { headers: { 'x-flavor': 'y', 'accept-version': '1.x' } })).status).toBe(404)
+  })
+
   it('refuses a constraint no strategy is named after', async () => {
     const built = createWebApplication().mount(
       new Router('/x')
         .get('/')
-        .extend(constraint('nope', 1))
+        .config(constraint('nope', 1))
         .handler(() => 'x'),
     )
     app = built
@@ -147,11 +164,11 @@ describe('route constraints on the engine', () => {
     await expect(booting).rejects.toThrow('Cannot serve "GET /x": no constraint strategy is named "nope"')
   })
 
-  it('refuses constraints written into the route config by hand', async () => {
+  it('refuses constraints written into the route options by hand', async () => {
     const built = createWebApplication().mount(
       new Router('/x')
         .get('/')
-        .config(kRouteConstraints, { version: '1.0.0' })
+        .config({ constraints: { version: '1.0.0' } } as never)
         .handler(() => 'x'),
     )
     app = built
@@ -166,7 +183,7 @@ describe('route constraints on the engine', () => {
     const empty = () =>
       new Router('/e')
         .get('/')
-        .config(kRouteConstraints, new Map())
+        .config({ constraints: new Map() })
         .handler(() => 'e')
     const built = createWebApplication().mount(empty(), empty())
     app = built
@@ -188,7 +205,7 @@ describe('route constraints on the engine', () => {
     const built = createWebApplication().mount(
       new Router('/h')
         .get('/')
-        .extend(constraint('host', 'api.example'))
+        .config(constraint('host', 'api.example'))
         .handler(() => 'h'),
     )
     app = built
@@ -204,7 +221,7 @@ describe('route constraints on the engine', () => {
       .mount(
         new Router('/api')
           .get('/')
-          .extend(constraint('version', 'v7'))
+          .config(constraint('version', 'v7'))
           .handler(() => 'v7'),
       )
     app = built
@@ -226,7 +243,7 @@ describe('route constraints on the engine', () => {
       .mount(
         new Router('/b')
           .get('/')
-          .extend(constraint('boom', 'x'))
+          .config(constraint('boom', 'x'))
           .handler(() => 'b'),
       )
     app = built
@@ -255,7 +272,7 @@ describe('route constraints on the engine', () => {
             register(context: HTTPSetupContext): void {
               context.app.mount(
                 new Router('/late')
-                  .extend(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
+                  .config(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
                   .get('/')
                   .handler(() => 'late'),
               )

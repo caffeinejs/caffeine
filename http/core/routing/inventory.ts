@@ -4,7 +4,6 @@ import type { Duration } from '@caffeinejs/std/duration'
 
 import { isExcluded, type ExcludedPath } from '../csrf/options.js'
 import { SAFE_METHODS } from '../csrf/origin.js'
-import { csrfMarkOf } from '../csrf/route.js'
 import { gatedRouteOf } from '../security/gate.js'
 import type { IRoute, IRouteGroup } from './route.js'
 
@@ -186,7 +185,7 @@ export function routeRecord(
         defaultPolicy: options?.defaultPolicy === true,
       },
       guards: (route.guards ?? []).map(guard => guard.name),
-      csrf: csrfOf(methods, url, csrfMarkOf(Object.fromEntries(route.config)), security.csrf),
+      csrf: csrfOf(methods, url, route.options.csrf?.exempt, security.csrf),
     },
   }
 }

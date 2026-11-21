@@ -4,6 +4,7 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { CookieSerializeOptions } from './core/cookie/options.js'
 import { ErrCaffeineWebApplication } from './core/error/common.js'
 import type { RouteDefinition } from './core/lifecycle/route_definition.js'
+import type { RouteOptions } from './core/routing/options.js'
 import type { AuthenticationState } from './core/security/auth/authentication_state.js'
 import { type Principal } from './core/security/identity.js'
 import type { ContextPlatform } from './core/server/platform.js'
@@ -149,11 +150,17 @@ export interface IContext<
   get sent(): boolean
 
   /**
-   * The route the request matched, as `onRoute` hooks saw it: how a hook that covers many routes, an application's
-   * or a plugin's, reads what one route declared, `ctx.route?.config.get('key')`. `undefined` when no route matched,
-   * and for a route Caffeine did not compile itself.
+   * The route the request matched, as `onRoute` hooks saw it. `undefined` when no route matched, and for a route
+   * Caffeine did not compile itself. What the route set for its plugins is {@link IContext.options}.
    */
   get route(): RouteDefinition | undefined
+
+  /**
+   * The options the matched route and its groups set with `config(...)` or `@RouteOptions(...)`:
+   * how a hook or a middleware that covers many routes reads one route's setting, `ctx.options.cors`. An empty object
+   * when no route matched.
+   */
+  get options(): Readonly<Partial<RouteOptions>>
 
   status(code: number): this
 
