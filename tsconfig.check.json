@@ -14,15 +14,6 @@
       "path": "./http"
     },
     {
-      "path": "./http/_tests/subpaths/routing"
-    },
-    {
-      "path": "./http/_tests/subpaths/decorators"
-    },
-    {
-      "path": "./http/_tests/subpaths/root"
-    },
-    {
       "path": "./http-node"
     },
     {

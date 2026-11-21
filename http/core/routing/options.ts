@@ -30,7 +30,11 @@ import { mergeInto, mergeValue, ownKeys } from './_merge.js'
  * Map, which merges by key: a route's constraint keeps its router's version.
  */
 export interface RouteOptions {
-  /** Never set: keeps a route's options checked even where no plugin has declared a field. */
+  /**
+   * Never set, and not dead code. An application loads a plugin's field only through a module that declares it, so one
+   * importing `@caffeinejs/http/routing` alone sees no field at all: without this member the interface is empty, and
+   * `.routeOptions(42)` or an unknown key would type-check and fail at start-up instead.
+   */
   readonly [kRouteOptions]?: never
 }
 
