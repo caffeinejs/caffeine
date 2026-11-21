@@ -146,9 +146,7 @@ export class RouteGroupBuilder {
 
   /** Adds route options covering every route of the group, after those already added. */
   options<C = unknown>(...inputs: RouteOptionsInput<C>[]): this {
-    this.#options ??= []
-    // Stored without `C`: the configuration type matters where the inputs are written, not where they wait.
-    this.#options.push(...(inputs as RouteOptionsInput[]))
+    this.#options = [...(this.#options ?? []), ...(inputs as RouteOptionsInput[])]
     return this
   }
 
@@ -304,9 +302,7 @@ export class RouteBuilder {
 
   /** Adds route options for this route alone, after those already added. */
   options<C = unknown>(...inputs: RouteOptionsInput<C>[]): this {
-    this.#options ??= []
-    // Stored without `C`: the configuration type matters where the inputs are written, not where they wait.
-    this.#options.push(...(inputs as RouteOptionsInput[]))
+    this.#options = [...(this.#options ?? []), ...(inputs as RouteOptionsInput[])]
     return this
   }
 

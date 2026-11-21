@@ -124,6 +124,27 @@ export class Router<
   }
 
   /**
+   * Sets route options for every route of this router and of the routers nested under it. A nested router's key, or a
+   * route's own `config(...)` key, replaces what is set here, except a Map, which merges by key; within this
+   * router, objects merge key by key, in the order written. A function runs while routes compile, handed the setup
+   * context and its start-up configuration.
+   *
+   * Named apart from {@link options}, which registers an OPTIONS route.
+   *
+   * ```ts
+   * new Router('/hooks')
+   *   .configType<{ webhooks: { strict: boolean } }>()
+   *   .config(cors(false), (o, { config }) => {
+   *     o.csrf = { exempt: !config.webhooks.strict }
+   *   })
+   * ```
+   */
+  config(...inputs: RouteOptionsInput<C>[]): this {
+    this.#state.builder.options(...inputs)
+    return this
+  }
+
+  /**
    * Declares dependencies for every route of the group and of the groups nested under it, keyed by the name the
    * handlers read them under. Values are container keys or any `$i` helper.
    *
@@ -413,27 +434,6 @@ export class Router<
 
   timeout(timeout: Duration): this {
     this.#state.builder.timeout(timeout)
-    return this
-  }
-
-  /**
-   * Sets route options for every route of this router and of the routers nested under it. A nested router's key, or a
-   * route's own `config(...)` key, replaces what is set here, except a Map, which merges by key; within this
-   * router, objects merge key by key, in the order written. A function runs while routes compile, handed the setup
-   * context and its start-up configuration.
-   *
-   * Named apart from {@link options}, which registers an OPTIONS route.
-   *
-   * ```ts
-   * new Router('/hooks')
-   *   .configType<{ webhooks: { strict: boolean } }>()
-   *   .config(cors(false), (o, { config }) => {
-   *     o.csrf = { exempt: !config.webhooks.strict }
-   *   })
-   * ```
-   */
-  config(...inputs: RouteOptionsInput<C>[]): this {
-    this.#state.builder.options(...inputs)
     return this
   }
 
