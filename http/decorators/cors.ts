@@ -1,6 +1,5 @@
 import { cors, type CORSConfig } from '../core/cors/cors.js'
-import { defineClassOrMemberDecorator } from './_decorator_util.js'
-import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
+import { RouteOptions } from '../core/routing/options.js'
 
 /**
  * Sets a route's CORS settings, or every route's of a controller, over `corsPolicy()`'s, member by member; `false`
@@ -10,8 +9,5 @@ import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
  * controller declared. The programmatic form is {@link cors}.
  */
 export function CORS(options: CORSConfig | boolean) {
-  return defineClassOrMemberDecorator(
-    (target, context) => configureRouteGroup(context, target, cors(options)),
-    context => configureRoute(context, cors(options)),
-  )
+  return RouteOptions(cors(options))
 }

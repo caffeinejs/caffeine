@@ -91,7 +91,7 @@ export function gatedRouteOf(route: Readonly<IRoute<any>>): { readonly skip: boo
   const options = route.authorization.options
 
   return {
-    skip: isAccessControlExempt(route.config),
+    skip: isAccessControlExempt(route.options),
     gated: {
       schemes: options?.schemes,
       allowAnonymous: options?.allowAnonymous === true,

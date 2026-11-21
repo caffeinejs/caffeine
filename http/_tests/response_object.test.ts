@@ -233,7 +233,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
 })
 
 describe("a Response's headers join the ones the server adds, rather than replacing them", () => {
-  const versioned = new Router('/versioned').extend(version('1.0.0'))
+  const versioned = new Router('/versioned').routeOptions(version('1.0.0'))
   versioned.get('/').handler(() => new Response('v1', { headers: { vary: 'Accept-Language' } }))
 
   const app = createWebApplication({ adapter: node() }).mount(versioned)

@@ -74,6 +74,8 @@ function walk<R>(
   own.routes = state.routes.map(route => compileRoute<R>(route, path, injection, context.container))
 
   const name = state.name ?? defaultGroupName(path)
+  // This router's own options: a failure in them names it, not a router nested under it.
+  own.options = own.options?.map(level => ({ ...level, owner: name }))
 
   if (parent !== undefined) {
     assertBindingFollows(parent, own, name)
@@ -84,7 +86,7 @@ function walk<R>(
   assertUniqueRouteNames(spec.routes, name)
 
   // A nested group is a scope of its own, so what a parent router registered reaches it only through this chain.
-  // Carrying the chain is what makes `router.with(...)` inherit the way `router.extend(...)` does,
+  // Carrying the chain is what makes `router.with(...)` inherit the way `router.routeOptions(...)` does,
   // and the path is where a relative middleware path of that router starts in this group.
   const scopes = [...parentScopes, { key: state, path }]
 

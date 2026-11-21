@@ -25,6 +25,7 @@ import type { ValidationSlot } from '../error/validation.js'
 import { isThenable, type SendPayload } from '../lifecycle/lifecycle.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import { normalizePath, sanitizeURL } from '../middleware/path.js'
+import { kNoRouteOptions, type RouteOptions } from '../routing/options.js'
 import type { AuthenticationState } from '../security/auth/authentication_state.js'
 import type { Principal } from '../security/identity.js'
 import type { CompiledSerializer } from '../validation/validation.js'
@@ -273,6 +274,11 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   /** @see {@link IContext.route} */
   get route(): RouteDefinition | undefined {
     return this.#store.definition
+  }
+
+  /** @see {@link IContext.options} */
+  get options(): Readonly<Partial<RouteOptions>> {
+    return this.#store.route?.options ?? kNoRouteOptions
   }
 
   /** The routes this request's path serves under `method`, as a preflight asks: see {@link ServerShared.routeOf}. */

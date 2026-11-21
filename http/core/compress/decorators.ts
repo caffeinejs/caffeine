@@ -1,5 +1,4 @@
-import { configureRoute, configureRouteGroup } from '../../decorators/registrar/registrar.js'
-import type { AnyRouteExtension } from '../routing/extension.js'
+import { RouteOptions } from '../routing/options.js'
 import { compress, type CompressionConfig, type ContentCoding } from './compress.js'
 import { decompress } from './decompression.js'
 
@@ -11,7 +10,7 @@ import { decompress } from './decompression.js'
  * controller declared. It needs `compression()` over the route. The programmatic form is {@link compress}.
  */
 export function Compress(options: CompressionConfig | boolean) {
-  return decorator(compress(options))
+  return RouteOptions(compress(options))
 }
 
 /**
@@ -22,24 +21,28 @@ export function Compress(options: CompressionConfig | boolean) {
  * over the route.
  */
 export function Gzip(options?: { level?: number }) {
-  return decorator(compress(options === undefined ? { encodings: ['gzip'] } : { encodings: ['gzip'], gzip: options }))
+  return RouteOptions(
+    compress(options === undefined ? { encodings: ['gzip'] } : { encodings: ['gzip'], gzip: options }),
+  )
 }
 
 /** Compresses with deflate alone; `options` sets its level, 1 to 9. See {@link Gzip}. */
 export function Deflate(options?: { level?: number }) {
-  return decorator(
+  return RouteOptions(
     compress(options === undefined ? { encodings: ['deflate'] } : { encodings: ['deflate'], deflate: options }),
   )
 }
 
 /** Compresses with Brotli alone; `options` sets its quality, 0 to 11. See {@link Gzip}. */
 export function Brotli(options?: { quality?: number }) {
-  return decorator(compress(options === undefined ? { encodings: ['br'] } : { encodings: ['br'], br: options }))
+  return RouteOptions(compress(options === undefined ? { encodings: ['br'] } : { encodings: ['br'], br: options }))
 }
 
 /** Compresses with zstd alone; `options` sets its level, 1 to 19. See {@link Gzip}. */
 export function Zstd(options?: { level?: number }) {
-  return decorator(compress(options === undefined ? { encodings: ['zstd'] } : { encodings: ['zstd'], zstd: options }))
+  return RouteOptions(
+    compress(options === undefined ? { encodings: ['zstd'] } : { encodings: ['zstd'], zstd: options }),
+  )
 }
 
 /**
@@ -47,15 +50,5 @@ export function Zstd(options?: { level?: number }) {
  * decodes none. A method's list replaces its controller's. The programmatic form is {@link decompress}.
  */
 export function Decompress(encodings: ContentCoding | readonly ContentCoding[] | false) {
-  return decorator(decompress(encodings))
-}
-
-function decorator(extension: AnyRouteExtension) {
-  return (target: Function | object, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {
-    if (context.kind === 'class') {
-      configureRouteGroup(context, target as Function, extension)
-    } else {
-      configureRoute(context, extension)
-    }
-  }
+  return RouteOptions(decompress(encodings))
 }

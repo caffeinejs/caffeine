@@ -6,7 +6,7 @@ import { appendVary } from '../../vary.js'
 import type { ErrConfiguration } from '../error/common.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
-import type { AnyRouteExtension } from '../routing/extension.js'
+import type { RouteOptions } from '../routing/options.js'
 import type { Context } from '../server/context.js'
 import { configurationError } from '../server/error.js'
 import { isOptions } from '../server/settings.js'
@@ -37,8 +37,12 @@ export interface CompressionConfig {
   compressible?: (type: string) => boolean
 }
 
-/** The route config key `compress()` writes: {@link CompressionConfig} or a boolean. */
-const kCompressionRoute = 'caffeine:compression'
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    /** Read by `compression()`: this route's settings over the plugin's, `false` to turn compression off for it. */
+    compression?: CompressionConfig | boolean
+  }
+}
 
 export const kBuild: unique symbol = Symbol('caffeine.http.compression.build')
 
@@ -165,10 +169,8 @@ export function compression<C = unknown>(
  * Sets a route's compression, or every route's of a group, over `compression()`'s, member by member: `false` turns
  * it off for the route, `true` keeps the plugin's settings. The programmatic form of `@Compress(...)`.
  */
-export function compress(options: CompressionConfig | boolean): AnyRouteExtension {
-  return (target: { config(key: string, value: unknown): unknown }) => {
-    target.config(kCompressionRoute, options)
-  }
+export function compress(options: CompressionConfig | boolean): Partial<RouteOptions> {
+  return { compression: options }
 }
 
 /** Every coding, in the order the server prefers them by default. */
@@ -225,7 +227,7 @@ class CompressionPlugin extends HTTPPlugin {
       OWNERS.set(route, this)
       const where = `serve "${route.methods.join('|')} ${route.url}"`
 
-      const policy = routePolicy(route.config.get(kCompressionRoute), own, options, where)
+      const policy = routePolicy(route.options.compression, own, options, where)
       if (policy !== undefined) {
         route.hook('onSend', (ctx, payload) => (OWNERS.get(route) === this ? encode(ctx, payload, policy) : undefined))
       }

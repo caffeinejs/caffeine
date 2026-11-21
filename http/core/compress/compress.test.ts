@@ -334,7 +334,7 @@ describe('compression() per route', () => {
 
   it('leaves a route with compress(false) alone, without varying', async () => {
     const off = new Router('/off')
-      .extend(compress(false))
+      .routeOptions(compress(false))
       .get('/')
       .handler(() => PETS)
     const res = await (await serve(undefined, off)).request('/off', { headers: { 'accept-encoding': 'gzip' } })
@@ -345,7 +345,7 @@ describe('compression() per route', () => {
 
   it("writes a route's settings over the plugin's", async () => {
     const zero = new Router('/zero')
-      .extend(compress({ threshold: 0 }))
+      .routeOptions(compress({ threshold: 0 }))
       .get('/')
       .handler(() => 'a'.repeat(100))
     const res = await (
@@ -360,7 +360,7 @@ describe('compression() per route', () => {
 
   it('offers only the codings a route lists', async () => {
     const only = new Router('/only')
-      .extend(compress({ encodings: ['gzip'] }))
+      .routeOptions(compress({ encodings: ['gzip'] }))
       .get('/')
       .handler(() => PETS)
     const res = await (await serve(undefined, only)).request('/only', { headers: { 'accept-encoding': 'br, gzip' } })
@@ -369,11 +369,11 @@ describe('compression() per route', () => {
   })
 
   it("lets a route's compress(true) turn compression back on under its router's compress(false)", async () => {
-    const router = new Router('/mixed').extend(compress(false))
+    const router = new Router('/mixed').routeOptions(compress(false))
     router.get('/off').handler(() => PETS)
     router
       .get('/on')
-      .extend(compress(true))
+      .options(compress(true))
       .handler(() => PETS)
     const app = await serve(undefined, router)
 
@@ -533,7 +533,7 @@ describe('compression() reading its settings once', () => {
     }
     const list: ContentCoding[] = ['gzip']
     const zero = new Router('/zero')
-      .extend(compress({ threshold: 0 }))
+      .routeOptions(compress({ threshold: 0 }))
       .get('/')
       .handler(() => 'a'.repeat(100))
     const app = createWebApplication()
@@ -580,7 +580,7 @@ describe('compression() refusing settings at start-up', () => {
 
   it("refuses a route's compress({ encodings: [] }), and tells it to turn compression off instead", async () => {
     const route = new Router('/r')
-      .extend(compress({ encodings: [] }))
+      .routeOptions(compress({ encodings: [] }))
       .get('/')
       .handler(() => 'r')
     const failure = await serve(undefined, route).then(
@@ -619,7 +619,7 @@ describe('compression() refusing settings at start-up', () => {
 
   it("names only a route's own settings when refusing an unknown one on a route", async () => {
     const route = new Router('/r')
-      .extend(compress({ levle: 9 } as never))
+      .routeOptions(compress({ levle: 9 } as never))
       .get('/')
       .handler(() => 'r')
     const failure = await serve(undefined, route).then(
@@ -636,7 +636,7 @@ describe('compression() refusing settings at start-up', () => {
 
   it("refuses a route's compress(...) that is neither an object nor a boolean", async () => {
     const route = new Router('/r')
-      .extend(compress('gzip' as never))
+      .routeOptions(compress('gzip' as never))
       .get('/')
       .handler(() => 'r')
 
@@ -647,7 +647,7 @@ describe('compression() refusing settings at start-up', () => {
 
   it("refuses a route's settings out of range", async () => {
     const route = new Router('/r')
-      .extend(compress({ gzip: { level: 12 } }))
+      .routeOptions(compress({ gzip: { level: 12 } }))
       .get('/')
       .handler(() => 'r')
 

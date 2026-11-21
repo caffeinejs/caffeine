@@ -135,7 +135,7 @@ describe('openapi from a programmatic router', () => {
   })
 
   it('lists the Accept-Version header parameter for a versioned route, from the compiled constraint', async () => {
-    const pets = new Router('/versioned-pets').name('VersionedPets').extend(version('1.0.0'))
+    const pets = new Router('/versioned-pets').name('VersionedPets').routeOptions(version('1.0.0'))
     pets
       .get('/')
       .name('list')

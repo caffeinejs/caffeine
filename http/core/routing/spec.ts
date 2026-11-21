@@ -9,6 +9,7 @@ import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import type { RequestHookName } from '../lifecycle/lifecycle.js'
 import type { AuthoredHooks } from '../lifecycle/route_definition.js'
+import type { RouteOptionsInput, RouteOptionsLevel } from './options.js'
 
 /**
  * A group of routes, as authored. Inert: it describes routes, it does not know how any of them is called.
@@ -25,7 +26,11 @@ export interface RouteGroupSpec<R> {
   bodyLimit?: ByteSize
   timeout?: Duration
   authz?: RouteAuthz
-  config?: Map<string, unknown>
+  /**
+   * One list per router level, outermost first. A more specific level's key replaces a less specific one's, and the
+   * route's own replaces them all, except a Map, which merges by key.
+   */
+  options?: RouteOptionsLevel[]
   detail?: RouteGroupDetail
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   catchBy?: ErrorHandlerRef[]
@@ -61,7 +66,7 @@ export interface RouteSpec<R> {
   /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
   bodyAs?: BodyMode
   authz?: RouteAuthz
-  config?: Map<string, unknown>
+  options?: RouteOptionsInput[]
   detail?: RouteDetail
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]

@@ -1,14 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import {
-  ErrConfiguration,
-  appendVary,
-  kRouteConstraints,
-  type IContext,
-  type IRequest,
-  type ResolvedRouteConstraint,
-  type RouteDefinition,
-} from '@caffeinejs/http'
+import { ErrConfiguration, appendVary, type IContext, type IRequest, type RouteDefinition } from '@caffeinejs/http'
 import { type Duration, formatDuration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -432,7 +424,7 @@ export function assertConstraintsKeyed(route: RouteDefinition, opts: CacheContro
     return
   }
 
-  const declared = route.config.get(kRouteConstraints) as Map<string, ResolvedRouteConstraint> | undefined
+  const declared = route.options.constraints
   const headers = new Map<string, string | undefined>()
 
   for (const [name, constraint] of declared ?? []) {

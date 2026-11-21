@@ -9,7 +9,7 @@ function routeDef(methods: string[], caffeine?: { group: string; route: string |
   return {
     methods,
     url: '/api/pets/:id',
-    config: new Map(),
+    options: {},
     route: { name: caffeine?.route },
     group: { name: caffeine?.group },
   } as unknown as RouteDefinition

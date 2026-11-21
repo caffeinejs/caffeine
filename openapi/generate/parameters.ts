@@ -1,5 +1,5 @@
 import type { AnySchema } from '@caffeinejs/application/schema'
-import { kRouteConstraints, type ResolvedRouteConstraint, type IRoute } from '@caffeinejs/http'
+import type { IRoute } from '@caffeinejs/http'
 
 import type { ParameterLocation, ParameterObject, SchemaObject } from '../spec/spec.js'
 import type { ComponentRegistry } from './components.js'
@@ -164,7 +164,7 @@ function fromPickers(route: IRoute<unknown>): ParameterObject[] {
  * versioned route. The value the route requires is not the request's, so the schema stays an open string.
  */
 function fromConstraints(route: IRoute<unknown>): ParameterObject[] {
-  const constraints = route.config?.get(kRouteConstraints) as Map<string, ResolvedRouteConstraint> | undefined
+  const constraints = route.options.constraints
   if (constraints === undefined) {
     return []
   }

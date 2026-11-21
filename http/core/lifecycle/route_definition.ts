@@ -1,6 +1,7 @@
 import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrConfiguration } from '../error/common.js'
+import type { RouteOptions } from '../routing/options.js'
 import type { IRoute, IRouteGroup } from '../routing/route.js'
 import type { HookBatch } from './batch.js'
 import { assertHookName, isThenable, REQUEST_HOOK_NAMES, type RequestHookName, type RequestHooks } from './lifecycle.js'
@@ -22,8 +23,8 @@ export interface RouteDefinition<R = unknown> {
   readonly url: string
   readonly route: Readonly<IRoute<R>>
   readonly group: Readonly<IRouteGroup<R>>
-  /** What the route and its groups declared with `config(...)`. */
-  readonly config: ReadonlyMap<string, unknown>
+  /** What the route and its groups set with `options(...)`. */
+  readonly options: Readonly<Partial<RouteOptions>>
 
   /**
    * Adds a hook to this route alone, after every other hook of that point.
@@ -56,7 +57,7 @@ export function openDefinition<R>(
     url,
     route,
     group,
-    config: route.config,
+    options: route.options,
     hook<K extends RequestHookName>(name: K, fn: RequestHooks[K]) {
       if (!open) {
         throw new ErrConfiguration(

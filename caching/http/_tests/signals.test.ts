@@ -74,14 +74,14 @@ describe('the signal a store call carries', () => {
     const router = new Router()
     router
       .get('/data')
-      .config('cache', { ttl: 60 * Second, tags: ['data'] })
+      .options({ cache: { ttl: 60 * Second, tags: ['data'] } })
       .handler(() => {
         handled.n++
         return { ok: true }
       })
     router
       .post('/data')
-      .config('cacheInvalidate', { tags: ['data'] })
+      .options({ cacheInvalidate: { tags: ['data'] } })
       .handler(() => ({ ok: true }))
 
     const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })

@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { Controller } from '../../decorators/controller.js'
-import { CSRFExempt } from '../../decorators/csrf_exempt.js'
 import { Post } from '../../decorators/verbs.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { Authentication } from '../security/auth/auth.js'
@@ -13,7 +12,7 @@ import { AuthenticateResult, AuthenticationTicket } from '../security/auth/ticke
 import { Claim, Identity, Principal } from '../security/identity.js'
 import { authentication } from '../security/security.js'
 import { csrf, type CSRFBuilder } from './csrf.js'
-import { csrfExempt } from './route.js'
+import { CSRFExempt, csrfExempt } from './route.js'
 
 let app: { close(): Promise<void> } | undefined
 
@@ -33,10 +32,10 @@ function routes(): Router<any, any, any, any, any> {
     .post('/hooks/x')
     .handler(() => 'ok')
     .post('/hooks/y')
-    .extend(csrfExempt(false))
+    .options(csrfExempt(false))
     .handler(() => 'ok')
     .post('/exempt')
-    .extend(csrfExempt())
+    .options(csrfExempt())
     .handler(() => 'ok')
 }
 

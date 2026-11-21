@@ -333,7 +333,7 @@ describe('csrf() at the edges', () => {
         .with(csrf(c => c.name('admin').exclude('/admin/hooks')))
         .post('/hooks', ok)
         .post('/marked')
-        .extend(csrfExempt())
+        .options(csrfExempt())
         .handler(ok)
 
       const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(admin))

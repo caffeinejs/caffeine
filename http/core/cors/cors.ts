@@ -6,13 +6,17 @@ import { appendVary } from '../../vary.js'
 import { originProblem } from '../csrf/origin.js'
 import type { ErrConfiguration } from '../error/common.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
-import type { AnyRouteExtension } from '../routing/extension.js'
+import type { RouteOptions } from '../routing/options.js'
 import { kRouteOf, type Context } from '../server/context.js'
 import { configurationError } from '../server/error.js'
 import { HEADER_NAME } from '../server/settings.js'
 
-/** The route config key `corsPolicy()` reads, holding a {@link CORSConfig} or a boolean. */
-export const kCORSRoute = 'caffeine:cors'
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    /** Read by `corsPolicy()`: this route's CORS settings over the policy's, or `false` to turn CORS off for it. */
+    cors?: CORSConfig | boolean
+  }
+}
 
 export const kBuild: unique symbol = Symbol('caffeine.http.cors.build')
 
@@ -124,10 +128,8 @@ export function corsPolicy<C = unknown>(configure?: HTTPPluginConfigurer<CORSBui
  * Sets a route's CORS settings, or every route's of a group, over `corsPolicy()`'s, member by member; `false` turns
  * CORS off for the route and its preflight. The programmatic form of `@CORS(...)`.
  */
-export function cors(options: CORSConfig | boolean): AnyRouteExtension {
-  return (target: { config(key: string, value: unknown): unknown }) => {
-    target.config(kCORSRoute, options)
-  }
+export function cors(options: CORSConfig | boolean): Partial<RouteOptions> {
+  return { cors: options }
 }
 
 const MEMBERS: ReadonlySet<string> = new Set(['origins', 'credentials', 'allowedHeaders', 'exposedHeaders', 'maxAge'])
@@ -181,12 +183,12 @@ class CORSPolicy extends HTTPPlugin {
 
     context.app.hook('onRoute', route => {
       const where = `serve "${route.methods.join('|')} ${route.url}"`
-      const value = route.config.get(kCORSRoute)
+      const value = route.options.cors
 
       if (value === false) {
         policies.set(route, null)
       } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        policies.set(route, resolve(overlay(config, value as CORSConfig), where))
+        policies.set(route, resolve(overlay(config, value), where))
       } else if (value !== undefined && value !== true) {
         throw refusal(
           where,
