@@ -50,11 +50,7 @@ const echo = (ctx: IContext) => ctx.options
 describe('route options', () => {
   it('lets a route replace one key of its router, keeping the router’s other keys', async () => {
     const built = await serve(
-      new Router('/r')
-        .routeOptions({ testA: 'group', testB: 'group' })
-        .get('/')
-        .routeOptions({ testA: 'route' })
-        .handler(echo),
+      new Router('/r').config({ testA: 'group', testB: 'group' }).get('/').config({ testA: 'route' }).handler(echo),
     )
 
     expect(await optionsAt(built, '/r')).toEqual({ testA: 'route', testB: 'group' })
@@ -64,9 +60,9 @@ describe('route options', () => {
   it('replaces a router’s whole object value with the route’s, rather than merging into it', async () => {
     const built = await serve(
       new Router('/r')
-        .routeOptions({ testObj: { x: 1 } })
+        .config({ testObj: { x: 1 } })
         .get('/')
-        .routeOptions({ testObj: { y: 2 } })
+        .config({ testObj: { y: 2 } })
         .handler(echo),
     )
 
@@ -77,7 +73,7 @@ describe('route options', () => {
     const built = await serve(
       new Router('/r')
         .get('/')
-        .routeOptions({ testObj: { x: 1 } }, { testObj: { y: 2 } })
+        .config({ testObj: { x: 1 } }, { testObj: { y: 2 } })
         .handler(echo),
     )
 
@@ -88,14 +84,14 @@ describe('route options', () => {
   it('merges a Map value with its router’s by key', async () => {
     const built = await serve(
       new Router('/r')
-        .routeOptions({
+        .config({
           testMap: new Map([
             ['a', 1],
             ['b', 1],
           ]),
         })
         .get('/')
-        .routeOptions({ testMap: new Map([['b', 2]]) })
+        .config({ testMap: new Map([['b', 2]]) })
         .handler(ctx => Object.fromEntries(ctx.options.testMap ?? [])),
     )
 
@@ -105,8 +101,8 @@ describe('route options', () => {
   it('lets a nested router replace its parent’s key', async () => {
     const built = await serve(
       new Router('/outer')
-        .routeOptions({ testA: 'outer', testB: 'outer' })
-        .mount(new Router('/inner').routeOptions({ testA: 'inner' }).get('/', echo)),
+        .config({ testA: 'outer', testB: 'outer' })
+        .mount(new Router('/inner').config({ testA: 'inner' }).get('/', echo)),
     )
 
     expect(await optionsAt(built, '/outer/inner')).toEqual({ testA: 'inner', testB: 'outer' })
@@ -116,7 +112,7 @@ describe('route options', () => {
     const built = await serve(
       new Router('/r')
         .get('/')
-        .routeOptions({ testA: '1' }, o => {
+        .config({ testA: '1' }, o => {
           o.testA = '2'
         })
         .handler(echo),
@@ -129,9 +125,9 @@ describe('route options', () => {
   it('hands a route’s configurer the route’s own options alone, not its router’s', async () => {
     const built = await serve(
       new Router('/r')
-        .routeOptions({ testA: 'group' })
+        .config({ testA: 'group' })
         .get('/')
-        .routeOptions(o => {
+        .config(o => {
           o.testB = String(o.testA)
         })
         .handler(echo),
@@ -150,7 +146,7 @@ describe('route options', () => {
     const built = createWebApplication({ adapter: node(), container: new CaffeineIoC(), config: conf }).mount(
       new Router('/r')
         .configType<AppConfig>()
-        .routeOptions((o, { config }) => {
+        .config((o, { config }) => {
           o.testA = config.greeting
         })
         .get('/', echo),
@@ -166,7 +162,7 @@ describe('route options', () => {
       o.testA = 'group'
     })
 
-    const built = await serve(new Router('/r').routeOptions(configure).get('/a', echo).get('/b', echo))
+    const built = await serve(new Router('/r').config(configure).get('/a', echo).get('/b', echo))
 
     expect(await optionsAt(built, '/r/b')).toEqual({ testA: 'group' })
     expect(configure).toHaveBeenCalledTimes(1)
@@ -179,7 +175,7 @@ describe('route options', () => {
 
     const built = await serve(
       new Router('/outer')
-        .routeOptions(configure)
+        .config(configure)
         .get('/', echo)
         .mount(new Router('/a').get('/', echo), new Router('/b').get('/', echo)),
     )
@@ -193,7 +189,7 @@ describe('route options', () => {
     const built = createWebApplication({ adapter: node() }).mount(
       new Router('/t')
         .name('throwing')
-        .routeOptions(() => {
+        .config(() => {
           throw thrown
         })
         .get('/', echo),
@@ -216,7 +212,7 @@ describe('route options', () => {
     const built = createWebApplication({ adapter: node() }).mount(
       new Router('/t')
         .name('throwing')
-        .routeOptions(() => {
+        .config(() => {
           throw thrown
         })
         .get('/', echo),
@@ -240,7 +236,7 @@ describe('route options', () => {
     const built = createWebApplication({ adapter: node() }).mount(
       new Router('/t')
         .name('throwing')
-        .routeOptions(() => {
+        .config(() => {
           throw new Error('no webhooks\n  - Add a webhooks block')
         })
         .get('/', echo),
@@ -260,9 +256,9 @@ describe('route options', () => {
   it('keeps a symbol-keyed option from the router down to the route', async () => {
     const built = await serve(
       new Router('/r')
-        .routeOptions({ [kTestSymbol]: 7 })
+        .config({ [kTestSymbol]: 7 })
         .get('/')
-        .routeOptions({ testA: 'a' })
+        .config({ testA: 'a' })
         .handler(ctx => ({ symbol: ctx.options[kTestSymbol] ?? null, a: ctx.options.testA })),
     )
 
@@ -276,7 +272,7 @@ describe('route options', () => {
         .name('group')
         .get('/')
         .name('hook')
-        .routeOptions(() => {
+        .config(() => {
           throw thrown
         })
         .handler(echo),
@@ -299,7 +295,7 @@ describe('route options', () => {
     const built = createWebApplication({ adapter: node() }).mount(
       new Router('/outer')
         .name('outer')
-        .routeOptions(() => {
+        .config(() => {
           throw new Error('no webhooks')
         })
         .mount(new Router('/inner').name('inner').get('/', echo)),
@@ -320,7 +316,7 @@ describe('route options', () => {
     const built = createWebApplication({ adapter: node() }).mount(
       new Router('/p')
         .name('promised')
-        .routeOptions((async () => undefined) as never)
+        .config((async () => undefined) as never)
         .get('/', echo),
     )
     app = built
@@ -341,7 +337,7 @@ describe('route options', () => {
     const built = await serve(
       new Router('/r')
         .get('/')
-        .routeOptions(JSON.parse('{"__proto__":{"testA":"x"}}') as Partial<RouteOptions>, o => {
+        .config(JSON.parse('{"__proto__":{"testA":"x"}}') as Partial<RouteOptions>, o => {
           o.testB = o.testA ?? 'none'
         })
         .handler(echo),
@@ -354,7 +350,7 @@ describe('route options', () => {
   it('keeps a configurer’s own __proto__ property from becoming the prototype of the route’s options', async () => {
     const built = await serve(
       new Router('/r')
-        .routeOptions(o => {
+        .config(o => {
           Object.defineProperty(o, '__proto__', { value: { testA: 'x' }, enumerable: true, writable: true })
         })
         .get('/', ctx => ({
@@ -371,7 +367,7 @@ describe('route options', () => {
     const built = await serve(
       new Router('/r')
         .get('/')
-        .routeOptions({ testA: 'a' })
+        .config({ testA: 'a' })
         .handler(ctx => ({ frozen: Object.isFrozen(ctx.options), a: ctx.options.testA })),
     )
 
@@ -382,7 +378,7 @@ describe('route options', () => {
     const seen: unknown[] = []
     const built = createWebApplication({ adapter: node() })
       .hook('onRequest', ctx => void seen.push(ctx.options))
-      .mount(new Router('/r').routeOptions({ testA: 'a' }).get('/', echo))
+      .mount(new Router('/r').config({ testA: 'a' }).get('/', echo))
     app = built
     await built.bootstrap()
 

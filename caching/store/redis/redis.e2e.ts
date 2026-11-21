@@ -231,11 +231,11 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
       const pets = new Router('/pets')
       pets
         .get('/')
-        .routeOptions(cacheControl({ ttl: 60 * Second, tags: ['pets'] }))
+        .config(cacheControl({ ttl: 60 * Second, tags: ['pets'] }))
         .handler(() => ({ calls: ++calls }))
       pets
         .post('/')
-        .routeOptions(cacheInvalidate({ tags: ['pets'] }))
+        .config(cacheInvalidate({ tags: ['pets'] }))
         .handler(() => ({ created: true }))
 
       const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })

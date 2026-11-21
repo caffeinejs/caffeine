@@ -230,7 +230,7 @@ describe('csrf() in front of a webhook receiver', () => {
       () =>
         createWebApplication({ adapter: node() })
           .with(csrf())
-          .mount(new Router('/webhooks/partner').routeOptions(csrfExempt()).post('/', ok)),
+          .mount(new Router('/webhooks/partner').config(csrfExempt()).post('/', ok)),
     ],
     [
       'exclude() of its path',
@@ -277,7 +277,7 @@ describe('csrf() in front of a webhook receiver', () => {
     const exempt = await ready(
       createWebApplication({ adapter: node() })
         .with(csrf())
-        .mount(new Router('/payments').post('/return').routeOptions(csrfExempt()).handler(ok)),
+        .mount(new Router('/payments').post('/return').config(csrfExempt()).handler(ok)),
     )
 
     expect((await deliver(exempt, '/payments/return', payment, THREE_DS_RETURN)).status).toBe(200)
@@ -302,7 +302,7 @@ describe('csrf() in front of a webhook receiver', () => {
     const wide = await ready(
       createWebApplication({ adapter: node() })
         .with(csrf(c => c.exclude('/webhooks')))
-        .mount(github([]), settings(new Router('/webhooks/settings').routeOptions(csrfExempt(false)))),
+        .mount(github([]), settings(new Router('/webhooks/settings').config(csrfExempt(false)))),
     )
 
     expect((await deliver(wide, '/webhooks/github', body, delivery)).status).toBe(200)

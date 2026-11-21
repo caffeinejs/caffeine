@@ -24,7 +24,7 @@ import { mergeInto, mergeValue, ownKeys } from './_merge.js'
  *
  * The import keeps the file a module, so the block adds to the package's types instead of replacing them.
  *
- * Set with `.routeOptions(...)` on a route or a router, and `@RouteOptions(...)` on a controller or a method. Within
+ * Set with `.config(...)` on a route or a router, and `@RouteOptions(...)` on a controller or a method. Within
  * one of those levels, settings merge key by key: plain objects member by member, arrays joined, Maps merged by key and
  * Sets united, anything else replaced. A more specific level's key replaces a less specific one's whole value, except a
  * Map, which merges by key: a route's constraint keeps its router's version.
@@ -33,7 +33,7 @@ export interface RouteOptions {
   /**
    * Never set, and not dead code. An application loads a plugin's field only through a module that declares it, so one
    * importing `@caffeinejs/http/routing` alone sees no field at all: without this member the interface is empty, and
-   * `.routeOptions(42)` or an unknown key would type-check and fail at start-up instead.
+   * `.config(42)` or an unknown key would type-check and fail at start-up instead.
    */
   readonly [kRouteOptions]?: never
 }

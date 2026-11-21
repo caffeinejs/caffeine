@@ -32,10 +32,10 @@ function routes(): Router<any, any, any, any, any> {
     .post('/hooks/x')
     .handler(() => 'ok')
     .post('/hooks/y')
-    .routeOptions(csrfExempt(false))
+    .config(csrfExempt(false))
     .handler(() => 'ok')
     .post('/exempt')
-    .routeOptions(csrfExempt())
+    .config(csrfExempt())
     .handler(() => 'ok')
 }
 

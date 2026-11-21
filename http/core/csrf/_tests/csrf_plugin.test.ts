@@ -492,11 +492,7 @@ describe('csrf()', () => {
     // A route's own mark is the more specific word: an application route under a prefix excluded for somebody
     // else's routes stays protected when it says so.
     it('keeps a route marked csrfExempt(false) protected under an excluded prefix', async () => {
-      const hooks = new Router('/hooks')
-        .post('/provider', ok)
-        .post('/settings')
-        .routeOptions(csrfExempt(false))
-        .handler(ok)
+      const hooks = new Router('/hooks').post('/provider', ok).post('/settings').config(csrfExempt(false)).handler(ok)
 
       const app = await ready(
         createWebApplication({ adapter: node() })
@@ -510,10 +506,10 @@ describe('csrf()', () => {
 
     it('takes csrfExempt() on a router, and csrfExempt(false) on one of its routes', async () => {
       const hooks = new Router('/hooks')
-        .routeOptions(csrfExempt())
+        .config(csrfExempt())
         .post('/open', ok)
         .post('/closed')
-        .routeOptions(csrfExempt(false))
+        .config(csrfExempt(false))
         .handler(ok)
 
       const app = await ready(createWebApplication({ adapter: node() }).with(csrf()).mount(hooks, echo()))
@@ -581,7 +577,7 @@ describe('csrf()', () => {
           )
           .mount(
             echo(),
-            new Router('/hooks').routeOptions(csrfExempt()).post('/', ok),
+            new Router('/hooks').config(csrfExempt()).post('/', ok),
             new Router('/excluded').post('/', ok),
           ),
       )

@@ -428,11 +428,11 @@ describe('programmatic router parity with the decorator feature set', () => {
     // What a feature reads per request, as `@RouteOptions` writes it. The more specific level wins a key outright.
     it("should give every route the group's entries, a route's own replacing the group's for its key", async () => {
       const read = (ctx: IContext) => ({ feature: ctx.options.testLevel, other: ctx.options.testTier })
-      const router = new Router('/configured').routeOptions({ testLevel: { level: 'group' }, testTier: 'kept' })
+      const router = new Router('/configured').config({ testLevel: { level: 'group' }, testTier: 'kept' })
       router.get('/inherits').handler(read)
       router
         .get('/overrides')
-        .routeOptions({ testLevel: { tier: 'route' } })
+        .config({ testLevel: { tier: 'route' } })
         .handler(read)
 
       const app = createWebApplication({ adapter: node() }).mount(router)
@@ -475,9 +475,9 @@ describe('programmatic router parity with the decorator feature set', () => {
 
   describe('given a version constraint', () => {
     it('should select a programmatic route by Accept-Version exactly as a decorated one', async () => {
-      const v1 = new Router('/pets').name('ParityPetsV1').routeOptions(version('1.0.0'))
+      const v1 = new Router('/pets').name('ParityPetsV1').config(version('1.0.0'))
       v1.get('/').handler(() => ({ v: 1 }))
-      const v2 = new Router('/pets').name('ParityPetsV2').routeOptions(version('2.0.0'))
+      const v2 = new Router('/pets').name('ParityPetsV2').config(version('2.0.0'))
       v2.get('/').handler(() => ({ v: 2 }))
 
       const app = createWebApplication({ adapter: node() }).mount(v1, v2)

@@ -147,10 +147,10 @@ export class RouteChain<
    * context and its start-up configuration.
    *
    * ```ts
-   * pets.post('/import').routeOptions(cors(false), csrfExempt())
+   * pets.post('/import').config(cors(false), csrfExempt())
    * ```
    */
-  routeOptions(...inputs: RouteOptionsInput<C>[]): this {
+  config(...inputs: RouteOptionsInput<C>[]): this {
     this.#state.builder.options(...inputs)
     return this
   }
@@ -176,7 +176,7 @@ export class RouteChain<
    *
    * How a package describes a route it does not own: `@caffeinejs/openapi` documenting an operation. An extension is
    * the same function a decorator passes to `configureRoute`, so a feature reads the same whichever way the route was
-   * declared. A setting a plugin reads goes through {@link routeOptions} instead.
+   * declared. A setting a plugin reads goes through {@link config} instead.
    *
    * ```ts
    * pets.get('/:id').extend(operation({ summary: 'Get a pet' }))

@@ -221,7 +221,7 @@ describe('routers that decide for themselves', () => {
     api.get('/').handler(() => BODY)
     api
       .get('/health')
-      .routeOptions(compress(false))
+      .config(compress(false))
       .handler(() => BODY)
     const assets = new Router('/assets').get('/').handler(() => BODY)
     const origin = await listen(app(), api, assets)

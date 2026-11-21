@@ -308,7 +308,7 @@ class WebhooksController {
 }
 
 // On a controller, @CSRFExempt() exempts every method, one added later included; @CSRFExempt(false) keeps one checked
-new Router('/hooks').routeOptions(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
+new Router('/hooks').config(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
 ```
 
 - `GET`, `HEAD`, `OPTIONS`, `TRACE` and `QUERY` are never checked: a safe method changes nothing, so an application
@@ -463,7 +463,7 @@ app.mount(pets) // before app.bootstrap()
   is refused at start-up.
 - Route names default to method + path (`get_pets_id`) and are what the OpenAPI operationId is built from.
   `.name('find')` pins one.
-- `.routeOptions(...)` on a route or a router sets the options a plugin reads for it:
+- `.config(...)` on a route or a router sets the options a plugin reads for it:
   `cors(options)`, `csrfExempt()`, `compress(options)`, `decompress(codings)`, `version(v)`, `constraint(name, value)`
   and, from the caching package, `cacheControl(options)` and `cacheInvalidate(options)`. Each is the same
   implementation as its decorator, and `@RouteOptions(...)` sets them on a controller or a method.

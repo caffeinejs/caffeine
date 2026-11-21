@@ -17,24 +17,24 @@ declare module './options.js' {
 
 new Router('/a')
   .get('/')
-  .routeOptions(cors(false), csrfExempt())
+  .config(cors(false), csrfExempt())
   .handler(() => 'a')
 
-new Router('/a').routeOptions(cors({ origins: ['https://example.com'] }), { csrf: { exempt: true } })
+new Router('/a').config(cors({ origins: ['https://example.com'] }), { csrf: { exempt: true } })
 
 // @ts-expect-error a declared field takes its declared type
-new Router('/a').get('/').routeOptions({ cors: 1 })
+new Router('/a').get('/').config({ cors: 1 })
 
 // @ts-expect-error a key no plugin declared is refused
-new Router('/a').routeOptions({ unknownPluginKey: true })
+new Router('/a').config({ unknownPluginKey: true })
 
-new Router('/a').configType<{ greeting: string }>().routeOptions((o, { config }) => {
+new Router('/a').configType<{ greeting: string }>().config((o, { config }) => {
   expectTypeOf(config.greeting).toEqualTypeOf<string>()
   expectTypeOf(o).toEqualTypeOf<Partial<RouteOptions>>()
 })
 
-// The `Router.routeOptions` example, as written there.
-new Router('/hooks').configType<{ webhooks: { strict: boolean } }>().routeOptions(cors(false), (o, { config }) => {
+// The `Router.config` example, as written there.
+new Router('/hooks').configType<{ webhooks: { strict: boolean } }>().config(cors(false), (o, { config }) => {
   o.csrf = { exempt: !config.webhooks.strict }
 })
 
@@ -47,25 +47,25 @@ class Hooks {}
 void Hooks
 
 // A route that sets no options still type-checks, and reads a declared field as possibly absent.
-new Router('/a').routeOptions({ cors: false }).get('/', (ctx: IContext) => {
+new Router('/a').config({ cors: false }).get('/', (ctx: IContext) => {
   // @ts-expect-error the field may be absent: no route is made to set it
   return ctx.options.testRequired.level
 })
 
 // @ts-expect-error a configurer writes the options it is handed: a returned object would be dropped
-new Router('/a').routeOptions(() => cors(false))
+new Router('/a').config(() => cors(false))
 
 // @ts-expect-error a configurer is synchronous: nothing waits on a promise
-new Router('/a').routeOptions(async () => undefined)
+new Router('/a').config(async () => undefined)
 
 // A configurer a plugin declares apart from the call: its return type is inferred as `void`.
 function closed(o: Partial<RouteOptions>) {
   o.cors = false
 }
 new Router('/a')
-  .routeOptions(closed)
+  .config(closed)
   .get('/')
-  .routeOptions(closed)
+  .config(closed)
   .handler(() => 'a')
 
 // A compiled route's options are what every reader shares: none can replace them.

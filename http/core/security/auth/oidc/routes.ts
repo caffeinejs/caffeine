@@ -105,7 +105,7 @@ export function mountOIDCRoutes(context: HTTPSetupContext, oidc: OIDCMeta, baseP
 
   const router = new Router()
     .detail('http', { internal: true })
-    .routeOptions(accessControlExempt(), { oidcRoute: OIDC_ROUTE })
+    .config(accessControlExempt(), { oidcRoute: OIDC_ROUTE })
 
   for (const { handler } of oidc.handlers) {
     // A failure here — the provider cannot be reached — goes to the error handlers, which answer with the error's

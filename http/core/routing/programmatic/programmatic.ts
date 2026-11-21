@@ -117,7 +117,7 @@ export class Router<
    * ```
    *
    * Only the type: the values come from the application's own configuration either way. A function handed to
-   * {@link routeOptions} reads the same type.
+   * {@link config} reads the same type.
    */
   configType<C2>(): Router<V, C2, GD, GP, R> {
     return this as unknown as Router<V, C2, GD, GP, R>
@@ -418,7 +418,7 @@ export class Router<
 
   /**
    * Sets route options for every route of this router and of the routers nested under it. A nested router's key, or a
-   * route's own `routeOptions(...)` key, replaces what is set here, except a Map, which merges by key; within this
+   * route's own `config(...)` key, replaces what is set here, except a Map, which merges by key; within this
    * router, objects merge key by key, in the order written. A function runs while routes compile, handed the setup
    * context and its start-up configuration.
    *
@@ -427,12 +427,12 @@ export class Router<
    * ```ts
    * new Router('/hooks')
    *   .configType<{ webhooks: { strict: boolean } }>()
-   *   .routeOptions(cors(false), (o, { config }) => {
+   *   .config(cors(false), (o, { config }) => {
    *     o.csrf = { exempt: !config.webhooks.strict }
    *   })
    * ```
    */
-  routeOptions(...inputs: RouteOptionsInput<C>[]): this {
+  config(...inputs: RouteOptionsInput<C>[]): this {
     this.#state.builder.options(...inputs)
     return this
   }

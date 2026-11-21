@@ -11,9 +11,9 @@ declare module '@caffeinejs/http' {
 
 /**
  * Evicts every entry stored under any of `tags` after a successful mutating request, applied with
- * `.routeOptions(cacheInvalidate(...))` on a route. The decorator form is {@link CacheInvalidate}.
+ * `.config(cacheInvalidate(...))` on a route. The decorator form is {@link CacheInvalidate}.
  *
- * Set on the route that mutates: under `router.routeOptions(...)` it covers every route of the router, and a read
+ * Set on the route that mutates: under `router.config(...)` it covers every route of the router, and a read
  * evicts too.
  */
 export function cacheInvalidate(options: CacheInvalidateOptions): Partial<RouteOptions> {

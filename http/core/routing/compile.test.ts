@@ -34,12 +34,12 @@ class DenyAll implements Guard {
 
 const marked = () =>
   new Router('/marked')
-    .routeOptions(accessControlExempt())
+    .config(accessControlExempt())
     .get('/')
     .handler(() => 'ok')
 const forged = () =>
   new Router('/forged')
-    .routeOptions({ accessControlExempt: true as never })
+    .config({ accessControlExempt: true as never })
     .get('/')
     .handler(() => 'ok')
 const plain = () => new Router('/plain').get('/').handler(() => 'ok')
@@ -96,7 +96,7 @@ describe('the access-control mark', () => {
       .mount(
         new Router('/open')
           .name('open')
-          .routeOptions(accessControlExempt())
+          .config(accessControlExempt())
           .get('/')
           .name('index')
           .authorize({ roles: ['admin'] })
@@ -129,7 +129,7 @@ describe('the access-control mark', () => {
       .mount(
         new Router('/outer').authorize({ roles: ['admin'] }).mount(
           new Router('/inner')
-            .routeOptions(accessControlExempt())
+            .config(accessControlExempt())
             .get('/')
             .handler(() => 'ok'),
         ),

@@ -343,7 +343,7 @@ describe('decompression() decoding request bodies', () => {
 
   it("decodes only the route's own codings", async () => {
     const gzipOnly = new Router('/only')
-      .routeOptions(decompress('gzip'))
+      .config(decompress('gzip'))
       .post('/')
       .handler(ctx => ctx.req.body())
     const res = await (await serve(gzipOnly)).request(...post('br', brotliCompressSync('{}'), '/only'))
@@ -355,7 +355,7 @@ describe('decompression() decoding request bodies', () => {
   it('hands a route with decompress(false) the coded bytes as they came', async () => {
     const coded = gzipSync('{"a":1}')
     const raw = new Router('/raw')
-      .routeOptions(decompress(false))
+      .config(decompress(false))
       .post('/')
       .extend(bodyAsBuffer())
       .handler(ctx => ({ size: (ctx.req.body() as Buffer).byteLength }))
@@ -635,7 +635,7 @@ describe('decompression() refusing settings at start-up', () => {
 
   it("refuses a route's decompress(...) that lists no coding", async () => {
     const route = new Router('/r')
-      .routeOptions(decompress([]))
+      .config(decompress([]))
       .post('/')
       .handler(() => 'r')
 
@@ -644,7 +644,7 @@ describe('decompression() refusing settings at start-up', () => {
 
   it("refuses a route's decompress(...) with an unknown coding", async () => {
     const route = new Router('/r')
-      .routeOptions(decompress(['lzma'] as never))
+      .config(decompress(['lzma'] as never))
       .post('/')
       .handler(() => 'r')
 
@@ -653,7 +653,7 @@ describe('decompression() refusing settings at start-up', () => {
 
   it("tells a route's decompress(...) that is not a list how to write one", async () => {
     const route = new Router('/r')
-      .routeOptions(decompress(5 as never))
+      .config(decompress(5 as never))
       .post('/')
       .handler(() => 'r')
     const failure = await serve(route).then(

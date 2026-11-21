@@ -30,7 +30,7 @@ function strategy(name: string, header: string): ConstraintStrategy {
 
 const pets = () =>
   new Router('/pets')
-    .routeOptions(version('1.0.0'))
+    .config(version('1.0.0'))
     .get('/')
     .handler(() => 'v1')
 const plain = () => new Router('/plain').get('/').handler(() => 'plain')
@@ -40,11 +40,11 @@ function dish() {
   return new Router('/d')
     .get('/')
     .name('spicy')
-    .routeOptions(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
+    .config(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
     .handler(() => 'spicy')
     .get('/')
     .name('mild')
-    .routeOptions(constraint('flavor', 'mild', { header: 'X-Flavor' }))
+    .config(constraint('flavor', 'mild', { header: 'X-Flavor' }))
     .handler(() => 'mild')
 }
 
@@ -136,9 +136,9 @@ describe('route constraints on the engine', () => {
       .server(() => ({ constraints: [strategy('flavor', 'X-Flavor')] }))
       .mount(
         new Router('/v')
-          .routeOptions(version('1.0.0'))
+          .config(version('1.0.0'))
           .get('/')
-          .routeOptions(constraint('flavor', 'x', { header: 'X-Flavor' }))
+          .config(constraint('flavor', 'x', { header: 'X-Flavor' }))
           .handler(() => 'ok'),
       )
     app = built
@@ -153,7 +153,7 @@ describe('route constraints on the engine', () => {
     const built = createWebApplication().mount(
       new Router('/x')
         .get('/')
-        .routeOptions(constraint('nope', 1))
+        .config(constraint('nope', 1))
         .handler(() => 'x'),
     )
     app = built
@@ -168,7 +168,7 @@ describe('route constraints on the engine', () => {
     const built = createWebApplication().mount(
       new Router('/x')
         .get('/')
-        .routeOptions({ constraints: { version: '1.0.0' } } as never)
+        .config({ constraints: { version: '1.0.0' } } as never)
         .handler(() => 'x'),
     )
     app = built
@@ -183,7 +183,7 @@ describe('route constraints on the engine', () => {
     const empty = () =>
       new Router('/e')
         .get('/')
-        .routeOptions({ constraints: new Map() })
+        .config({ constraints: new Map() })
         .handler(() => 'e')
     const built = createWebApplication().mount(empty(), empty())
     app = built
@@ -205,7 +205,7 @@ describe('route constraints on the engine', () => {
     const built = createWebApplication().mount(
       new Router('/h')
         .get('/')
-        .routeOptions(constraint('host', 'api.example'))
+        .config(constraint('host', 'api.example'))
         .handler(() => 'h'),
     )
     app = built
@@ -221,7 +221,7 @@ describe('route constraints on the engine', () => {
       .mount(
         new Router('/api')
           .get('/')
-          .routeOptions(constraint('version', 'v7'))
+          .config(constraint('version', 'v7'))
           .handler(() => 'v7'),
       )
     app = built
@@ -243,7 +243,7 @@ describe('route constraints on the engine', () => {
       .mount(
         new Router('/b')
           .get('/')
-          .routeOptions(constraint('boom', 'x'))
+          .config(constraint('boom', 'x'))
           .handler(() => 'b'),
       )
     app = built
@@ -272,7 +272,7 @@ describe('route constraints on the engine', () => {
             register(context: HTTPSetupContext): void {
               context.app.mount(
                 new Router('/late')
-                  .routeOptions(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
+                  .config(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
                   .get('/')
                   .handler(() => 'late'),
               )

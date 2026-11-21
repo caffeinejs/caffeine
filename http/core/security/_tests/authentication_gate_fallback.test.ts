@@ -64,7 +64,7 @@ class PlainRoutes extends HTTPPlugin {
   register({ app }: HTTPSetupContext): void {
     app.mount(
       new Router().get('/admin-ui/users', ok).get('/assets/app.js', ok).get('/assets-but-not-really', ok),
-      new Router('/metrics').routeOptions(accessControlExempt()).get('/', ctx => ({ user: ctx.user })),
+      new Router('/metrics').config(accessControlExempt()).get('/', ctx => ({ user: ctx.user })),
     )
   }
 }

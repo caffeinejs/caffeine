@@ -128,7 +128,7 @@ describe('routeRecord on the fetch application', () => {
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme())))
       .mount(
         new Router('/marked')
-          .routeOptions(accessControlExempt())
+          .config(accessControlExempt())
           .get('/')
           .handler(() => 'x'),
         new Router('/plain').get('/').handler(() => 'x'),

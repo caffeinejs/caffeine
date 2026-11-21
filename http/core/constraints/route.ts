@@ -9,7 +9,7 @@ declare module '../routing/options.js' {
 }
 
 /**
- * Route options that select on a registered route constraint, applied with `.routeOptions(constraint(name, value))` on
+ * Route options that select on a registered route constraint, applied with `.config(constraint(name, value))` on
  * a route or a router. The server matches on it by itself. A route's constraint replaces the same name from its router
  * and keeps the others: a route of a versioned router stays versioned.
  */
@@ -23,7 +23,7 @@ export function constraint(name: string, value: unknown, options?: { header?: st
  *
  * Nothing is installed for it; a name other than `version` and `host` needs its strategy in `.server(...)`'s
  * `constraints`. A route whose constraint the request does not satisfy is not matched, and the request is answered
- * 404. The programmatic form is {@link constraint}, applied with `.routeOptions(constraint(name, value))`.
+ * 404. The programmatic form is {@link constraint}, applied with `.config(constraint(name, value))`.
  */
 export function Constraint(name: string, value: unknown, options?: { header?: string }) {
   return RouteOptions(constraint(name, value, options))
@@ -31,7 +31,7 @@ export function Constraint(name: string, value: unknown, options?: { header?: st
 
 /**
  * Route options binding routes to an API version. One implementation behind {@link Version}, applied with
- * `.routeOptions(version(v))` on a route or a router.
+ * `.config(version(v))` on a route or a router.
  */
 export function version(version: string): Partial<RouteOptions> {
   return constraint(VERSION_CONSTRAINT, version, { header: kVersionHeader })

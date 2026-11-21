@@ -44,7 +44,7 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  * Installed on a server and again on a router or a controller under it, it is refused at start-up.
  *
  * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
- * `cacheInvalidate()` route options, set with `.routeOptions(...)`. Wherever it is installed, its hooks run after every
+ * `cacheInvalidate()` route options, set with `.config(...)`. Wherever it is installed, its hooks run after every
  * hook of the server, its routers and the route's guards, so a request the authentication gate or a guard refuses is
  * never served from the store. A payload an earlier `onSend` hook turned into a stream is neither hashed nor stored.
  */

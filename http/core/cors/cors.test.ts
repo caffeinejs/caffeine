@@ -62,7 +62,7 @@ const r = () =>
     .handler(() => 'p')
 const off = () =>
   new Router('/off')
-    .routeOptions(cors(false))
+    .config(cors(false))
     .get('/')
     .handler(() => 'off')
 
@@ -121,7 +121,7 @@ describe('corsPolicy() on an actual request', () => {
 
   it("lets a route's cors(...) name origins of its own", async () => {
     const wide = new Router('/wide')
-      .routeOptions(cors({ origins: [PARTNER] }))
+      .config(cors({ origins: [PARTNER] }))
       .get('/')
       .handler(() => 'w')
     const built = await serve(undefined, wide)
@@ -292,7 +292,7 @@ describe('corsPolicy() on a preflight', () => {
 
   it('grants the preflight of a route marked cors(true) from the policy', async () => {
     const on = new Router('/on')
-      .routeOptions(cors(true))
+      .config(cors(true))
       .get('/')
       .handler(() => 'on')
     const res = await (await serve(undefined, on)).request('/on', preflight(A, 'GET'))
@@ -321,12 +321,12 @@ describe('corsPolicy() on a preflight', () => {
     const built = await serve(
       undefined,
       new Router('/v')
-        .routeOptions(version('1.0.0'))
+        .config(version('1.0.0'))
         .get('/')
         .handler(() => 'v1'),
       new Router('/v')
         .name('V2')
-        .routeOptions(version('2.0.0'))
+        .config(version('2.0.0'))
         .get('/')
         .handler(() => 'v2'),
     )
@@ -344,12 +344,12 @@ describe('corsPolicy() on a preflight', () => {
       .with(corsPolicy(c => c.origins(A)))
       .mount(
         new Router('/v')
-          .routeOptions(version('1.0.0'))
+          .config(version('1.0.0'))
           .get('/')
           .handler(() => 'v1'),
         new Router('/v')
           .name('V2')
-          .routeOptions(version('2.0.0'), cors(false))
+          .config(version('2.0.0'), cors(false))
           .get('/')
           .handler(() => 'v2'),
       )
@@ -375,12 +375,12 @@ describe('corsPolicy() on a preflight', () => {
     const built = await serve(
       undefined,
       new Router('/v')
-        .routeOptions(version('1.0.0'))
+        .config(version('1.0.0'))
         .get('/:id')
         .handler(() => 'v1'),
       new Router('/v')
         .name('V2')
-        .routeOptions(version('2.0.0'), cors(false))
+        .config(version('2.0.0'), cors(false))
         .get('/:petId')
         .handler(() => 'v2'),
     )
@@ -421,7 +421,7 @@ describe('corsPolicy() on a preflight', () => {
       .with(corsPolicy(c => c.origins(A)))
       .mount(
         new Router('/v')
-          .routeOptions(version('1.0.0'))
+          .config(version('1.0.0'))
           .get('/')
           .handler(() => 'v1'),
       )
@@ -454,9 +454,9 @@ describe('corsPolicy() on a preflight', () => {
 })
 
 describe('corsPolicy() refusals at start-up', () => {
-  const x = (...inputs: Parameters<AnyRouter['routeOptions']>) =>
+  const x = (...inputs: Parameters<AnyRouter['config']>) =>
     new Router('/x')
-      .routeOptions(...inputs)
+      .config(...inputs)
       .get('/')
       .handler(() => 'x')
 
@@ -526,7 +526,7 @@ describe('corsPolicy() refusals at start-up', () => {
       'a route whose setting is neither an object nor a boolean',
       c => c.origins(A),
       new Router('/x')
-        .routeOptions({ cors: 'yes' } as never)
+        .config({ cors: 'yes' } as never)
         .get('/')
         .handler(() => 'x'),
       'Cannot serve "GET /x": its CORS setting must be an object or a boolean',

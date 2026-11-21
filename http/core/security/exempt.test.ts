@@ -36,7 +36,7 @@ describe('accessControlExempt', () => {
       )
       .mount(
         new Router('/x')
-          .routeOptions(accessControlExempt())
+          .config(accessControlExempt())
           .get('/')
           .handler(() => 'ok'),
       )

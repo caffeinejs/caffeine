@@ -282,7 +282,7 @@ describe('the request a key function is handed', () => {
     const router = new Router('/key-request')
     router
       .get('/:id')
-      .routeOptions(
+      .config(
         cacheControl({
           ttl: 60 * Second,
           key: req => {
@@ -328,7 +328,7 @@ describe('cacheInvalidate refuses an eviction that names nothing at start-up', (
     const router = new Router('/inv-bad-empty')
     router
       .post('/x')
-      .routeOptions(cacheInvalidate({ tags: [] }))
+      .config(cacheInvalidate({ tags: [] }))
       .handler(() => ({ ok: true }))
 
     const failure = ready(router)
@@ -343,7 +343,7 @@ describe('cacheInvalidate refuses an eviction that names nothing at start-up', (
     const router = new Router('/inv-bad-tag')
     router
       .post('/x')
-      .routeOptions(cacheInvalidate({ tags: ['pets', '{1}'] }))
+      .config(cacheInvalidate({ tags: ['pets', '{1}'] }))
       .handler(() => ({ ok: true }))
 
     await expect(ready(router)).rejects.toThrow(
@@ -355,7 +355,7 @@ describe('cacheInvalidate refuses an eviction that names nothing at start-up', (
     const router = new Router('/inv-bad-none')
     router
       .post('/x')
-      .routeOptions(cacheInvalidate({} as never))
+      .config(cacheInvalidate({} as never))
       .handler(() => ({ ok: true }))
 
     await expect(ready(router)).rejects.toThrow(

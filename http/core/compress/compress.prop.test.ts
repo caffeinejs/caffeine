@@ -30,7 +30,7 @@ const app = createWebApplication()
   .with(compression())
   .mount(
     new Router('/bytes')
-      .routeOptions(compress({ threshold: 0 }))
+      .config(compress({ threshold: 0 }))
       .get('/')
       .handler(ctx => {
         ctx.header('content-type', 'text/plain')

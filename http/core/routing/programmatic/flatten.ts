@@ -86,7 +86,7 @@ function walk<R>(
   assertUniqueRouteNames(spec.routes, name)
 
   // A nested group is a scope of its own, so what a parent router registered reaches it only through this chain.
-  // Carrying the chain is what makes `router.with(...)` inherit the way `router.routeOptions(...)` does,
+  // Carrying the chain is what makes `router.with(...)` inherit the way `router.config(...)` does,
   // and the path is where a relative middleware path of that router starts in this group.
   const scopes = [...parentScopes, { key: state, path }]
 

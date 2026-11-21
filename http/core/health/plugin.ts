@@ -87,7 +87,7 @@ class HealthProbes extends HTTPPlugin {
     context.app.mount(
       new Router()
         .detail('http', { internal: true })
-        .routeOptions(accessControlExempt(), { healthProbe: PROBE })
+        .config(accessControlExempt(), { healthProbe: PROBE })
         .get(live)
         .handler(probe('livez', options, p => health.liveness(p)))
         .get(ready)

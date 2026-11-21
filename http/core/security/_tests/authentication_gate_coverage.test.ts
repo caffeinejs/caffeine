@@ -135,7 +135,7 @@ describe('routes no authentication gate covers', () => {
       .install(header())
       .install(byDefault())
       .with(healthProbes())
-      .mount(new Router('/exempt').routeOptions(accessControlExempt()).get('/', ok))
+      .mount(new Router('/exempt').config(accessControlExempt()).get('/', ok))
       .mount(new Router('/anonymous').authorize({ allowAnonymous: true }).get('/', ok))
 
     try {
