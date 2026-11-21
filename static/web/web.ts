@@ -10,7 +10,16 @@ import {
   type Encoding,
   type ManifestFile,
   type ManifestVariant,
+  type StaticManifest,
 } from '../manifest/manifest.js'
+import {
+  decideFile,
+  prepareResponseFile,
+  type FileDecision,
+  type FilePolicy,
+  type PreparedFile,
+} from '../response/index.js'
+import { openBody } from './_body.js'
 
 /**
  * Raw bytes of one immutable release. Every open returns a fresh, unlocked stream with bounded chunks.
@@ -44,9 +53,40 @@ export interface VerifiedStaticAssets {
   readonly bytes: ByteSize
   /** Whether the manifest lists this exact identity key. */
   has(key: string): boolean
+  /** Answers a GET or HEAD for an explicit manifest key. Authorize the request before calling. */
+  respond(request: Request, key: string): Promise<Response>
 }
 
+export interface AssetBody {
+  readonly stream: ReadableStream<Uint8Array>
+  close(reason?: unknown): Promise<void>
+}
+
+interface VerifiedRelease {
+  readonly source: StaticAssetSource
+  readonly manifest: StaticManifest
+}
+
+const releases = new WeakMap<VerifiedStaticAssets, VerifiedRelease>()
 const SOURCE = 'static asset source'
+const PRIVATE_REVALIDATION: FilePolicy = {
+  routeCacheControl: () => 'private, no-cache',
+  sendFileCacheControl: () => 'private, no-cache',
+  headers: () => undefined,
+}
+
+export function releaseOf(assets: VerifiedStaticAssets): VerifiedRelease | undefined {
+  return releases.get(assets)
+}
+
+export function openAssetBody(
+  release: VerifiedRelease,
+  representation: NonNullable<FileDecision['representation']>,
+  range: FileDecision['range'],
+  signal: AbortSignal,
+): Promise<AssetBody> {
+  return openBody(release.source, representation, range, signal)
+}
 
 /**
  * Verify every stored identity and compressed variant before returning the release's membership and counts.
@@ -54,11 +94,64 @@ const SOURCE = 'static asset source'
  *
  * @throws {@link ErrStaticManifest} if a limit, manifest, stored length or digest is invalid, or a read fails.
  */
-export function verifyStaticAssets(
+export async function verifyStaticAssets(
   source: StaticAssetSource,
   options: VerifyStaticAssetsOptions = {},
 ): Promise<VerifiedStaticAssets> {
-  return verifyAssets(source, options)
+  const { manifest, files, variants, bytes } = await verifyAssets(source, options)
+  const prepared = new Map<string, PreparedFile>()
+  const assets: VerifiedStaticAssets = Object.freeze<VerifiedStaticAssets>({
+    files,
+    variants,
+    bytes,
+    has: key => Object.hasOwn(manifest.files, key),
+    async respond(request, key) {
+      const { method, signal } = request
+      signal.throwIfAborted()
+      if (method !== 'GET' && method !== 'HEAD') {
+        return new Response(null, { status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' } })
+      }
+
+      const entry = Object.hasOwn(manifest.files, key) ? manifest.files[key] : undefined
+      if (entry === undefined) {
+        return new Response(null, { status: 404, headers: { 'cache-control': 'no-store' } })
+      }
+
+      let file = prepared.get(key)
+      if (file === undefined) {
+        file = prepareResponseFile(key, entry, PRIVATE_REVALIDATION)
+        prepared.set(key, file)
+      }
+
+      const decision = decideFile(
+        file,
+        { method, header: name => request.headers.get(name) ?? undefined },
+        {
+          via: 'route',
+          conditional: true,
+          strictEncoding: true,
+        },
+      )
+      const { status, headers, cacheControl, representation, range } = decision
+      const init = { status, headers: { ...headers, 'cache-control': cacheControl ?? 'no-store' } }
+      if (representation === undefined) {
+        return new Response(null, init)
+      }
+
+      let body: AssetBody | undefined
+      try {
+        body = await openBody(source, representation, range, signal)
+        signal.throwIfAborted()
+        return new Response(body.stream, init)
+      } catch (err) {
+        await body?.close(err)
+        signal.throwIfAborted()
+        return new Response(null, { status: 500, headers: { 'cache-control': 'no-store' } })
+      }
+    },
+  })
+  releases.set(assets, { source, manifest })
+  return assets
 }
 
 type CheckVariant = (
@@ -73,7 +166,7 @@ export async function verifyAssets(
   source: StaticAssetSource,
   { signal, maxManifestSize = 8 * MiB, maxEntries = 20_000 }: VerifyStaticAssetsOptions,
   checkVariant?: CheckVariant,
-): Promise<VerifiedStaticAssets> {
+): Promise<Pick<VerifiedStaticAssets, 'files' | 'variants' | 'bytes'> & { manifest: StaticManifest }> {
   signal?.throwIfAborted()
 
   for (const [option, limit] of Object.entries({ maxManifestSize, maxEntries })) {
@@ -129,7 +222,7 @@ export async function verifyAssets(
   )
 
   const manifest = parseManifest(text, SOURCE, maxEntries)
-  const keys = new Set(Object.keys(manifest.files))
+  const keys = Object.keys(manifest.files)
   let variants = 0
   let bytes = 0
 
@@ -152,7 +245,7 @@ export async function verifyAssets(
   }
 
   signal?.throwIfAborted()
-  return { files: keys.size, variants, bytes, has: key => keys.has(key) }
+  return { files: keys.length, variants, bytes, manifest }
 }
 
 async function verifyObject(

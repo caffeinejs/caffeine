@@ -26,18 +26,26 @@ self.onmessage = async ({ data }: MessageEvent<Release>) => {
   const opened: string[] = []
   const source: StaticAssetSource = {
     readManifest: async () => body(data.manifest),
-    async open(key) {
+    async open(key, { range }) {
       opened.push(key)
       const bytes = data.objects.get(key)
       if (!bytes) {
         throw new Error(`Missing "${key}"`)
       }
-      return body(bytes)
+      return body(range ? bytes.subarray(range.start, range.endExclusive) : bytes)
     },
   }
   try {
     const assets = await verifyStaticAssets(source, data.limits)
+    const key = data.keys[0]!
+    const request = new Request('https://worker.test/explicit', { headers: { range: 'bytes=1-1' } })
+    const response = await assets.respond(request, key)
     self.postMessage({
+      range: {
+        status: response.status,
+        contentRange: response.headers.get('content-range'),
+        bytes: [...new Uint8Array(await response.arrayBuffer())],
+      },
       files: assets.files,
       bytes: assets.bytes,
       variants: assets.variants,

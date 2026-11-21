@@ -57,6 +57,40 @@ The verifier reads one object at a time, checks stored lengths and SHA-256 diges
 
 Use a trusted manifest and keep its backing release immutable for the lifetime of the source. Verification compares content to that manifest. The directory provider binds the release's real path when created. Publish updates under a new version and construct a new source for it.
 
+### Respond from a Fetch host
+
+Pass the exact manifest key to the verified handle. Apply the route's access policy before calling `respond`.
+
+```ts
+const assets = await verifyStaticAssets(source)
+
+export function icon(request: Request): Promise<Response> {
+  return assets.respond(request, 'favicon.svg')
+}
+```
+
+The responder supports GET and HEAD, stored encodings, conditional requests and single byte ranges.
+Files use `Cache-Control: private, no-cache`. A source must serve the same release versions it verified at startup.
+The handle opens storage only when it needs response bytes.
+
+### Mount a verified release in Caffeine
+
+Use `@caffeinejs/static/http` for verified source mounts. Mount a handle once per server. Give another server the
+same handle to reuse verification for the same release.
+
+```ts
+import { Router } from '@caffeinejs/http'
+import { sendFile, staticFiles } from '@caffeinejs/static/http'
+
+app.with(staticFiles(s => s.serve(assets, { prefix: '/site', unrouted: ['index.html'] })))
+app.mount(new Router('/site').get('/', ctx => sendFile(ctx, 'index.html', assets)))
+```
+
+The handle overload takes exact manifest keys. Its `unrouted` and `immutable` patterns accept exact keys,
+`directory/**` and `**`. The root package also accepts verified handles alongside the existing directory mounts.
+For verified mounts, a handler-set status of 204, 205 or 304 skips the storage open. If a send hook later changes
+that status, the response still has no file body.
+
 ## License
 
 [MIT](LICENSE)

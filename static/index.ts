@@ -1,6 +1,7 @@
 export { StaticBuilder } from './builder.js'
-export type { MountOptions, StaticMountConfig, StaticOptions, StaticRoot } from './config.js'
+export type { AssetMountOptions, MountOptions, StaticMountConfig, StaticOptions, StaticRoot } from './config.js'
 export * from './errors.js'
+export type { StaticContext } from './http/http.js'
 export * from './manifest/index.js'
 export * from './send.js'
 export * from './spa.js'

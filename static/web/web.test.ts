@@ -1,3 +1,5 @@
+import { runInNewContext } from 'node:vm'
+
 import { Byte, MiB } from '@caffeinejs/std/bytes'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -349,4 +351,152 @@ describe('verifyStaticAssets', () => {
       await vi.waitFor(() => expect(body.locked).toBe(false))
     },
   )
+})
+
+describe('verified Fetch responses', () => {
+  it('selects exact keys, ranges and stored variants without opening bodyless responses', async () => {
+    const metadata = manifest({ 'café%.txt': { ...file, variants: { gzip: variant } } })
+    const fallback = source(
+      metadata,
+      new Map([
+        ['café%.txt', abc],
+        [variant.path, xyz],
+      ]),
+    )
+    const open = vi.fn<StaticAssetSource['open']>((key, options) =>
+      options.range
+        ? Promise.resolve(stream(abc.subarray(options.range.start, options.range.endExclusive)))
+        : fallback.open(key, options),
+    )
+    const assets = await verifyStaticAssets({ ...fallback, open })
+    open.mockClear()
+    const respond = (headers: Record<string, string> = {}, method = 'GET', key = 'café%.txt') =>
+      assets.respond(new Request('https://example.test/unrelated', { method, headers }), key)
+
+    const wrongMethod = await respond({}, 'POST', 'missing')
+    expect(wrongMethod.status).toBe(405)
+    expect(wrongMethod.headers.get('allow')).toBe('GET, HEAD')
+    expect((await respond({}, 'GET', 'caf%C3%A9%25.txt')).status).toBe(404)
+    const refused = await respond({ 'accept-encoding': 'identity;q=0' })
+    expect(refused.status).toBe(406)
+    expect(refused.headers.get('vary')).toBe('Accept-Encoding')
+    const head = await respond({ 'accept-encoding': 'gzip', range: 'bytes=1-' }, 'HEAD')
+    expect(head.headers.get('content-encoding')).toBe('gzip')
+    expect(head.headers.get('content-length')).toBe('3')
+    expect(head.body).toBe(null)
+    const fresh = await respond({ 'accept-encoding': 'gzip', 'if-none-match': head.headers.get('etag')! })
+    expect(fresh.status).toBe(304)
+    expect(fresh.body).toBe(null)
+    expect(fresh.headers.get('cache-control')).toBe('private, no-cache')
+    expect((await respond({ 'if-match': '"wrong"' })).status).toBe(412)
+    const unsatisfiable = await respond({ range: 'bytes=3-' })
+    expect(unsatisfiable.status).toBe(416)
+    expect(unsatisfiable.headers.get('content-range')).toBe('bytes */3')
+    expect(open).not.toHaveBeenCalled()
+
+    const part = await respond({ range: 'bytes=2-' })
+    expect(part.status).toBe(206)
+    expect(part.headers.get('content-range')).toBe('bytes 2-2/3')
+    expect(await part.text()).toBe('c')
+    expect(open).toHaveBeenLastCalledWith(
+      'café%.txt',
+      expect.objectContaining({ range: { start: 2, endExclusive: 3 } }),
+    )
+    const encoded = await respond({ 'accept-encoding': 'gzip' })
+    expect(await encoded.bytes()).toEqual(xyz)
+    expect(open).toHaveBeenLastCalledWith(variant.path, expect.objectContaining({ range: undefined }))
+  })
+
+  it.each(['a', 'abc'])(
+    'errors a range body when the provider returns %s instead of the requested bytes',
+    async bytes => {
+      const backing = source(manifest({ file }), new Map([['file', abc]]))
+      const assets = await verifyStaticAssets({
+        ...backing,
+        open: (key, options) =>
+          options.range ? Promise.resolve(stream(encoder.encode(bytes))) : backing.open(key, options),
+      })
+      const response = await assets.respond(
+        new Request('https://example.test', { headers: { range: 'bytes=1-' } }),
+        'file',
+      )
+      expect(response.status).toBe(206)
+      await expect(response.bytes()).rejects.toBeInstanceOf(Error)
+    },
+  )
+
+  it('accepts byte views from another realm throughout verification and serving', async () => {
+    const view: Uint8Array = runInNewContext('Uint8Array.of(0, 97, 98, 99, 0).subarray(1, 4)')
+    const assets = await verifyStaticAssets(source(manifest({ file }), new Map([['file', view]])))
+    const response = await assets.respond(new Request('https://example.test'), 'file')
+    expect(await response.text()).toBe('abc')
+  })
+
+  it('returns a generic no-store 500 when the verified source fails to open', async () => {
+    const release = source(manifest({ file }), new Map([['file', abc]]))
+    const open = vi.fn(release.open)
+    const assets = await verifyStaticAssets({ ...release, open })
+    open.mockRejectedValueOnce(new Error('storage account details'))
+    const response = await assets.respond(new Request('https://example.test'), 'file')
+    expect(response.status).toBe(500)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.body).toBe(null)
+  })
+
+  it('cancels a late response open with the request abort reason', async () => {
+    const backing = source(manifest({ file }), new Map([['file', abc]]))
+    const pending = Promise.withResolvers<ReadableStream<Uint8Array>>()
+    const opening = Promise.withResolvers<void>()
+    let verify = true
+    const assets = await verifyStaticAssets({
+      ...backing,
+      open: (key, options) => {
+        if (verify) {
+          return backing.open(key, options)
+        }
+        opening.resolve()
+        return pending.promise
+      },
+    })
+    verify = false
+    const controller = new AbortController()
+    const answer = assets.respond(new Request('https://example.test', { signal: controller.signal }), 'file')
+    const reason = new Error('superseded')
+    await opening.promise
+    controller.abort(reason)
+    await expect(answer).rejects.toBe(reason)
+    const cancelled = Promise.withResolvers<unknown>()
+    const body = new ReadableStream<Uint8Array>({ cancel: cancelled.resolve }, { highWaterMark: 0 })
+    pending.resolve(body)
+    expect(await cancelled.promise).toBe(reason)
+    expect(body.locked).toBe(false)
+  })
+
+  it.each([false, true])('releases an acquired response stream once with request abort=%s', async abort => {
+    const backing = source(manifest({ file }), new Map([['file', abc]]))
+    const cancel = vi.fn()
+    const started = Promise.withResolvers<void>()
+    const body = new ReadableStream<Uint8Array>({ pull: () => started.resolve(), cancel }, { highWaterMark: 0 })
+    let verify = true
+    const assets = await verifyStaticAssets({
+      ...backing,
+      open: (key, options) => (verify ? backing.open(key, options) : Promise.resolve(body)),
+    })
+    verify = false
+    const controller = new AbortController()
+    const response = await assets.respond(new Request('https://example.test', { signal: controller.signal }), 'file')
+    const reader = response.body!.getReader()
+    const next = reader.read()
+    await started.promise
+    const reason = new Error('client left')
+    if (abort) {
+      controller.abort(reason)
+      await expect(next).rejects.toBe(reason)
+    } else {
+      await reader.cancel(reason)
+      await expect(next).resolves.toEqual({ done: true, value: undefined })
+    }
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(reason)
+    expect(body.locked).toBe(false)
+  })
 })

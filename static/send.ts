@@ -1,18 +1,9 @@
-import { ErrHTTPNotFound, type Responder, type RouteDefinition } from '@caffeinejs/http'
+import type { Responder } from '@caffeinejs/http'
 
 import { resolveRoot } from './builder.js'
 import type { StaticRoot } from './config.js'
-import { ErrSendFileUnavailable } from './errors.js'
-import { FileResponder } from './serve.js'
-import { mountsByRoute } from './static.js'
-
-/**
- * The slice of an `IContext` {@link sendFile} reads: the route, whose server's mounts it sends from. A structural
- * slice, so every context fits.
- */
-export interface StaticContext {
-  readonly route: RouteDefinition | undefined
-}
+import { sendMountedFile, type StaticContext } from './http/http.js'
+import type { VerifiedStaticAssets } from './web/web.js'
 
 /**
  * Sends a file a `staticFiles(...)` mount lists, from a handler: the handler returns what this returns.
@@ -25,8 +16,8 @@ export interface StaticContext {
  * `path` is the manifest's key as written, such as `'100%.txt'`, or, with a leading `/`, a URL path: the slash is
  * dropped and each segment percent-decoded, so `'/100%25.txt'` names the same file. A decoded segment holding a `/`
  * names nothing. A path the manifest does not list, `..` included, is a `404`. `root` picks the mount by the root its
- * `.serve(...)` was given; without it, the first mount. On a request no route matched, such as one an error handler
- * answers, there is no route to find the mounts by.
+ * `.serve(...)` was given. Pass the verified handle to select a source mount and use an exact manifest key. Without
+ * a selector, the first mount is used. On a request no route matched, there is no route to find the mounts by.
  *
  * @throws {@link ErrSendFileUnavailable} when no `staticFiles(...)` is installed, no mount serves `root`, or on a
  *   request no route matched
@@ -36,50 +27,7 @@ export interface StaticContext {
  * .get('/*', ctx => (isDocumentRequest(ctx) ? sendFile(ctx, 'index.html', DIST) : notFound(ctx)))
  * ```
  */
-export function sendFile(ctx: StaticContext, path: string, root?: StaticRoot): Responder {
-  const route = ctx.route
-
-  if (route === undefined) {
-    throw new ErrSendFileUnavailable(undefined, false, false)
-  }
-
-  const served = mountsByRoute.get(route)
-
-  if (served === undefined) {
-    throw new ErrSendFileUnavailable()
-  }
-
-  const mount =
-    root === undefined ? served.mounts[0] : served.mounts.find(({ root: served }) => served === resolveRoot(root))
-
-  if (mount === undefined) {
-    throw new ErrSendFileUnavailable(root === undefined ? undefined : resolveRoot(root), true)
-  }
-
-  const key = manifestKey(path)
-  const file = key === undefined ? undefined : mount.files.get(key)
-
-  if (file === undefined) {
-    throw new ErrHTTPNotFound()
-  }
-
-  return new FileResponder(file, 'sendFile', served.log)
-}
-
-/** The manifest key `path` names: itself, or for a URL path, the path without its leading `/`, each segment decoded. */
-function manifestKey(path: string): string | undefined {
-  if (!path.startsWith('/')) {
-    return path
-  }
-
-  try {
-    const segments = path
-      .slice(1)
-      .split('/')
-      .map(segment => decodeURIComponent(segment))
-
-    return segments.some(segment => segment.includes('/')) ? undefined : segments.join('/')
-  } catch {
-    return undefined
-  }
+export function sendFile(ctx: StaticContext, path: string, root?: StaticRoot | VerifiedStaticAssets): Responder {
+  const selector = typeof root === 'string' || root instanceof URL ? resolveRoot(root) : root
+  return sendMountedFile(ctx, path, selector)
 }
