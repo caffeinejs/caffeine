@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { access } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import os from 'node:os'
@@ -63,13 +64,33 @@ function intEnv(name: string, fallback: number): number {
   return value
 }
 
+// The kernel resets a connect that finds the server's accept queue full, and autocannon counts every reset as
+// a failed request. The queue holds Node's default backlog, capped by the kernel's somaxconn: 128 on macOS.
+function acceptQueueLimit(): number {
+  const nodeBacklog = 511
+  try {
+    const raw =
+      os.platform() === 'linux'
+        ? readFileSync('/proc/sys/net/core/somaxconn', 'utf8')
+        : execFileSync('sysctl', ['-n', 'kern.ipc.somaxconn'], { encoding: 'utf8' })
+    const value = Number.parseInt(raw.trim(), 10)
+    return Number.isInteger(value) && value > 0 ? Math.min(nodeBacklog, value) : nodeBacklog
+  } catch {
+    return nodeBacklog
+  }
+}
+
 const ROUNDS = Math.max(1, intEnv('BENCH_ROUNDS', 3))
 const WARMUP = intEnv('BENCH_WARMUP', 5)
 const DURATION = Math.max(1, intEnv('BENCH_DURATION', 10))
 // The load generator, the harness and a single-threaded server share the machine, so the window of
 // outstanding requests follows the cores rather than a fixed number: a window wide enough to queue measures
-// the queue, and on a CPU-poor box it measures the collapse.
-const CONNECTIONS = Math.max(8, intEnv('BENCH_CONNECTIONS', os.availableParallelism() * 8))
+// the queue, and on a CPU-poor box it measures the collapse. A window wider than the accept queue fails the
+// slowest server with connection resets whenever it stalls.
+const CONNECTIONS = Math.max(
+  8,
+  intEnv('BENCH_CONNECTIONS', Math.min(os.availableParallelism() * 8, acceptQueueLimit())),
+)
 const PIPELINING = Math.max(1, intEnv('BENCH_PIPELINING', 8))
 // The load generator runs off the harness thread and leaves a core for the server and one for the harness.
 const WORKERS = Math.max(1, intEnv('BENCH_WORKERS', Math.min(4, os.availableParallelism() - 2)))
