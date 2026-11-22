@@ -17,6 +17,9 @@
       "path": "./html/tsconfig.build.json"
     },
     {
+      "path": "./templating/tsconfig.build.json"
+    },
+    {
       "path": "./static/tsconfig.build.json"
     },
     {

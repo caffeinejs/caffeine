@@ -1,0 +1,19 @@
+import type { TemplateCompiler } from '@caffeinejs/templating/build/node'
+
+export const receiptCompiler = {
+  extensions: { html: '.receipt', text: '.txt.receipt' },
+  moduleURL: import.meta.url,
+  compile({ source, kind }) {
+    const [before, after, extra] = source.split('{{name}}')
+    if (after === undefined || extra !== undefined) {
+      throw new Error('Expected exactly one name token')
+    }
+    return [
+      "import { format } from './format.js'",
+      'export default function render(model) {',
+      `  const name = format(model.name, ${JSON.stringify(kind)})`,
+      `  return ${JSON.stringify(before)} + name + ${JSON.stringify(after)}`,
+      '}',
+    ].join('\n')
+  },
+} satisfies TemplateCompiler

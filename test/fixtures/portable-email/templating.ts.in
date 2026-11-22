@@ -1,0 +1,34 @@
+import { compiledTemplates, html, TemplateRenderer } from '@caffeinejs/templating'
+
+import * as receipt from './receipt.mjs'
+import * as handlebars from './handlebars.mjs'
+import * as ejs from './ejs.mjs'
+
+export async function checkTemplates() {
+  for (const manifest of [receipt, handlebars, ejs]) {
+    const renderer = new TemplateRenderer({
+      default: { ...compiledTemplates(manifest.entries), partials: manifest.partials },
+    })
+    for (const name of ['<Ada>', '<Lin>']) {
+      const model = { name }
+      const escaped = name.replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+      const expected = [
+        ['html', undefined, `Hello, ${escaped}!`],
+        ['text', undefined, `Hello, ${name}!`],
+        ['html', 'pt-BR', `Olá, ${escaped}!`],
+        ['text', 'pt-BR', `Olá, ${name}!`],
+      ] as const
+      for (const [kind, locale, want] of expected) {
+        const result = await renderer.render('welcome', model, { kind, locale })
+        if (result !== want) {
+          throw new Error(`Expected ${want}, rendered ${result}`)
+        }
+      }
+    }
+  }
+
+  const inline = html`<p title="${'a & b'}">${'<Ada>'}</p>`
+  if (inline.toString() !== '<p title="a &amp; b">&lt;Ada&gt;</p>') {
+    throw new Error('The standalone HTML tag did not escape its inputs')
+  }
+}
