@@ -22,7 +22,7 @@ RUN npm run build:static -w @caffeinejs/example-petstore
 #
 # The whole /app is carried over rather than re-copied from context because .caffeinerc.ts imports
 # '@caffeinejs/cli', which resolves through the workspace symlinks that `npm ci` created above.
-FROM oven/bun:1@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS codegen
+FROM oven/bun:1@sha256:3aa040e5445efa09d75bb428a64ba50db13e2b3ac9b6b0c7f145615f62b2ee18 AS codegen
 WORKDIR /app
 COPY --from=base /app /app
 WORKDIR /app/examples/03-petstore
