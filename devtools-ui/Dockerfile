@@ -42,7 +42,7 @@ RUN find /app -type f \( -name '*.d.ts' -o -name '*.d.ts.map' -o -name '*.d.mts'
     -o -name examples -o -name benchmark -o -name benchmarks -o -name .github \) -prune -exec rm -rf {} + \
   && find /app/node_modules -type f \( -name '*.map' -o -name '*.md' -o -name '*.markdown' \) -delete
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:6abfcb367ebc291572c774c1592a986be2ab26a2486f73093401327495a5962a
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:39b0407357c9fadf1a9708d22088f02de21f0e1e8a688474eea2d8701e7d5693
 
 LABEL org.opencontainers.image.title="caffeinejs-devtools-ui" \
   org.opencontainers.image.description="A web UI for the CaffeineJS devtools endpoints" \
