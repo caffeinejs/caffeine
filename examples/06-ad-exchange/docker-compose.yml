@@ -1,7 +1,7 @@
 # Eight DSPs on VLatte, each serving the mock files of its directory under dsps/, and the exchange that calls them.
 # Every DSP answers bid requests on 810N and its admin API on 820N, in the order of `dsps` in the configuration.
 x-dsp: &dsp
-  image: ghcr.io/caffeine-projects/vlatte:1.2.0@sha256:44eee7613c0cd2ef132d058a569ec69595278664f44a41edb6e6797dab1800f1
+  image: ghcr.io/caffeine-projects/vlatte:1.3.1@sha256:85e2805ed268634a67181e6dbd7cd2f4ca811f761a33a608212986ce89f67605
   # No journal: under load it would write every bid request to disk.
   command: ['--journal=false']
 
