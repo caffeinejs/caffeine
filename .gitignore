@@ -178,6 +178,7 @@ replay_pid*
 .vscode/*
 !.vscode/extensions.json
 
+graphify-out/
 dist/
 out/
 # npm run release:pack

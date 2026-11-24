@@ -204,6 +204,11 @@ status: ## print GitHub CI status for the current branch
 	  gh run view "$$run_id" --json jobs -q '.jobs[] | "\(.name)\t\(.status)\t\(.conclusion // "-")"'; \
 	fi
 
+.PHONY: graphify
+graphify: ## open the graphify knowledge graph (graphify-out/graph.html) in a browser
+	@test -f graphify-out/graph.html || { echo "Cannot find graphify-out/graph.html: run /graphify in your coding agent to build it"; exit 1; }
+	@if [ "$$(uname -s)" = Darwin ]; then open graphify-out/graph.html; else xdg-open graphify-out/graph.html; fi
+
 .PHONY: help
 help:: ## show help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
