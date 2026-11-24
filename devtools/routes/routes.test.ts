@@ -6,7 +6,6 @@ import {
   AuthenticationTicket,
   Authorization,
   BaseAuthenticationHandler,
-  bindTo,
   healthProbes,
   type IContext,
   Identity,
@@ -55,14 +54,21 @@ describe('routesRouter', () => {
       .server(() => ({ listen: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
-      .listener('admin', l => l.server(() => ({ listen: loopback })).with(authentication()))
+      .listener('admin', l =>
+        l
+          .server(() => ({ listen: loopback }))
+          .with(authentication())
+          .mount(new Router('/jobs').get('/', () => [])),
+      )
       .install(DevTools(d => d.port(0)))
       .with(authentication())
       .with(healthProbes(h => h.enabled(true)))
-      .mount(
-        new Router('/pets').authorize({ roles: ['keeper'] }).get('/', () => []),
-        new Router('/jobs').extend(bindTo('admin')).get('/', () => []),
-      ) as WebApplication<never, never, unknown, NodeAdapter>
+      .mount(new Router('/pets').authorize({ roles: ['keeper'] }).get('/', () => [])) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     await app.run()
 
     // The fallback policy reaches the devtools too: their own server runs the gate.

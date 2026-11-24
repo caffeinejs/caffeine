@@ -127,7 +127,6 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
   /** The listeners, once {@link setup} has built them. */
   #listenerServers: ReadonlyMap<string, IServer> | undefined
   #routeGroups: IRouteGroup<Context>[] = []
-  #mounted: AnyRouter[] = []
   #built = false
   /** What routers and controllers registered for themselves, resolved once during start-up. */
   readonly #plugins = new ScopedPlugins()
@@ -188,7 +187,7 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
 
   /**
    * The listeners {@link listener} and the features added, by name and in the order they were added: empty when none
-   * was. Each one's `address` is where to point a client at the routes bound to it, and its `instance` what serves it.
+   * was. Each one's `address` is where to point a client at its routes, and its `instance` what serves them.
    *
    * @throws ErrApplicationNotReady before {@link bootstrap} has built them.
    */
@@ -365,8 +364,9 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
   }
 
   /**
-   * Adds a listener: a server of its own, on its own port, serving the routers bound to `name` with `bindTo(name)`
-   * or `@BindTo(name)`, and nothing else. It starts after the application's own server and closes after it.
+   * Adds a listener: a server of its own, on its own port, serving the routers mounted on it with `l.mount(...)` and
+   * the controllers bound to it with `@BindTo(name)`, and nothing else. It starts after the application's own server
+   * and closes after it.
    *
    * The name is taken at once. `configure` runs at start-up, once the container has initialized, with the builder
    * and the context a plugin factory gets, so it reads the configuration:
@@ -374,9 +374,11 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * ```ts
    * createWebApplication({ config })
    *   .listener('admin', (l, { config }) =>
-   *     l.server(() => ({ bodyLimit: config.app.adminBodyLimit })).with(healthProbes()),
+   *     l
+   *       .server(() => ({ bodyLimit: config.app.adminBodyLimit }))
+   *       .with(healthProbes())
+   *       .mount(new Router('/jobs').get('/', () => listJobs())),
    *   )
-   *   .mount(new Router('/jobs').extend(bindTo('admin')).get('/', () => listJobs()))
    * ```
    *
    * Under no adapter there is no socket: the runtime serves each listener's `app.listeners.get(name).fetch` itself. A
@@ -554,7 +556,7 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * ```
    *
    * The application comes back carrying the mounted routers' routes in its type, so `RoutesOf<typeof app>` is the
-   * whole surface a generated client would call.
+   * whole surface a generated client calls on the application's own server.
    */
   mount<const RS extends ReadonlyArray<AnyRouter>>(
     ...routers: RS
@@ -569,26 +571,9 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
       )
     }
 
-    this.#mounted.push(...routers)
+    this.#own.routers.push(...routers)
 
     return this
-  }
-
-  /**
-   * Where routes come from. One source per way of declaring them; a route declared any of those ways is
-   * compiled the same and registered the same.
-   *
-   * The programmatic source is added only when something was mounted, so an application declaring every route
-   * with decorators builds exactly what it built before there was a second way.
-   */
-  protected routeSources(): RouteSource<Context>[] {
-    const sources: RouteSource<Context>[] = [new ControllerRouteSource<Context>()]
-
-    if (this.#mounted.length > 0) {
-      sources.push(new FluentRouteSource<Context>(this.#mounted, this.#plugins.childrenOf))
-    }
-
-    return sources
   }
 
   /**
@@ -621,16 +606,21 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
     }
 
     // Before routing is built: a router's plugins may nest the routers it is built from.
-    await this.#plugins.resolveRouters(this.#mounted, context)
+    await resolveMounted(this.#plugins, [this.#own], context)
     await this.#controllerPlugins(context)
 
-    const listeners = this.#listeners.build(context as HTTPSetupContext<C>)
-    const routing = buildRouting<Context>(this.routeSources(), context)
-    const servers = new ServerSet([this.#own as ServerDefinition, ...(listeners as unknown as ServerDefinition[])])
+    // The application's own server first, then each listener. A listener's callback runs once every plugin above has,
+    // and the routers it mounts have their plugins run in turn.
+    const definitions = [this.#own, ...this.#listeners.build(context as HTTPSetupContext<C>)]
+    await resolveMounted(this.#plugins, definitions, context)
+
+    const routing = buildRouting<Context>(routeSources(definitions, this.#plugins.childrenOf), context)
+    const servers = new ServerSet(definitions as unknown as ServerDefinition[])
     this.#servers = servers
 
     // Every group compiles here, before any server is built, so a route that cannot compile fails before anything
-    // has started. Each server serves the routers bound to it; the application's own, the unbound ones.
+    // has started. Each server serves the routers mounted on it and the controllers bound to it; the application's
+    // own, the unbound controllers too.
     this.#routeGroups = servers.select(routing)
     this.#built = true
 
@@ -722,4 +712,41 @@ export function createWebApplication<TConfig, A extends AnyServerAdapter>(
   options?: WebApplicationOptions<TConfig, A>,
 ): WebApplication<never, never, TConfig, A> {
   return new WebApplication(options)
+}
+
+/**
+ * Where routes come from: the controllers, and what each server in `definitions` has mounted. A route declared any
+ * way is compiled the same and registered the same.
+ */
+function routeSources<C>(
+  definitions: readonly ServerDefinition<C>[],
+  childrenOf: ScopedPlugins['childrenOf'],
+): RouteSource<Context>[] {
+  return [
+    new ControllerRouteSource<Context>(),
+    ...definitions.map(definition => new FluentRouteSource<Context>(definition.routers, childrenOf, definition.name)),
+  ]
+}
+
+/**
+ * Runs the plugins of every router mounted on `definitions` that has not run them yet. A plugin may mount more routers,
+ * on any of them, whose plugins run in turn: each list is read live, and all are read again while one grew.
+ */
+async function resolveMounted<C>(
+  plugins: ScopedPlugins,
+  definitions: readonly ServerDefinition<C>[],
+  context: HTTPSetupContext,
+): Promise<void> {
+  let mounted: number
+  do {
+    mounted = countRouters(definitions)
+    for (const definition of definitions) {
+      await plugins.resolveRouters(definition.routers, context)
+    }
+  } while (countRouters(definitions) !== mounted)
+}
+
+/** How many routers `definitions` hold between them. */
+function countRouters<C>(definitions: readonly ServerDefinition<C>[]): number {
+  return definitions.reduce((count, definition) => count + definition.routers.length, 0)
 }

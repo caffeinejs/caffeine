@@ -7,19 +7,19 @@ import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../../application.js'
-import { bindTo, HTTPPlugin, type HTTPSetupContext, Router } from '../../../index.js'
+import { HTTPPlugin, type HTTPSetupContext, Router } from '../../../index.js'
 import { node, type NodeAdapter } from '../../../platform/node.testkit.js'
 import { healthProbes } from '../../health/index.js'
 
 /**
  * A listener's lifecycle follows the application's own server: it starts after it — the first listen to
  * complete is the one Watt takes over — and closes after it, so probes and metrics answer while the application
- * drains. A binding no server answers to stops the application at start-up rather than landing anywhere.
+ * drains.
  */
 
 const listener = { host: '127.0.0.1', port: 0 }
 
-const jobs = () => new Router('/jobs').extend(bindTo('admin')).get('/', () => ({ jobs: true }))
+const jobs = () => new Router('/jobs').get('/', () => ({ jobs: true }))
 
 describe('the lifecycle of a listener', () => {
   let app: WebApplication<never, never, unknown, NodeAdapter> | undefined
@@ -40,11 +40,13 @@ describe('the lifecycle of a listener', () => {
     const events: string[] = []
     app = createWebApplication({ adapter: node() })
       .listener('admin', l =>
-        l.server(() => ({ listen: listener })).hook('onClose', () => void events.push('admin closed')),
+        l
+          .server(() => ({ listen: listener }))
+          .hook('onClose', () => void events.push('admin closed'))
+          .mount(jobs()),
       )
       .server(() => ({ listen: listener }))
-      .hook('onClose', () => void events.push('main closed'))
-      .mount(jobs()) as WebApplication<never, never, unknown, NodeAdapter>
+      .hook('onClose', () => void events.push('main closed')) as WebApplication<never, never, unknown, NodeAdapter>
 
     await app.bootstrap()
     app.instance.once('listening', () => events.push('main listening'))
@@ -66,24 +68,25 @@ describe('the lifecycle of a listener', () => {
 
     app = createWebApplication({ adapter: node() })
       .listener('admin', l =>
-        l.server(() => ({ listen: listener })).hook('onClose', () => void events.push('admin closed')),
+        l
+          .server(() => ({ listen: listener }))
+          .hook('onClose', () => void events.push('admin closed'))
+          .mount(
+            jobs(),
+            new Router('/background').get('/').handler(ctx => {
+              ctx.server.waitUntil!(adminWork.promise)
+              return 'admin'
+            }),
+          ),
       )
       .server(() => ({ listen: listener }))
       .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
       .hook('onClose', () => void events.push('main closed'))
       .mount(
-        jobs(),
         new Router('/background').get('/').handler(ctx => {
           ctx.server.waitUntil!(mainWork.promise)
           return 'main'
         }),
-        new Router('/background')
-          .extend(bindTo('admin'))
-          .get('/')
-          .handler(ctx => {
-            ctx.server.waitUntil!(adminWork.promise)
-            return 'admin'
-          }),
       ) as WebApplication<never, never, unknown, NodeAdapter>
 
     await app.run()
@@ -152,11 +155,10 @@ describe('the lifecycle of a listener', () => {
     const held = new Promise<void>(resolve => (release = resolve))
 
     app = createWebApplication({ adapter: node() })
-      .listener('admin', l => l.server(() => ({ listen: listener })))
+      .listener('admin', l => l.server(() => ({ listen: listener })).mount(jobs()))
       .server(() => ({ http2: true, listen: listener }))
       .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
       .mount(
-        jobs(),
         new Router('/slow').get('/', async () => {
           started()
           await held
@@ -194,15 +196,18 @@ describe('the lifecycle of a listener', () => {
     const held = new Promise<void>(resolve => (release = resolve))
 
     app = createWebApplication({ adapter: node() })
-      .listener('admin', l => l.server(() => ({ listen: listener })))
-      .shutdown(s => s.drainDelay(0).shutdownTimeout(200))
-      .mount(
-        new Router('/slow').extend(bindTo('admin')).get('/', async () => {
-          started()
-          await held
-          return { ok: true }
-        }),
-      ) as WebApplication<never, never, unknown, NodeAdapter>
+      .listener('admin', l =>
+        l
+          .server(() => ({ listen: listener }))
+          .mount(
+            new Router('/slow').get('/', async () => {
+              started()
+              await held
+              return { ok: true }
+            }),
+          ),
+      )
+      .shutdown(s => s.drainDelay(0).shutdownTimeout(200)) as WebApplication<never, never, unknown, NodeAdapter>
 
     await app.run()
     const admin = app.listeners.get('admin')!
@@ -217,37 +222,6 @@ describe('the lifecycle of a listener', () => {
 
     release()
     app = undefined
-  })
-
-  it('refuses a router bound to a name no server has, naming the router and the servers there are', async () => {
-    app = createWebApplication({ adapter: node() })
-      .listener('admin', l => l.server(() => ({ listen: listener })))
-      .mount(new Router('/jobs').extend(bindTo('nowhere')).get('/', () => ({}))) as WebApplication<
-      never,
-      never,
-      unknown,
-      NodeAdapter
-    >
-
-    const error = await app.bootstrap().catch((error: unknown) => error)
-
-    expect(error).toMatchObject({ code: 'ERR_CONFIGURATION' })
-    expect((error as Error).message).toMatch(
-      /^Cannot serve router "Jobs": it is bound to "nowhere", and no installed server has that name/,
-    )
-    expect((error as Error).message).toContain(`.listener('nowhere', ...)`)
-    expect((error as Error).message).toContain('"admin"')
-  })
-
-  it('refuses a router bound to a name when no listener is installed, offering only to install one', async () => {
-    app = createWebApplication({ adapter: node() }).mount(
-      new Router('/jobs').extend(bindTo('nowhere')).get('/', () => ({})),
-    ) as WebApplication<never, never, unknown, NodeAdapter>
-
-    const error = await app.bootstrap().catch((error: unknown) => error)
-
-    expect((error as Error).message).toContain(`.listener('nowhere', ...)`)
-    expect((error as Error).message).not.toContain('Or bind to an installed server')
   })
 
   // A server that cannot close is reported, and the rest are closed all the same.
@@ -266,9 +240,13 @@ describe('the lifecycle of a listener', () => {
       const failure = new Error('admin cannot close')
 
       app = createWebApplication({ adapter: node() })
-        .listener('admin', l => l.server(() => ({ listen: listener })).with(failingToClose(failure)))
-        .server(() => ({ listen: listener }))
-        .mount(jobs()) as WebApplication<never, never, unknown, NodeAdapter>
+        .listener('admin', l =>
+          l
+            .server(() => ({ listen: listener }))
+            .with(failingToClose(failure))
+            .mount(jobs()),
+        )
+        .server(() => ({ listen: listener })) as WebApplication<never, never, unknown, NodeAdapter>
 
       await app.run()
       const servers = [app.instance, app.listeners.get('admin')!.instance]
@@ -287,10 +265,14 @@ describe('the lifecycle of a listener', () => {
       const adminFailure = new Error('admin cannot close')
 
       app = createWebApplication({ adapter: node() })
-        .listener('admin', l => l.server(() => ({ listen: listener })).with(failingToClose(adminFailure)))
+        .listener('admin', l =>
+          l
+            .server(() => ({ listen: listener }))
+            .with(failingToClose(adminFailure))
+            .mount(jobs()),
+        )
         .server(() => ({ listen: listener }))
-        .with(failingToClose(ownFailure))
-        .mount(jobs()) as WebApplication<never, never, unknown, NodeAdapter>
+        .with(failingToClose(ownFailure)) as WebApplication<never, never, unknown, NodeAdapter>
 
       await app.run()
 
@@ -324,9 +306,9 @@ describe('the lifecycle of a listener', () => {
       })
     })
 
-    app = createWebApplication({ adapter: node() })
-      .listener('admin', l => l.server(() => ({ listen: listener })))
-      .mount(jobs()) as WebApplication<never, never, unknown, NodeAdapter>
+    app = createWebApplication({ adapter: node() }).listener('admin', l =>
+      l.server(() => ({ listen: listener })).mount(jobs()),
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 
     // Handed to the listener as well, the port would be taken twice and run() would reject.
     await app.run({ host: '127.0.0.1', port: free })
@@ -336,9 +318,9 @@ describe('the lifecycle of a listener', () => {
   })
 
   it('answers an injected request on a listener, with nothing listening', async () => {
-    app = createWebApplication({ adapter: node() })
-      .listener('admin', l => l.server(() => ({ listen: listener })))
-      .mount(jobs()) as WebApplication<never, never, unknown, NodeAdapter>
+    app = createWebApplication({ adapter: node() }).listener('admin', l =>
+      l.server(() => ({ listen: listener })).mount(jobs()),
+    ) as WebApplication<never, never, unknown, NodeAdapter>
 
     await app.bootstrap()
     const admin = app.listeners.get('admin')!

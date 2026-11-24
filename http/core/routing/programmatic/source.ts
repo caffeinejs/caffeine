@@ -1,12 +1,13 @@
 import type { Container } from '@caffeinejs/di'
 
+import { bindGroup } from '../../../binding.js'
 import type { DeclaredRouteGroup, RouteSource } from '../routing.js'
 import { flattenRouter } from './flatten.js'
 import type { Router } from './programmatic.js'
 import { stateOf, type RouterState } from './state.js'
 
 /**
- * The routes declared with {@link Router} and mounted into the application.
+ * The routes declared with {@link Router} and mounted on one server.
  *
  * Nothing here knows how a route is invoked beyond "call this function": the handler *is* the target, and the
  * arguments it takes are pickers, so the compiler's default dispatch covers it. What the source does is flatten
@@ -18,16 +19,20 @@ export class FluentRouteSource<R = unknown> implements RouteSource<R> {
 
   readonly #routers: readonly Router<any, any, any, any, any>[]
   readonly #childrenOf: ((state: RouterState) => readonly RouterState[]) | undefined
+  readonly #server: string | undefined
 
   /**
    * @param childrenOf - A router's children as start-up sees them, when its plugins mounted more than it declared.
+   * @param server - The listener these routers are mounted on; `undefined` for the application's own server.
    */
   constructor(
     routers: readonly Router<any, any, any, any, any>[],
     childrenOf?: (state: RouterState) => readonly RouterState[],
+    server?: string,
   ) {
     this.#routers = routers
     this.#childrenOf = childrenOf
+    this.#server = server
   }
 
   collect(container: Container): DeclaredRouteGroup<R>[] {
@@ -48,7 +53,9 @@ export class FluentRouteSource<R = unknown> implements RouteSource<R> {
       seen.add(state)
 
       for (const flat of flattenRouter<R>(state, container, this.#childrenOf)) {
-        groups.push({ name: flat.name, spec: flat.spec, meta: () => ({ name: flat.name }), scopes: flat.scopes })
+        const spec = this.#server === undefined ? flat.spec : bindGroup(flat.spec, this.#server)
+
+        groups.push({ name: flat.name, spec, meta: () => ({ name: flat.name }), scopes: flat.scopes })
       }
     }
 

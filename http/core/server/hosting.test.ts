@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
 import { ErrWaitUntilClosed, type ServerContext } from '../../context.js'
-import { bindTo } from '../../decorators/bind_to.js'
 import { HTTPPlugin } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { Router } from '../routing/programmatic/programmatic.js'
@@ -95,14 +94,7 @@ describe('the fetch application', () => {
   })
 
   it("serves a listener's routes through the listener's fetch", async () => {
-    app = createWebApplication()
-      .listener('admin')
-      .mount(
-        new Router('/jobs')
-          .extend(bindTo('admin'))
-          .get('/')
-          .handler(() => 'jobs'),
-      )
+    app = createWebApplication().listener('admin', l => l.mount(new Router('/jobs').get('/').handler(() => 'jobs')))
     await app.bootstrap()
 
     const res = await app.listeners.get('admin')!.fetch(new Request('http://localhost/jobs'))

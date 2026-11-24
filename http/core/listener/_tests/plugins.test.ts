@@ -6,7 +6,6 @@ import {
   HTTPPlugin,
   type HTTPSetupContext,
   type IContext,
-  bindTo,
   type WebApplication,
   Router,
 } from '../../../index.js'
@@ -53,9 +52,9 @@ function tagging(header: string) {
   }
 }
 
-const jobs = () => new Router('/jobs').extend(bindTo('admin')).get('/', () => ({ jobs: true }))
+const jobs = () => new Router('/jobs').get('/', () => ({ jobs: true }))
 
-const status = () => new Router('/status').extend(bindTo('admin')).get('/', () => ({ up: true }))
+const status = () => new Router('/status').get('/', () => ({ up: true }))
 
 const api = () => new Router('/api').get('/', () => ({ api: true }))
 
@@ -78,11 +77,12 @@ describe("a listener's own plugins and middleware", () => {
         l
           .server(() => ({ listen: listener }))
           .with(marking('x-order', 'first'))
-          .with(marking('x-order', 'second')),
+          .with(marking('x-order', 'second'))
+          .mount(jobs()),
       )
       .server(() => ({ listen: listener }))
       .with(marking('x-app-plugin'))
-      .mount(jobs(), api()) as WebApplication
+      .mount(api()) as WebApplication
 
     await app.run()
 
@@ -102,10 +102,11 @@ describe("a listener's own plugins and middleware", () => {
           .server(() => ({ listen: listener }))
           .use(tagging('x-admin-middleware'))
           .use('/jobs', tagging('x-jobs-middleware'))
-          .useFn(() => tagging('x-built-middleware')),
+          .useFn(() => tagging('x-built-middleware'))
+          .mount(jobs(), status()),
       )
       .server(() => ({ listen: listener }))
-      .mount(jobs(), status(), api()) as WebApplication
+      .mount(api()) as WebApplication
     app.use(tagging('x-app-middleware'))
 
     await app.run()

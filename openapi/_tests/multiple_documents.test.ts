@@ -2,7 +2,6 @@ import { $t } from '@caffeinejs/application/schema'
 import {
   Authentication,
   authentication,
-  bindTo,
   Claim,
   Identity,
   Principal,
@@ -115,13 +114,15 @@ describe('several OpenAPI documents in one application', () => {
     expect((await app.request('/docs/back-office/_scalar.js')).status).toBe(200)
   })
 
-  // A listener is a second server; the document registered on it sees only the routes bound to it.
+  // A listener is a second server; the document registered on it sees only the routes mounted on it.
   it('documents a listener on its own, beside the main server', async () => {
     app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
-      .listener('internal', l => l.with(openapi('internal', o => o.info({ title: 'Internal', version: '1.0.0' }))))
+      .listener('internal', l =>
+        l.with(openapi('internal', o => o.info({ title: 'Internal', version: '1.0.0' }))).mount(backOffice()),
+      )
       .with(openapi(o => o.info({ title: 'Public', version: '1.0.0' })))
-      .mount(catalog(), backOffice().extend(bindTo('internal'))) as WebApplication<never, never, unknown, NodeAdapter>
+      .mount(catalog()) as WebApplication<never, never, unknown, NodeAdapter>
     await app.bootstrap()
 
     const internal = await json(await app.listeners.get('internal')!.request('/openapi/internal.json'))

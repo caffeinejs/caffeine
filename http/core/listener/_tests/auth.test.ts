@@ -11,7 +11,6 @@ import {
   type IContext,
   Identity,
   Principal,
-  bindTo,
   type WebApplication,
   Router,
 } from '../../../index.js'
@@ -72,14 +71,11 @@ const schemes = () =>
       .default('App'),
   )
 
-const metrics = () => new Router('/metrics').extend(bindTo('admin')).get('/', () => ({ metrics: true }))
+const metrics = () => new Router('/metrics').get('/', () => ({ metrics: true }))
 
-/** `/metrics`, bound to `admin`, for an `Ops` operator alone. */
+/** `/metrics`, mounted on `admin`, for an `Ops` operator alone. */
 const protectedMetrics = () =>
-  new Router('/metrics')
-    .extend(bindTo('admin'))
-    .authorize({ schemes: ['Ops'], roles: ['operator'] })
-    .get('/', () => ({ metrics: true }))
+  new Router('/metrics').authorize({ schemes: ['Ops'], roles: ['operator'] }).get('/', () => ({ metrics: true }))
 
 const api = () => new Router('/api').get('/', () => ({ api: true }))
 
@@ -102,9 +98,14 @@ describe('a listener with authentication and authorization', () => {
   it("answers 401, 403 and 200 under its router's scheme and roles, while the application server stays open", async () => {
     app = createWebApplication({ adapter: node() })
       .install(schemes())
-      .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
+      .listener('admin', l =>
+        l
+          .server(() => ({ listen: listener }))
+          .with(authentication())
+          .mount(protectedMetrics()),
+      )
       .server(() => ({ listen: listener }))
-      .mount(protectedMetrics(), api()) as WebApplication
+      .mount(api()) as WebApplication
 
     await app.run()
 
@@ -124,10 +125,15 @@ describe('a listener with authentication and authorization', () => {
     app = createWebApplication({ adapter: node() })
       .install(schemes())
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
-      .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
+      .listener('admin', l =>
+        l
+          .server(() => ({ listen: listener }))
+          .with(authentication())
+          .mount(metrics()),
+      )
       .with(authentication())
       .server(() => ({ listen: listener }))
-      .mount(metrics(), api()) as WebApplication
+      .mount(api()) as WebApplication
 
     await app.run()
 
@@ -141,8 +147,8 @@ describe('a listener with authentication and authorization', () => {
     it('refuses a protected route at start-up, naming the route and the fix', async () => {
       app = createWebApplication({ adapter: node() })
         .install(schemes())
-        .listener('admin', l => l.server(() => ({ listen: listener })))
-        .mount(protectedMetrics(), api()) as WebApplication
+        .listener('admin', l => l.server(() => ({ listen: listener })).mount(protectedMetrics()))
+        .mount(api()) as WebApplication
 
       const error = await app.bootstrap().catch((error: unknown) => error)
 
@@ -154,9 +160,9 @@ describe('a listener with authentication and authorization', () => {
     it("refuses it with the application's own server gated", async () => {
       app = createWebApplication({ adapter: node() })
         .install(schemes())
-        .listener('admin', l => l.server(() => ({ listen: listener })))
+        .listener('admin', l => l.server(() => ({ listen: listener })).mount(protectedMetrics()))
         .with(authentication())
-        .mount(protectedMetrics(), api()) as WebApplication
+        .mount(api()) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_GATE_REQUIRED' })
     })
@@ -165,9 +171,9 @@ describe('a listener with authentication and authorization', () => {
       app = createWebApplication({ adapter: node() })
         .install(schemes())
         .install(Authorization(z => z.requireAuthenticatedByDefault()))
-        .listener('admin', l => l.server(() => ({ listen: listener })))
+        .listener('admin', l => l.server(() => ({ listen: listener })).mount(metrics()))
         .with(authentication())
-        .mount(metrics(), api()) as WebApplication
+        .mount(api()) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_GATE_REQUIRED' })
     })
@@ -193,10 +199,14 @@ describe('a listener with authentication and authorization', () => {
     it("serves the login callback from the application's own gate, and not from the listener's", async () => {
       app = createWebApplication({ adapter: node() })
         .install(oidc())
-        .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
+        .listener('admin', l =>
+          l
+            .server(() => ({ listen: listener }))
+            .with(authentication())
+            .mount(metrics()),
+        )
         .with(authentication())
-        .server(() => ({ listen: listener }))
-        .mount(metrics()) as WebApplication
+        .server(() => ({ listen: listener })) as WebApplication
 
       await app.run()
 
@@ -207,9 +217,13 @@ describe('a listener with authentication and authorization', () => {
     it("serves the login callback from a listener's gate when it is the only one", async () => {
       app = createWebApplication({ adapter: node() })
         .install(oidc())
-        .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
-        .server(() => ({ listen: listener }))
-        .mount(metrics()) as WebApplication
+        .listener('admin', l =>
+          l
+            .server(() => ({ listen: listener }))
+            .with(authentication())
+            .mount(metrics()),
+        )
+        .server(() => ({ listen: listener })) as WebApplication
 
       await app.run()
 
@@ -220,8 +234,12 @@ describe('a listener with authentication and authorization', () => {
     it('keeps the login callback off a listener whose gate turns the OIDC routes off', async () => {
       app = createWebApplication({ adapter: node() })
         .install(oidc())
-        .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication(g => g.oidcRoutes(false))))
-        .mount(metrics()) as WebApplication
+        .listener('admin', l =>
+          l
+            .server(() => ({ listen: listener }))
+            .with(authentication(g => g.oidcRoutes(false)))
+            .mount(metrics()),
+        ) as WebApplication
 
       await app.run()
 
@@ -231,17 +249,20 @@ describe('a listener with authentication and authorization', () => {
 
   describe('refusals at start-up', () => {
     it('refuses a protected route with authentication never installed', async () => {
-      app = createWebApplication({ adapter: node() })
-        .listener('admin', l => l.server(() => ({ listen: listener })))
-        .mount(protectedMetrics()) as WebApplication
+      app = createWebApplication({ adapter: node() }).listener('admin', l =>
+        l.server(() => ({ listen: listener })).mount(protectedMetrics()),
+      ) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
     })
 
     it('refuses a gate on a server with authentication never installed', async () => {
-      app = createWebApplication({ adapter: node() })
-        .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
-        .mount(metrics()) as WebApplication
+      app = createWebApplication({ adapter: node() }).listener('admin', l =>
+        l
+          .server(() => ({ listen: listener }))
+          .with(authentication())
+          .mount(metrics()),
+      ) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({
         code: 'ERR_FEATURE_NOT_INSTALLED',
@@ -252,12 +273,11 @@ describe('a listener with authentication and authorization', () => {
     it('refuses a route naming a scheme nothing registered', async () => {
       app = createWebApplication({ adapter: node() })
         .install(schemes())
-        .listener('admin', l => l.server(() => ({ listen: listener })).with(authentication()))
-        .mount(
-          new Router('/metrics')
-            .extend(bindTo('admin'))
-            .authorize({ schemes: ['Missing'] })
-            .get('/', () => ({ metrics: true })),
+        .listener('admin', l =>
+          l
+            .server(() => ({ listen: listener }))
+            .with(authentication())
+            .mount(new Router('/metrics').authorize({ schemes: ['Missing'] }).get('/', () => ({ metrics: true }))),
         ) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTH_SCHEME_NOT_FOUND' })

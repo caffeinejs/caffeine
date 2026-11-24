@@ -5,6 +5,7 @@ import { createWebApplication } from '../../../application.js'
 import {
   type AdapterSettings,
   type ActionResult,
+  type AnyRouter,
   Catch,
   type IContext,
   ErrHTTPBadRequest,
@@ -15,7 +16,6 @@ import {
   HTTPPlugin,
   type HTTPSetupContext,
   type ListenerConfigurer,
-  bindTo,
   type WebApplication,
   Router,
 } from '../../../index.js'
@@ -90,7 +90,11 @@ describe('routers on a listener with middleware, guards and plugins', () => {
     app = undefined
   })
 
-  const admin: ListenerConfigurer<unknown, AdapterSettings<NodeAdapter>> = l => l.server(() => ({ listen: listener }))
+  /** The `admin` listener, serving `routers`. */
+  const admin =
+    (...routers: AnyRouter[]): ListenerConfigurer<unknown, AdapterSettings<NodeAdapter>> =>
+    l =>
+      l.server(() => ({ listen: listener })).mount(...routers)
 
   function at(server: 'main' | 'admin', path: string, headers?: Record<string, string>): Promise<Response> {
     const origin = server === 'main' ? app!.address!.origin : app!.listeners.get('admin')!.address!.origin
@@ -99,15 +103,9 @@ describe('routers on a listener with middleware, guards and plugins', () => {
 
   it("runs a router's own plugin on what it serves on the listener, and nowhere else", async () => {
     app = createWebApplication({ adapter: node() })
-      .listener('admin', admin)
+      .listener('admin', admin(new Router('/jobs').with(marking('x-router-plugin')).get('/', () => ({ jobs: true }))))
       .server(() => ({ listen: listener }))
-      .mount(
-        new Router('/jobs')
-          .extend(bindTo('admin'))
-          .with(marking('x-router-plugin'))
-          .get('/', () => ({ jobs: true })),
-        new Router('/api').get('/', () => ({ api: true })),
-      ) as WebApplication
+      .mount(new Router('/api').get('/', () => ({ api: true }))) as WebApplication
 
     await app.run()
 
@@ -117,15 +115,14 @@ describe('routers on a listener with middleware, guards and plugins', () => {
 
   it("denies with the router's own guards on the listener, and runs the global guards there too", async () => {
     app = createWebApplication({ adapter: node() })
-      .listener('admin', admin)
-      .install(Guards(g => g.global(TokenGuard)))
-      .mount(
-        new Router('/denied')
-          .extend(bindTo('admin'))
-          .guards([DenyGuard])
-          .get('/', () => ({ denied: false })),
-        new Router('/open').extend(bindTo('admin')).get('/', () => ({ open: true })),
-      ) as WebApplication
+      .listener(
+        'admin',
+        admin(
+          new Router('/denied').guards([DenyGuard]).get('/', () => ({ denied: false })),
+          new Router('/open').get('/', () => ({ open: true })),
+        ),
+      )
+      .install(Guards(g => g.global(TokenGuard))) as WebApplication
 
     await app.run()
 
@@ -134,17 +131,18 @@ describe('routers on a listener with middleware, guards and plugins', () => {
     expect((await at('admin', '/open', { 'x-token': 'ok' })).status).toBe(200)
   })
 
-  it('carries the binding, the plugin and the guards of a router down to the routers nested in it', async () => {
+  it('carries the listener, the plugin and the guards of a router down to the routers nested in it', async () => {
     app = createWebApplication({ adapter: node() })
-      .listener('admin', admin)
-      .server(() => ({ listen: listener }))
-      .mount(
-        new Router('/ops')
-          .extend(bindTo('admin'))
-          .with(marking('x-parent-plugin'))
-          .guards([TokenGuard])
-          .group('/child', child => child.get('/', () => ({ child: true }))),
-      ) as WebApplication
+      .listener(
+        'admin',
+        admin(
+          new Router('/ops')
+            .with(marking('x-parent-plugin'))
+            .guards([TokenGuard])
+            .group('/child', child => child.get('/', () => ({ child: true }))),
+        ),
+      )
+      .server(() => ({ listen: listener })) as WebApplication
 
     await app.run()
 
@@ -159,18 +157,21 @@ describe('routers on a listener with middleware, guards and plugins', () => {
 
   it("answers on the listener with the application's error handlers and its not-found problem", async () => {
     app = createWebApplication({ adapter: node() })
-      .listener('admin', admin)
+      .listener(
+        'admin',
+        admin(
+          new Router('/failing')
+            .get('/teapot', () => {
+              throw new Teapot()
+            })
+            .get('/bad', () => {
+              throw new ErrHTTPBadRequest('bad input')
+            }),
+        ),
+      )
       .server(() => ({ listen: listener }))
       .errorHandling(e => e.globalHandlers(TeapotHandler))
       .mount(
-        new Router('/failing')
-          .extend(bindTo('admin'))
-          .get('/teapot', () => {
-            throw new Teapot()
-          })
-          .get('/bad', () => {
-            throw new ErrHTTPBadRequest('bad input')
-          }),
         new Router('/failing-main').get('/bad', () => {
           throw new ErrHTTPBadRequest('bad input')
         }),

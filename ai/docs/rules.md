@@ -37,7 +37,7 @@ createWebApplication({ container })
 `.install(Feature(configure))` takes features — PascalCase factories, container binders, deduplicated and
 order-free. `.with(factory)` takes server plugins — camelCase factories, registered in written order, HTTP only.
 A router takes `.with(factory)` too, for its own routes; route settings go through `.config(...)` on a router
-or a route, and `.extend(...)` takes the other extensions, such as `bindTo(name)`. A factory
+or a route, and `.extend(...)` takes the other extensions, such as `bodyAsBuffer()`. A factory
 returns an `HTTPPlugin`, written against Caffeine alone, which mounts routers and adds middleware and hooks where it
 was registered with `context.app`.
 The authentication gate is a plugin: `.install(Authentication(a => …))` binds the schemes, `.with(authentication())`

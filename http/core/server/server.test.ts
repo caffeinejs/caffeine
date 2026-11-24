@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
 import { ErrWaitUntilClosed, type IContext } from '../../context.js'
-import { bindTo } from '../../decorators/bind_to.js'
 import { Catch, Controller, Get, Prefix } from '../../decorators/index.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
@@ -1187,16 +1186,12 @@ describe('HTTPServer', () => {
 
   it("does not hang when a listener's handler stalls past the budget", async () => {
     const started = latch()
-    const admin = new Router('/admin')
-      .extend(bindTo('admin'))
-      .get('/')
-      .handler(async () => {
-        started.release()
-        await new Promise(() => undefined)
-      })
+    const admin = new Router('/admin').get('/').handler(async () => {
+      started.release()
+      await new Promise(() => undefined)
+    })
     app = createWebApplication()
-      .listener('admin')
-      .mount(admin)
+      .listener('admin', l => l.mount(admin))
       .shutdown(s => s.drainDelay(0).shutdownTimeout(200 * Millisecond))
     await app.run()
     const pending = app.listeners.get('admin')!.fetch(new Request('http://localhost/admin'))

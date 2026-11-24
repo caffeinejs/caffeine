@@ -14,7 +14,6 @@ import {
   type HTTPSetupContext,
   type MiddlewareFn,
   Router,
-  bindTo,
   type WebApplication,
 } from '../index.js'
 import { node } from '../platform/node.testkit.js'
@@ -82,20 +81,6 @@ void [DenyGuard, TokenGuard, Greeter]
 class Metrics extends HTTPPlugin {
   register({ app }: HTTPSetupContext): void {
     app.mount(new Router('/metrics').get('/', () => ({ metrics: true })))
-  }
-}
-
-/** Mounts a router bound to `server`, to see the binding refused. */
-class Bound extends HTTPPlugin {
-  readonly #server: string
-
-  constructor(server: string) {
-    super()
-    this.#server = server
-  }
-
-  register({ app }: HTTPSetupContext): void {
-    app.mount(new Router('/metrics').extend(bindTo(this.#server)).get('/', () => ({ metrics: true })))
   }
 }
 
@@ -309,55 +294,16 @@ describe('HTTPPlugin', () => {
       expect((await app.request('/metrics')).status).toBe(404)
     })
 
-    it("refuses a router bound to a listener from the application's own server", async () => {
-      app = createWebApplication({ adapter: node() })
-        .listener('admin')
-        .with(() => new Bound('admin'))
+    it('serves a router once on the listener that mounts it and whose plugin mounts it again', async () => {
+      const shared = new Router('/shared-admin').get('/', () => ({ shared: true }))
 
-      await expect(app.bootstrap()).rejects.toThrow(
-        /^Cannot add route group "Metrics" to the application's own server: it is bound to "admin"/,
-      )
-      app = undefined
-    })
-
-    it('refuses a router bound to another server from a listener', async () => {
-      app = createWebApplication({ adapter: node() }).listener('admin', l => l.with(() => new Bound('metrics')))
-
-      await expect(app.bootstrap()).rejects.toThrow(
-        /^Cannot add route group "Metrics" to listener "admin": it is bound to "metrics"/,
-      )
-      app = undefined
-    })
-
-    it('serves a router once on the listener the application and its plugin both put it on', async () => {
-      const shared = new Router('/shared-admin').extend(bindTo('admin')).get('/', () => ({ shared: true }))
-
-      app = createWebApplication({ adapter: node() })
-        .listener('admin', l => l.with(() => new Mounter(shared)))
-        .mount(shared) as WebApplication
+      app = createWebApplication({ adapter: node() }).listener('admin', l =>
+        l.mount(shared).with(() => new Mounter(shared)),
+      ) as WebApplication
       await app.bootstrap()
 
       expect((await app.listeners.get('admin')!.request('/shared-admin')).status).toBe(200)
       expect((await app.request('/shared-admin')).status).toBe(404)
-    })
-
-    // A router whose nested router is bound elsewhere is split: its own group on the application's server, the
-    // nested one on `admin`. A plugin on `admin` mounting it adds the group `admin` lacks and skips the one it serves.
-    it("adds a split router's own routes to the server whose plugin mounts it", async () => {
-      const split = new Router('/split')
-        .get('/', () => ({ split: true }))
-        .mount(new Router('/child').extend(bindTo('admin')).get('/', () => ({ child: true })))
-
-      app = createWebApplication({ adapter: node() })
-        .listener('admin', l => l.with(() => new Mounter(split)))
-        .mount(split) as WebApplication
-      await app.bootstrap()
-
-      const admin = app.listeners.get('admin')!
-      expect((await admin.request('/split')).status).toBe(200)
-      expect((await admin.request('/split/child')).status).toBe(200)
-      expect((await app.request('/split')).status).toBe(200)
-      expect((await app.request('/split/child')).status).toBe(404)
     })
   })
 
@@ -387,11 +333,8 @@ describe('HTTPPlugin', () => {
 
     it('stays on the server it was registered on', async () => {
       app = createWebApplication({ adapter: node() })
-        .listener('admin', l => l.with(() => new Stamping('x-admin')))
-        .mount(
-          new Router('/own').get('/', () => ({})),
-          new Router('/ops').extend(bindTo('admin')).get('/', () => ({})),
-        ) as WebApplication
+        .listener('admin', l => l.with(() => new Stamping('x-admin')).mount(new Router('/ops').get('/', () => ({}))))
+        .mount(new Router('/own').get('/', () => ({}))) as WebApplication
       await app.bootstrap()
 
       expect((await app.listeners.get('admin')!.request('/ops')).headers.get('x-admin')).toBe('yes')
@@ -492,13 +435,10 @@ describe('HTTPPlugin', () => {
       expect((await app.request('/jobs')).status).toBe(404)
     })
 
-    it('serves what it nests on the server the router is bound to', async () => {
-      const bound = new Router('/admin-ops')
-        .extend(bindTo('admin'))
-        .with(() => new Nester())
-        .get('/', () => ({}))
+    it('serves what it nests on the server the router is mounted on', async () => {
+      const bound = new Router('/admin-ops').with(() => new Nester()).get('/', () => ({}))
 
-      app = createWebApplication({ adapter: node() }).listener('admin').mount(bound) as WebApplication
+      app = createWebApplication({ adapter: node() }).listener('admin', l => l.mount(bound)) as WebApplication
       await app.bootstrap()
 
       expect((await app.listeners.get('admin')!.request('/admin-ops/jobs')).status).toBe(200)

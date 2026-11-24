@@ -5,7 +5,7 @@ import { connect } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../../application.js'
-import { bindTo, csrfExempt, type OriginPredicate, type WebApplication, Router } from '../../../index.js'
+import { csrfExempt, type OriginPredicate, type WebApplication, Router } from '../../../index.js'
 import { node } from '../../../platform/node.testkit.js'
 import { corsPolicy } from '../../cors/cors.js'
 import { csrf } from '../csrf.js'
@@ -345,10 +345,15 @@ describe('csrf() at the edges', () => {
     it("leaves the application server's paths to its own plugin, whatever a listener excludes", async () => {
       const app = (await running(
         createWebApplication({ adapter: node() })
-          .listener('admin', l => l.server(() => ({ listen: listener })).with(csrf(c => c.exclude('/hooks'))))
+          .listener('admin', l =>
+            l
+              .server(() => ({ listen: listener }))
+              .with(csrf(c => c.exclude('/hooks')))
+              .mount(new Router('/hooks').post('/', ok)),
+          )
           .server(() => ({ listen: listener }))
           .with(csrf())
-          .mount(new Router('/hooks').extend(bindTo('admin')).post('/', ok), new Router('/hooks').post('/', ok)),
+          .mount(new Router('/hooks').post('/', ok)),
       )) as WebApplication
       const admin = app.listeners.get('admin')!.address!.origin
 

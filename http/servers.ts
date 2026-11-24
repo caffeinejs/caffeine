@@ -2,17 +2,16 @@ import type { ContextKey } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { normalizeBasePath } from './base_path.js'
-import { boundTo, kBindTo } from './binding.js'
+import { boundTo } from './binding.js'
 import { ErrConfiguration } from './core/error/common.js'
 import type { HookBatch } from './core/lifecycle/batch.js'
-import type { RouteGroupCompiler, RouteGroupMeta } from './core/routing/compile.js'
+import type { RouteGroupCompiler } from './core/routing/compile.js'
 import { kCompleteInventory, kRecordServer, type RouteInventory } from './core/routing/inventory.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
 import type { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './core/routing/programmatic/source.js'
 import type { IRouteGroup, RouteGroupScope } from './core/routing/route.js'
 import type { Routing } from './core/routing/routing.js'
-import type { RouteGroupSpec } from './core/routing/spec.js'
 import type { Context } from './core/server/context.js'
 import {
   buildEngine,
@@ -91,10 +90,10 @@ export class ServerSet {
   }
 
   /**
-   * Compiles the routers bound to each server, and refuses one bound to no server. Returns every group compiled,
-   * for the application's route table.
+   * Compiles the groups each server serves, and refuses a controller bound to no server. Returns every group
+   * compiled, for the application's route table.
    *
-   * @throws ErrConfiguration for a router bound to a name no server has.
+   * @throws ErrConfiguration for a controller bound to a name no server has.
    */
   select(routing: Routing<Context>): IRouteGroup<Context>[] {
     const compiled: IRouteGroup<Context>[] = []
@@ -105,7 +104,7 @@ export class ServerSet {
       compiled.push(...entry.groups)
     }
 
-    assertEveryRouterServed(routing, this.names)
+    assertEveryControllerServed(routing, this.names)
 
     return compiled
   }
@@ -121,7 +120,6 @@ export class ServerSet {
 
   async #build(entry: Entry, input: ServerSetupInput): Promise<HostedServer> {
     const { definition } = entry
-    const compile = serverCompiler(input.compileRouteGroup, definition.name)
     // What this server's plugins may do to the application: mount on it and add to its pipeline, while they register.
     const slot = new PluginSlot(definition.middlewares)
     const context = serverContext(input.context, definition.name, slot)
@@ -141,7 +139,9 @@ export class ServerSet {
     // What the plugins mounted: those routers' own plugins first, since they may nest more, then the groups. A group
     // the application already serves on this server is served once, as a router mounted twice in one place is.
     await input.plugins.resolveRouters(slot.mounted, context)
-    entry.groups.push(...compileMounted(slot.mounted, entry.groups, input.plugins, context, compile))
+    entry.groups.push(
+      ...compileMounted(slot.mounted, entry.groups, input.plugins, context, input.compileRouteGroup, definition.name),
+    )
 
     const engine = buildEngine({
       contextKey: input.contextKey,
@@ -260,8 +260,8 @@ async function registerPlugins(
 }
 
 /**
- * What a server's plugins mounted, compiled as the application's own routers are and bound to that server, less the
- * groups it already `served`.
+ * What a server's plugins mounted, compiled as the application's own routers are and labelled with that server, less
+ * the groups it already `served`.
  */
 function compileMounted(
   routers: readonly AnyRouter[],
@@ -269,8 +269,9 @@ function compileMounted(
   plugins: ScopedPlugins,
   context: HTTPSetupContext,
   compile: RouteGroupCompiler,
+  name: string | undefined,
 ): IRouteGroup<Context>[] {
-  return new FluentRouteSource<Context>(routers, plugins.childrenOf)
+  return new FluentRouteSource<Context>(routers, plugins.childrenOf, name)
     .collect(context.container)
     .filter(declared => !isServed(declared.scopes!, served))
     .map(declared => {
@@ -283,46 +284,17 @@ function compileMounted(
 
 /** Whether `groups` already hold the group `scopes` describes: the same routers, nested the same way. */
 function isServed(scopes: readonly RouteGroupScope[], groups: readonly IRouteGroup<Context>[]): boolean {
-  // Per group, never per router: a router whose nested routers are bound elsewhere is split across servers, and a
-  // plugin mounting it on one of them still adds the groups that server lacks.
+  // Per group, never per router: a group is the one already served only when its whole chain of routers is.
   return groups.some(
     group => group.scopes?.length === scopes.length && group.scopes.every((scope, at) => scope.key === scopes[at].key),
   )
 }
 
 /**
- * What `$route` and a plugin's `app.mount(...)` compile a group with on the server named `name`: a group bound to
- * another server is refused, since that server would never see it, and an unbound one is bound to this one, as every
- * group it serves is.
+ * Refuses a controller bound with `@BindTo` to a name no installed server has. Nothing would serve it, and serving it
+ * on the application's own server instead would expose what its binding kept off that server.
  */
-function serverCompiler(compile: RouteGroupCompiler, name: string | undefined): RouteGroupCompiler {
-  return <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): IRouteGroup<R> => {
-    const bound = boundTo(spec.labels)
-
-    if (bound !== undefined && bound !== name) {
-      const server = name === undefined ? "the application's own server" : `listener "${name}"`
-
-      throw new ErrConfiguration(
-        errMessage(`Cannot add route group "${meta.name}" to ${server}: it is bound to "${bound}"`)
-          .solutions('Drop the binding: a plugin adds its group to the server it is registered on')
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
-    }
-
-    if (name === undefined || bound !== undefined) {
-      return compile(spec, meta)
-    }
-
-    return compile({ ...spec, labels: new Map([...(spec.labels ?? []), [kBindTo, name]]) }, meta)
-  }
-}
-
-/**
- * Refuses a router bound to a name no installed server has. Nothing would serve it, and serving it on the
- * application's own server instead would expose what its binding kept off that server.
- */
-function assertEveryRouterServed<R>(routing: Routing<R>, installed: readonly string[]): void {
+function assertEveryControllerServed<R>(routing: Routing<R>, installed: readonly string[]): void {
   const [unserved] = routing.unselected()
 
   if (unserved === undefined) {
@@ -334,12 +306,12 @@ function assertEveryRouterServed<R>(routing: Routing<R>, installed: readonly str
 
   if (installed.length > 0) {
     const names = installed.map(candidate => `"${candidate}"`).join(', ')
-    fixes.push(`Or bind to an installed server: ${names}`)
+    fixes.push(`Or bind it to an installed server: ${names}`)
   }
 
   throw new ErrConfiguration(
     errMessage(
-      `Cannot serve router "${unserved.name}": it is bound to "${name}", and no installed server has that name`,
+      `Cannot serve controller "${unserved.name}": it is bound to "${name}" with @BindTo, and no installed server has that name`,
     )
       .solutions(...fixes)
       .reference('@caffeinejs/http', ErrConfiguration)

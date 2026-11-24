@@ -13,14 +13,14 @@ import { $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
-import { bindTo, type AdapterSettings, type WebApplication, Router } from '../../index.js'
+import { type AdapterSettings, type WebApplication, Router } from '../../index.js'
 import { node, type NodeAdapter } from '../../platform/node.testkit.js'
 import { listenersOf, type ListenerConfigurer } from './listener.js'
 
 /**
  * Listeners are a list the application keeps: the application adds to it with `.listener(...)`, a feature with
- * `listenersOf(kit).add(...)`. A name is taken once, whoever takes it, so a router bound to it is never served by
- * the wrong server.
+ * `listenersOf(kit).add(...)`. A name is taken once, whoever takes it, so what is mounted on or bound to it is never
+ * served by the wrong server.
  */
 
 const listener = { host: '127.0.0.1', port: 0 }
@@ -61,17 +61,36 @@ describe('listeners', () => {
     app = undefined
   })
 
-  it('serves a router bound to a listener a feature added, on that listener alone', async () => {
+  it('serves a router mounted on a listener a feature added, on that listener alone', async () => {
     app = createWebApplication({ adapter: node() })
       .server(() => ({ listen: listener }))
-      .install(new Probe('probe', l => l.server(() => ({ listen: listener }))))
-      .mount(new Router('/probe').extend(bindTo('probe')).get('/', () => ({ up: true }))) as WebApplication
+      .install(
+        new Probe('probe', l =>
+          l.server(() => ({ listen: listener })).mount(new Router('/probe').get('/', () => ({ up: true }))),
+        ),
+      ) as WebApplication
 
     await app.run()
 
     const probe = app.listeners.get('probe')!
     expect(await (await fetch(`${probe.address!.origin}/probe`)).json()).toEqual({ up: true })
     expect((await fetch(`${app.address!.origin}/probe`)).status).toBe(404)
+  })
+
+  it('serves a router mounted on both the application and a listener on each, since neither claims it', async () => {
+    const jobs = new Router('/jobs').get('/', () => 'jobs')
+
+    app = createWebApplication({ adapter: node() })
+      .listener('probe', l => l.mount(jobs))
+      .mount(jobs) as WebApplication
+    await app.bootstrap()
+
+    expect((await app.listeners.get('probe')!.request('/jobs')).status).toBe(200)
+    expect((await app.request('/jobs')).status).toBe(200)
+    expect(app.routeGroups.map(group => [group.name, group.boundTo])).toEqual([
+      ['Jobs', undefined],
+      ['Jobs', 'probe'],
+    ])
   })
 
   it('hands the callback the resolved configuration, so a port read from it is the one listened on', async () => {
@@ -144,8 +163,11 @@ describe('ListenerBuilder.hook', () => {
   // A listener's hooks are its own: the application's server never runs them.
   it('runs a listener hook on that listener alone', async () => {
     const app = createWebApplication({ adapter: node() })
-      .listener('admin', l => l.hook('onSend', ctx => void ctx.header('x-listener', 'admin')))
-      .mount(new Router('/jobs').extend(bindTo('admin')).get('/', () => 'jobs'))
+      .listener('admin', l =>
+        l
+          .hook('onSend', ctx => void ctx.header('x-listener', 'admin'))
+          .mount(new Router('/jobs').get('/', () => 'jobs')),
+      )
       .mount(new Router('/own').get('/', () => 'own'))
 
     try {

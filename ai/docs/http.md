@@ -468,7 +468,7 @@ app.mount(pets) // before app.bootstrap()
   and, from the caching package, `cacheControl(options)` and `cacheInvalidate(options)`. Each is the same
   implementation as its decorator, and `@RouteOptions(...)` sets them on a controller or a method.
 - `.extend(ext, ...)` applies the other extensions — how a package configures a route it does not own. http ships
-  `bodyAsBuffer()`, `bodyAsStream()` and `bindTo(name)`; openapi ships `operation(detail)` and `apiGroup(detail)`.
+  `bodyAsBuffer()` and `bodyAsStream()`; openapi ships `operation(detail)` and `apiGroup(detail)`.
   Each is the same implementation as its decorator.
 - `.with(factory)` registers a plugin in front of that router's routes and the groups nested under it, taking what
   the application's `.with(...)` takes: a factory that returns an `HTTPPlugin` ([Plugins](#plugins)). A router from
@@ -476,8 +476,8 @@ app.mount(pets) // before app.bootstrap()
   Node's request and response. The same on a controller is `@Use(factory)` above `@Controller`. A router takes only plugins, never
   features, and nothing is deduplicated: two groups wanting different settings pass two factories. The factory's context carries
   `config` as `ConfigSnapshot<unknown>` — a router does not know which application it will be mounted into.
-- A router accumulates its routes in its type: `RoutesOf<typeof app>` is the whole surface, ready for a typed
-  client. What carries them is the value `.handler()` returns, so a chain gathers them all.
+- A router accumulates its routes in its type: `RoutesOf<typeof app>` is every route `app.mount(...)` took, ready for
+  a typed client; a listener's are those of the routers it mounts, `RoutesOf<typeof router>`. What carries them is the value `.handler()` returns, so a chain gathers them all.
 - Writing routes as separate statements leaves one such value each. `blend(...routers)` unions them into one
   router — as do `.mount(...)` and `app.mount(...)`, which take several. The variable the routes were opened from
   carries none of them.
@@ -680,11 +680,10 @@ new Router('/api').with(metrics()) // that router alone: /api/metrics
 
 Where it is registered decides what `context.app` reaches:
 
-- **On a server** (`.with(...)`, `l.with(...)`): the server serves what it mounts, and a router bound with `bindTo`
-  to another server is refused at start-up. Its middleware joins that server's pipeline after the application's own
-  `.use(...)` entries, and a path is the server's own.
+- **On a server** (`.with(...)`, `l.with(...)`): the server serves what it mounts. Its middleware joins that
+  server's pipeline after the application's own `.use(...)` entries, and a path is the server's own.
 - **On a router** (`router.with(...)`): it registers once, before routing is built. What it mounts nests under the
-  router, starting from its path, binding, guards and plugins. Its middleware runs in front of the router's routes
+  router, starting from its path, guards and plugins. Its middleware runs in front of the router's routes
   alone, nested groups included, and a path is relative to the router: `use('/jobs', mw)` on a router at `/admin`
   covers `/admin/jobs`, under every parent the router is nested in. A relative path under a router whose path holds
   a wildcard or an optional parameter is refused at start-up.
@@ -771,10 +770,12 @@ const readiness = await app.health.readiness() // { ok, checks, outcomes }
 
 ## Listeners
 
-A listener is one more port, serving only the routers bound to it: metrics, probes or an admin API kept off the
-public one. Each is named, and an application may add several.
+A listener is one more port, serving only the routers mounted on it and the controllers bound to it: metrics,
+probes or an admin API kept off the public one. Each is named, and an application may add several.
 
 ```ts
+const jobsRouter = new Router('/jobs').authorize({ schemes: ['ops'], roles: ['operator'] }).get('/', () => jobs.list())
+
 const app = createWebApplication({ config, adapter: node() })
   .install(
     Authentication(a =>
@@ -789,15 +790,10 @@ const app = createWebApplication({ config, adapter: node() })
       .server(() => ({ listen: config.app.admin }))
       .with(authentication())
       .with(healthProbes())
-      .use(AuditLog),
+      .use(AuditLog)
+      .mount(jobsRouter),
   )
   .with(authentication())
-  .mount(
-    new Router('/jobs')
-      .extend(bindTo('admin'))
-      .authorize({ schemes: ['ops'], roles: ['operator'] })
-      .get('/', () => jobs.list()),
-  )
 
 @BindTo('admin')
 @Controller('/metrics')
@@ -823,9 +819,9 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   }
   ```
 
-- **Binding is per router.** `@BindTo(name)` on a controller and `router.extend(bindTo(name))` bind every route under
-  it. A router nested in a bound one is served where its parent is: binding it to another server is refused at
-  start-up, and so is a name no installed server has. `group.boundTo` on `app.routeGroups` names the server.
+- **What a listener serves.** The routers mounted on it with `l.mount(...)`, nested routers included, and the
+  controllers bound to it with `@BindTo(name)`. A name no installed server has is refused at start-up.
+  `group.boundTo` on `app.routeGroups` names the server.
 - **What it gets.** A listener is built through the same path as the application's own server: the same request
   context, error handlers, not-found problem, cookies, global guards and start-up checks. What a router asks for
   itself follows it: `router.with(...)` or `@Use(...)`, and `router.guards(...)` or `@UseGuards(...)`.
@@ -848,11 +844,11 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
 - **Lifecycle.** `run()` starts the application's own server first, then each listener, with the listen settings of
   its own `l.server(...)`; what `run(...)` is given does not reach them. `close()` closes the application's own
   server first, so probes and metrics answer through the drain.
-- **Clients and tests.** A typed client reaches a listener's routes given its origin:
-  `brewer<App>(app.listeners.get('admin')!.address!.origin)`. A test sends a request with
-  `app.listeners.get('admin')!.request('/jobs')`; `app.request(...)` reaches the application's own server only. Each
-  listener is an `IServer`, as the application is for its own server.
-- **OpenAPI.** `@caffeinejs/openapi` documents the server it is registered on, so routes bound to a listener are
+- **Clients and tests.** A typed client reaches a listener's routes given its origin, typed by the router the
+  listener mounts: `brewer<typeof jobsRouter>(app.listeners.get('admin')!.address!.origin)`. A test sends a request
+  with `app.listeners.get('admin')!.request('/jobs')`; `app.request(...)` reaches the application's own server only.
+  Each listener is an `IServer`, as the application is for its own server.
+- **OpenAPI.** `@caffeinejs/openapi` documents the server it is registered on, so routes a listener serves are
   left out of the main document. A listener gets one of its own with a named plugin,
   `.listener('admin', l => l.with(openapi('admin')))`, served at `/openapi/admin.json` and read from code with
   `container.get(OpenAPIProvider).docs('admin')`. Both need `.install(OpenAPI())` on the application.

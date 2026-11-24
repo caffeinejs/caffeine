@@ -7,10 +7,10 @@ This slice has a single example. Add files as codes become worth documenting.
 ## Reading a Caffeine error
 
 ```text
-Cannot serve router "admin": it is bound to "ops", and no installed server has that name
+Cannot serve controller "AdminController": it is bound to "ops" with @BindTo, and no installed server has that name
 Possible Solutions:
   - Add it: ".listener('ops', ...)"
-  - Or bind to an installed server: "main"
+  - Or bind it to an installed server: "main"
 ```
 
 - The first line says what failed and why. The quoted values are the application's own names: search the code for them.

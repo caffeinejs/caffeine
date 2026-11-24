@@ -4,17 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
-import {
-  $p,
-  Args,
-  bindTo,
-  Controller,
-  createWebApplication,
-  Get,
-  Post,
-  Router,
-  type IContext,
-} from '../../../dist/index.js'
+import { $p, Args, Controller, createWebApplication, Get, Post, Router, type IContext } from '../../../dist/index.js'
 import { bun } from '../../../dist/platform/bun/index.js'
 
 const settings = JSON.parse(process.argv[2] ?? '{}') as Record<string, unknown>
@@ -67,14 +57,11 @@ const app = createWebApplication({ adapter: bun() })
   .shutdown(s => s.signals(['SIGTERM']))
 
 if (flags.listener === true) {
-  app
-    .listener('admin', l => l.server(() => ({ listen: { host: '127.0.0.1', port: 0 } })))
-    .mount(
-      new Router('/admin')
-        .extend(bindTo('admin'))
-        .get('/')
-        .handler(() => ({ admin: true })),
-    )
+  app.listener('admin', l =>
+    l
+      .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+      .mount(new Router('/admin').get('/').handler(() => ({ admin: true }))),
+  )
 }
 
 // Answers once the process is told to stop: a request in flight when the shutdown starts.

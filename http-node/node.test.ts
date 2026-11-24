@@ -11,7 +11,7 @@ import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { newNoopLogger } from '@caffeinejs/application/logger'
 import { $t } from '@caffeinejs/application/schema'
-import { type AnyRouter, bindTo, createWebApplication, Router, type WebApplication } from '@caffeinejs/http'
+import { type AnyRouter, createWebApplication, Router, type WebApplication } from '@caffeinejs/http'
 import { testTLS } from '@caffeinejs/testing/tls'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -259,8 +259,11 @@ describe('the Node application', () => {
   it('serves a listener on its own listen settings', async () => {
     const built = createWebApplication({ adapter: node() })
       .logger(b => b.use(newNoopLogger()))
-      .listener('admin', l => l.server(() => ({ listen: { host: '127.0.0.1', port: 0 } })))
-      .mount(new Router('/admin').extend(bindTo('admin')).get('/', () => ({ up: true })))
+      .listener('admin', l =>
+        l
+          .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+          .mount(new Router('/admin').get('/', () => ({ up: true }))),
+      )
     apps.push(built)
 
     await built.run({ host: '127.0.0.1', port: 0 })

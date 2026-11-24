@@ -55,8 +55,9 @@ export interface IRouteGroup<R = unknown> {
   detail?: RouteGroupDetail
 
   /**
-   * The server the group is bound to, as `bindTo(...)` or `@BindTo(...)` named it; `undefined` on the application's
-   * own server. Metadata: which server serves the group was decided before it compiled.
+   * The listener that serves the group: the one it is mounted on, or the one its controller's `@BindTo(...)` names;
+   * `undefined` on the application's own server. Metadata: which server serves the group was decided before it
+   * compiled.
    */
   boundTo?: string
 

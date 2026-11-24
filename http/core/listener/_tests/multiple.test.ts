@@ -16,7 +16,6 @@ import {
   HTTPPlugin,
   type HTTPPluginFactory,
   type HTTPSetupContext,
-  bindTo,
   Router,
 } from '../../../index.js'
 import { node, type NodeAdapter } from '../../../platform/node.testkit.js'
@@ -26,7 +25,7 @@ import { authentication } from '../../security/security.js'
 /**
  * Scenario: several listeners with different settings.
  *
- * Each server is built from its own settings and serves the routers bound to it and nothing else: one server's
+ * Each server is built from its own settings and serves the routers mounted on it and nothing else: one server's
  * authorization, factory options and plugins never reach another, nor the application's own server.
  */
 
@@ -53,7 +52,7 @@ class OpsScheme extends BaseAuthenticationHandler<object> {
   }
 }
 
-/** Collects the server each route group is bound to, as every route registers. */
+/** Collects the server each route group is mounted on, as every route registers. */
 class Recording extends HTTPPlugin {
   constructor(private readonly seen: Array<string | undefined>) {
     super()
@@ -83,17 +82,26 @@ function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; ad
       if (adminPlugin !== undefined) {
         l.with(adminPlugin)
       }
+
+      l.mount(
+        new Router('/admin')
+          .authorize({ schemes: ['Ops'], roles: ['operator'] })
+          .post('/echo', ctx => ({ received: ctx.req.body() })),
+      )
     })
-    .listener('metrics', l => l.server(() => ({ listen: { ...listener, port: metricsPort } })).with(healthProbes()))
+    .listener('metrics', l =>
+      l
+        .server(() => ({ listen: { ...listener, port: metricsPort } }))
+        .with(healthProbes())
+        .mount(new Router('/metrics').get('/', () => ({ up: true }))),
+    )
     .server(() => ({ listen: listener }))
-    .mount(
-      new Router('/admin')
-        .extend(bindTo('admin'))
-        .authorize({ schemes: ['Ops'], roles: ['operator'] })
-        .post('/echo', ctx => ({ received: ctx.req.body() })),
-      new Router('/metrics').extend(bindTo('metrics')).get('/', () => ({ up: true })),
-      new Router('/api').post('/echo', ctx => ({ received: ctx.req.body() })),
-    ) as WebApplication<never, never, unknown, NodeAdapter>
+    .mount(new Router('/api').post('/echo', ctx => ({ received: ctx.req.body() }))) as WebApplication<
+    never,
+    never,
+    unknown,
+    NodeAdapter
+  >
 }
 
 describe('several listeners with different settings', () => {

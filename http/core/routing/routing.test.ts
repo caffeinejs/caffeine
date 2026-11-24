@@ -1,7 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
-import { bindTo } from '../../decorators/bind_to.js'
+import { kBindTo } from '../../binding.js'
 import type { HTTPSetupContext } from '../../plugin.js'
 import { RouteBuilder, RouteGroupBuilder } from './builder.js'
 import { buildRouting, type DeclaredRouteGroup, type RouteSource } from './routing.js'
@@ -83,7 +83,7 @@ describe('route selection', () => {
   })
 
   it('names the server a group is bound to on the compiled group, and nothing for an unbound one', async () => {
-    const bound = declared('bound', bindTo('admin'))
+    const bound = declared('bound', group => group.label(kBindTo, 'admin'))
     const own = declared('own')
 
     const groups = buildRouting([source(bound.group, own.group)], await context()).select(() => true)

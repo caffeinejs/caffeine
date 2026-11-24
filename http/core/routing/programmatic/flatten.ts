@@ -2,7 +2,6 @@ import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 import { $i, type Container, type ObjectInjectionSpec } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { boundTo } from '../../../binding.js'
 import { ErrConfiguration } from '../../error/index.js'
 import { normalizeGroupPath, normalizeRoutePath } from '../builder.js'
 import { inheritGroupSpec } from '../inherit.js'
@@ -48,16 +47,10 @@ interface Walk<R> {
   readonly stack: RouterState[]
 }
 
-/** The group a nested router starts from: its parent's spec, and the name the parent goes by. */
-interface Parent<R> {
-  spec: RouteGroupSpec<R>
-  name: string
-}
-
 function walk<R>(
   state: RouterState,
   parentPath: string,
-  parent: Parent<R> | undefined,
+  parentSpec: RouteGroupSpec<R> | undefined,
   parentInjection: ObjectInjectionSpec | undefined,
   parentScopes: readonly RouteGroupScope[],
   context: Walk<R>,
@@ -77,11 +70,7 @@ function walk<R>(
   // This router's own options: a failure in them names it, not a router nested under it.
   own.options = own.options?.map(level => ({ ...level, owner: name }))
 
-  if (parent !== undefined) {
-    assertBindingFollows(parent, own, name)
-  }
-
-  const spec = parent === undefined ? own : inheritGroupSpec(parent.spec, own)
+  const spec = parentSpec === undefined ? own : inheritGroupSpec(parentSpec, own)
 
   assertUniqueRouteNames(spec.routes, name)
 
@@ -95,7 +84,7 @@ function walk<R>(
   }
 
   for (const child of context.childrenOf(state)) {
-    walk<R>(child, path, { spec, name }, injection, scopes, context)
+    walk<R>(child, path, spec, injection, scopes, context)
   }
 
   context.stack.pop()
@@ -127,34 +116,6 @@ function assertNotNestedInItself(state: RouterState, stack: readonly RouterState
 /** A router as its author wrote it: the name it was given, or else its own path. */
 function labelOf(state: RouterState): string {
   return state.name ?? (state.path === '' ? '/' : state.path)
-}
-
-/**
- * Refuses a nested router bound to another server than the router it is nested in.
- *
- * A nested router is served where its parent is: the parent's binding wins the merge, so a different one of its own
- * would be dropped without a word. The same binding repeated is accepted, and a router whose parent is unbound binds
- * itself.
- */
-function assertBindingFollows<R>(parent: Parent<R>, own: RouteGroupSpec<R>, name: string): void {
-  const outer = boundTo(parent.spec.labels)
-  const inner = boundTo(own.labels)
-
-  if (outer === undefined || inner === undefined || inner === outer) {
-    return
-  }
-
-  throw new ErrConfiguration(
-    errMessage(
-      `Cannot nest router "${name}" in "${parent.name}": it is bound to "${inner}", and "${parent.name}" to "${outer}"`,
-    )
-      .solutions(
-        'A nested router is served where its parent is: drop its own binding',
-        `Or mount "${name}" outside "${parent.name}"`,
-      )
-      .reference('@caffeinejs/http', ErrConfiguration)
-      .build(),
-  )
 }
 
 function compileRoute<R>(

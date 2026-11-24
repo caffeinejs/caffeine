@@ -19,7 +19,6 @@ import {
   Identity,
   Post,
   Principal,
-  bindTo,
   csrfExempt,
   type ActionResult,
   type IContext,
@@ -951,14 +950,19 @@ describe('csrf()', () => {
 
     // A plugin covers the server it was registered on, and only that one.
     it('covers a listener through its own l.with(csrf()), and no other server', async () => {
-      const metrics = new Router('/metrics').extend(bindTo('admin')).post('/', ok)
+      const metrics = new Router('/metrics').post('/', ok)
       const api = new Router('/api').post('/', ok)
 
       const app = (await running(
         createWebApplication({ adapter: node() })
-          .listener('admin', l => l.server(() => ({ listen: listener })).with(csrf()))
+          .listener('admin', l =>
+            l
+              .server(() => ({ listen: listener }))
+              .with(csrf())
+              .mount(metrics),
+          )
           .server(() => ({ listen: listener }))
-          .mount(metrics, api),
+          .mount(api),
       )) as WebApplication
       const admin = app.listeners.get('admin')!.address!.origin
 

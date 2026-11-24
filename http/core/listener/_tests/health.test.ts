@@ -6,7 +6,6 @@ import {
   Authentication,
   Authorization,
   BaseAuthenticationHandler,
-  bindTo,
   type WebApplication,
   Router,
 } from '../../../index.js'
@@ -81,9 +80,9 @@ describe('health probes on a listener', () => {
         l
           .server(() => ({ listen: listener }))
           .with(authentication())
-          .with(healthProbes()),
-      )
-      .mount(new Router('/jobs').extend(bindTo('admin')).get('/', () => ({}))) as WebApplication
+          .with(healthProbes())
+          .mount(new Router('/jobs').get('/', () => ({}))),
+      ) as WebApplication
 
     await app.run()
     const admin = app.listeners.get('admin')!.address!.origin
@@ -105,9 +104,12 @@ describe('health probes on a listener', () => {
   })
 
   it('refuses a route of the server serving the probes that takes a probe path', async () => {
-    app = createWebApplication({ adapter: node() })
-      .listener('admin', l => l.server(() => ({ listen: listener })).with(healthProbes()))
-      .mount(new Router().extend(bindTo('admin')).get('/readyz', () => ({}))) as WebApplication
+    app = createWebApplication({ adapter: node() }).listener('admin', l =>
+      l
+        .server(() => ({ listen: listener }))
+        .with(healthProbes())
+        .mount(new Router().get('/readyz', () => ({}))),
+    ) as WebApplication
 
     await expect(app.bootstrap()).rejects.toThrow(/already registered at "\/readyz"/)
   })

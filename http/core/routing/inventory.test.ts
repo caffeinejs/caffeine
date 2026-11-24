@@ -2,7 +2,6 @@ import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
-import { bindTo } from '../../decorators/bind_to.js'
 import {
   AuthenticateResult,
   Authentication,
@@ -212,13 +211,10 @@ describe('route inventory across listeners', () => {
       ?.routes.find(record => record.url === url)
   }
 
-  it("lists the application's own server first, then each listener with the routes bound to it alone", async () => {
+  it("lists the application's own server first, then each listener with the routes mounted on it alone", async () => {
     app = createWebApplication({ adapter: node() })
-      .listener('admin')
-      .mount(
-        new Router('/api').get('/', () => 'api'),
-        new Router('/jobs').extend(bindTo('admin')).get('/', () => 'jobs'),
-      ) as WebApplication
+      .listener('admin', l => l.mount(new Router('/jobs').get('/', () => 'jobs')))
+      .mount(new Router('/api').get('/', () => 'api')) as WebApplication
 
     await app.bootstrap()
 

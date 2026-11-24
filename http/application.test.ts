@@ -2,7 +2,7 @@ import { ErrApplicationNotReady, ErrApplicationStarted } from '@caffeinejs/appli
 import { afterEach, describe, expect, it, expectTypeOf } from 'vitest'
 
 import { type WebApplication, type WebRunInfo, createWebApplication } from './application.js'
-import { ErrConfiguration, Router } from './index.js'
+import { ErrConfiguration, HTTPPlugin, Router } from './index.js'
 import { node, type NodeAdapter } from './platform/node.testkit.js'
 
 let app: WebApplication | undefined
@@ -45,6 +45,37 @@ describe('WebApplication', () => {
 
     await built.bootstrap()
     expect(built.routeGroups.some(group => group.path === '/hi')).toBe(true)
+  })
+
+  // A router mounted while start-up runs another router's plugins is served, so its own plugins must run too, even
+  // when that other router is on a listener whose routers are resolved after the application's.
+  it("runs the plugins of a router mounted while a listener router's plugin factories run", async () => {
+    let registered = 0
+    const late = new Router('/late')
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register(): void {
+              registered++
+            }
+          })(),
+      )
+      .get('/', () => 'late')
+    const built = createWebApplication({ adapter: node() })
+    const first = new Router('/first')
+      .with(() => {
+        built.mount(late)
+        return new (class extends HTTPPlugin {
+          register(): void {}
+        })()
+      })
+      .get('/', () => 'first')
+    app = built.listener('admin', l => l.mount(first)) as WebApplication
+
+    await app.bootstrap()
+
+    expect((await app.request('/late')).status).toBe(200)
+    expect(registered).toBe(1)
   })
 })
 

@@ -17,12 +17,13 @@ import {
   type MiddlewareResolvable,
   type MiddlewareTarget,
 } from '../middleware/middleware.js'
+import type { AnyRouter } from '../routing/programmatic/programmatic.js'
 import type { ServerSettings } from '../server/settings.js'
 
 /**
- * Fluently builds one listener: a server of its own, on its own port, serving the routers bound to it with
- * `bindTo(name)` or `@BindTo(name)` and nothing else. Handed to the callback of `app.listener(name, ...)` or
- * `listenersOf(kit).add(name, ...)`.
+ * Fluently builds one listener: a server of its own, on its own port, serving the routers mounted on it with
+ * `mount(...)` and the controllers bound to it with `@BindTo(name)`, and nothing else. Handed to the callback of
+ * `app.listener(name, ...)` or `listenersOf(kit).add(name, ...)`.
  *
  * The application builds it the way it builds its own server — the same request context, error handling, cookies
  * and start-up checks — and starts it after its own, closing it after its own. Its plugins and middleware are
@@ -54,6 +55,21 @@ export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
    */
   server(configure: ServerConfigurer<S, C>): this {
     this.#definition.server.push(configure)
+    return this
+  }
+
+  /**
+   * Mounts programmatic routers on this server alone, the way `app.mount(...)` mounts them on the application's own:
+   * compiled the same, nested routers included, and listed in `app.routeGroups` with `boundTo` naming this listener.
+   * A router mounted here and on the application is served on both. Mounting it here alone does not add its routes
+   * to `RoutesOf<typeof app>`: a typed client for this listener takes the router's own, `RoutesOf<typeof router>`.
+   *
+   * ```ts
+   * .listener('admin', l => l.mount(new Router('/jobs').get('/', () => listJobs())))
+   * ```
+   */
+  mount(...routers: AnyRouter[]): this {
+    this.#definition.routers.push(...routers)
     return this
   }
 
@@ -150,8 +166,8 @@ export type ListenerConfigurer<C = unknown, S extends object = ServerSettings> =
  */
 export interface ListenerAdder<C = unknown, S extends object = ServerSettings> {
   /**
-   * Adds a listener named `name`, serving the routers bound to it. The name is taken at once; `configure` runs at
-   * start-up.
+   * Adds a listener named `name`, serving what is mounted on it or bound to it. The name is taken at once;
+   * `configure` runs at start-up.
    *
    * @throws ErrConfiguration when a listener of that name is already added.
    * @throws ErrApplicationStarted once the application has built its servers.
@@ -172,7 +188,9 @@ export class Listeners<C = unknown> implements ListenerAdder<C, object> {
     if (this.#added.some(({ definition }) => definition.name === name)) {
       throw new ErrConfiguration(
         errMessage(`Cannot add listener "${name}": a listener named "${name}" is already added`)
-          .solutions('Give one of them another name and bind its routers to it with bindTo(...)')
+          .solutions(
+            'Add one of them under another name, in its ".listener(name, ...)" or "listenersOf(kit).add(name, ...)"',
+          )
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
       )

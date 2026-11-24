@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
-import { bindTo } from '../../decorators/bind_to.js'
 import { node } from '../../platform/node.testkit.js'
 import { version } from '../constraints/route.js'
 import { ErrConfiguration } from '../error/common.js'
@@ -204,14 +203,10 @@ describe('corsPolicy() on an actual request', () => {
 
   it('answers on a listener its own policy, and leaves the application alone', async () => {
     const built = createWebApplication()
-      .listener('admin', l => l.with(corsPolicy(c => c.origins(A))))
-      .mount(
-        new Router('/jobs')
-          .extend(bindTo('admin'))
-          .get('/')
-          .handler(() => 'jobs'),
-        new Router('/own').get('/').handler(() => 'own'),
+      .listener('admin', l =>
+        l.with(corsPolicy(c => c.origins(A))).mount(new Router('/jobs').get('/').handler(() => 'jobs')),
       )
+      .mount(new Router('/own').get('/').handler(() => 'own'))
     app = built
     await built.bootstrap()
 

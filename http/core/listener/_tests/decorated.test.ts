@@ -20,7 +20,7 @@ import {
 import { node } from '../../../platform/node.testkit.js'
 
 /**
- * A controller bound with `@BindTo(...)`: the controller counterpart of `router.extend(bindTo(...))`, carrying its
+ * A controller bound with `@BindTo(...)`: the controller counterpart of `l.mount(...)`, carrying its
  * own plugin, guards and `@Catch` methods to the listener that serves it.
  *
  * Isolated: a `@Controller` registers into the process-wide registry, so every application in this file serves it

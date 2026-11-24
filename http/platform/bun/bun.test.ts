@@ -252,7 +252,7 @@ describe('bun() on Bun', { timeout: 30_000 }, () => {
     expect(before(line => 'origin' in line)).toEqual([{ callback: Number(new URL(origin).port) }])
   })
 
-  it('serves a listener on its own port, with the routes bound to it alone', async () => {
+  it('serves a listener on its own port, with the routes mounted on it alone', async () => {
     const { origin, admin } = await serve({ listen: { host: '127.0.0.1', port: 0 } }, {}, { listener: true })
 
     expect(admin!.startsWith('http://127.0.0.1:')).toBe(true)

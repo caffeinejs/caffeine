@@ -28,10 +28,9 @@ export interface WebApplicationOps<C = unknown> {
    * `detail('http', { internal: true })`. The groups stay out of `app.routeGroups`, and a router mounted twice in
    * one place, or one the application already serves on that server, is served once.
    *
-   * On a server, the server serves them, and a router bound with `bindTo` to another server is refused at
-   * start-up. On a router, they nest under it, starting from its path, binding, guards and plugins. A controller's
-   * plugin cannot mount: a class has no children to nest routers under. A router nested in itself, through any of
-   * these mounts, is refused at start-up.
+   * On a server, the server serves them. On a router, they nest under it, starting from its path, guards and
+   * plugins. A controller's plugin cannot mount: a class has no children to nest routers under. A router nested in
+   * itself, through any of these mounts, is refused at start-up.
    */
   mount(...routers: AnyRouter[]): this
 
