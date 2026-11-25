@@ -61,8 +61,8 @@ const ok = () => ({ ok: true })
 class PlainRoutes extends HTTPPlugin {
   override readonly name = 'plain-routes'
 
-  register({ app }: HTTPSetupContext): void {
-    app.mount(
+  register({ server }: HTTPSetupContext): void {
+    server.mount(
       new Router().get('/admin-ui/users', ok).get('/assets/app.js', ok).get('/assets-but-not-really', ok),
       new Router('/metrics').config(accessControlExempt()).get('/', ctx => ({ user: ctx.user })),
     )
@@ -265,8 +265,8 @@ describe('an application whose scheme reads cookies', () => {
           new (class extends HTTPPlugin {
             override readonly name = 'early-route'
 
-            register({ app }: HTTPSetupContext): void {
-              app.mount(new Router().get('/seen', ctx => ({ seen: ctx.req.cookie('probe') ?? null })))
+            register({ server }: HTTPSetupContext): void {
+              server.mount(new Router().get('/seen', ctx => ({ seen: ctx.req.cookie('probe') ?? null })))
             }
           })(),
       )

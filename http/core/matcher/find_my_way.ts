@@ -4,6 +4,7 @@ import FindMyWay from 'find-my-way'
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
+import { parseRoutePattern } from '../routing/paths.js'
 import { ErrRouteConflict, type DerivedConstraints, type RouteMatcherFactory, type RouterFlags } from './matcher.js'
 
 // find-my-way calls a handler per match from `lookup` only; the engine reads the store `find` hands back.
@@ -203,57 +204,17 @@ function spelled(value: unknown): string {
 
 /**
  * Why the route `url` cannot register, when it declares a parameter named `*`: find-my-way gives the wildcard's value
- * that name, so whoever reads `params['*']` could not tell the two apart. `::` is an escaped colon, and the regular
- * expression a parameter may carry, in parentheses, is not read for parameters.
+ * that name, so whoever reads `params['*']` could not tell the two apart.
  */
 export function starParameterRefusal(url: string): ErrConfiguration | undefined {
-  // The router registers the full form of a terminal optional parameter with the question mark removed.
-  const path = url.replace(/(\/:[^/()]*?)\?(\/?)$/, '$1$2')
-
-  for (let i = 0; i < path.length; i++) {
-    if (path[i] !== ':') {
-      continue
-    }
-
-    if (path[i + 1] === ':') {
-      i++
-      continue
-    }
-
-    let end = i + 1
-
-    while (end < path.length && !'/-.('.includes(path[end]!)) {
-      end++
-    }
-
-    if (path.slice(i + 1, end) === '*') {
-      return new ErrConfiguration(
-        errMessage(`Cannot register "${url}": a parameter named "*" reads as a wildcard, whose value has that name`)
-          .solutions('Name the parameter, such as ":name"', 'Write a wildcard as "*", without ":"')
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
-    }
-
-    i = path[end] === '(' ? closingParenthesis(path, end) : end - 1
+  if (!parseRoutePattern(url).some(part => part.kind === 'param' && part.name === '*')) {
+    return undefined
   }
 
-  return undefined
-}
-
-/** The index of the `)` closing the `(` at `open`, nested ones and escaped ones aside, or the end of `url`. */
-function closingParenthesis(url: string, open: number): number {
-  let depth = 0
-
-  for (let i = open; i < url.length; i++) {
-    if (url[i] === '\\') {
-      i++
-    } else if (url[i] === '(') {
-      depth++
-    } else if (url[i] === ')' && --depth === 0) {
-      return i
-    }
-  }
-
-  return url.length
+  return new ErrConfiguration(
+    errMessage(`Cannot register "${url}": a parameter named "*" reads as a wildcard, whose value has that name`)
+      .solutions('Name the parameter, such as ":name"', 'Write a wildcard as "*", without ":"')
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
+  )
 }

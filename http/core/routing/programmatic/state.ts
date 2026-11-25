@@ -22,7 +22,10 @@ export interface RouteState {
 /** The authored state of one group: its own config, its routes, and the groups nested under it. */
 export interface RouterState {
   readonly builder: RouteGroupBuilder
+  /** Its path as mounted: the path given to `mount(path, ...)`, then its own. */
   readonly path: string
+  /** The path given to `mount(path, ...)`: where it is mounted under its parent, ahead of its group prefix. */
+  readonly at?: string
   name?: string
   injection?: ObjectInjectionSpec
   readonly routes: RouteState[]

@@ -4,9 +4,13 @@ import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrConfiguration } from '../../error/index.js'
 import { normalizeGroupPath, normalizeRoutePath } from '../builder.js'
+import type { RouteGroupMeta } from '../compile.js'
 import { inheritGroupSpec } from '../inherit.js'
+import type { RouteOptionsLevel } from '../options.js'
+import { parseRoutePattern } from '../paths.js'
 import { $p } from '../picker.js'
 import type { RouteGroupScope } from '../route.js'
+import type { ScopeChains } from '../scope_chain.js'
 import type { RouteGroupSpec, RouteSpec } from '../spec.js'
 import type { RouterState, RouteState } from './state.js'
 
@@ -25,23 +29,81 @@ export interface FlatRouteGroup<R> {
  * parent's, not a structure the engine has to walk. Nothing here mutates the router, so mounting the same one
  * into two applications — as tests do — builds it twice rather than accumulating.
  *
- * @param childrenOf - A router's children as start-up sees them: those it declared, by default, and for an
- *   application also those its plugins mounted.
+ * @param childrenOf - A router's children at one place, the chain `scopes` ending with it, as start-up sees them: those
+ *   it declared, by default, and on a server also those its plugins mounted there.
+ * @param parent - What `root` nests under when it is not mounted on a server: the controller whose plugin mounted it,
+ *   its spec, full path and scope.
+ * @param levels - Each place's own route-option levels, kept across walks of one server, so a router's configurer
+ *   runs once per place it is mounted at, however often its place is walked.
  */
 export function flattenRouter<R>(
   root: RouterState,
   container: Container,
-  childrenOf: (state: RouterState) => readonly RouterState[] = state => state.children,
+  childrenOf: ChildrenOf = state => state.children,
+  parent?: FlatParent<R>,
+  levels?: ScopeChains<RouteOptionsLevel[] | undefined>,
 ): FlatRouteGroup<R>[] {
   const out: FlatRouteGroup<R>[] = []
-  walk<R>(root, '', undefined, undefined, [], { container, childrenOf, out, stack: [] })
+  walk<R>(root, parent?.path ?? '', parent?.spec, undefined, parent?.scopes ?? [], {
+    container,
+    childrenOf,
+    levels,
+    out,
+    stack: [],
+  })
   return out
+}
+
+/** A router's children at one place it is mounted at: `scopes` is its mount chain there, ending with it. */
+export type ChildrenOf = (state: RouterState, scopes: readonly RouteGroupScope[]) => readonly RouterState[]
+
+/** What a router nests under when a controller's plugin mounted it. */
+export interface FlatParent<R> {
+  readonly spec: RouteGroupSpec<R>
+  /** The controller's full path: where the router's path starts. */
+  readonly path: string
+  readonly scopes: readonly RouteGroupScope[]
+  /** What the controller's routes run with besides their spec: its instance, hook methods and error handlers. */
+  readonly meta?: Pick<RouteGroupMeta<R>, 'onRequest' | 'handleError' | 'hooks'>
+}
+
+/**
+ * Where a router's routes start at one place: its parent's path, the path it was mounted at, then its group prefix,
+ * then its own path. A router's children nest under it.
+ */
+export function scopePathOf(parentPath: string, prefix: string | undefined, state: RouterState): string {
+  const { at, own } = placeOf(state)
+
+  // Composed as its routes are: a group prefix leads them less one trailing slash, and their path follows it.
+  return prefix === undefined
+    ? pathUnder(parentPath, state.path)
+    : `${parentPath}${leadOf(at, prefix)}${normalizeGroupPath(own)}`
+}
+
+/** What a router's mount path and group prefix add after its parent's path: the prefix less one trailing slash. */
+function leadOf(at: string, prefix: string): string {
+  return `${at}${prefix}`.replace(/\/$/, '')
+}
+
+/**
+ * A router's path under its parent's. A router with no path of its own starts where its parent's routes start, an empty
+ * segment its parent's prefix ends with included.
+ */
+function pathUnder(parentPath: string, path: string): string {
+  return normalizeGroupPath(path) === '' ? parentPath : normalizeGroupPath(`${parentPath}${path}`)
+}
+
+/** A router's path split in two: where `mount(path, ...)` put it, and its own. */
+function placeOf(state: RouterState): { readonly at: string; readonly own: string } {
+  const at = state.at ?? ''
+  return { at, own: state.path.slice(at.length) }
 }
 
 /** What every level of one walk shares. */
 interface Walk<R> {
   readonly container: Container
-  readonly childrenOf: (state: RouterState) => readonly RouterState[]
+  readonly childrenOf: ChildrenOf
+  readonly levels: ScopeChains<RouteOptionsLevel[] | undefined> | undefined
   readonly out: FlatRouteGroup<R>[]
   /** The routers from the root down to the one being walked. */
   readonly stack: RouterState[]
@@ -59,32 +121,45 @@ function walk<R>(
   assertNotNestedInItself(state, context.stack)
   context.stack.push(state)
 
-  const path = normalizeGroupPath(`${parentPath}${state.path}`)
   const injection = merge(parentInjection, state.injection)
-
   const own = state.builder.toRouteGroup<R>()
+
+  // A group prefix comes after the parent's path, and the group's own path is relative to it: the server serves the
+  // group's root at its prefix with and without the trailing slash.
+  const { at, own: ownPath } = placeOf(state)
+  // The server takes one trailing slash off a group prefix. The one taken is the router's own: a parent's path ending
+  // in an empty segment keeps it, so a slash is added for the server to take.
+  const lead = own.prefix === undefined ? undefined : `${parentPath}${leadOf(at, own.prefix)}`
+  const prefix = lead === undefined ? undefined : lead.endsWith('/') ? `${lead}/` : lead
+  const path = prefix === undefined ? pathUnder(parentPath, state.path) : normalizeGroupPath(ownPath)
+  const scopePath = scopePathOf(parentPath, own.prefix, state)
+  own.prefix = prefix
   own.path = path
   own.routes = state.routes.map(route => compileRoute<R>(route, path, injection, context.container))
 
-  const name = state.name ?? defaultGroupName(path)
-  // This router's own options: a failure in them names it, not a router nested under it.
-  own.options = own.options?.map(level => ({ ...level, owner: name }))
+  // After the whole path it serves at: under a prefix, `path` alone leaves out the parent's.
+  const name = state.name ?? defaultGroupName(scopePath)
+
+  // A nested group is a scope of its own, so what a parent router registered reaches it only through this chain.
+  // Carrying the chain is what makes `router.with(...)` inherit the way `router.config(...)` does,
+  // and the path is where a relative middleware path of that router starts in this group.
+  const scopes = [...parentScopes, { key: state, path: scopePath }]
+
+  // This router's own options: a failure in them names it, not a router nested under it. Kept per place, so a second
+  // walk of it hands the compiler the levels it already resolved.
+  const owned = () => own.options?.map(level => ({ ...level, owner: name }))
+  own.options = context.levels === undefined ? owned() : context.levels.at(scopes, owned)
 
   const spec = parentSpec === undefined ? own : inheritGroupSpec(parentSpec, own)
 
   assertUniqueRouteNames(spec.routes, name)
 
-  // A nested group is a scope of its own, so what a parent router registered reaches it only through this chain.
-  // Carrying the chain is what makes `router.with(...)` inherit the way `router.config(...)` does,
-  // and the path is where a relative middleware path of that router starts in this group.
-  const scopes = [...parentScopes, { key: state, path }]
-
   if (spec.routes.length > 0) {
     context.out.push({ spec, name, scopes })
   }
 
-  for (const child of context.childrenOf(state)) {
-    walk<R>(child, path, spec, injection, scopes, context)
+  for (const child of context.childrenOf(state, scopes)) {
+    walk<R>(child, scopePath, spec, injection, scopes, context)
   }
 
   context.stack.pop()
@@ -92,9 +167,9 @@ function walk<R>(
 
 /**
  * Refuses a router nested in itself, directly or through the routers under it, by a `.mount(...)` call or by a
- * router plugin's `context.app.mount(...)`: its routes would nest without end.
+ * plugin's `context.server.mount(...)`: its routes would nest without end.
  */
-function assertNotNestedInItself(state: RouterState, stack: readonly RouterState[]): void {
+export function assertNotNestedInItself(state: RouterState, stack: readonly RouterState[]): void {
   const at = stack.indexOf(state)
 
   if (at === -1) {
@@ -105,9 +180,7 @@ function assertNotNestedInItself(state: RouterState, stack: readonly RouterState
 
   throw new ErrConfiguration(
     errMessage(`Cannot nest router "${labelOf(state)}" in itself: ${loop}`)
-      .solutions(
-        'Remove the mount that closes the loop: a ".mount(...)", or a router plugin\'s "context.app.mount(...)"',
-      )
+      .solutions('Remove the mount that closes the loop: a ".mount(...)", or a plugin\'s "context.server.mount(...)"')
       .reference('@caffeinejs/http', ErrConfiguration)
       .build(),
   )
@@ -229,52 +302,14 @@ function defaultGroupName(path: string): string {
 }
 
 // Parameter markers, matching constraints and the wildcard are not part of a name — two routes differing only
-// in what they call a parameter are the same route to a reader.
+// in what they call a parameter are the same route to a reader. A parameter is left as its name, a wildcard as `all`.
 function pathSegments(path: string): string[] {
-  return path
+  return parseRoutePattern(path)
+    .map(part =>
+      part.kind === 'text' ? part.text : part.kind === 'param' ? part.name : part.kind === 'wildcard' ? 'all' : '',
+    )
+    .join('')
     .split('/')
-    .map(segment => segmentName(segment.replace(/\?$/, '')).replaceAll('*', 'all'))
+    .map(segment => segment.replace(/\?$/, ''))
     .filter(segment => segment.length > 0)
-}
-
-// A segment read as the router reads it, every parameter left as its name: a single `:` starts one, whose name ends
-// at `(`, `-` or `.`; a constraint runs to its balancing `)`, a `\` escaping the character after it; `::` is a
-// literal colon, and any other text is kept.
-function segmentName(segment: string): string {
-  let name = ''
-  let i = 0
-
-  while (i < segment.length) {
-    if (segment[i] !== ':') {
-      name += segment[i++]
-    } else if (segment[i + 1] === ':') {
-      name += ':'
-      i += 2
-    } else {
-      i++
-      while (i < segment.length && !'(-.'.includes(segment[i])) {
-        name += segment[i++]
-      }
-      i = segment[i] === '(' ? afterConstraint(segment, i) : i
-    }
-  }
-
-  return name
-}
-
-// The index just past the `)` balancing the `(` at `open`, or the segment's length when none does.
-function afterConstraint(segment: string, open: number): number {
-  let depth = 0
-
-  for (let i = open; i < segment.length; i++) {
-    if (segment[i] === '\\') {
-      i++
-    } else if (segment[i] === '(') {
-      depth++
-    } else if (segment[i] === ')' && --depth === 0) {
-      return i + 1
-    }
-  }
-
-  return segment.length
 }

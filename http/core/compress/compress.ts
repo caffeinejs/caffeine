@@ -5,7 +5,6 @@ import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTT
 import { appendVary } from '../../vary.js'
 import type { ErrConfiguration } from '../error/common.js'
 import type { SendPayload } from '../lifecycle/lifecycle.js'
-import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import type { RouteOptions } from '../routing/options.js'
 import type { Context } from '../server/context.js'
 import { configurationError } from '../server/error.js'
@@ -139,12 +138,12 @@ export class CompressionBuilder {
  * coding, `identity;q=0` included, sends identity rather than a 406, since the handler has run.
  *
  * Its hooks run on each route after the server's, the scopes', the group's and the route's own, and after the hooks
- * that plugins in outer slots, or registered before it in its slot, add to the route. So it compresses what
- * `HTTPCaching` stores only when caching is registered before it in the same slot, or in an outer one; registered
+ * that plugins in outer scopes, or registered before it in its scope, add to the route. So it compresses what
+ * `HTTPCaching` stores only when caching is registered before it in the same scope, or in an outer one; registered
  * after it, caching stores none of the answers it coded, unless the route's key varies on `Accept-Encoding`. Only the
- * routes of its slot are covered: a 404 for a path no route matches is not compressed. With several over one route, a
- * server's, a router's and a controller's, the innermost one alone compresses it, by its own settings and the route's
- * `compress(...)`.
+ * routes of its scope are covered: a 404 for a path no route matches is not compressed. Register it once, where it
+ * covers the routes it should, and tune a route with `compress(...)`: two over one route both run, and the inner one
+ * finds the answer already coded.
  *
  * Compressing a secret beside input the request reflects lets an attacker who sees the sizes guess the secret
  * (BREACH): turn such a route off with `compress(false)`.
@@ -203,10 +202,6 @@ interface ResolvedCompression {
   readonly compressible: (type: string) => boolean
 }
 
-// The `compression()` that owns each route: the innermost over it, whose `onRoute` runs last. Keyed by the definition,
-// one per route and server.
-const OWNERS = new WeakMap<RouteDefinition, CompressionPlugin>()
-
 class CompressionPlugin extends HTTPPlugin {
   override readonly name = 'caffeine-compression'
   // What a route's `compress({...})` is written over.
@@ -223,13 +218,12 @@ class CompressionPlugin extends HTTPPlugin {
     const own = this.#own
     const options = this.#options
 
-    context.app.hook('onRoute', route => {
-      OWNERS.set(route, this)
+    context.server.hook('onRoute', route => {
       const where = `serve "${route.methods.join('|')} ${route.url}"`
 
       const policy = routePolicy(route.options.compression, own, options, where)
       if (policy !== undefined) {
-        route.hook('onSend', (ctx, payload) => (OWNERS.get(route) === this ? encode(ctx, payload, policy) : undefined))
+        route.hook('onSend', (ctx, payload) => encode(ctx, payload, policy))
       }
     })
   }

@@ -13,6 +13,7 @@ import {
   Claim,
   Identity,
   Principal,
+  Router,
   type IContext,
   createWebApplication,
   type WebApplication,
@@ -338,6 +339,19 @@ describe('devtools', () => {
 
       expect(res.status).toBe(200)
       expect((await res.json()).runtime.pid).toBe(process.pid)
+    })
+
+    // Under a router the tools serve at the router's path, and the index links to them there.
+    it("links each tool's routes under the router it is registered on", async () => {
+      app = createWebApplication({ adapter: node(), logger: false })
+        .server(() => ({ listen: loopback }))
+        .mount(new Router('/ops').with(devTools())) as WebApplication<never, never, unknown, NodeAdapter>
+      await app.run()
+      const devtools = brewer<DevToolsRoutes>(`${app.address!.origin}/ops/devtools`)
+
+      const { tools } = await (await devtools.get()).json()
+
+      expect(tools.find(tool => tool.id === 'info')!.links).toEqual([{ method: 'GET', href: '/ops/devtools/info' }])
     })
 
     it('takes what to show and mask, as DevTools() does', async () => {

@@ -35,8 +35,8 @@ function collectURLs(urls: string[]) {
     new (class extends HTTPPlugin {
       override readonly name = 'collect-urls'
 
-      register({ app }: HTTPSetupContext): void {
-        app.hook('onRoute', r => void urls.push(r.url))
+      register({ server }: HTTPSetupContext): void {
+        server.hook('onRoute', r => void urls.push(r.url))
       }
     })()
 }

@@ -107,10 +107,7 @@ export class CSRFBuilder {
     return this
   }
 
-  /**
-   * Names this plugin: `caffeine-csrf` for the default, `caffeine-csrf:<label>` otherwise. A second one under one
-   * label in one slot is refused at start-up.
-   */
+  /** Names this plugin: `caffeine-csrf` for the default, `caffeine-csrf:<label>` otherwise. */
   name(label: string): this {
     this.#label = label
     return this
@@ -168,12 +165,19 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
   }
 }
 
-// The `exclude(...)` list of every enabled `csrf()` covering a route, outermost first, for the route inventory.
-const COVERS = new WeakMap<RouteDefinition, Array<readonly ExcludedPath[]>>()
+/** Where a route keeps the `exclude(...)` list of every enabled `csrf()` covering it, outermost first. */
+const kCSRFCovers: unique symbol = Symbol('caffeine.http.csrf.covers')
+
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    /** Written by every enabled `csrf()` covering the route in `onRoute`, for the route inventory. */
+    [kCSRFCovers]?: ReadonlyArray<readonly ExcludedPath[]>
+  }
+}
 
 /** The `exclude(...)` list of every enabled `csrf()` covering `route`, outermost first; empty when none does. */
 export function csrfCoversOf(route: RouteDefinition): ReadonlyArray<readonly ExcludedPath[]> {
-  return COVERS.get(route) ?? []
+  return route.options[kCSRFCovers] ?? []
 }
 
 class CSRFProtection extends HTTPPlugin {
@@ -196,10 +200,8 @@ class CSRFProtection extends HTTPPlugin {
     const asks = options.originChecks.length > 0 || options.siteChecks.length > 0
     const exempt = new WeakSet<RouteDefinition>()
 
-    context.app.hook('onRoute', route => {
-      const covers = COVERS.get(route) ?? []
-      covers.push(options.exclude)
-      COVERS.set(route, covers)
+    context.server.hook('onRoute', route => {
+      route.options[kCSRFCovers] = [...(route.options[kCSRFCovers] ?? []), options.exclude]
 
       // A route's own mark is the more specific word: `csrfExempt(false)` keeps it under an excluded prefix.
       const mark = route.options.csrf?.exempt
@@ -208,7 +210,7 @@ class CSRFProtection extends HTTPPlugin {
       }
     })
 
-    context.app.hook('onRequest', ctx => {
+    context.server.hook('onRequest', ctx => {
       const route = ctx.route
       if (SAFE_METHODS.has(ctx.req.method) || route === undefined || exempt.has(route)) {
         return

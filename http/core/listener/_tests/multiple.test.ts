@@ -58,8 +58,8 @@ class Recording extends HTTPPlugin {
     super()
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRoute', route => {
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRoute', route => {
       if (route.group.boundTo !== undefined) {
         this.seen.push(route.group.boundTo)
       }

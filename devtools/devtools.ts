@@ -298,7 +298,8 @@ export function DevTools<C = unknown>(configure?: FeatureConfigurer<DevToolsBuil
 /**
  * Serves the devtools on a server that already exists: the application's own with `.with(devTools())`, a listener's
  * with `l.with(devTools())`. The server's own gate and fallback policy apply to them as to every route there, and
- * `authorize(...)` adds what they require.
+ * `authorize(...)` adds what they require. On a router they serve under its path, and the index links each tool's
+ * routes as patterns: a parameter in the router's path stays a parameter there.
  *
  * Prefer `.install(DevTools())`, which keeps them off the port the application serves its users on.
  *
@@ -355,11 +356,12 @@ class DevToolsPlugin extends HTTPPlugin {
     }
 
     router.mount(
-      indexRouter(context.container, options.path, TOOLS),
+      // Linked where they serve: under the scope's path.
+      indexRouter(context.container, `${context.server.prefix}${options.path}`, TOOLS),
       ...builtInRouters(context.container, context.store as ConfigStore<unknown>, options, this.#events),
     )
 
-    context.app.mount(router)
+    context.server.mount(router)
   }
 }
 
@@ -435,7 +437,7 @@ export type DevToolsRoutes = ReturnType<typeof indexRouter> | ReturnType<typeof 
  */
 class DevToolsGuard extends HTTPPlugin {
   register(context: HTTPSetupContext): void {
-    context.app.use((ctx, next) => {
+    context.server.use((ctx, next) => {
       ctx.header('cache-control', 'no-store')
       assertLoopbackHost(ctx)
 

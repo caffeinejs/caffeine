@@ -161,7 +161,7 @@ describe('findMyWayMatcher', () => {
     })
 
     // An escaped colon is text, and a parameter's regular expression is the parameter's, whatever it holds.
-    it.each([['/a::*'], ['/files/:name(^[a-z]+:*$)'], ['/files/:name(^\\(:*\\)$)'], ['/files/:name(:*']])(
+    it.each([['/a::*'], ['/files/:name(^[a-z]+:*$)'], ['/files/:name(^\\(:*\\)$)']])(
       'reads no parameter named * in %s',
       url => {
         expect(starParameterRefusal(url)).toBe(undefined)

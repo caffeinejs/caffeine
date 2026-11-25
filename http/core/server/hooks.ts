@@ -14,7 +14,7 @@ import {
 } from '../lifecycle/lifecycle.js'
 import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 import { compileChain } from '../middleware/chain.js'
-import type { ResolvedMiddleware } from '../middleware/pipeline.js'
+import type { PlacedMiddleware } from '../middleware/path.js'
 import type { CompiledHooks, IRouteGroup } from '../routing/route.js'
 import type { Context } from './context.js'
 import type { ResolvedServerSettings } from './settings.js'
@@ -31,8 +31,8 @@ export interface StoreHooks {
 /** One level in front of routes, the server's root or one scope at one path: its plugins' hooks, then its middleware. */
 export interface LevelInput {
   readonly batches: readonly HookBatch[]
-  /** Already rebased under the scope's path. */
-  readonly middlewares: readonly ResolvedMiddleware[]
+  /** Placed under the scope's path: a relative path carries the scope's segments to skip. */
+  readonly middlewares: readonly PlacedMiddleware[]
 }
 
 /**
@@ -50,7 +50,7 @@ export function compileLevel(level: LevelInput, settings: ResolvedServerSettings
     }
   }
 
-  const byPoint = new Map<RequestHookName, ResolvedMiddleware[]>()
+  const byPoint = new Map<RequestHookName, PlacedMiddleware[]>()
   for (const middleware of level.middlewares) {
     const point = middleware.hook ?? 'onRequest'
     assertHookName(point, REQUEST_HOOK_NAMES, `for a middleware on the ${settings.application}`)

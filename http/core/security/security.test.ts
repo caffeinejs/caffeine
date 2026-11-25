@@ -235,11 +235,12 @@ describe('authentication() on the engine', () => {
   })
 
   describe('two gates under one label', () => {
-    it('refuses them in one slot', async () => {
+    // Both register, as any plugin does twice, and the route they would both authenticate is refused.
+    it('refuses them in one scope over a route', async () => {
       const { app } = gated()
-      app.with(authentication()).with(authentication())
+      app.with(authentication()).with(authentication()).mount(guarded('/p'))
 
-      await expect(app.bootstrap()).rejects.toThrow('Cannot register plugin "caffeine-authentication" twice')
+      await expect(app.bootstrap()).rejects.toThrow('Cannot register a second authentication gate labelled "default"')
     })
 
     it('refuses one on a router under one on the application', async () => {
@@ -302,7 +303,26 @@ describe('OIDC routes on the engine', () => {
     expect((await built.request('/api/oidc/callback/login?returnTo=/x')).status).toBe(302)
   })
 
-  it('refuses a router gate that keeps the routes when no gate on a server claimed them', async () => {
+  // A router gate serves the routes in its scope: at the callback's own path, which starts with the router's.
+  it('serves the routes from a router gate at their own paths, under the router that holds them', async () => {
+    const built = createWebApplication()
+      .install(oidc())
+      .with(authentication(g => g.oidcRoutes(false)))
+      .mount(
+        new Router('/oidc')
+          .with(authentication(g => g.name('scoped')))
+          .get('/')
+          .handler(() => 'ok'),
+      )
+    app = built
+    await built.bootstrap()
+
+    expect((await built.request('/oidc/callback/login?returnTo=/x')).status).toBe(302)
+    expect((await built.request('/oidc/oidc/callback/login?returnTo=/x')).status).toBe(404)
+  })
+
+  // The identity provider sends the user to the callback's path: a gate whose scope cannot hold it says so at start-up.
+  it("refuses a router gate whose callback is outside the router's path", async () => {
     const built = createWebApplication()
       .install(oidc())
       .with(authentication(g => g.oidcRoutes(false)))
@@ -317,7 +337,9 @@ describe('OIDC routes on the engine', () => {
     const err = await built.bootstrap().then(undefined, (e: unknown) => e)
 
     expect(err).toBeInstanceOf(ErrAuthConfiguration)
-    expect((err as Error).message).toContain('only a gate on a server registers them')
+    expect((err as Error).message.split('\n')[0]).toBe(
+      'Cannot serve the OIDC route "/oidc/callback" from a gate under "/s": the path is outside it',
+    )
   })
 
   it('starts a router gate that keeps the routes under the gate on the application that claimed them', async () => {

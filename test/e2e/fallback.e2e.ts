@@ -25,8 +25,8 @@ const ok = () => ({ ok: true })
 class PlainRoutes extends HTTPPlugin {
   override readonly name = 'e2e-plain-routes'
 
-  register({ app }: HTTPSetupContext): void {
-    app.mount(
+  register({ server }: HTTPSetupContext): void {
+    server.mount(
       new Router().get('/admin-ui/users', ok).get('/assets-but-not-really', ok),
       new Router('/assets').authorize({ allowAnonymous: true }).get('/app.js', ok),
       new Router('/metrics').config(accessControlExempt()).get('/', ok),

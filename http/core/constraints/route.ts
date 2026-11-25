@@ -3,8 +3,12 @@ import { kVersionHeader, VERSION_CONSTRAINT, type ResolvedRouteConstraint } from
 
 declare module '../routing/options.js' {
   interface RouteOptions {
-    /** Read by the constraint matcher: the constraints this route selects on, by name. */
-    constraints?: Map<string, ResolvedRouteConstraint>
+    /**
+     * Read by the constraint matcher: the constraints this route selects on, by name. A Map adds to what the route's
+     * groups set, name by name; `null` drops every one of them, for a route that must match whatever its router
+     * selects on, and a Map set after it on the same route or router is then all it selects on.
+     */
+    constraints?: Map<string, ResolvedRouteConstraint> | null
   }
 }
 

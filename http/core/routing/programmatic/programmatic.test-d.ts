@@ -3,7 +3,7 @@ import { expectTypeOf } from 'vitest'
 import { type AnyRouter, type ContextPlatform, Router, type SendPayload } from '../../../index.js'
 
 /**
- * `AnyRouter` is what a plugin's `context.app.mount` and the test client take: a router stays one whatever its path,
+ * `AnyRouter` is what a plugin's `context.server.mount` and the test client take: a router stays one whatever its path,
  * routes and dependencies type it as. Nothing at run time checks it, so `npm run test:typecheck` is the test.
  */
 

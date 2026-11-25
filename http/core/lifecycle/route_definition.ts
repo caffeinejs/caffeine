@@ -13,8 +13,10 @@ export type AuthoredHooks = { readonly [K in RequestHookName]?: readonly Request
  * One route as an `onRoute` hook sees it.
  *
  * Everything the route declares is read before `onRoute` runs, so changing `route` or `group` here changes nothing the
- * server does; `route.detail` may be enriched for readers that come later, such as a generated document. What a hook
- * adds for this route alone goes through {@link hook}.
+ * server does; `route.detail` may be enriched for readers that come later, such as a generated document. What the
+ * server itself reads off the options, such as access-control exemption and constraints, it read when the route
+ * compiled, before any hook writes. What a hook adds for this route alone goes through {@link hook}, and what it
+ * records for it through {@link options}.
  */
 export interface RouteDefinition<R = unknown> {
   /** Upper-case, as declared. The automatic HEAD route of a GET is not listed. */
@@ -23,8 +25,13 @@ export interface RouteDefinition<R = unknown> {
   readonly url: string
   readonly route: Readonly<IRoute<R>>
   readonly group: Readonly<IRouteGroup<R>>
-  /** What the route and its groups set with `config(...)`. */
-  readonly options: Readonly<Partial<RouteOptions>>
+  /**
+   * What the route and its groups declared with `config(...)` or `@RouteOptions(...)`, and what `onRoute` hooks wrote
+   * for this route on this server. A plugin writes keys of its own, and a later hook sees what an earlier one wrote.
+   * Frozen once `onRoute` returns, and read at request time as `ctx.options`. Replace a nested value, never mutate one:
+   * a declared value is shared by every route it covers.
+   */
+  readonly options: Partial<RouteOptions>
 
   /**
    * Adds a hook to this route alone, after every other hook of that point.
@@ -32,6 +39,11 @@ export interface RouteDefinition<R = unknown> {
    * @throws ErrConfiguration once `onRoute` has returned, and for a point that is not a request hook.
    */
   hook<K extends RequestHookName>(name: K, fn: RequestHooks[K]): this
+}
+
+/** A route as a request sees it, `ctx.route`: its options are frozen, read and never written. */
+export type ServedRoute<R = unknown> = Omit<RouteDefinition<R>, 'options'> & {
+  readonly options: Readonly<Partial<RouteOptions>>
 }
 
 /** A definition still open to `onRoute`: what its hooks added, and how to close it. */
@@ -57,7 +69,8 @@ export function openDefinition<R>(
     url,
     route,
     group,
-    options: route.options,
+    // A copy: what a hook writes is this route's on this server, never the compiled route's every server shares.
+    options: { ...route.options },
     hook<K extends RequestHookName>(name: K, fn: RequestHooks[K]) {
       if (!open) {
         throw new ErrConfiguration(
@@ -79,6 +92,7 @@ export function openDefinition<R>(
     added,
     close: () => {
       open = false
+      Object.freeze(definition.options)
     },
   }
 }

@@ -2,8 +2,7 @@ import type { IContext } from '../../context.js'
 import { asError, isThenable, type Answerable, type HookEntry, type RequestHookName } from '../lifecycle/lifecycle.js'
 import { ErrNextCalledTwice } from './errors.js'
 import type { MiddlewareFn, Next } from './middleware.js'
-import { compilePrefix } from './path.js'
-import type { ResolvedMiddleware } from './pipeline.js'
+import { compilePrefix, pathAfter, type PlacedMiddleware } from './path.js'
 
 /** What the chain needs of the request it runs on. */
 export interface ChainTarget extends Answerable {
@@ -15,6 +14,7 @@ export interface ChainTarget extends Answerable {
 
 interface Layer {
   readonly prefix: RegExp | undefined
+  readonly skip: number | undefined
   readonly handle: MiddlewareFn
 }
 
@@ -25,7 +25,7 @@ interface Layer {
  * middleware runs. `undefined` when there is no middleware.
  */
 export function compileChain<X extends ChainTarget>(
-  middlewares: readonly ResolvedMiddleware[],
+  middlewares: readonly PlacedMiddleware[],
   point: RequestHookName,
 ): HookEntry<X> | undefined {
   if (middlewares.length === 0) {
@@ -34,6 +34,7 @@ export function compileChain<X extends ChainTarget>(
 
   const layers: Layer[] = middlewares.map(middleware => ({
     prefix: middleware.path === undefined ? undefined : compilePrefix(middleware.path),
+    skip: middleware.skip,
     handle: middleware.handle,
   }))
 
@@ -86,7 +87,8 @@ function runChain<X extends ChainTarget>(
           return
         }
 
-        if (!layer.prefix.test(normalized.path)) {
+        const path = layer.skip === undefined ? normalized.path : pathAfter(normalized.path, layer.skip)
+        if (!layer.prefix.test(path)) {
           continue
         }
       }

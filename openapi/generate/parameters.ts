@@ -165,7 +165,7 @@ function fromPickers(route: IRoute<unknown>): ParameterObject[] {
  */
 function fromConstraints(route: IRoute<unknown>): ParameterObject[] {
   const constraints = route.options.constraints
-  if (constraints === undefined) {
+  if (constraints === undefined || constraints === null) {
     return []
   }
 

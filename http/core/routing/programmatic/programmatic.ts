@@ -209,7 +209,7 @@ export class Router<
     for (const router of routers) {
       const state = stateOf(router)!
 
-      this.#adopt(path === '' ? state : { ...state, path: `${path}${state.path}` })
+      this.#adopt(path === '' ? state : { ...state, path: `${path}${state.path}`, at: `${path}${state.at ?? ''}` })
     }
 
     return this
@@ -463,11 +463,11 @@ export class Router<
    * Registers a server plugin in front of this group's routes and the groups nested under it, and nowhere else: the
    * router's own `.with(...)`, taking what the application's takes, in the order written.
    *
-   * The factory's `HTTPPlugin` registers once during start-up, before routing is built, with `context.app` scoped to
-   * this router: `mount(...)` nests routers under it, and `use(...)` puts middleware in front of its routes, a path
-   * relative to the router. A router is written without knowing which application it will be mounted into, so the
-   * configuration there is typed `unknown`. Routing is built during start-up, so this has to be called before the
-   * application is ready.
+   * The factory's `HTTPPlugin` registers on each server the router is mounted on, once per place, after that server's
+   * own plugins, with `context.server` scoped to this router there: `mount(...)` nests routers under it, and `use(...)`
+   * puts middleware in front of its routes, a path relative to the router. A router is written without knowing which
+   * application it will be mounted into, so the configuration there is typed `unknown`. Routing is built during
+   * start-up, so this has to be called before the application is ready.
    *
    * ```ts
    * const pets = new Router('/pets').with(authentication(g => g.name('pets')))

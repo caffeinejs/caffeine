@@ -1363,84 +1363,25 @@ describe('HTTPServer hooks', () => {
   })
 })
 
-/**
- * What the caching package does to a server and a route, without the package: a plugin registered under its name, and
- * a `cache` entry in the route's options. The plugin adds a hook, as the real one does, so its batch is kept.
- */
+/** A route's caching options are data for a plugin: with none over the route to read them, it is served as declared. */
 describe('a route that declares caching', () => {
-  class Caching extends HTTPPlugin {
-    override readonly name = '@caffeinejs/caching'
-
-    register(context: HTTPSetupContext): void {
-      context.app.hook('onRoute', () => {})
-    }
-  }
-
-  const caching = () => new Caching()
-  function cached<R extends AnyRouter>(router: R): R {
+  // Declaring caching is the route's setting for a plugin; with none to read it, the route answers as it would anyway.
+  it('serves every request when nothing installed caching', async () => {
+    let calls = 0
+    const router = new Router('/cache-none')
     router
       .get('/x')
       .config({ cache: { ttl: 60 * Second } } as never)
-      .handler(() => 'x')
-    return router
-  }
-
-  async function failure(): Promise<unknown> {
-    return app!.bootstrap().then(
-      () => undefined,
-      (err: unknown) => err,
-    )
-  }
-
-  // It would answer every request as if it declared nothing.
-  it('is refused when nothing installed caching', async () => {
-    app = createWebApplication().mount(cached(new Router('/cache-none')))
-
-    const err = await failure()
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect((err as Error).message).toContain(
-      'Cannot serve "GET /cache-none/x" on the fetch application: it declares @CacheControl or @CacheInvalidate and no HTTP caching covers it',
-    )
-  })
-
-  it('starts when the application installed caching', async () => {
-    app = createWebApplication()
-      .with(caching)
-      .mount(cached(new Router('/cache-root')))
+      .handler(() => {
+        calls++
+        return 'x'
+      })
+    app = createWebApplication().mount(router)
     await app.bootstrap()
 
-    expect((await fetchOn(app, '/cache-root/x')).status).toBe(200)
-  })
+    await fetchOn(app, '/cache-none/x')
+    await fetchOn(app, '/cache-none/x')
 
-  // A router's install covers its own routes and says nothing about its sibling's.
-  it('starts when its own router installed caching, and still refuses a sibling without it', async () => {
-    app = createWebApplication().mount(cached(new Router('/cache-own').with(caching)))
-    await app.bootstrap()
-    expect((await fetchOn(app, '/cache-own/x')).status).toBe(200)
-    await app.close()
-
-    app = createWebApplication().mount(
-      cached(new Router('/cache-own').with(caching)),
-      cached(new Router('/cache-sibling')),
-    )
-
-    const err = await failure()
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect((err as Error).message).toContain('"GET /cache-sibling/x"')
-    expect((err as Error).message).toContain('no HTTP caching covers it')
-  })
-
-  // Two installs over one route would run two caches, each reporting every outcome.
-  it('is refused when its router installed caching under a server that did', async () => {
-    const nested = new Router('/cache-twice').with(caching)
-    nested.get('/x').handler(() => 'x')
-    app = createWebApplication().with(caching).mount(nested)
-
-    const err = await failure()
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect((err as Error).message).toContain('HTTP caching is installed more than once over it')
+    expect(calls).toBe(2)
   })
 })

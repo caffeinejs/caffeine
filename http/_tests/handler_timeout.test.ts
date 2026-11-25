@@ -25,8 +25,8 @@ describe('a handler that outlives its timeout', () => {
       super()
     }
 
-    register({ app }: HTTPSetupContext): void {
-      app.hook('onSend', async (ctx, payload) => {
+    register({ server }: HTTPSetupContext): void {
+      server.hook('onSend', async (ctx, payload) => {
         this.runs.n++
         if (ctx.req.url.endsWith('/slow')) {
           await sleep(60)
@@ -214,8 +214,8 @@ describe('a Responder that rejects after its handler timed out', () => {
     const plugin = new (class extends HTTPPlugin {
       override readonly name = 'holding'
 
-      register({ app }: HTTPSetupContext): void {
-        app.hook('onSend', async (ctx, payload) => {
+      register({ server }: HTTPSetupContext): void {
+        server.hook('onSend', async (ctx, payload) => {
           statuses.push(ctx.statusCode)
           if (ctx.statusCode === 503) {
             holding.resolve()

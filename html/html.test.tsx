@@ -145,7 +145,7 @@ describe('HTML', () => {
   })
 
   // Rendering must not require any application wiring: with no plugin registered no route carries settings
-  // and HTML_DEFAULTS applies. An application that only ever renders registers nothing.
+  // and HTML() renders with autoDoctype true. An application that only ever renders registers nothing.
   it('renders in an application that never registered the HTML plugin', async () => {
     const app = createWebApplication({ adapter: node() })
     await app.bootstrap()
@@ -208,8 +208,8 @@ describe('HTML', () => {
     expect(await res.text()).toBe('<html><body><h1>hello</h1></body></html>')
   })
 
-  // What reading the node buys: the plugin is handed a live slice of the tree, so a deployment turns the
-  // doctype off without a rebuild.
+  // What reading the node buys: the plugin is handed the configuration's slice, so a deployment turns the doctype
+  // off from its configuration.
   it('reads the doctype default from the configuration the callback handed it', async () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ html: { autoDoctype: false } }))
@@ -288,15 +288,15 @@ describe('HTML', () => {
     expect(await res.text()).toBe('<div>missing</div>')
   })
 
-  // A router's plugin parameterizes its own routes, as it did a route group's Fastify context.
-  it("applies a router's html() settings to its routes alone", async () => {
+  // Registered once, html() is tuned per route group through the route option, which wins over its setting.
+  it("applies a router's html option to its routes alone", async () => {
     const page = () => HTML('<html><body>x</body></html>')
     const app = createWebApplication({ adapter: node() })
       .with(html(() => ({ autoDoctype: true })))
       .mount(
         new Router('/top').get('/').handler(page),
         new Router('/r')
-          .with(html(() => ({ autoDoctype: false })))
+          .config({ html: { autoDoctype: false } })
           .get('/')
           .handler(page),
       )
@@ -319,6 +319,20 @@ describe('HTML', () => {
 
     expect(res.status).toBe(404)
     expect(await res.text()).toBe('<!doctype html><html><body>missing</body></html>')
+
+    await app.close()
+  })
+
+  it("reads a route's html option with no html() registered", async () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router('/bare')
+        .config({ html: { autoDoctype: false } })
+        .get('/')
+        .handler(() => HTML('<html><body>x</body></html>')),
+    )
+    await app.bootstrap()
+
+    expect(await (await app.request('/bare')).text()).toBe('<html><body>x</body></html>')
 
     await app.close()
   })

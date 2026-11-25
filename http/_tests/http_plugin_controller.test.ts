@@ -37,15 +37,15 @@ class Marking extends HTTPPlugin {
     this.name = `marking:${header}`
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRequest', ctx => void ctx.header(this.header, this.value))
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRequest', ctx => void ctx.header(this.header, this.value))
   }
 }
 
 class Stamping extends HTTPPlugin {
-  register({ app }: HTTPSetupContext): void {
-    app.use(stamp('x-all'))
-    app.use('/sub', stamp('x-sub'))
+  register({ server }: HTTPSetupContext): void {
+    server.use(stamp('x-all'))
+    server.use('/sub', stamp('x-sub'))
   }
 }
 

@@ -1,5 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { ErrConfiguration, Router, createWebApplication } from '@caffeinejs/http'
+import { Router, createWebApplication } from '@caffeinejs/http'
 import { node } from '@caffeinejs/http-node'
 import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -16,33 +16,8 @@ describe('cache plugin wiring', () => {
     close = undefined
   })
 
-  // Named, like any other first-party plugin: a second registration in the same slot is refused.
-  it('refuses a second registration on the same context', async () => {
-    const app = createWebApplication({ adapter: node() })
-      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-First')))
-      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-Second')))
-    close = () => app.close()
-
-    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
-  })
-
-  // A route group inherits the plugins its parent registered, so a group install under a root install is the
-  // same double registration — refused by the server before any route could run two caches and report every
-  // outcome twice.
-  it('refuses a group install under a root install', async () => {
-    const router = new Router('/nested-install').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    router.get('/data').handler(() => ({ ok: true }))
-
-    const app = createWebApplication({ adapter: node() })
-      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      .mount(router)
-    close = () => app.close()
-
-    await expect(app.bootstrap()).rejects.toThrow(/more than once/)
-  })
-
-  // The start-up refusal exists for a decorated route nothing serves. A group that installed the plugin for
-  // itself is served, though the root server never heard of it.
+  // An install covers its own group: a group that installed the plugin for itself is cached, though the root server
+  // never heard of it.
   // Programmatic routes only (`decorators: false`): the controller registry is global, and a decorated
   // controller from another test would be one more group nothing serves.
   it('serves the routes of a group that installed it for itself', async () => {
@@ -92,24 +67,30 @@ describe('cache plugin wiring', () => {
     expect((await stores.owners.get('data'))?.payload).toBe('{"name":"owners"}')
   })
 
-  it('still refuses a sibling group that declares caching and installed nothing', async () => {
+  // An install covers its own group: a sibling that declares caching and installed nothing is served uncached.
+  it('serves a sibling group that declares caching and installed nothing, uncached', async () => {
     const served = new Router('/group-served').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     served
       .get('/data')
       .config(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
-    const unserved = new Router('/group-unserved')
-    unserved
+    let calls = 0
+    const uncovered = new Router('/group-uncovered')
+    uncovered
       .get('/data')
       .config(cacheControl({ ttl: 60 * Second }))
-      .handler(() => ({ ok: true }))
+      .handler(() => ({ calls: ++calls }))
 
     const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .mount(served)
-      .mount(unserved)
+      .mount(uncovered)
     close = () => app.close()
+    await app.bootstrap()
 
-    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
+    await app.request('/group-uncovered/data')
+    const second = await app.request('/group-uncovered/data')
+
+    expect([second.headers.get('x-cache'), await second.json()]).toEqual([null, { calls: 2 }])
   })
 })

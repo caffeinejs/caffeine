@@ -711,18 +711,6 @@ describe('the Node platform', () => {
     expect(await (await trusted.request('/a/scheme', { headers })).text()).toBe('https')
     expect(await (await other.request('/a/scheme', { headers })).text()).toBe('http')
   })
-
-  it('refuses at start-up a cached route no HTTP caching covers', async () => {
-    const routes = new Router('/a')
-    routes
-      .get('/cached')
-      .config({ cache: { maxAge: 1 } } as never)
-      .handler(() => 'never')
-    const app = createWebApplication({ adapter: node() }).mount(routes)
-    apps.push(app)
-
-    await expect(app.bootstrap()).rejects.toThrow('on the Node application')
-  })
 })
 
 describe('hooks on Node', () => {

@@ -2,11 +2,16 @@ import { formatDuration, Second, type Duration } from '@caffeinejs/std/duration'
 
 import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
+import { isServerScope } from '../../plugin_slot.js'
 import { appendVary } from '../../vary.js'
 import { originProblem } from '../csrf/origin.js'
 import type { ErrConfiguration } from '../error/common.js'
+import { ErrHTTPNotFound } from '../error/http.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import type { RouteOptions } from '../routing/options.js'
+import { parseRoutePattern } from '../routing/paths.js'
+import { Router } from '../routing/programmatic/programmatic.js'
+import { accessControlExempt } from '../security/exempt.js'
 import { kRouteOf, type Context } from '../server/context.js'
 import { configurationError } from '../server/error.js'
 import { HEADER_NAME } from '../server/settings.js'
@@ -15,8 +20,15 @@ declare module '../routing/options.js' {
   interface RouteOptions {
     /** Read by `corsPolicy()`: this route's CORS settings over the policy's, or `false` to turn CORS off for it. */
     cors?: CORSConfig | boolean
+    /** Written by `corsPolicy()`: the policy that answers for this route, `null` where CORS is off. */
+    [kCORSPolicy]?: ResolvedCORS | null
+    /** Marks the `OPTIONS` routes a `corsPolicy()` serves its preflights from: no preflight asks for them. */
+    [kPreflightRoute]?: true
   }
 }
+
+const kCORSPolicy: unique symbol = Symbol('caffeine.http.cors.policy')
+const kPreflightRoute: unique symbol = Symbol('caffeine.http.cors.preflight-route')
 
 export const kBuild: unique symbol = Symbol('caffeine.http.cors.build')
 
@@ -106,13 +118,24 @@ export class CORSBuilder {
  * `'*'`, every answer it covers varies on `Origin`. A preflight is allowed the one method it asks for, and the headers
  * it asks for unless `allowedHeaders(...)` lists them.
  *
- * It registers on a server: the application's, or a listener's with `.listener(name, l => l.with(corsPolicy(...)))`.
- * A preflight matches no route, so a router's plugin would never see one. The headers of an answer are set as it goes
- * out, so a refusal by `authentication()` carries them too; register it before `authentication()` when a protected
- * route declares `OPTIONS` itself, so its preflights are answered first.
+ * It covers the routes of the scope it is registered in: a server's with `.with(...)`, a router's, or a controller's.
+ * On a server it answers preflights whatever route they match, none included. On a router or a controller it serves
+ * `OPTIONS /` and `OPTIONS /*` under that path, outside access control and whatever constraints the scope selects on,
+ * which its preflights match: an `OPTIONS` route of the application's at either path, or a second policy on a router at
+ * the same path, fails start-up with `ErrRouteConflict`, and its `OPTIONS /*` answers a plain `OPTIONS` request under
+ * the path before a broader route of the application's would. An `OPTIONS` route of the application's in its scope
+ * still has its preflights answered by the policy first; one outside it, such as a sibling router's, answers them
+ * itself. Register it once, where it covers the routes it should, and tune a route with `cors(...)`; of two over one
+ * route, the first registered decides its settings.
+ *
+ * The headers of an answer are set as it goes out, so a refusal by `authentication()` carries them too. When a
+ * protected route declares `OPTIONS` itself, register the policy before `authentication()` in the gate's scope or an
+ * outer one, so its preflights are answered first: an outer scope's hooks run before an inner one's.
  *
  * @throws ErrConfiguration at start-up for settings that name no origin or one that is not, `'*'` beside other origins
- * or with credentials, a header that is not a header name, a `maxAge` under a second, and on a router or a controller.
+ * or with credentials, a header that is not a header name, and a `maxAge` under a second.
+ * @throws ErrRouteConflict at start-up, on a router or a controller, beside an `OPTIONS` route of the application's at
+ * its path, or a second policy on a router at the same path.
  */
 export function corsPolicy<C = unknown>(configure?: HTTPPluginConfigurer<CORSBuilder, C>): HTTPPluginFactory<C> {
   return context => {
@@ -162,34 +185,60 @@ class CORSPolicy extends HTTPPlugin {
   }
 
   register(context: HTTPSetupContext): void {
-    if (context.app.server === undefined) {
-      throw configurationError(
-        'Cannot install corsPolicy() on a router or a controller: a preflight matches no route, so only a ' +
-          "server's policy answers it",
-        'Register it on the application or a listener: ".with(corsPolicy(...))"',
-        `Set a route group's own settings with "cors(...)" or "@CORS(...)"`,
-      )
+    // A request no route matches runs the server's own hooks, so a policy there sees every preflight. A router's or a
+    // controller's sees those to its routes alone: it serves `OPTIONS` routes at its path and below for preflights to
+    // match, answered in `onRequest` before their handler runs, which gives one it does not grant a path's 404. They
+    // select on no constraint: a browser sends none with a preflight. A path ending in a wildcard or an optional
+    // parameter has nothing below it.
+    if (!isServerScope(context.server)) {
+      const { prefix } = context.server
+      const parts = parseRoutePattern(prefix)
+      const wildcard = parts.some(part => part.kind === 'wildcard')
+      const optional = parts.some(part => part.kind === 'optional')
+      const preflights = new Router()
+
+      // A group prefix of its own: its root is served with and without the trailing slash, as a prefixed router's is.
+      // Nothing follows a wildcard; and a path that is one optional segment is `/` both ways without it.
+      if (!wildcard && parts[0]?.kind !== 'optional') {
+        preflights.extend(group => {
+          group.prefix('')
+        })
+      }
+
+      preflights
+        .detail('http', { internal: true })
+        .config(accessControlExempt(), { [kPreflightRoute]: true, constraints: null })
+        .options('/', notFound)
+      context.server.mount(wildcard || optional ? preflights : preflights.options('/*', notFound))
     }
 
     const own = this.#own
     const config = this.#config
-    // A route's own policy, `null` for one that turned CORS off; a route that set nothing keeps the plugin's.
-    const policies = new WeakMap<RouteDefinition, ResolvedCORS | null>()
     const warned = new WeakSet<RouteDefinition>()
+    // A request no route matched has the plugin's own.
     const policyOf = (route: RouteDefinition | undefined): ResolvedCORS | null => {
-      const policy = route === undefined ? undefined : policies.get(route)
+      const policy = route?.options[kCORSPolicy]
       return policy === undefined ? own : policy
     }
 
-    context.app.hook('onRoute', route => {
+    // A route's own policy, `null` for one that turned CORS off; a route that set nothing keeps the plugin's. Kept on
+    // the route: one `OPTIONS` route can catch the preflights of routes another scope's policy covers, and the hook
+    // that sees them answers with theirs. Of two policies over one route, the first registered decides.
+    context.server.hook('onRoute', route => {
+      if (route.options[kCORSPolicy] !== undefined || route.options[kPreflightRoute] === true) {
+        return
+      }
+
       const where = `serve "${route.methods.join('|')} ${route.url}"`
       const value = route.options.cors
 
-      if (value === false) {
-        policies.set(route, null)
+      if (value === undefined || value === true) {
+        route.options[kCORSPolicy] = own
+      } else if (value === false) {
+        route.options[kCORSPolicy] = null
       } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        policies.set(route, resolve(overlay(config, value), where))
-      } else if (value !== undefined && value !== true) {
+        route.options[kCORSPolicy] = resolve(overlay(config, value), where)
+      } else {
         throw refusal(
           where,
           'its CORS setting must be an object or a boolean',
@@ -198,19 +247,23 @@ class CORSPolicy extends HTTPPlugin {
       }
     })
 
-    context.app.hook('onRequest', ctx => {
+    context.server.hook('onRequest', ctx => {
       if (!isPreflight(ctx)) {
         return
       }
 
       const origin = ctx.req.header('origin')!
       const requested = ctx.req.header('access-control-request-method')!
-      const targets = (ctx as unknown as Context)[kRouteOf](requested)
-      if (targets === undefined) {
+      // The policy's own `OPTIONS` routes are where preflights land, never what one asks for.
+      const targets = (ctx as unknown as Context)
+        [kRouteOf](requested)
+        ?.filter(target => target.options[kPreflightRoute] !== true)
+      const found = targets?.map(target => target.options[kCORSPolicy])
+      // A route no policy covers is not one to grant.
+      if (targets === undefined || found === undefined || targets.length === 0 || found.includes(undefined)) {
         return
       }
 
-      const found = targets.map(policyOf)
       const keys = new Set(found.map(policy => policy?.key ?? 'off'))
       if (keys.size > 1) {
         if (!warned.has(targets[0]!)) {
@@ -250,7 +303,7 @@ class CORSPolicy extends HTTPPlugin {
       ctx.status(204).body()
     })
 
-    context.app.hook('onSend', ctx => {
+    context.server.hook('onSend', ctx => {
       // A granted preflight has its headers; one not granted gets none.
       if (isPreflight(ctx)) {
         return
@@ -420,4 +473,9 @@ function resolve(config: CORSConfig, where: string): ResolvedCORS {
 
 function refusal(where: string, reason: string, ...solutions: string[]): ErrConfiguration {
   return configurationError(`Cannot ${where}: ${reason}`, ...solutions)
+}
+
+// A preflight the policy did not grant, or an `OPTIONS` request that is not one.
+function notFound(ctx: IContext): never {
+  throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
 }

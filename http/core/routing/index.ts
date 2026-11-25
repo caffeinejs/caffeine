@@ -9,6 +9,7 @@ export {
   type RouteSecurityRecord,
   type ServerRoutes,
 } from './inventory.js'
+export { parseRoutePattern, type RoutePatternPart } from './paths.js'
 export { RouteOptions, type RouteOptionsConfigurer, type RouteOptionsInput, type RouteOptionsLevel } from './options.js'
 export * from './picker.js'
 export * from './programmatic/index.js'

@@ -71,7 +71,10 @@ const kNoLabels: RouteGroupLabels = new Map()
  * guard instance per key and the same policies. Two sources claiming the same path on one server is left to the
  * server to reject at registration, which it does with the path in the message.
  */
-export function buildRouting<R>(sources: readonly RouteSource<R>[], context: HTTPSetupContext): Routing<R> {
+export function buildRouting<R>(
+  sources: readonly RouteSource<R>[],
+  context: Omit<HTTPSetupContext, 'server'>,
+): Routing<R> {
   const compileRouteGroup = createRouteGroupCompiler(context)
   const declared = sources.flatMap(source => source.collect(context.container))
   const taken = new Set<DeclaredRouteGroup<R>>()

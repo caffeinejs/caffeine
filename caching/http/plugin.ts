@@ -39,9 +39,9 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  * Concurrent misses for one key run the handler once: the first request leads, the others wait, up to
  * `lockTimeout`, for what it stores. The wait is in this process alone.
  *
- * Being a plain plugin factory rather than a feature, it installs once per context — the root, or one route
- * group with `router.with(...)` / `@Use(...)` — each with its own settings.
- * Installed on a server and again on a router or a controller under it, it is refused at start-up.
+ * Being a plain plugin factory rather than a feature, it installs per scope — a server, or one route group with
+ * `router.with(...)` / `@Use(...)` — each with its own settings. Register it once where it covers the routes that
+ * declare caching: two over one route both run, each with its own store.
  *
  * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
  * `cacheInvalidate()` route options, set with `.config(...)`. Wherever it is installed, its hooks run after every
@@ -218,7 +218,6 @@ function resolveETagGenerator(
 }
 
 class CachingPlugin extends HTTPPlugin {
-  // What refuses two installs in one slot, and how the server finds them.
   override readonly name = '@caffeinejs/caching'
   readonly #deps: CacheDeps
 
@@ -230,7 +229,7 @@ class CachingPlugin extends HTTPPlugin {
   register(context: HTTPSetupContext): void {
     const deps = this.#deps
 
-    context.app.hook('onRoute', route => {
+    context.server.hook('onRoute', route => {
       const cacheOpts = route.options.cache
       if (cacheOpts !== undefined) {
         attachCacheHooks(route, cacheOpts, deps)
@@ -254,8 +253,7 @@ class CachingPlugin extends HTTPPlugin {
  * The hooks land behind the ones the server already runs, `@UseGuards` included, so a guard runs on a cache hit as
  * well as on a miss.
  *
- * Installs once per slot, the server's or one router's or controller's; a second install over the same route is
- * refused.
+ * Register it once where it covers the routes that declare caching: two over one route both run.
  */
 export function cachePlugin(deps: CacheDeps): HTTPPlugin {
   return new CachingPlugin(deps)

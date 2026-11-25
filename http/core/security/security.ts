@@ -1,16 +1,10 @@
 import type { Container } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/err'
 
 import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import { kCookieSettings } from '../cookie/keys.js'
 import type { IRouteGroup } from '../routing/route.js'
-import {
-  ErrAuthConfiguration,
-  ErrAuthenticationCookies,
-  ErrAuthenticationRequired,
-  ErrAuthSchemeNotFound,
-} from './auth/errors.js'
+import { ErrAuthenticationCookies, ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
 import { OIDCRoutesRef } from './auth/oidc/oidc_routes_ref.js'
 import { mountOIDCRoutes } from './auth/oidc/routes.js'
 import { AuthenticationSchemeProvider } from './auth/scheme_provider.js'
@@ -76,8 +70,8 @@ export class AuthenticationGateBuilder {
 
   /**
    * Names this gate: `caffeine-authentication` for the default, `caffeine-authentication:<label>` otherwise. Two
-   * gates under one label are refused at start-up, in one slot or when both cover a route, so a gate inside a route
-   * group under a root gate carries its own label.
+   * gates under one label are refused at start-up when both cover a route, so a gate inside a route group under a
+   * root gate carries its own label.
    */
   name(label: string): this {
     this.#label = label
@@ -101,10 +95,8 @@ export class AuthenticationGateBuilder {
 
   /**
    * Whether this gate may claim the OIDC login and callback routes, which the first installing gate registers
-   * once for the whole application. On by default. Turn it off on a gate registered inside a prefixed route
-   * group: the routes would land under the group's prefix, where the identity provider's `callbackURL` never
-   * arrives. On the web-standards engine only a gate on a server registers them; a router's gate that keeps them on
-   * fails start-up unless a gate on its server, or on one built before it, claimed them.
+   * once for the whole application, in its own scope. On by default. On a router or a controller, each route keeps its
+   * own path, which must start with the scope's: start-up refuses one outside it, so turn it off on such a gate.
    */
   oidcRoutes(enabled: boolean): this {
     this.#oidcRoutes = enabled
@@ -133,15 +125,16 @@ export class AuthenticationGateBuilder {
  * Start-up refuses a protected route, one declaring protection or one the fallback policy reaches, when no gate
  * covers it: installing `Authentication(...)` is not what gates a request.
  *
- * The OIDC sign-in and callback routes are registered once, by the first gate on a server that keeps them on; servers
- * are built the application's own first. A gate on a router does not register them.
+ * The OIDC sign-in and callback routes are registered once, by the first gate that keeps them on, in that gate's
+ * scope and at their own paths: servers are built the application's own first, and on each a server's gates register
+ * before its routers'.
  *
  * @throws ErrFeatureNotInstalled at start-up when `Authentication(...)` is not installed.
  * @throws ErrAuthSchemeNotFound at start-up when the gate's `defaultScheme(...)` names an unregistered scheme.
  * @throws ErrAuthenticationCookies at start-up when a scheme keeps its session in a cookie and cookies are off.
  * @throws ErrConfiguration at start-up when two gates under one label would cover one route.
- * @throws ErrAuthConfiguration at start-up when a gate on a router keeps the OIDC routes on and no gate on its server,
- * or on a server built before it, registered them.
+ * @throws ErrAuthConfiguration at start-up when the gate that registers the OIDC routes is on a router or a controller
+ * whose path a callback or sign-in path is outside.
  */
 export function authentication<C = unknown>(
   configure?: HTTPPluginConfigurer<AuthenticationGateBuilder, C>,
@@ -173,12 +166,12 @@ class AuthenticationGate extends HTTPPlugin {
     }
 
     if (oidcRoutes) {
-      claimOIDCRoutes(context, this.name)
+      claimOIDCRoutes(context)
     }
 
     const id = Symbol(label)
-    context.app.hook('onRoute', route => ownRoute(route, id, label))
-    context.app.hook('onRequest', ctx => {
+    context.server.hook('onRoute', route => ownRoute(route, id, label))
+    context.server.hook('onRequest', ctx => {
       const route = ctx.route
       // This gate's `onRoute` saw every route its `onRequest` covers: the entry names the innermost gate. A miss has
       // none, and is authenticated by the default scheme and authorized by nothing.
@@ -206,41 +199,13 @@ async function gate(
   }
 }
 
-/**
- * Serves the OIDC routes from the first gate on a server that keeps them on. A router's or a controller's slot belongs
- * to no server: whether a gate on a server claimed them, on any server built so far, is known once the server this
- * router is served on is ready.
- */
-function claimOIDCRoutes(context: HTTPSetupContext, gate: string): void {
+/** Serves the OIDC routes from the first gate that keeps them on, in that gate's scope, at their own paths. */
+function claimOIDCRoutes(context: HTTPSetupContext): void {
   const oidc = context.container.getOptional(OIDCRoutesRef)
-  if (oidc === undefined) {
+  if (oidc === undefined || oidc.claimed) {
     return
   }
 
-  const server = context.app.server
-  if (server !== undefined) {
-    if (!oidc.claimed) {
-      oidc.claimed = true
-      mountOIDCRoutes(context, oidc.meta, server.basePath)
-    }
-    return
-  }
-
-  context.app.hook('onReady', () => {
-    if (!oidc.claimed) {
-      throw new ErrAuthConfiguration(
-        errMessage(
-          `Cannot serve the OIDC sign-in and callback routes from gate "${gate}" on a router: on the ` +
-            'web-standards engine only a gate on a server registers them, and none on this server or one built ' +
-            'before it did',
-        )
-          .solutions(
-            'Register a gate on the application, whose server is built first: ".with(authentication())"',
-            'Or turn them off on the router\'s gate: "authentication(g => g.oidcRoutes(false))"',
-          )
-          .reference('@caffeinejs/http', ErrAuthConfiguration)
-          .build(),
-      )
-    }
-  })
+  oidc.claimed = true
+  mountOIDCRoutes(context, oidc.meta)
 }

@@ -16,6 +16,7 @@ import {
   type IRoute,
   type IRouteGroup,
   type RouteAuthzOptions,
+  type RouterFlags,
 } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/err'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
@@ -51,8 +52,9 @@ interface EndpointPaths {
 
 /**
  * Generates an OpenAPI document, registers it with `OpenAPIProvider`, and serves it, as a plugin:
- * `.with(openapi(o => ...))`. Needs `.install(OpenAPI())` on the application, and installs on the application or a
- * listener: a router or a controller is refused.
+ * `.with(openapi(o => ...))`. Needs `.install(OpenAPI())` on the application. On the application or a listener it
+ * documents every route of that server; on a router or a controller, that one's routes, and serves the document under
+ * its path. A document name is registered once: a router mounted at two places, or on two servers, cannot carry one.
  *
  * Most of what ends up in the document is not configured here at all — it is read from the routes the
  * application already declares. The builder covers the document-level facts nothing else can know (title,
@@ -67,7 +69,7 @@ interface EndpointPaths {
  * ```
  *
  * @throws ErrOpenAPIConfiguration when the name is not letters, digits, `-` and `_`, starting with a letter or digit,
- *   and at start-up when it is installed on a router or a controller.
+ *   and at start-up when a document of that name is already registered, or its router serves at more than one place.
  */
 export function openapi<C = unknown>(configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C>
 export function openapi<C = unknown>(name: string, configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C>
@@ -81,7 +83,7 @@ export function openapi<C = unknown>(
 
   assertDocumentName(name)
 
-  return context => {
+  const factory: HTTPPluginFactory<C> = context => {
     // Factories run at start-up: a plugin with nowhere to register its document is a boot failure naming the fix.
     if (!context.hasFeature('openapi')) {
       throw new ErrFeatureNotInstalled('openapi', 'Install it with .install(OpenAPI()) on the application')
@@ -93,14 +95,16 @@ export function openapi<C = unknown>(
     assertUIHasDocument(name, options)
 
     const provider = context.container.get(OpenAPIProvider)
-    provider[kReserve](name)
+    provider[kReserve](name, factory)
 
     return new OpenAPIPlugin(name, options, provider)
   }
+
+  return factory
 }
 
 /**
- * Collects the routes of its server as they register and generates the document in `onReady`, once all of them
+ * Collects the routes of its scope as they register and generates the document in `onReady`, once all of them
  * have — whichever order the plugins that contributed them were installed in. The routes that serve the document
  * are real, protectable routes on a router it mounts, marked hidden so the document never describes them.
  *
@@ -126,16 +130,7 @@ class OpenAPIPlugin extends HTTPPlugin {
     const name = this.#document
     const options = this.#options
     const provider = this.#provider
-    const server = context.app.server
-
-    if (server === undefined) {
-      throw new ErrOpenAPIConfiguration(
-        errMessage(`Cannot install openapi() on a router or a controller: the document "${name}" describes a server`)
-          .solutions('Register it on the application or a listener: ".with(openapi(...))"')
-          .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
-          .build(),
-      )
-    }
+    const { server } = context
 
     const { container } = context
     const paths = resolvePaths(options)
@@ -148,7 +143,7 @@ class OpenAPIPlugin extends HTTPPlugin {
 
     // A group holds only the routes that registered, in registration order; the HEAD twin of a GET is not listed.
     const groups = new Map<IRouteGroup<unknown>, Set<IRoute<unknown>>>()
-    context.app.hook('onRoute', ({ route, group }) => {
+    context.server.hook('onRoute', ({ route, group }) => {
       let routes = groups.get(group as IRouteGroup<unknown>)
       if (routes === undefined) {
         routes = new Set()
@@ -162,7 +157,7 @@ class OpenAPIPlugin extends HTTPPlugin {
     let document!: OpenAPIDocument
     let yaml!: string
 
-    context.app.hook('onReady', () => {
+    context.server.hook('onReady', () => {
       const warnings: string[] = []
       const generated =
         options.source === undefined
@@ -204,7 +199,15 @@ class OpenAPIPlugin extends HTTPPlugin {
       return
     }
 
-    const { docsPage, asset } = ui(options, paths, server.basePath)
+    // Under a prefix or a base that matches more than itself, the page's links are relative to where it was opened, so
+    // they keep the path a browser asked for: the values the parameters matched, spelled as the request spelled them.
+    // A root starting with "//" would name a host: it is linked relative to the page too.
+    const root = `${server.basePath}${server.prefix}`
+    const parametric = /[:*]/.test(server.prefix + options.routes.base)
+    const docsPage = parametric || root.startsWith('//') ? undefined : uiPage(options, paths, root)
+    // Relative to the base: the request path already holds the values it matched.
+    const docsDepth = paths.docs === undefined ? 0 : segmentsOf(paths.docs)
+    const asset = paths.docs === undefined ? undefined : readScalarBundle()
     const authz = options.secure === undefined ? undefined : toRouteAuthz(options.secure)
     const router = new Router(options.routes.base === '/' ? '' : options.routes.base)
       .name(this.name)
@@ -217,7 +220,9 @@ class OpenAPIPlugin extends HTTPPlugin {
       endpoint(router, paths.yaml, 'application/yaml', authz).handler(() => yaml)
     }
     if (paths.docs !== undefined) {
-      endpoint(router, paths.docs, 'text/html', authz).handler(() => docsPage)
+      endpoint(router, paths.docs, 'text/html', authz).handler(
+        ctx => docsPage ?? uiPage(options, paths, rootFrom(ctx.req.url, docsDepth, server.router), '/'),
+      )
     }
     if (paths.asset !== undefined) {
       endpoint(router, paths.asset, 'text/javascript', authz)
@@ -225,7 +230,7 @@ class OpenAPIPlugin extends HTTPPlugin {
         .handler(() => asset)
     }
 
-    context.app.mount(router)
+    context.server.mount(router)
   }
 }
 
@@ -334,18 +339,31 @@ function endpoint(router: Router, path: string, contentType: string, authz: Rout
  */
 function resolvePaths(options: OpenAPIOptions): EndpointPaths {
   const { routes } = options
+  // As the router routes them: the links name them as they are served.
+  const docs = routed(routes.docs)
 
   return {
-    json: routes.json,
-    yaml: routes.yaml,
-    docs: routes.docs,
-    asset: routes.docs === undefined ? undefined : `${routes.docs}${ASSET_SEGMENT}`,
+    json: routed(routes.json),
+    yaml: routed(routes.yaml),
+    docs,
+    // Trimmed first: a page at `/` would otherwise put its bundle at `//_scalar.js`, which a browser reads as a host.
+    asset: docs === undefined ? undefined : `${docs.replace(/\/+$/, '')}${ASSET_SEGMENT}`,
   }
+}
+
+/** A route path as the router routes it: with a leading `/`, without repeated ones or a trailing one. */
+function routed(path: string | undefined): string | undefined {
+  if (path === undefined) {
+    return undefined
+  }
+  const collapsed = `/${path}`.replace(/\/+/g, '/')
+  return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
 }
 
 /** The URL a browser requests, which includes the router base the routes are mounted under. */
 function publicURL(base: string, path: string): string {
-  return joinPaths(base === '/' ? '' : base, path)
+  // Without its trailing slashes, as the router the endpoints are mounted on is routed.
+  return joinPaths(base.replace(/\/+$/, ''), path)
 }
 
 /**
@@ -358,28 +376,90 @@ function withBasePathServer(options: OpenAPIOptions, basePath: string): OpenAPIO
 }
 
 /**
- * Builds the documentation page and its bundle, or nothing when no UI is served.
+ * Builds the documentation page, or nothing when no UI is served.
  *
- * The page's links are followed by a browser, so they carry the application's base path.
+ * The page's links are followed by a browser, so they start at `root`, then `base`: where the plugin's routes start,
+ * and the base its endpoints are under, `/` when `root` already ends there.
  */
-function ui(options: OpenAPIOptions, paths: EndpointPaths, basePath: string): { docsPage?: string; asset?: string } {
+function uiPage(
+  options: OpenAPIOptions,
+  paths: EndpointPaths,
+  root: string,
+  base = options.routes.base,
+): string | undefined {
   const { docs, asset, json } = paths
   if (docs === undefined || asset === undefined) {
-    return {}
+    return undefined
   }
 
-  const base = options.routes.base
+  return scalarPage({
+    title: options.info.title,
+    // Present: `assertUIHasDocument` refused a UI without a JSON endpoint before the plugin was built.
+    specURL: root + publicURL(base, json!),
+    assetURL: root + publicURL(base, asset),
+    configuration: options.ui,
+  })
+}
 
-  return {
-    docsPage: scalarPage({
-      title: options.info.title,
-      // Present: `assertUIHasDocument` refused a UI without a JSON endpoint before the plugin was built.
-      specURL: basePath + publicURL(base, json!),
-      assetURL: basePath + publicURL(base, asset),
-      configuration: options.ui,
-    }),
-    asset: readScalarBundle(),
+/** How many segments a literal path holds. */
+function segmentsOf(path: string): number {
+  return path.split('/').filter(segment => segment !== '').length
+}
+
+/**
+ * Where the plugin's endpoints start, under its base, relative to the docs page a request opened. The path the router
+ * matched ends with the page's `depth` segments, each after one or more `/`: the links climb one level for each `/`
+ * after the page's own path starts, and one for each `/` a browser sees past where the router stopped reading, after a
+ * `;` under `useSemicolonDelimiter`. A trailing `/` the router ignores lies past the page; one it does not ends the
+ * page's own path, after an empty value. A relative link never names another origin.
+ */
+function rootFrom(url: string, depth: number, router: RouterFlags | undefined): string {
+  const browsed = url.slice(0, endOf(url, /[?#]/))
+  const path = router?.useSemicolonDelimiter === true ? browsed.slice(0, endOf(browsed, /;/)) : browsed
+  const past = browsed.slice(path.length).split('/').length - 1
+  let at = path.length
+  let ups = 0
+  let rest = ''
+  // The links start after the page's own path, which ends in a "/".
+  let slash = false
+
+  if (depth === 0) {
+    // A page at the root itself: its last segment is where the links start.
+    while (at > 0 && path[at - 1] === '/') {
+      at--
+      ups++
+    }
+    const ignored =
+      router?.ignoreDuplicateSlashes === true ? ups : router?.ignoreTrailingSlash === true ? Math.min(ups, 1) : 0
+    if (ups === 0) {
+      rest = path.slice(path.lastIndexOf('/') + 1)
+    } else if (ups > ignored) {
+      slash = ignored === 0
+      ups = 0
+    } else {
+      ups--
+    }
   }
+
+  // Trailing slashes, then each of the page's segments from the last, with the slashes between them.
+  for (let segment = 0; segment < depth; segment++) {
+    while (at > 0 && path[at - 1] === '/') {
+      at--
+      ups++
+    }
+    while (at > 0 && path[at - 1] !== '/') {
+      at--
+    }
+  }
+
+  const climb = Array.from({ length: ups + past }, () => '..')
+  const root = [...(climb.length === 0 ? ['.'] : climb), ...(rest === '' ? [] : [rest])].join('/')
+  return slash ? `${root}/` : root
+}
+
+function endOf(text: string, stop: RegExp): number {
+  const at = text.search(stop)
+  return at === -1 ? text.length : at
 }
 
 /**

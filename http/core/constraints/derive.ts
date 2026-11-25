@@ -94,7 +94,7 @@ export function compileConstraints(
 
     of(route, methods, url) {
       const declared = route.options.constraints
-      if (declared === undefined || (declared instanceof Map && declared.size === 0)) {
+      if (declared === undefined || declared === null || (declared instanceof Map && declared.size === 0)) {
         return undefined
       }
 

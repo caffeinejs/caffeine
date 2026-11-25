@@ -7,7 +7,6 @@ import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
 import { stripBasePath } from '../../base_path.js'
 import { ErrWaitUntilClosed, type ServerContext } from '../../context.js'
-import { CACHING_PLUGIN } from '../../plugin_marks.js'
 import { compileConstraints, type CompiledConstraints } from '../constraints/derive.js'
 import { kCookieSettings } from '../cookie/keys.js'
 import { kCookieFlush, kPendingCookies, ServerCookies, type CookieWriter } from '../cookie/server_cookies.js'
@@ -35,6 +34,7 @@ import { ErrRouteConflict, type DerivedConstraints, type RouteMatch, type RouteM
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
 import { joinPaths, pathsOf } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
+import { ScopeChains } from '../routing/scope_chain.js'
 import { assertGated, gateOf } from '../security/gate.js'
 import type { CompiledSerializer } from '../validation/validation.js'
 import { answer, compileSerializers, connectionFields, HeldStream, NO_SERIALIZER } from './answer.js'
@@ -76,8 +76,16 @@ export interface HTTPServerInput {
   /** The slot of each request's frame that holds its context: what the container resolves `Context` from. */
   readonly contextKey: ContextKey<Context>
   readonly logger: Logger
-  /** What sits in front of the routes: the server's root level, and each scope's at one path. */
-  readonly levels: { readonly root: LevelInput; of(scope: RouteGroupScope): LevelInput }
+  /**
+   * What sits in front of the routes: the server's root level, and each scope's at one place, the mount chain
+   * `scopes[0..at]`. `scoped` is every scope's hooks, in the order they registered: their server hooks run whatever
+   * routes the scope holds.
+   */
+  readonly levels: {
+    readonly root: LevelInput
+    readonly scoped: Iterable<HookBatch>
+    of(scopes: readonly RouteGroupScope[], at: number): LevelInput
+  }
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, string | undefined>> = Object.freeze({})
@@ -107,9 +115,9 @@ export class HTTPServer {
   readonly #settings: ResolvedServerSettings
   readonly #input: HTTPServerInput
   readonly #root: StoreHooks
-  /** Each scope's level, by key then path: one router nested under two parents is one key at two paths. */
-  readonly #scoped = new Map<object, Map<string, ScopeLevel>>()
-  /** Every batch whose server hooks run on this server: the root's, then each served scope's, once each. */
+  /** Each scope's level, by mount chain. */
+  readonly #scoped = new ScopeChains<ScopeLevel>()
+  /** Every batch whose server hooks run on this server: the root's, then each scope's, in the order they registered. */
   readonly #batches = new Set<HookBatch>()
 
   /** Each request still in flight, to cut: abort its handler, or its answer once it has one. */
@@ -187,7 +195,7 @@ export class HTTPServer {
     const root = compileLevel(input.levels.root, settings)
     const vary = this.#constraints.vary
     this.#root = vary === undefined ? root : { ...root, onSend: [vary, ...root.onSend] }
-    for (const batch of input.levels.root.batches) {
+    for (const batch of [...input.levels.root.batches, ...input.levels.scoped]) {
       this.#batches.add(batch)
     }
     this.#notFound = {
@@ -335,7 +343,7 @@ export class HTTPServer {
     flight.sent()
   }
 
-  /** Runs every `onReady`, the root's plugins' first, then each served scope's, in order. */
+  /** Runs every `onReady`, the root's plugins' first, then each scope's, in the order they registered. */
   async ready(): Promise<void> {
     for (const batch of this.#batches) {
       for (const onReady of batch.onReady) {
@@ -579,10 +587,9 @@ export class HTTPServer {
     }
 
     const scopes = group.scopes ?? []
-    const levels = scopes.map(scope => this.#level(scope))
+    const levels = scopes.map((_scope, at) => this.#level(scopes, at))
 
     const batches = [this.#input.levels.root.batches, ...levels.map(level => level.batches)]
-    assertCachingCovered(route, batches, name, settings.application)
 
     // A copy: the automatic HEAD route is added to `methods` later, and is not one the route declared.
     const open = openDefinition(route, group, Object.freeze([...methods]), url)
@@ -612,26 +619,16 @@ export class HTTPServer {
     }
   }
 
-  // A scope's level at one path, compiled on first use; its batches join the server's once.
-  #level(scope: RouteGroupScope): ScopeLevel {
-    let byPath = this.#scoped.get(scope.key)
-    if (byPath === undefined) {
-      byPath = new Map()
-      this.#scoped.set(scope.key, byPath)
-    }
-
-    let level = byPath.get(scope.path)
-    if (level === undefined) {
-      const input = this.#input.levels.of(scope)
-      level = { hooks: compileLevel(input, this.#settings), batches: input.batches }
-      byPath.set(scope.path, level)
-
-      for (const batch of input.batches) {
-        this.#batches.add(batch)
-      }
-    }
-
-    return level
+  // A scope's level at one place, the mount chain `scopes[0..at]`, compiled on first use.
+  #level(scopes: readonly RouteGroupScope[], at: number): ScopeLevel {
+    return this.#scoped.at(
+      scopes,
+      () => {
+        const input = this.#input.levels.of(scopes, at)
+        return { hooks: compileLevel(input, this.#settings), batches: input.batches }
+      },
+      at,
+    )
   }
 }
 
@@ -1238,42 +1235,6 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
     throw configurationError(
       `Cannot serve "${methods.join('|')} ${url}": a @Timeout of "${String(timeout)}ms" is not a duration above 0 and at most ${formatDuration(MAX_TIMEOUT)}`,
       'Write a positive duration, such as 30 * Second',
-    )
-  }
-}
-
-/**
- * Refuses a route that declares caching with no HTTP caching over it, which would answer as if it declared nothing, and
- * a route with two, which would run two caches. `batches` are the server's and each scope's around the route.
- */
-function assertCachingCovered(
-  route: IRoute<Context>,
-  batches: readonly (readonly HookBatch[])[],
-  name: string,
-  application: string,
-): void {
-  let installs = 0
-  for (const level of batches) {
-    for (const batch of level) {
-      if (batch.name === CACHING_PLUGIN) {
-        installs++
-      }
-    }
-  }
-
-  if (installs > 1) {
-    throw configurationError(
-      `Cannot serve "${name}" on the ${application}: HTTP caching is installed more than once over it, among its server, routers and controller`,
-      'Keep one ".with(HTTPCaching(...))" or "@Use(HTTPCaching(...))" over the route, and remove the others',
-    )
-  }
-
-  if (installs === 0 && (Object.hasOwn(route.options, 'cache') || Object.hasOwn(route.options, 'cacheInvalidate'))) {
-    throw configurationError(
-      `Cannot serve "${name}" on the ${application}: it declares @CacheControl or @CacheInvalidate and no HTTP caching covers it`,
-      'Add ".with(HTTPCaching(...))" to the application builder',
-      'On a listener, add it there: ".listener(name, l => l.with(HTTPCaching(...)))"',
-      'Install it on the route group with "router.with(HTTPCaching(...))" or "@Use(HTTPCaching(...))"',
     )
   }
 }

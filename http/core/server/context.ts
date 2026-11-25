@@ -23,7 +23,7 @@ import type { ErrorHandlerProvider } from '../error/handler.js'
 import { newProblem } from '../error/problem.js'
 import type { ValidationSlot } from '../error/validation.js'
 import { isThenable, type SendPayload } from '../lifecycle/lifecycle.js'
-import type { RouteDefinition } from '../lifecycle/route_definition.js'
+import type { RouteDefinition, ServedRoute } from '../lifecycle/route_definition.js'
 import { normalizePath, sanitizeURL } from '../middleware/path.js'
 import { kNoRouteOptions, type RouteOptions } from '../routing/options.js'
 import type { AuthenticationState } from '../security/auth/authentication_state.js'
@@ -272,7 +272,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   }
 
   /** @see {@link IContext.route} */
-  get route(): RouteDefinition | undefined {
+  get route(): ServedRoute | undefined {
     return this.#store.definition
   }
 

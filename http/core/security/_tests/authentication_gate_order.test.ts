@@ -44,8 +44,8 @@ function stamping(name: string, ran: string[]): HTTPPluginFactory {
     new (class extends HTTPPlugin {
       override readonly name = name
 
-      register({ app }: HTTPSetupContext): void {
-        app.hook('onRequest', ctx => {
+      register({ server }: HTTPSetupContext): void {
+        server.hook('onRequest', ctx => {
           ran.push(name)
           ctx.header(`x-${name}`, 'yes')
         })

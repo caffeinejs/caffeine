@@ -1,3 +1,4 @@
+import { ErrConfiguration } from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { joinPaths, routeURL, templateParameters, translatePath } from '../generate/paths.js'
@@ -11,18 +12,17 @@ describe('translatePath', () => {
   })
 
   it('keeps grouped and escaped constraints with their parameter', () => {
-    expect(translatePath('/pets/:id(^a(b|c)\\(d\\)$)?')).toEqual({
-      templates: ['/pets', '/pets/{id}'],
+    expect(translatePath('/pets/:id(^a(b|c)\\(d\\)$)')).toEqual({
+      templates: ['/pets/{id}'],
       parameters: [{ name: 'id', pattern: 'a(b|c)\\(d\\)' }],
     })
   })
 
-  it('does not rescan unclosed constraints for every parameter', () => {
+  // A path the router cannot register is not documented as some other path: it is refused, in time linear in it.
+  it('refuses an unclosed constraint in time linear in the path', () => {
     const path = '/' + ':id(('.repeat(20_000)
     const started = performance.now()
-    const result = translatePath(path)
-    expect(result.parameters).toHaveLength(20_000)
-    expect(result.templates).toEqual(['/' + '{id}(('.repeat(20_000)])
+    expect(() => translatePath(path)).toThrow(ErrConfiguration)
     expect(performance.now() - started).toBeLessThan(1000)
   })
 
@@ -98,6 +98,11 @@ describe('routeURL', () => {
     expect(routeURL(undefined, '/pets', '/')).toBe('/pets')
     expect(routeURL(undefined, '/pets', '/:id')).toBe('/pets/:id')
     expect(routeURL('/api', '/pets', '/')).toBe('/api/pets')
+  })
+
+  // The server takes one trailing slash off a group prefix, as a controller's `@Prefix('/v1/')` writes it.
+  it('drops one trailing slash of the prefix, as the server does', () => {
+    expect(routeURL('/v1/', '/pets', '/')).toBe('/v1/pets')
   })
 })
 

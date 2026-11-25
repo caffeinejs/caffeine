@@ -81,14 +81,16 @@ describe('gate registration', () => {
     await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTH_SCHEME_NOT_FOUND' })
   })
 
-  it('refuses two root gates under the default label', async () => {
+  // Both register, as any plugin does twice; a route both would authenticate is what is refused.
+  it('refuses two root gates under the default label over a route', async () => {
     const { a } = schemes()
     const app = createWebApplication({ adapter: node() })
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
       .with(authentication())
       .with(authentication())
+      .mount(new Router('/two-roots').get('/', () => ({ ok: true })))
 
-    await expect(app.bootstrap()).rejects.toThrow('Cannot register plugin "caffeine-authentication" twice')
+    await expect(app.bootstrap()).rejects.toThrow('Cannot register a second authentication gate labelled "default"')
   })
 
   // A scoped chain inherits the root's registered plugin names, so a scoped gate under a root one must carry

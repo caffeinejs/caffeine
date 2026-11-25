@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
 import { ErrWaitUntilClosed, type ServerContext } from '../../context.js'
-import { HTTPPlugin } from '../../plugin.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 
@@ -59,7 +59,7 @@ describe('the fetch application', () => {
         () =>
           new (class extends HTTPPlugin {
             register(context: Parameters<HTTPPlugin['register']>[0]): void {
-              context.app.use((ctx, next) => {
+              context.server.use((ctx, next) => {
                 ctx.header('x-plugin', '1')
                 next()
               })
@@ -81,7 +81,7 @@ describe('the fetch application', () => {
       () =>
         new (class extends HTTPPlugin {
           register(context: Parameters<HTTPPlugin['register']>[0]): void {
-            context.app.mount(new Router('/mounted').get('/').handler(() => 'mounted'))
+            context.server.mount(new Router('/mounted').get('/').handler(() => 'mounted'))
           }
         })(),
     )
@@ -470,5 +470,50 @@ describe('Fetch host background work', () => {
       declined.resolve()
       afterClose.resolve()
     }
+  })
+})
+
+describe("a router plugin's path-scoped middleware", () => {
+  // The middleware covers every request the router sends to the router's route, or a guard there could be skipped.
+  const nine = Array.from({ length: 9 }, (_, i) => `/:p${i}`).join('')
+
+  it.each([
+    ['/tenants/:id', undefined, {}, '/tenants//jobs'],
+    ['/a//b', undefined, { ignoreDuplicateSlashes: true }, '/a//b/jobs'],
+    ['/a//b', undefined, { ignoreDuplicateSlashes: true }, '/a/b/jobs'],
+    ['', '/v2//', { ignoreDuplicateSlashes: true }, '/v2/jobs'],
+    ['', '/v2//', { ignoreDuplicateSlashes: true }, '/v2//jobs'],
+    ['', '/v2//', {}, '/v2//jobs'],
+    [nine, undefined, {}, '/1/2/3/4/5/6/7/8/9/jobs'],
+  ])('under %j prefixed %j with %j runs for %s', async (path, prefix, router, url) => {
+    const a = createWebApplication()
+      .server(() => ({ router }))
+      .mount(
+        new Router(path)
+          .extend((group: { prefix(prefix: string): unknown }) => {
+            if (prefix !== undefined) {
+              group.prefix(prefix)
+            }
+          })
+          .with(
+            () =>
+              new (class extends HTTPPlugin {
+                register({ server }: HTTPSetupContext): void {
+                  server.use('/jobs', (ctx, next) => {
+                    ctx.header('x-guard', 'ran')
+                    return next()
+                  })
+                }
+              })(),
+          )
+          .get('/jobs')
+          .handler(() => 'jobs'),
+      )
+    app = a
+    await a.bootstrap()
+
+    const res = await a.request(url)
+
+    expect([res.status, res.headers.get('x-guard')]).toEqual([200, 'ran'])
   })
 })

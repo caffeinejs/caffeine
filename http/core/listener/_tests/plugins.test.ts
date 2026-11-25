@@ -31,8 +31,8 @@ class Marking extends HTTPPlugin {
     this.name = `marking:${header}:${value}`
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRequest', ctx => {
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRequest', ctx => {
       const previous = ctx.getHeader(this.#header)
       ctx.header(this.#header, previous === undefined ? this.#value : `${String(previous)},${this.#value}`)
     })

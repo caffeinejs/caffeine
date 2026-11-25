@@ -8,42 +8,92 @@ import { parseUse } from './core/middleware/middleware.js'
 import { MiddlewarePipeline } from './core/middleware/pipeline.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
 import { configurationError } from './core/server/error.js'
-import { HTTPPlugin, type HTTPSetupContext, type SlotServer, type WebApplicationOps } from './plugin.js'
+import { HTTPPlugin, type HTTPSetupContext, type ScopedServer } from './plugin.js'
+import type { ServerAddress } from './server.js'
 
 type Operation = 'mount' | 'use' | 'useFn' | 'hook' | 'hasPlugin'
 
+/** The server a slot belongs to, as its owner knows it once the server's settings have resolved. */
+export interface SlotIdentity {
+  readonly name: string | undefined
+  readonly basePath: string
+  readonly router: RouterFlags | undefined
+  /** Reads where the server listens, each time it is asked. */
+  readonly address: () => ServerAddress | undefined
+}
+
 /**
- * `context.app` for one plugin slot. What is mounted is recorded in {@link mounted} for whoever owns the slot to
- * serve, and middleware goes into the pipeline it was given. Every call is refused unless {@link during} is running,
- * so a context kept past its slot is refused whether the slot finished or failed.
+ * `context.server` for one plugin slot: the server's `.with(...)`, one place a router is mounted at, or one controller.
+ * What is mounted is recorded in {@link mounted} for whoever owns the slot to serve, and middleware goes into the
+ * pipeline it was given. Every operation is refused unless {@link during} is running, so a context kept past its slot
+ * is refused whether the slot finished or failed; the identity stays readable.
  */
-export class PluginSlot implements WebApplicationOps<any> {
+export class PluginSlot implements ScopedServer<any> {
   /** What was mounted while the slot was open, in call order. */
   readonly mounted: AnyRouter[] = []
 
   readonly #middlewares: MiddlewarePipeline
-  readonly #mountable: boolean
+  readonly #prefix: string
+  /** The slot this one is nested in: the enclosing router's or controller's, or the server's. */
+  readonly #parent: PluginSlot | undefined
   /** The names of the plugins claimed in this slot so far. */
   readonly #names = new Set<string>()
   #open = false
   /** Where `hook(...)` adds: the batch of the slot entry running now. */
   #batch: HookBatch | undefined
-  #server: SlotServer | undefined
+  #identity: SlotIdentity | undefined
 
-  /** @param mountable - `false` for a controller's slot: a class has no children to nest routers under. */
-  constructor(middlewares: MiddlewarePipeline = new MiddlewarePipeline(), mountable = true) {
+  /**
+   * @param prefix - Where the slot's routes start: `''` for a server's, a router's or controller's full path.
+   * @param parent - The slot this one is nested in, whose plugins {@link hasPlugin} sees too.
+   */
+  constructor(middlewares: MiddlewarePipeline = new MiddlewarePipeline(), prefix = '', parent?: PluginSlot) {
     this.#middlewares = middlewares
-    this.#mountable = mountable
+    this.#prefix = prefix
+    this.#parent = parent
   }
 
-  /** @see {@link WebApplicationOps.server} */
-  get server(): SlotServer | undefined {
-    return this.#server
+  get name(): string | undefined {
+    return this.#server().name
   }
 
-  /** Marks this slot as a server's. Called once, before the slot opens. */
-  forServer(basePath: string, router: RouterFlags | undefined): void {
-    this.#server = { basePath, router }
+  get basePath(): string {
+    return this.#server().basePath
+  }
+
+  get prefix(): string {
+    return this.#prefix
+  }
+
+  get router(): RouterFlags | undefined {
+    return this.#server().router
+  }
+
+  get address(): ServerAddress | undefined {
+    return this.#server().address()
+  }
+
+  /** Whether the slot is a router's or a controller's, nested in its server's. */
+  get nested(): boolean {
+    return this.#parent !== undefined
+  }
+
+  /** The server this slot belongs to. Called once, before the slot opens. */
+  forServer(identity: SlotIdentity): void {
+    this.#identity = identity
+  }
+
+  #server(): SlotIdentity {
+    if (this.#identity === undefined) {
+      throw new ErrConfiguration(
+        errMessage('Cannot read the server of a plugin slot: the slot belongs to no server yet')
+          .solutions('Read it from a ".with(...)" factory or from "HTTPPlugin.register"')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    return this.#identity
   }
 
   /** Runs `work` with the slot open, and closes it on every way out. */
@@ -59,20 +109,26 @@ export class PluginSlot implements WebApplicationOps<any> {
 
   /**
    * Runs one entry of the slot: the factory, then the plugin it produced, its name claimed and its `register` run.
-   * Resolves to the hooks the entry added.
+   * `keep` is handed the batch the entry's hooks go into before the factory runs, so the hooks of an entry that fails
+   * partway are kept too: an `onClose` it added before failing still runs.
    *
-   * @throws ErrConfiguration when the factory produced no `HTTPPlugin`, or a plugin name already claimed here.
+   * @throws ErrConfiguration when the factory produced no `HTTPPlugin`, or a plugin with an empty name.
    */
   async run(
     factory: (context: HTTPSetupContext) => unknown,
     context: HTTPSetupContext,
     where: string,
-  ): Promise<HookBatch> {
-    const batch = new HookBatch(context)
+    keep: (batch: HookBatch) => void,
+  ): Promise<void> {
+    // This entry's own server: open while its factory and `register` run, refused once they return, whatever the slot.
+    const server = new EntryServer(this)
+    const entry: HTTPSetupContext = { ...context, server }
+    const batch = new HookBatch(entry)
     this.#batch = batch
+    keep(batch)
 
     try {
-      const plugin = await factory(context)
+      const plugin = await factory(entry)
 
       if (!(plugin instanceof HTTPPlugin)) {
         throw configurationError(
@@ -81,20 +137,18 @@ export class PluginSlot implements WebApplicationOps<any> {
         )
       }
 
-      batch.name = plugin.name
       this.claim(plugin, where)
-      await plugin.register(context)
-
-      return batch
+      await plugin.register(entry)
     } finally {
       this.#batch = undefined
+      server.close()
     }
   }
 
   /**
    * Records `plugin`'s name in this slot.
    *
-   * @throws ErrConfiguration for an empty name, or one already claimed here.
+   * @throws ErrConfiguration for an empty name.
    */
   claim(plugin: HTTPPlugin, where: string): void {
     const name = plugin.name
@@ -112,15 +166,6 @@ export class PluginSlot implements WebApplicationOps<any> {
       )
     }
 
-    if (this.#names.has(name)) {
-      throw new ErrConfiguration(
-        errMessage(`Cannot register plugin "${name}" twice ${where}`)
-          .solutions(`Remove the second .with(...) that registers plugin "${name}" ${where}`)
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
-    }
-
     this.#names.add(name)
   }
 
@@ -130,31 +175,23 @@ export class PluginSlot implements WebApplicationOps<any> {
       throw slotClosed('hook')
     }
 
-    assertHookName(name, HOOK_NAMES, 'with context.app.hook')
+    assertHookName(name, HOOK_NAMES, 'with context.server.hook')
     this.#batch.add(name, fn as HookFn<K>)
     return this
   }
 
   hasPlugin(name: string): boolean {
     this.#assertOpen('hasPlugin')
-    return this.#names.has(name)
+    return this.#has(name)
+  }
+
+  #has(name: string): boolean {
+    const parent = this.#parent
+    return this.#names.has(name) || (parent !== undefined && parent.#has(name))
   }
 
   mount(...routers: AnyRouter[]): this {
     this.#assertOpen('mount')
-
-    if (!this.#mountable) {
-      throw new ErrConfiguration(
-        errMessage('Cannot call "app.mount" from a controller\'s plugin: routers nest only under a router')
-          .solutions(
-            'Mount them from a router\'s plugin, registered with "router.with(...)"',
-            'Or from a plugin registered with ".with(...)" on the application or a listener',
-          )
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
-    }
-
     this.mounted.push(...routers)
     return this
   }
@@ -180,18 +217,93 @@ export class PluginSlot implements WebApplicationOps<any> {
   }
 }
 
-/** The `app` of a context handed out outside every plugin slot: every operation refuses. */
-export function closedApplicationOps(): WebApplicationOps {
-  return new PluginSlot()
+/**
+ * Whether `server`, a plugin's `context.server`, is a server's own scope, its `.with(...)`, rather than a router's or a
+ * controller's: a request no route matches runs that scope's hooks alone.
+ */
+export function isServerScope(server: ScopedServer<any>): boolean {
+  const slot = server instanceof PluginSlot ? server : EntryServer.slotOf(server)
+  return slot !== undefined && !slot.nested
+}
+
+/** One plugin's `context.server`: its slot's, open only while that plugin registers. */
+class EntryServer implements ScopedServer<any> {
+  readonly #slot: PluginSlot
+  #open = true
+
+  constructor(slot: PluginSlot) {
+    this.#slot = slot
+  }
+
+  static slotOf(server: ScopedServer<any>): PluginSlot | undefined {
+    return server instanceof EntryServer ? server.#slot : undefined
+  }
+
+  get name(): string | undefined {
+    return this.#slot.name
+  }
+
+  get basePath(): string {
+    return this.#slot.basePath
+  }
+
+  get prefix(): string {
+    return this.#slot.prefix
+  }
+
+  get router(): RouterFlags | undefined {
+    return this.#slot.router
+  }
+
+  get address(): ServerAddress | undefined {
+    return this.#slot.address
+  }
+
+  close(): void {
+    this.#open = false
+  }
+
+  hook<K extends HookName>(name: K, fn: HookFn<K, any>): this {
+    this.#assertOpen('hook')
+    this.#slot.hook(name, fn)
+    return this
+  }
+
+  hasPlugin(name: string): boolean {
+    this.#assertOpen('hasPlugin')
+    return this.#slot.hasPlugin(name)
+  }
+
+  mount(...routers: AnyRouter[]): this {
+    this.#assertOpen('mount')
+    this.#slot.mount(...routers)
+    return this
+  }
+
+  use(...args: unknown[]): this {
+    this.#assertOpen('use')
+    this.#slot.use(...args)
+    return this
+  }
+
+  useFn(...args: unknown[]): this {
+    this.#assertOpen('useFn')
+    this.#slot.useFn(...args)
+    return this
+  }
+
+  #assertOpen(operation: Operation): void {
+    if (!this.#open) {
+      throw slotClosed(operation)
+    }
+  }
 }
 
 function slotClosed(operation: Operation): ErrConfiguration {
   const message = errMessage(
-    `Cannot call "app.${operation}" here: the application's operations are open only to a plugin while it ` +
-      'registers',
+    `Cannot call "server.${operation}" here: a plugin's server operations are open only while it registers`,
   ).solutions(
-    'Call it from a ".with(...)" factory or from "HTTPPlugin.register", on the application, a listener or a ' +
-      'router',
+    'Call it from a ".with(...)" factory or from "HTTPPlugin.register", on a server, a router or a controller',
   )
 
   return new ErrConfiguration(message.reference('@caffeinejs/http', ErrConfiguration).build())

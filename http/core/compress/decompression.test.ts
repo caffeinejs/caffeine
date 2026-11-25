@@ -547,7 +547,7 @@ describe('decompression() under node()', () => {
   })
 })
 
-describe('two decompression() over one route', () => {
+describe('decompression() on a router beside one on the server', () => {
   async function nested() {
     const api = new Router('/api').with(decompression(d => d.encodings('gzip')))
     api.post('/').handler(ctx => ctx.req.body())
@@ -560,16 +560,13 @@ describe('two decompression() over one route', () => {
     return built
   }
 
-  it("lets the router's, the innermost, decide which codings its routes decode", async () => {
+  // Two over one route both run, the server's first: a coding it does not decode is refused before the router's sees it.
+  it("refuses on a router's route a coding the server's does not decode", async () => {
     const built = await nested()
 
     const gzip = await built.request(...post('gzip', gzipSync('{"a":1}'), '/api'))
-    const br = await built.request(...post('br', brotliCompressSync('{"a":1}'), '/api'))
 
-    expect(gzip.status).toBe(200)
-    expect(await gzip.json()).toEqual({ a: 1 })
-    expect(br.status).toBe(415)
-    expect(br.headers.get('accept-encoding')).toBe('gzip')
+    expect([gzip.status, gzip.headers.get('accept-encoding')]).toEqual([415, 'br'])
   })
 
   it("keeps the server's for a router without one of its own", async () => {
@@ -664,14 +661,5 @@ describe('decompression() refusing settings at start-up', () => {
     expect(failure).toBeInstanceOf(ErrConfiguration)
     expect(failure!.message.split('\n')[0]).toBe('Cannot serve "POST /r": "decompress" must be a list of codings')
     expect(failure!.message.split('\n')).toContain("  - Write decompress(['gzip', 'br']) or decompress(false)")
-  })
-
-  it('refuses a second decompression() in one slot', async () => {
-    const built = createWebApplication().with(decompression()).with(decompression()).mount(pets())
-    apps.push(built)
-
-    expect(await refusal(() => built.bootstrap())).toBe(
-      `Cannot register plugin "caffeine-decompression" twice on the application's own server`,
-    )
   })
 })

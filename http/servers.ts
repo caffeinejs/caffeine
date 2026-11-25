@@ -6,10 +6,12 @@ import { boundTo } from './binding.js'
 import { ErrConfiguration } from './core/error/common.js'
 import type { HookBatch } from './core/lifecycle/batch.js'
 import type { RouteGroupCompiler } from './core/routing/compile.js'
+import { controllerSetup } from './core/routing/decorated.js'
 import { kCompleteInventory, kRecordServer, type RouteInventory } from './core/routing/inventory.js'
+import type { FlatParent } from './core/routing/programmatic/flatten.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
-import type { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
-import { FluentRouteSource } from './core/routing/programmatic/source.js'
+import { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
+import { FluentRouteSource, type FluentRouteOptions } from './core/routing/programmatic/source.js'
 import type { IRouteGroup, RouteGroupScope } from './core/routing/route.js'
 import type { Routing } from './core/routing/routing.js'
 import type { Context } from './core/server/context.js'
@@ -21,8 +23,9 @@ import {
   type kHosting,
 } from './core/server/hosting.js'
 import type { HTTPServer } from './core/server/server.js'
+import { getRouteGroup } from './decorators/registrar/registrar.js'
 import type { HTTPPluginFactory, HTTPSetupContext } from './plugin.js'
-import { PluginSlot } from './plugin_slot.js'
+import { PluginSlot, type SlotIdentity } from './plugin_slot.js'
 import type { ServerConfigurer } from './server.js'
 import type { ServerDefinition } from './server_definition.js'
 
@@ -32,20 +35,17 @@ interface Entry {
   groups: IRouteGroup<Context>[]
   server?: HostedServer
   engine?: HTTPServer
+  /** The hooks of the plugins that registered when start-up failed before an engine took them over. */
+  stranded?: readonly HookBatch[]
 }
 
 /** What every server is built with that is not its own. */
 export interface ServerSetupInput {
   /**
-   * The application's, with a closed `app`: each server's own is this one with an `app` of its own and, for a named
-   * server, a child logger.
+   * The application's, with no `server`: each server's own is this one with its scoped server and, for a named server,
+   * a child logger.
    */
-  readonly context: HTTPSetupContext
-  /**
-   * What routers and controllers asked for, resolved and installed in front of their groups on any server. What a
-   * server's plugins mount is resolved into it too.
-   */
-  readonly plugins: ScopedPlugins
+  readonly context: Omit<HTTPSetupContext, 'server'>
   /** The compiler every group went through, for a group `$route` adds. */
   readonly compileRouteGroup: RouteGroupCompiler
   /** Where each server's routes are recorded, complete once every server is built. */
@@ -120,40 +120,78 @@ export class ServerSet {
 
   async #build(entry: Entry, input: ServerSetupInput): Promise<HostedServer> {
     const { definition } = entry
-    // What this server's plugins may do to the application: mount on it and add to its pipeline, while they register.
+    // The server as its plugins see it: they mount on it and add to its pipeline while they register.
     const slot = new PluginSlot(definition.middlewares)
-    const context = serverContext(input.context, definition.name, slot)
+    const base = serverLogger(input.context, definition.name)
 
     // The server's own settings first: they describe what everything below registers onto, and a callback that
-    // fails should do so before a factory with side effects has run.
-    const settings = await resolveServerOptions(definition.server, context)
-    const basePath = normalizeBasePath(await definition.basePath?.(context))
+    // fails should do so before a factory with side effects has run. They build the server, so they get no `server`.
+    const settings = await resolveServerOptions(definition.server, base)
+    const basePath = normalizeBasePath(await definition.basePath?.(base))
     const hosting = input.hosting(settings)
-    slot.forServer(basePath ?? '', findMyWayFlags(hosting.settings))
+    const identity: SlotIdentity = {
+      name: definition.name,
+      basePath: basePath ?? '',
+      router: findMyWayFlags(hosting.settings),
+      address: () => entry.server?.address,
+    }
+    slot.forServer(identity)
+    const context: HTTPSetupContext = { ...base, server: slot }
 
     // Its own `.with(...)` factories, in the order they were written. The engine installs the framework's head
     // slots ahead of them.
     const where = definition.name === undefined ? "on the application's own server" : `on listener "${definition.name}"`
-    const root = await slot.during(() => registerPlugins(definition.plugins, context, slot, where))
+    const root: HookBatch[] = []
+    const scoped = new ScopedPlugins(slot, identity)
+    const engine = await strandOnFailure(entry, root, scoped, async () => {
+      await slot.during(() => registerPlugins(definition.plugins, context, slot, where, root))
 
-    // What the plugins mounted: those routers' own plugins first, since they may nest more, then the groups. A group
-    // the application already serves on this server is served once, as a router mounted twice in one place is.
-    await input.plugins.resolveRouters(slot.mounted, context)
-    entry.groups.push(
-      ...compileMounted(slot.mounted, entry.groups, input.plugins, context, input.compileRouteGroup, definition.name),
-    )
+      // Then the plugins of what it serves, each scoped to its place: the routers mounted on it and those its plugins
+      // mounted, parents before children, then its controllers.
+      await scoped.resolveRouters([...definition.routers, ...slot.mounted], context)
+      const controllerMounts: Array<{ routers: readonly AnyRouter[]; parent: FlatParent<Context> }> = []
+      for (const scope of controllerScopes(entry.groups)) {
+        const spec = getRouteGroup(scope.key as Function)!.toRouteGroup<Context>()
+        const routers = await scoped.resolveController(scope, spec.plugins ?? [], context)
+        if (routers.length > 0) {
+          const meta = controllerSetup(scope.key as Function, spec, context.container)
+          controllerMounts.push({ routers, parent: { spec, path: scope.path, scopes: [scope], meta } })
+        }
+      }
 
-    const engine = buildEngine({
-      contextKey: input.contextKey,
-      routeGroups: entry.groups,
-      context,
-      middlewares: definition.middlewares,
-      root,
-      scoped: input.plugins,
-      basePath,
-      settings: hosting.settings,
-      recordRoutes: routes =>
-        input.inventory[kRecordServer]({ server: definition.name, basePath: basePath ?? '', routes }),
+      // What the plugins mounted, compiled as the server's own routers are: under the routers whose plugins mounted
+      // them, at its root, or under a controller. A group the server already serves is served once, as a router
+      // mounted twice in one place is: each batch joins the served groups before the next is compiled.
+      const compile = (routers: readonly AnyRouter[], parent?: FlatParent<Context>): void => {
+        entry.groups.push(
+          ...compileMounted(routers, entry.groups, context, input.compileRouteGroup, {
+            childrenOf: scoped.childrenOf,
+            server: definition.name,
+            parent,
+            levels: definition.levels,
+          }),
+        )
+      }
+      if (scoped.routersMounted) {
+        compile(definition.routers)
+      }
+      compile(slot.mounted)
+      for (const { routers, parent } of controllerMounts) {
+        compile(routers, parent)
+      }
+
+      return buildEngine({
+        contextKey: input.contextKey,
+        routeGroups: entry.groups,
+        context,
+        middlewares: definition.middlewares,
+        root,
+        scoped,
+        basePath,
+        settings: hosting.settings,
+        recordRoutes: routes =>
+          input.inventory[kRecordServer]({ server: definition.name, basePath: basePath ?? '', routes }),
+      })
     })
     entry.engine = engine
     await engine.ready()
@@ -178,15 +216,21 @@ export class ServerSet {
   }
 
   /**
-   * Closes every server built, and the engine of a server whose build failed after its engine was built. Closes the
-   * rest even when one fails. Resolves to what failed.
+   * Closes every server built, and the engine of a server whose build failed after its engine was built. For a server
+   * whose build failed before then, runs the `onClose` of the plugins that had registered, once. Closes the rest even
+   * when one fails. Resolves to what failed: every `onClose` of those plugins that failed, where a built engine logs
+   * each and rejects with the first.
    */
   async teardown(): Promise<unknown[]> {
     const failures: unknown[] = []
 
     for (const entry of this.#entries) {
       try {
-        await (entry.server?.teardown() ?? entry.engine?.close())
+        if (entry.server !== undefined || entry.engine !== undefined) {
+          await (entry.server?.teardown() ?? entry.engine?.close())
+        } else {
+          failures.push(...(await closeStranded(entry)))
+        }
       } catch (err) {
         failures.push(err)
       }
@@ -213,7 +257,7 @@ export class ServerSet {
  */
 async function resolveServerOptions(
   configurers: readonly ServerConfigurer<object>[],
-  context: HTTPSetupContext,
+  context: Omit<HTTPSetupContext, 'server'>,
 ): Promise<object> {
   const merged: Record<string, unknown> = {}
 
@@ -231,9 +275,54 @@ async function resolveServerOptions(
   return merged
 }
 
-/** A server's own context: the application's, with this server's `app` and, for a named server, a child logger. */
-function serverContext(base: HTTPSetupContext, name: string | undefined, app: PluginSlot): HTTPSetupContext {
-  return { ...base, logger: name === undefined ? base.logger : base.logger.child({ server: name }), app }
+/** The application's context with, for a named server, a child logger. */
+function serverLogger(
+  base: Omit<HTTPSetupContext, 'server'>,
+  name: string | undefined,
+): Omit<HTTPSetupContext, 'server'> {
+  return name === undefined ? base : { ...base, logger: base.logger.child({ server: name }) }
+}
+
+/** The scope of each controller in `groups`: a controller's group carries one only when it registered plugins. */
+function controllerScopes(groups: readonly IRouteGroup<Context>[]): RouteGroupScope[] {
+  return groups.flatMap(group => (group.scopes ?? []).filter(scope => typeof scope.key === 'function'))
+}
+
+/**
+ * Builds a server's engine with `build`, which registers its plugins first. A failure before the engine exists leaves
+ * the hooks of the plugins that registered on `entry`, for teardown to run their `onClose`.
+ */
+async function strandOnFailure(
+  entry: Entry,
+  root: readonly HookBatch[],
+  scoped: ScopedPlugins,
+  build: () => Promise<HTTPServer>,
+): Promise<HTTPServer> {
+  try {
+    return await build()
+  } catch (err) {
+    entry.stranded = [...root, ...scoped.batches]
+    throw err
+  }
+}
+
+/** Runs every `onClose` the entry's stranded hooks hold, once, each with its own context. Resolves to what failed. */
+async function closeStranded(entry: Entry): Promise<unknown[]> {
+  const failures: unknown[] = []
+  const batches = entry.stranded ?? []
+  entry.stranded = undefined
+
+  for (const batch of batches) {
+    for (const onClose of batch.onClose) {
+      try {
+        await onClose(batch.kit)
+      } catch (err) {
+        failures.push(err)
+      }
+    }
+  }
+
+  return failures
 }
 
 /**
@@ -245,33 +334,29 @@ async function registerPlugins(
   context: HTTPSetupContext,
   slot: PluginSlot,
   where: string,
-): Promise<HookBatch[]> {
-  const root: HookBatch[] = []
-
+  root: HookBatch[],
+): Promise<void> {
   for (const factory of factories) {
-    const batch = await slot.run(factory, context, where)
-
-    if (!batch.empty) {
-      root.push(batch)
-    }
+    await slot.run(factory, context, where, batch => root.push(batch))
   }
-
-  return root
 }
 
 /**
- * What a server's plugins mounted, compiled as the application's own routers are and labelled with that server, less
- * the groups it already `served`.
+ * What the plugins on a server mounted, under its `routers` or at its root, compiled as the application's own routers
+ * are and labelled with that server, less the groups it already `served`: the routers' declared groups among them.
  */
 function compileMounted(
   routers: readonly AnyRouter[],
   served: readonly IRouteGroup<Context>[],
-  plugins: ScopedPlugins,
   context: HTTPSetupContext,
   compile: RouteGroupCompiler,
-  name: string | undefined,
+  options: FluentRouteOptions<Context>,
 ): IRouteGroup<Context>[] {
-  return new FluentRouteSource<Context>(routers, plugins.childrenOf, name)
+  if (routers.length === 0) {
+    return []
+  }
+
+  return new FluentRouteSource<Context>(routers, options)
     .collect(context.container)
     .filter(declared => !isServed(declared.scopes!, served))
     .map(declared => {

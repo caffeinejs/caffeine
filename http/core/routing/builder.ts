@@ -10,7 +10,7 @@ import { assertHookName, REQUEST_HOOK_NAMES, type RequestHookName, type RequestH
 import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 import { mergeValue } from './_merge.js'
 import { foldAuthz } from './inherit.js'
-import type { RouteOptionsInput } from './options.js'
+import type { RouteOptionsInput, RouteOptionsLevel } from './options.js'
 import type {
   BodyMode,
   RouteAuthz,
@@ -34,6 +34,9 @@ export class RouteGroupBuilder {
   #timeout?: Duration
   #authorize?: RouteAuthz
   #options?: RouteOptionsInput[]
+  // One level for every spec built from the same options: the compiler resolves a level once, so a configurer runs once
+  // however often the group is built.
+  #levels?: RouteOptionsLevel[]
   #detail?: RouteGroupDetail
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
@@ -147,6 +150,7 @@ export class RouteGroupBuilder {
   /** Adds route options covering every route of the group, after those already added. */
   options<C = unknown>(...inputs: RouteOptionsInput<C>[]): this {
     this.#options = [...(this.#options ?? []), ...(inputs as RouteOptionsInput[])]
+    this.#levels = undefined
     return this
   }
 
@@ -178,7 +182,7 @@ export class RouteGroupBuilder {
       bodyLimit: this.#bodyLimit,
       timeout: this.#timeout,
       authz: this.#authorize,
-      options: this.#options === undefined ? undefined : [{ inputs: [...this.#options] }],
+      options: this.#options === undefined ? undefined : (this.#levels ??= [{ inputs: this.#options }]),
       detail: this.#detail,
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,

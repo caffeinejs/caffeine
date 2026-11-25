@@ -4,6 +4,7 @@ import { pathToRegexp } from 'path-to-regexp'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import type { RouterFlags } from '../matcher/matcher.js'
+import { parseRoutePattern, routePathSegments } from '../routing/paths.js'
 import type { MiddlewarePath } from './middleware.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
@@ -69,32 +70,43 @@ export function normalizePath(url: string, flags: PathFlags): { path: string; er
   return { path, error: undefined }
 }
 
-/**
- * A router's or a controller's middleware with each relative path rebased under `base`, that scope's full path:
- * `/jobs` added by a router at `/admin` matches `/admin/jobs`. A middleware with no path covers every route of the
- * scope already, and keeps none.
- *
- * A named parameter in `base` is kept and its regular expression dropped, which only widens a prefix the route
- * itself still checks.
- *
- * @throws ErrConfiguration when a path would be rebased under a wildcard or an optional parameter: neither has a
- *   prefix form.
- */
-export function rebaseMiddlewares(base: string, middlewares: readonly ResolvedMiddleware[]): ResolvedMiddleware[] {
-  return middlewares.map(middleware =>
-    middleware.path === undefined ? middleware : { ...middleware, path: rebase(base, middleware.path) },
-  )
+/** A middleware as a level of the engine runs it. */
+export interface PlacedMiddleware extends ResolvedMiddleware {
+  /**
+   * How many leading segments of the request path `path` is relative to: those of the router's or controller's path a
+   * relative path was added under. `undefined` for a path from the start of the request path.
+   */
+  readonly skip?: number
 }
 
-function rebase(base: string, path: MiddlewarePath): MiddlewarePath {
-  // `:name(regex)` reads as `:name` to the matcher; nothing else in a route path differs from it but these two.
-  const prefix = base.replace(/:(\w+)\([^/]*\)/g, ':$1')
+/**
+ * A router's or a controller's middleware with each relative path placed under `base`, that scope's path: `/jobs`
+ * added by a router at `/admin` matches `/admin/jobs`. A middleware with no path covers every route of the scope
+ * already, and keeps none.
+ *
+ * It runs only for the scope's routes, whose paths the router matched from `base`: the path is matched after as many
+ * segments as `base` spans, whatever its parameters hold. Under `ignoreDuplicateSlashes`, they are counted with
+ * duplicate slashes folded, as the router folds them.
+ *
+ * @throws ErrConfiguration when a path would be placed under a wildcard or an optional parameter: neither spans a
+ *   fixed number of segments.
+ */
+export function placeMiddlewares(
+  base: string,
+  middlewares: readonly ResolvedMiddleware[],
+  flags: PathFlags,
+): PlacedMiddleware[] {
+  const relative = middlewares.filter(middleware => middleware.path !== undefined)
+  if (relative.length === 0) {
+    return [...middlewares]
+  }
 
-  if (/[*?]/.test(prefix)) {
+  const parts = parseRoutePattern(base)
+  if (parts.some(part => part.kind === 'wildcard' || part.kind === 'optional')) {
     throw new ErrConfiguration(
       errMessage(
-        `Cannot add middleware "${String(path)}" under "${base}": a relative path cannot start from a wildcard or ` +
-          'an optional parameter',
+        `Cannot add middleware "${String(relative[0]!.path)}" under "${base}": a relative path cannot start from a ` +
+          'wildcard or an optional parameter',
       )
         .solutions(
           'Leave the path out, so the middleware covers every route of the router',
@@ -105,13 +117,33 @@ function rebase(base: string, path: MiddlewarePath): MiddlewarePath {
     )
   }
 
-  // `use('/')` joins to `/admin/`, which the matcher reads as `/admin`, as it reads a trailing slash on any prefix.
-  const join = (relative: string): string => {
-    const rooted = relative.startsWith('/') ? relative : `/${relative}`
-    return `${prefix}${rooted}`
-  }
+  const skip = routePathSegments(base, flags)
+  const rooted = (path: string): string => (path.startsWith('/') ? path : `/${path}`)
 
-  return typeof path === 'string' ? join(path) : path.map(join)
+  return middlewares.map(middleware =>
+    middleware.path === undefined
+      ? middleware
+      : {
+          ...middleware,
+          path: typeof middleware.path === 'string' ? rooted(middleware.path) : middleware.path.map(rooted),
+          skip,
+        },
+  )
+}
+
+/**
+ * The part of a normalized request path after its first `skip` segments: `''` when it has no more. What a middleware
+ * added under a scope matches.
+ */
+export function pathAfter(path: string, skip: number): string {
+  let at = 0
+  for (let segment = 0; segment < skip; segment++) {
+    at = path.indexOf('/', at + 1)
+    if (at === -1) {
+      return ''
+    }
+  }
+  return skip === 0 ? path : path.slice(at)
 }
 
 function sanitizePrefix(prefix: string): string {

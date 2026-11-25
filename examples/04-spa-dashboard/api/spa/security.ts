@@ -42,8 +42,8 @@ const headers = helmet({
 export class SecurityHeaders extends HTTPPlugin {
   override readonly name = 'security-headers'
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRequest', ctx => {
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRequest', ctx => {
       const platform = ctx.platform as { name: string }
       if (platform.name !== 'node') {
         return

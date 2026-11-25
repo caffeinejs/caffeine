@@ -201,20 +201,21 @@ describe('csrf()', () => {
       ])
     })
 
-    // Two plugins on one chain would check every request twice; refused at once by name, and admitted apart.
-    it('refuses a second plugin under the same name, and admits one named apart', async () => {
-      const twice = createWebApplication({ adapter: node() }).with(csrf()).with(csrf())
-      close = () => twice.close().catch(() => undefined)
-
-      await expect(twice.bootstrap()).rejects.toThrow(/Cannot register plugin "caffeine-csrf" twice/)
-
-      const apart = await ready(
+    // Two plugins on one chain check every request twice: the user's to decide, so both register and each refuses
+    // what the other's exclusion lets through.
+    it('registers a second plugin under the same name, and both check a request', async () => {
+      const twice = await ready(
         createWebApplication({ adapter: node() })
-          .with(csrf())
-          .with(csrf(c => c.name('api'))),
+          .with(csrf(c => c.exclude('/a')))
+          .with(csrf(c => c.exclude('/b')))
+          .mount(new Router('/a').post('/', ok), new Router('/b').post('/', ok), new Router('/c').post('/', ok)),
       )
 
-      expect((await post(apart, '/nothing', CROSS_SITE)).status).toBe(404)
+      const statuses = await Promise.all(
+        ['/a', '/b', '/c'].map(async path => (await post(twice, path, CROSS_SITE)).status),
+      )
+      expect(statuses).toEqual([403, 403, 403])
+      expect((await post(twice, '/c', SAME_ORIGIN)).status).toBe(200)
     })
   })
 
@@ -723,8 +724,8 @@ describe('csrf()', () => {
         new (class extends HTTPPlugin {
           override readonly name = 'afterwards'
 
-          register({ app }: HTTPSetupContext): void {
-            app.hook('onRequest', () => {
+          register({ server }: HTTPSetupContext): void {
+            server.hook('onRequest', () => {
               later++
             })
           }

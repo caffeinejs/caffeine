@@ -27,8 +27,8 @@ describe('accessControlExempt', () => {
       .with(
         () =>
           new (class extends HTTPPlugin {
-            register({ app }: HTTPSetupContext): void {
-              app.hook('onRoute', route => {
+            register({ server }: HTTPSetupContext): void {
+              server.hook('onRoute', route => {
                 seen.push(isAccessControlExempt(route.options))
               })
             }

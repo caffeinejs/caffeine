@@ -92,6 +92,40 @@ describe('healthProbes', () => {
     expect((await app.request('/readyz')).status).toBe(404)
   })
 
+  // Under a router the probes serve at the router's path: a route of that router at a probe's path is the one refused.
+  it("refuses to start when a route of the router already owns a probe path under the router's path", async () => {
+    const app = track(
+      createWebApplication().mount(
+        new Router('/ops')
+          .with(healthProbes(h => h.enabled(true)))
+          .post('/readyz')
+          .handler(() => 'x'),
+      ),
+    )
+
+    const booting = app.bootstrap()
+
+    await expect(booting).rejects.toThrow(ErrHealthConfiguration)
+    await expect(booting).rejects.toThrow('already registered at "/ops/readyz"')
+  })
+
+  // A probe at "/" under a router serves at the router's path, where a route of the router is refused too.
+  it("refuses to start when a route of the router owns the router's path and a probe is at '/'", async () => {
+    const app = track(
+      createWebApplication().mount(
+        new Router('/ops')
+          .with(healthProbes(h => h.enabled(true).paths({ ready: '/' })))
+          .post('/')
+          .handler(() => 'x'),
+      ),
+    )
+
+    const booting = app.bootstrap()
+
+    await expect(booting).rejects.toThrow(ErrHealthConfiguration)
+    await expect(booting).rejects.toThrow('already registered at "/ops"')
+  })
+
   it('refuses to start when a route already owns a probe path', async () => {
     const app = track(
       createWebApplication()
@@ -148,12 +182,11 @@ describe('healthProbes', () => {
     expect(count).toBe(1)
   })
 
-  it('refuses the plugin twice on one server', async () => {
+  // Both register, as any plugin does twice; their routes claim the same paths.
+  it('fails start-up with a route conflict when registered twice on one server', async () => {
     const app = track(createWebApplication().with(healthProbes()).with(healthProbes()))
 
-    await expect(app.bootstrap()).rejects.toThrow(
-      'Cannot register plugin "caffeine-health-probes" twice on the application\'s own server',
-    )
+    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_ROUTE_CONFLICT' })
   })
 
   describe('?verbose', () => {

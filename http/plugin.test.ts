@@ -127,13 +127,17 @@ describe('WebApplication.with()', () => {
 })
 
 describe('HTTPPlugin.name', () => {
+  let registered = 0
+
   class Named extends HTTPPlugin {
     override readonly name = 'named'
 
-    register(): void {}
+    register(): void {
+      registered++
+    }
   }
 
-  // A name is refused twice in one slot, not across slots: two routers may each want the same plugin.
+  // A name is no claim to be alone: two routers may each want the same plugin.
   it('allows one named plugin on each of two routers', async () => {
     const app = createWebApplication({ adapter: node() })
       .mount(new Router('/a').with(() => new Named()).get('/', () => 'a'))
@@ -147,15 +151,19 @@ describe('HTTPPlugin.name', () => {
     }
   })
 
-  it('refuses one named plugin twice on one server', async () => {
+  // Registering a plugin twice is the user's to decide: both register, and nothing reconciles them.
+  it('registers two plugins of one name in one scope', async () => {
+    registered = 0
     const app = createWebApplication({ adapter: node() })
       .with(() => new Named())
       .with(() => new Named())
 
-    await expect(app.bootstrap()).rejects.toThrow(
-      `Cannot register plugin "named" twice on the application's own server`,
-    )
-    await app.close().catch(() => undefined)
+    try {
+      await app.bootstrap()
+      expect(registered).toBe(2)
+    } finally {
+      await app.close()
+    }
   })
 })
 

@@ -1,6 +1,7 @@
 import { kFeatureConfigure, kFeatureName, type Feature } from '@caffeinejs/application'
+import { newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { Byte } from '@caffeinejs/std/bytes'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication, type WebApplication } from './application.js'
 import { findMyWayMatcher } from './core/matcher/find_my_way.js'
@@ -51,7 +52,7 @@ describe('ServerSet', () => {
       .with(
         () =>
           new (class extends HTTPPlugin {
-            register({ app: ops }: HTTPSetupContext): void {
+            register({ server: ops }: HTTPSetupContext): void {
               ops.hook('onRequest', () => void order.push('plugin'))
             }
           })(),
@@ -146,13 +147,104 @@ const slotless = {
   [kFeatureConfigure]() {},
 } as Feature
 
-describe('context.app.server', () => {
-  /** A plugin that records what its slot says of the server it registers on. */
+describe('ServerSet teardown', () => {
+  // A server plugin that registered holds what it opened until its `onClose` runs: a later plugin failing start-up
+  // leaves no engine to run it, so the server's teardown does.
+  it("runs the onClose of the plugins that registered when a router's plugin fails start-up", async () => {
+    const closed: string[] = []
+    const app = createWebApplication({ adapter: node() })
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              server.hook('onClose', () => void closed.push('server'))
+            }
+          })(),
+      )
+      .mount(
+        new Router('/r')
+          .with(() => {
+            throw new Error('router plugin failed')
+          })
+          .get('/', () => 'r'),
+      )
+
+    const err = await app.bootstrap().catch((err: unknown) => err)
+    await app.close()
+
+    expect([(err as Error).message, closed]).toEqual(['router plugin failed', ['server']])
+  })
+
+  // A plugin that registered its `onClose` before it failed holds what it opened too: its own hook runs, once.
+  it('runs the onClose a plugin registered before its own registration failed, once', async () => {
+    const closed: string[] = []
+    const app = createWebApplication({ adapter: node() }).with(
+      () =>
+        new (class extends HTTPPlugin {
+          register({ server }: HTTPSetupContext): void {
+            server.hook('onClose', () => void closed.push('self'))
+            throw new Error('register failed')
+          }
+        })(),
+    )
+
+    const err = await app.bootstrap().catch((err: unknown) => err)
+    await app.close()
+    await app.close()
+
+    expect([(err as Error).message, closed]).toEqual(['register failed', ['self']])
+  })
+
+  // Every close that fails is reported, not the first alone: a failed start-up's close logs what its teardown hit.
+  it('reports every onClose that failed after start-up failed', async () => {
+    const failing = (message: string) => () =>
+      new (class extends HTTPPlugin {
+        register({ server }: HTTPSetupContext): void {
+          server.hook('onClose', () => {
+            throw new Error(message)
+          })
+        }
+      })()
+    const errors = vi.fn()
+    const logger: Logger = { ...newNoopLogger(), error: errors }
+    const app = createWebApplication({ adapter: node() })
+      .logger(b => b.use(logger))
+      .with(failing('first'))
+      .with(failing('second'))
+      .mount(
+        new Router('/r')
+          .with(() => {
+            throw new Error('router plugin failed')
+          })
+          .get('/', () => 'r'),
+      )
+
+    await app.bootstrap().catch(() => undefined)
+    await app.close()
+
+    const logged = errors.mock.calls.map(([fields]) => (fields as { err: unknown }).err)
+    const aggregate = logged.find((err): err is AggregateError => err instanceof AggregateError)
+    expect(aggregate?.errors.map((err: Error) => err.message)).toEqual(['first', 'second'])
+  })
+})
+
+describe('context.server', () => {
+  /** A plugin that records what its scoped server says of the server it registers on. */
   function recorder(seen: unknown[]): () => HTTPPlugin {
     return () =>
       new (class extends HTTPPlugin {
-        register(context: HTTPSetupContext): void {
-          seen.push(context.app.server)
+        register({ server }: HTTPSetupContext): void {
+          seen.push({ basePath: server.basePath, router: server.router })
+        }
+      })()
+  }
+
+  /** A plugin that records the server's name and the scope's prefix. */
+  function placer(seen: unknown[]): () => HTTPPlugin {
+    return () =>
+      new (class extends HTTPPlugin {
+        register({ server }: HTTPSetupContext): void {
+          seen.push({ name: server.name, basePath: server.basePath, prefix: server.prefix })
         }
       })()
   }
@@ -202,8 +294,8 @@ describe('context.app.server', () => {
     ])
   })
 
-  // A router's slot is shared by every server that serves it: it belongs to none.
-  it("reports no server on a router's slot", async () => {
+  // A router's plugins register on the server it is mounted on, so they know that server as the server's own do.
+  it("reports the server a router's plugin registers on", async () => {
     expect(
       await serverSeen(seen =>
         createWebApplication().mount(
@@ -213,7 +305,53 @@ describe('context.app.server', () => {
             .handler(() => 'ok'),
         ),
       ),
-    ).toEqual([undefined])
+    ).toEqual([{ basePath: '', router: DEFAULT_ROUTER_FLAGS }])
+  })
+
+  // What a plugin builds URLs from: the server it is on, and where its scope starts on that server.
+  it('reports the server name and the scope prefix wherever a plugin registers', async () => {
+    const seen: unknown[] = []
+    const nested = new Router('/n')
+      .with(placer(seen))
+      .get('/')
+      .handler(() => 'ok')
+    const app = createWebApplication({ adapter: node() })
+      .basePath('/api')
+      .with(placer(seen))
+      .mount(new Router('/r').with(placer(seen)).mount(nested))
+      .listener('admin', l => l.with(placer(seen)).mount(new Router('/ops').with(placer(seen)).mount(nested)))
+
+    try {
+      await app.bootstrap()
+    } finally {
+      await app.close()
+    }
+
+    expect(seen).toEqual([
+      { name: undefined, basePath: '/api', prefix: '' },
+      { name: undefined, basePath: '/api', prefix: '/r' },
+      { name: undefined, basePath: '/api', prefix: '/r/n' },
+      { name: 'admin', basePath: '', prefix: '' },
+      { name: 'admin', basePath: '', prefix: '/ops' },
+      { name: 'admin', basePath: '', prefix: '/ops/n' },
+    ])
+  })
+
+  // `.server(...)` builds the server: its context has none, and the type says so.
+  it('hands .server(...) a context without a server', async () => {
+    const seen: unknown[] = []
+    const app = createWebApplication().server(context => {
+      seen.push('server' in context)
+      return {}
+    })
+
+    try {
+      await app.bootstrap()
+    } finally {
+      await app.close()
+    }
+
+    expect(seen).toEqual([false])
   })
 
   it("reports the listener's server on a listener's slot", async () => {
@@ -255,5 +393,33 @@ describe('context.app.server', () => {
           .with(recorder(seen)),
       ),
     ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false } }])
+  })
+
+  // Read on each access: a plugin holding its server sees where it listens once it does, and nothing before.
+  it('reports where the server listens once it does', async () => {
+    let held: HTTPSetupContext['server'] | undefined
+    const app = createWebApplication({ adapter: node() })
+      .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              held = server
+            }
+          })(),
+      )
+      .mount(new Router('/ping').get('/', () => 'pong'))
+
+    try {
+      await app.bootstrap()
+      const before = held!.address
+      await app.run()
+      const address = held!.address!
+
+      const res = await fetch(`http://127.0.0.1:${address.port}/ping`)
+      expect([before, address.host, res.status, await res.text()]).toEqual([undefined, '127.0.0.1', 200, 'pong'])
+    } finally {
+      await app.close()
+    }
   })
 })

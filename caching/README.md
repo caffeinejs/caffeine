@@ -535,12 +535,14 @@ Observers cost nothing when absent: no event is built for a route nobody observe
 
 All of these fail `app.bootstrap()` with `ErrConfiguration`:
 
-- a route declares `@CacheControl` or `@CacheInvalidate` and the plugin is not installed for it
 - `HTTPCaching` has no `store`, or a `store`, `etagGenerator` or `observer` token is bound to nothing
 - `ttl` is below one second, `storeTimeout` or `lockTimeout` is not a positive duration, another duration option
   is negative or not a number, or `maxEntrySize` is not a whole number of bytes
 - a tag is not a non-empty string without `{` or `}`, or `@CacheInvalidate` names no tag
 - a constrained route has a `ttl` and nothing in its key tells it from the other routes on its URL
+
+A route that declares `@CacheControl` or `@CacheInvalidate` with no `HTTPCaching` over it starts, and is served
+uncached.
 
 ## Limits
 

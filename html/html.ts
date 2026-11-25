@@ -1,7 +1,5 @@
 import { Responder, type ActionResult, type IContext } from '@caffeinejs/http'
 
-import { HTML_DEFAULTS, routeSettings } from './config.js'
-
 /**
  * What `@kitajs/html` evaluates a JSX expression to: the markup itself, or a promise of it when any
  * component in the tree is asynchronous. There is no render step to call.
@@ -32,8 +30,8 @@ const DOCTYPE = '<!doctype html>'
  * Content-Type defaults to `text/html; charset=utf-8`, applied only when the response does not already
  * carry one — a route's `@Produces`, or a handler's own `ctx.header('content-type', ...)` call, both
  * survive undisturbed. There is no way to set Content-Type through this function; use `@Produces` or
- * `ctx.header(...)` instead. The `<!doctype html>` prefix comes from the route's
- * `.with(html(({ config }) => config.app.html))` setting, or `HTML_DEFAULTS` where none applies;
+ * `ctx.header(...)` instead. The `<!doctype html>` prefix comes from the route's `html` option, as the route set it
+ * with `.config({ html: { … } })` or `.with(html(...))` resolved it, or `true` where none applies;
  * `options.doctype` overrides it for this response.
  *
  * `@kitajs/html` escapes nothing on its own: interpolated values need the `safe` attribute, and the
@@ -61,11 +59,9 @@ function applyDoctype(markup: string, autoDoctype: boolean): string {
   return DOCTYPE + markup
 }
 
-/** The route's `html()` setting, or {@link HTML_DEFAULTS} where none applies, read when the response renders. */
+/** The route's `html` option, as the route set it or `html()` resolved it, or `true` where none applies. */
 function autoDoctypeOf(ctx: IContext): boolean {
-  const route = ctx.route
-
-  return (route === undefined ? undefined : routeSettings.get(route))?.autoDoctype ?? HTML_DEFAULTS.autoDoctype
+  return ctx.options.html?.autoDoctype ?? true
 }
 
 /**

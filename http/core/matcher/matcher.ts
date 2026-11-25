@@ -33,6 +33,9 @@ export interface RouteMatch<S> {
 /** Finds the route a request names. The engine registers every route before the first match. */
 export interface RouteMatcher<S> {
   /**
+   * Registers a route. `path` is written in Caffeine's route syntax, as `parseRoutePattern` reads it: a matcher for
+   * another router translates it to that router's own.
+   *
    * @throws ErrRouteConflict when a route of `method` already matches `path` under these constraints.
    * @throws ErrConfiguration when `path` or `method` is not one the matcher can register.
    */

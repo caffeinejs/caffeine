@@ -5,8 +5,8 @@ import { type ActionResult, Controller, Get, HTTPPlugin, Router, Use } from './i
 import { node } from './platform/node.testkit.js'
 
 /**
- * Start-up runs the routers' plugins, then the controllers', then each listener's callback, so a callback sees what
- * those plugins set up.
+ * Start-up runs each listener's callback first, since it describes a server, then each server's plugins: its own, its
+ * routers', then its controllers'.
  *
  * Isolated: a `@Controller` registers into the process-wide registry, so every application in this file serves it.
  */
@@ -41,12 +41,12 @@ afterEach(async () => {
   app = undefined
 })
 
-it("runs a listener's callback after the plugins of the routers and of the controllers", async () => {
+it("runs a listener's callback before any plugin, then a server's routers' plugins before its controllers'", async () => {
   app = createWebApplication({ adapter: node() })
     .listener('admin', () => void order.push('listener callback'))
     .mount(new Router('/api').with(recording('router plugin')).get('/', () => 'api')) as WebApplication
 
   await app.bootstrap()
 
-  expect(order).toEqual(['router plugin', 'controller plugin', 'listener callback'])
+  expect(order).toEqual(['listener callback', 'router plugin', 'controller plugin'])
 })
