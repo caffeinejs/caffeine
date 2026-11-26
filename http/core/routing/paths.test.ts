@@ -8,8 +8,6 @@ import {
   normalizeLiteralPath,
   normalizeRoutePath,
   parseRoutePattern,
-  routeKeys,
-  routePathSegments,
   routeURL,
   underPrefix,
 } from './paths.js'
@@ -54,20 +52,6 @@ describe('parseRoutePattern', () => {
   // An unclosed regex runs to the end of the path: the router refuses it when the route registers.
   it('reads an unclosed regex to the end of the path', () => {
     expect(parseRoutePattern('/a/:id(\\d+')).toEqual([text('/a/'), param('id', '\\d+')])
-  })
-})
-
-describe('routePathSegments', () => {
-  // A request to a route under the path starts with this many segments, whatever its parameters hold: a caller takes
-  // them off to read what follows.
-  it.each([
-    ['', 0],
-    ['/tenants/:id', 2],
-    ['/at/:hour(^\\d{2})h', 2],
-    ['/d/:p((a|b)/c)', 2],
-    ['/v2/', 2],
-  ])('counts %j as %i segments', (path, segments) => {
-    expect(routePathSegments(path)).toBe(segments)
   })
 })
 
@@ -155,29 +139,6 @@ describe('routeURL', () => {
     [undefined, '/v1/', 'x/', '/v1/x'],
   ])('joins %j, %j and %j as %j', (prefix, groupPath, routePath, expected) => {
     expect(routeURL(prefix, groupPath, routePath)).toBe(expected)
-  })
-})
-
-describe('routeKeys', () => {
-  // The router files a parameter by its place and its regex, not its name.
-  it('gives two paths differing only in parameter names one key', () => {
-    expect(routeKeys('/t/:id')).toEqual(routeKeys('/t/:tid'))
-  })
-
-  it('tells a parameter apart from one with a regex, and from an escaped colon', () => {
-    const [plain] = routeKeys('/t/:id')
-    expect([routeKeys('/t/:id(\\d+)')[0] === plain, routeKeys('/t/::id')[0] === plain]).toEqual([false, false])
-  })
-
-  // find-my-way trims a regex's leading "^" and trailing "$" before it files the parameter.
-  it('gives a regex with and without its anchors one key', () => {
-    expect(routeKeys('/t/:id(^\\d+$)')).toEqual(routeKeys('/t/:x(\\d+)'))
-  })
-
-  // A route with an optional last segment answers at both forms.
-  it('gives a path with an optional last segment the key of each form', () => {
-    expect(routeKeys('/t/:id?')).toEqual([...routeKeys('/t/:x'), ...routeKeys('/t')])
-    expect(routeKeys('/:id?')).toEqual([...routeKeys('/:x'), ...routeKeys('/')])
   })
 })
 

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../../application.js'
 import { ErrWaitUntilClosed, type ServerContext } from '../../context.js'
-import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
+import { HTTPPlugin } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 
@@ -470,43 +470,5 @@ describe('Fetch host background work', () => {
       declined.resolve()
       afterClose.resolve()
     }
-  })
-})
-
-describe("a router plugin's path-scoped middleware", () => {
-  // The middleware covers every request the router sends to the router's route, or a guard there could be skipped.
-  const nine = Array.from({ length: 9 }, (_, i) => `/:p${i}`).join('')
-
-  it.each([
-    ['/tenants/:id', undefined, '/tenants//jobs'],
-    [nine, undefined, '/1/2/3/4/5/6/7/8/9/jobs'],
-  ])('under %j prefixed %j runs for %s', async (path, prefix, url) => {
-    const a = createWebApplication().mount(
-      new Router(path)
-        .extend((group: { prefix(prefix: string): unknown }) => {
-          if (prefix !== undefined) {
-            group.prefix(prefix)
-          }
-        })
-        .with(
-          () =>
-            new (class extends HTTPPlugin {
-              register({ server }: HTTPSetupContext): void {
-                server.use('/jobs', (ctx, next) => {
-                  ctx.header('x-guard', 'ran')
-                  return next()
-                })
-              }
-            })(),
-        )
-        .get('/jobs')
-        .handler(() => 'jobs'),
-    )
-    app = a
-    await a.bootstrap()
-
-    const res = await a.request(url)
-
-    expect([res.status, res.headers.get('x-guard')]).toEqual([200, 'ran'])
   })
 })

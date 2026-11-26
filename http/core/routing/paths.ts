@@ -34,7 +34,8 @@ const OPTIONAL_SEGMENT = /\/:[^/()]*\?\/?$/
 
 /**
  * A route path split as Caffeine's route syntax reads it. This syntax is what a `RouteMatcher` receives, whatever
- * router it matches with:
+ * router it matches with. It is read here without being checked: the matcher refuses a malformed path when the route
+ * registers. The syntax:
  *
  * - `:name` is a parameter. Its value lies within one segment, and its name ends at `(`, `-`, `.` or `/`, so text can
  *   follow it in its segment: `/files/:name.json`.
@@ -173,53 +174,6 @@ function trimTrailingSlashes(path: string): string {
   }
 
   return path.slice(0, end)
-}
-
-/**
- * How many segments of a request path a route path spans: where the paths of the routes under it begin. A parameter
- * is one segment whatever its value: `/tenants/:id` spans two.
- */
-export function routePathSegments(path: string): number {
-  const joined = `${parseRoutePattern(path)
-    .map(part => (part.kind === 'text' ? part.text : 'p'))
-    .join('')}/x`
-  return joined.split('/').length - 2
-}
-
-/**
- * The keys the router files a route path under, to tell whether two route paths are one path to it: a parameter by
- * its place and its regex, not its name, and a path with an optional last segment under each of its forms.
- */
-export function routeKeys(path: string): string[] {
-  const keys: string[] = []
-  let key = ''
-
-  for (const part of parseRoutePattern(path)) {
-    switch (part.kind) {
-      case 'text':
-        key += part.text
-        break
-      case 'param':
-        // Not a character a path holds: a parameter never reads as text. The router files a regex without its
-        // anchors.
-        key += `\u0000${anchorless(part.regex ?? '')}\u0000`
-        break
-      case 'wildcard':
-        key += '\u0001'
-        break
-      case 'optional':
-        keys.push(key || '/')
-        break
-    }
-  }
-
-  return [key, ...keys]
-}
-
-function anchorless(regex: string): string {
-  const start = regex.startsWith('^') ? 1 : 0
-  const end = regex.endsWith('$') ? regex.length - 1 : regex.length
-  return regex.slice(start, Math.max(start, end))
 }
 
 /** The index of the `)` closing the regex that opens at `at`, escapes and nested groups included. */

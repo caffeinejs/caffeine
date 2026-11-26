@@ -45,7 +45,7 @@ function origin(authenticateByDefault: boolean): WebApplication<never, never, un
         .detail('http', { internal: true })
         .authorize({ roles: ['admin'] })
         .get('/admin', shellOf(adminDist))
-        .get('/admin/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!.slice('/admin'.length), adminDist))
+        .get('/admin/assets/*', ctx => sendFile(ctx, ctx.req.path.slice('/admin'.length), adminDist))
         .get('/admin/*', clientRouteOf(adminDist)),
     ) as WebApplication<never, never, unknown, NodeAdapter>
 

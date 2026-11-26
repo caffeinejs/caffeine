@@ -70,16 +70,16 @@ const pages = new Router()
 
 // The API owns its own misses. **One line per API base, not per controller** — three controllers under
 // `/api/*` share this one. Without it a browser navigating to `/api/typo` sees the application.
-const apiMisses = new Router('/api').get('/*', notFound)
+const apiMisses = new Router('/api').get('/', notFound).get('/*', notFound)
 
 app
   .with(staticFiles(s => s.serve(DIST, { unrouted: ['index.html'], anonymous: true, immutable: ['assets/**'] })))
   .mount(apiMisses, pages)
 ```
 
-`unrouted: ['index.html']` keeps the shell off the mount's routes, so `/` and `/index.html` are the
-application's own routes above. The mount registers a route per file at its root and one per directory under
-it: a miss under `/assets/` is the mount's own 404, and a miss at the root falls through to `/*`.
+`unrouted: ['index.html']` keeps the shell off the mount's routes, so `/` and `/index.html` are the application's own
+routes above. The mount registers a route per file at its root and one per directory under it: a miss under `/assets/`
+is the mount's own 404, while `/assets` itself, which holds no index, falls through to `/*` like a miss at the root.
 
 The `br` and `gzip` variants the build wrote to `.static-variants/` are negotiated by `Accept-Encoding` and are
 never URLs of their own.
@@ -128,8 +128,8 @@ ordinary routes. Keep the sign-in page anonymous or the redirect loops.
 The bundle stays public here: one bundle serves the public and the protected routes alike, and `/login` needs
 it. The data is protected by the API.
 
-**One wildcard per gated subtree** — `/dashboard/*` answers the bare `/dashboard` too, with an empty `*`. A route
-declared at exactly `/dashboard` wins: declare one when the bare path serves something else, such as the shell.
+**One wildcard per gated subtree, and its parent declared** — `/dashboard/*` answers what follows `/dashboard`, never
+`/dashboard` itself: declare that path too, as the shell.
 
 A prefixed router needs no special handling for the bare path: `new Router('/app')` with a route at `/`
 composes to `/app`, so the prefixed router declares the pair as follows.
@@ -152,7 +152,7 @@ const admin = new Router()
   .detail('http', { internal: true })
   .authorize({ roles: ['admin'] })
   .get('/admin', adminDocument)
-  .get('/admin/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!.slice('/admin'.length), ADMIN))
+  .get('/admin/assets/*', ctx => sendFile(ctx, ctx.req.path.slice('/admin'.length), ADMIN))
   .get('/admin/*', ctx => (isDocumentRequest(ctx) ? adminDocument(ctx) : notFound(ctx)))
 
 // `unrouted: ['**']` registers no routes at all: the mount exists so `sendFile` can find its files.

@@ -10,7 +10,7 @@ function exactMatcher() {
     },
     match(method, path) {
       const store = routes.get(method + ' ' + path)
-      return store === undefined ? null : { store, params: {}, query: '' }
+      return store === undefined ? null : { store, params: {} }
     },
   }
 }

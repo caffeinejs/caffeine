@@ -13,7 +13,7 @@ import { kCookieFlush, kPendingCookies, ServerCookies, type CookieWriter } from 
 import { csrfCoversOf } from '../csrf/csrf.js'
 import { problemEncoder } from '../error/encode.js'
 import { ErrorHandlerProvider } from '../error/handler.js'
-import { ErrHTTPBadRequest, ErrHTTPNotFound, ErrHTTPServiceUnavailable } from '../error/http.js'
+import { ErrHTTPNotFound, ErrHTTPServiceUnavailable } from '../error/http.js'
 import { kErrorHandlingOptions } from '../error/keys.js'
 import { newProblem } from '../error/problem.js'
 import type { GuardTarget } from '../guards/guard.js'
@@ -29,17 +29,15 @@ import {
   type SendPayload,
 } from '../lifecycle/lifecycle.js'
 import { callOnRoute, openDefinition, type RouteDefinition } from '../lifecycle/route_definition.js'
-import { findMyWayMatcher, preflightTable, type PreflightTable } from '../matcher/find_my_way.js'
 import { ErrRouteConflict, type DerivedConstraints, type RouteMatch, type RouteMatcher } from '../matcher/matcher.js'
-import { normalizePath, sanitizeURL } from '../middleware/path.js'
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
-import { joinRoutePath, routeKeys } from '../routing/paths.js'
+import { joinRoutePath } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import { ScopeChains } from '../routing/scope_chain.js'
 import { assertGated, gateOf } from '../security/gate.js'
 import type { CompiledSerializer } from '../validation/validation.js'
 import { answer, compileSerializers, connectionFields, HeldStream, NO_SERIALIZER } from './answer.js'
-import { Context, kAppendCookies, type ServerShared } from './context.js'
+import { Context, kAppendCookies, pathEnd, requestPath, type ServerShared } from './context.js'
 import { answerError, configurationError, defaultProblem, sendProblem } from './error.js'
 import { compileLevel, composeRouteHooks, type LevelInput, type StoreHooks } from './hooks.js'
 import { compileRouteInput, readInput, type RouteInput } from './input.js'
@@ -63,8 +61,6 @@ export interface RouteStore {
   readonly timeout: Duration | undefined
   /** The automatic HEAD route of a GET, which replaces `content-length` as Fastify's does. */
   readonly twin: boolean
-  /** A wildcard route at its bare parent, `/dash` for `/dash/*`, where the wildcard reads empty. */
-  readonly bare: boolean
   /** How the route reads its body and validates its request; `undefined` for a miss, which reads neither. */
   readonly input: RouteInput | undefined
   /** The serializer an answer of a status is written with, when the route's response schema declares one. */
@@ -93,19 +89,6 @@ export interface HTTPServerInput {
 
 const EMPTY_PARAMS: Readonly<Record<string, string | undefined>> = Object.freeze({})
 
-const NO_ROUTES: readonly RouteDefinition[] = Object.freeze([])
-
-// A wildcard route's bare parent reads its `*` as empty.
-function paramsOf(
-  match: RouteMatch<RouteStore> | null,
-  store: RouteStore,
-): Readonly<Record<string, string | undefined>> {
-  if (match === null) {
-    return EMPTY_PARAMS
-  }
-  return store.bare ? { ...match.params, '*': '' } : match.params
-}
-
 // The engine's cookie writer, one for every server: a context appends its own lines.
 const writeCookies: CookieWriter<Context> = (ctx, lines) => ctx[kAppendCookies](lines)
 
@@ -121,8 +104,6 @@ export class HTTPServer {
   readonly #shared: ServerShared
   readonly #matcher: RouteMatcher<RouteStore>
   readonly #constraints: CompiledConstraints
-  /** Where a preflight looks its route up once some route is constrained: a table that ignores constraints. */
-  readonly #preflight: PreflightTable<RouteDefinition> | undefined
   readonly #notFound: RouteStore
   readonly #basePath: string | undefined
   readonly #container: Container
@@ -176,33 +157,6 @@ export class HTTPServer {
       requestIDHeader: settings.requestIDHeader,
       bodyLimit: settings.bodyLimit,
       cookies: cookieSettings.enabled ? ServerCookies.resolve(cookieSettings, container, writeCookies) : undefined,
-      routeOf: (method, url) => {
-        let found: readonly RouteDefinition[] | undefined
-        if (this.#preflight === undefined) {
-          try {
-            const definition = this.#matcher.match(method, url, undefined)?.store.definition
-            found = definition === undefined ? undefined : [definition]
-          } catch (err) {
-            // A URL that cannot be decoded names no route.
-            if (err instanceof ErrHTTPBadRequest) {
-              return undefined
-            }
-            throw err
-          }
-        } else {
-          found = this.#preflight.match(method, url)
-        }
-
-        if (found !== undefined) {
-          return found
-        }
-        // A miss is certain only for a path that decodes, and where the lookup sees every route: a matcher of the
-        // application's own finds unconstrained routes only.
-        const certain =
-          normalizePath(sanitizeURL(url)).error === undefined &&
-          (this.#preflight !== undefined || !this.#constraints.derives)
-        return certain ? NO_ROUTES : undefined
-      },
     }
     this.#basePath = input.basePath
     this.#container = container
@@ -212,10 +166,6 @@ export class HTTPServer {
     this.#settings = settings
     this.#input = input
     this.#constraints = compileConstraints(input.routeGroups, settings.constraints)
-    // Without a constrained route a preflight finds its route in the matcher itself. The table is find-my-way's: under
-    // a matcher of the application's own, a preflight finds only unconstrained routes, and a constrained one goes
-    // unanswered.
-    this.#preflight = this.#constraints.derives && settings.matcher === findMyWayMatcher ? preflightTable() : undefined
     this.#matcher = settings.matcher<RouteStore>(settings.constraints)
     const root = compileLevel(input.levels.root, settings)
     const vary = this.#constraints.vary
@@ -236,7 +186,6 @@ export class HTTPServer {
       status: undefined,
       timeout: undefined,
       twin: false,
-      bare: false,
       input: undefined,
       serializerFor: NO_SERIALIZER,
     }
@@ -289,21 +238,25 @@ export class HTTPServer {
 
       let failure: Error | undefined
       let match: RouteMatch<RouteStore> | null = null
+      const end = pathEnd(url)
+      // As sent until it is read: what a request refused before that carries.
+      let path = url.slice(0, end)
 
-      if (this.#closing) {
-        failure = new ErrHTTPServiceUnavailable('The server is closing')
-      } else {
-        try {
+      try {
+        path = requestPath(path)
+        if (this.#closing) {
+          failure = new ErrHTTPServiceUnavailable('The server is closing')
+        } else {
           match = this.#matcher.match(
             method,
-            url,
+            path,
             this.#constraints.derives
               ? this.#constraints.derive({ header: name => platform.header(native, name) })
               : undefined,
           )
-        } catch (err) {
-          failure = asError(err)
         }
+      } catch (err) {
+        failure = asError(err)
       }
 
       const store = match?.store ?? this.#notFound
@@ -315,9 +268,10 @@ export class HTTPServer {
         id,
         method,
         url,
+        path,
         seenBase,
-        paramsOf(match, store),
-        match?.query ?? queryAfter(url),
+        match?.params ?? EMPTY_PARAMS,
+        queryAfter(url, end),
         store,
         !this.#closing,
       )
@@ -521,7 +475,6 @@ export class HTTPServer {
   #yielding(method: string, path: string, declared: DerivedConstraints | undefined, store: RouteStore): boolean {
     try {
       this.#matcher.add(method, path, declared, store)
-      this.#preflight?.add(method, path, store.definition!)
       return true
     } catch (err) {
       if (!(err instanceof ErrRouteConflict)) {
@@ -539,20 +492,14 @@ export class HTTPServer {
       readonly methods: string[]
       readonly url: string
     }> = []
-    // A route registered after every explicit one, giving way to what is there.
-    type Later = {
+    // A GET route's HEAD twin, registered after every explicit route, giving way to what is there.
+    type Twin = {
       readonly store: RouteStore
       readonly path: string
       readonly methods: string[]
       readonly declared: DerivedConstraints | undefined
     }
-    const twins: Later[] = []
-    // A wildcard route's bare parent: `/dash/*` answers `/dash` too, with an empty `*`.
-    const bares: Later[] = []
-    // Every method and path a route was declared at, as the router files it (`routeKeys`), whatever its constraints:
-    // find-my-way reports a conflict only when the constraints match too, and a bare parent gives way to a declared
-    // route either way.
-    const declaredAt = new Set<string>()
+    const twins: Twin[] = []
 
     for (const group of groups) {
       for (const route of group.routes) {
@@ -564,13 +511,8 @@ export class HTTPServer {
 
         const store = this.#storeOf(group, route, methods, path, settings)
 
-        const keys = routeKeys(path)
         for (const method of methods) {
           this.#matcher.add(method, path, declared, store)
-          this.#preflight?.add(method, path, store.definition!)
-          for (const key of keys) {
-            declaredAt.add(`${method} ${key}`)
-          }
         }
 
         registered.push({ route, group, definition: store.definition!, methods, url: path })
@@ -578,42 +520,13 @@ export class HTTPServer {
         if (methods.includes('GET')) {
           twins.push({ store: { ...store, twin: true }, path, methods, declared })
         }
-
-        // The methods as declared: the HEAD twin pass adds to `methods`, and a bare parent takes its own HEAD twin.
-        if (path.endsWith('/*') && path !== '/*') {
-          bares.push({ store: { ...store, bare: true }, path: path.slice(0, -2), methods: [...methods], declared })
-        }
       }
     }
 
     // After every explicit route, so an explicit HEAD route wins whichever was declared first.
     for (const twin of twins) {
-      if (this.#yielding('HEAD', twin.path, twin.declared, twin.store)) {
-        // Declared there now, as a bare parent sees it: its HEAD gives way to the twin, as its GET does to the route.
-        for (const key of routeKeys(twin.path)) {
-          declaredAt.add(`HEAD ${key}`)
-        }
-        if (!twin.methods.includes('HEAD')) {
-          twin.methods.push('HEAD')
-        }
-      }
-    }
-
-    // After every explicit route and HEAD twin, so a route at a wildcard's parent keeps its GET and its HEAD.
-    for (const bare of bares) {
-      // A bare path has no optional segment: an optional one is a path's last.
-      const [key] = routeKeys(bare.path)
-      let get = false
-
-      for (const method of bare.methods) {
-        if (!declaredAt.has(`${method} ${key}`)) {
-          const added = this.#yielding(method, bare.path, bare.declared, bare.store)
-          get ||= added && method === 'GET'
-        }
-      }
-
-      if (get && !bare.methods.includes('HEAD') && !declaredAt.has(`HEAD ${key}`)) {
-        this.#yielding('HEAD', bare.path, bare.declared, { ...bare.store, twin: true })
+      if (this.#yielding('HEAD', twin.path, twin.declared, twin.store) && !twin.methods.includes('HEAD')) {
+        twin.methods.push('HEAD')
       }
     }
 
@@ -681,7 +594,6 @@ export class HTTPServer {
       }),
       definition: open.definition as RouteDefinition,
       twin: false,
-      bare: false,
     }
   }
 
@@ -1313,9 +1225,14 @@ function lengthOf(payload: SendPayload | HeldStream): number | undefined {
   return payload instanceof Uint8Array ? payload.byteLength : undefined
 }
 
-function queryAfter(url: string): string {
-  const at = url.indexOf('?')
-  return at === -1 ? '' : url.slice(at + 1)
+// The query of the request target `url` whose path ends at `end`: what follows a `?` there, up to a fragment.
+function queryAfter(url: string, end: number): string {
+  if (url.charCodeAt(end) !== 63) {
+    return ''
+  }
+
+  const hash = url.indexOf('#', end + 1)
+  return hash === -1 ? url.slice(end + 1) : url.slice(end + 1, hash)
 }
 
 // A body that will not go out: a stream is cancelled, so its source stops.

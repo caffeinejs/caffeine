@@ -220,7 +220,7 @@ class OpenAPIPlugin extends HTTPPlugin {
     }
     if (paths.docs !== undefined) {
       endpoint(router, paths.docs, 'text/html', authz).handler(
-        ctx => docsPage ?? uiPage(options, paths, rootFrom(ctx.req.url, docsDepth), '/'),
+        ctx => docsPage ?? uiPage(options, paths, rootFrom(ctx.req.path, docsDepth), '/'),
       )
     }
     if (paths.asset !== undefined) {
@@ -410,8 +410,7 @@ function segmentsOf(path: string): number {
  * after the page's own path starts. A page at a group's root answers at both forms: a trailing `/` lies past the page,
  * and the links climb out of it. A relative link never names another origin.
  */
-function rootFrom(url: string, depth: number): string {
-  const path = url.slice(0, endOf(url, /[?#]/))
+function rootFrom(path: string, depth: number): string {
   let at = path.length
   let ups = 0
   let rest = ''
@@ -442,11 +441,6 @@ function rootFrom(url: string, depth: number): string {
 
   const climb = Array.from({ length: ups }, () => '..')
   return [...(climb.length === 0 ? ['.'] : climb), ...(rest === '' ? [] : [rest])].join('/')
-}
-
-function endOf(text: string, stop: RegExp): number {
-  const at = text.search(stop)
-  return at === -1 ? text.length : at
 }
 
 /**

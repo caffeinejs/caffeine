@@ -182,6 +182,13 @@ describe('fillPath', () => {
     expect(fillPath('/p/x+-:id', { id: 7 })).toBe('/p/x+-7')
     expect(fillPath('/p/v::1-:id', { id: 7 })).toBe('/p/v:1-7')
   })
+
+  // A `*` before a segment's first parameter starts a wildcard, as the route syntax reads it; after one it is text.
+  it('fills a wildcard written inside a segment', () => {
+    expect(fillPath('/files*', { '*': 'a/b' })).toBe('/filesa/b')
+    expect(fillPath('/a::*', { '*': 'x' })).toBe('/a:x')
+    expect(fillPath('/download/:id-file*name', { id: 7 })).toBe('/download/7-file*name')
+  })
 })
 
 describe('buildQuery', () => {

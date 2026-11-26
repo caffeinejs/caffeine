@@ -10,7 +10,7 @@ import {
   type OriginPredicate,
   type SecFetchSitePredicate,
 } from './options.js'
-import { checkOrigin, pathOf, questionsOf, SAFE_METHODS, type OriginCheckInput } from './origin.js'
+import { checkOrigin, questionsOf, SAFE_METHODS, type OriginCheckInput } from './origin.js'
 
 export const kBuild = Symbol('caffeine.http.csrf.build')
 
@@ -236,7 +236,7 @@ class CSRFProtection extends HTTPPlugin {
             reqId: ctx.req.id,
             reason,
             method: input.method,
-            path: pathOf(ctx.req.url),
+            path: ctx.req.path,
             host: input.host,
             origin: input.origin,
             secFetchSite: input.secFetchSite,

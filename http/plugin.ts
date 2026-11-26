@@ -36,7 +36,10 @@ export interface ScopedServer<C = unknown> {
    */
   readonly prefix: string
 
-  /** The factory the server matches routes with: `findMyWayMatcher` unless `.server(...)` replaced it. */
+  /**
+   * The factory the server matches routes with: `findMyWayMatcher` unless `.server(...)` replaced it. A plugin builds a
+   * matcher of its own with it to ask how the server ranks routes.
+   */
   readonly matcher: RouteMatcherFactory
 
   /** Where the server listens; `undefined` until it does, and once it has closed. */

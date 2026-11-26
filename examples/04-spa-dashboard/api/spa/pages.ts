@@ -40,7 +40,7 @@ export const publicPages = new Router()
  * Pages that need a session. An anonymous navigation here is redirected to `/login?returnUrl=…` by the cookie
  * scheme *before the page loads*, while an anonymous `fetch` gets 401 — one scheme, two right answers.
  *
- * `/dashboard/*` answers `/dashboard` too; the route declared at exactly `/dashboard` wins there and serves the shell.
+ * `/dashboard/*` answers what follows `/dashboard`; `/dashboard` itself is declared and serves the shell.
  */
 export const memberPages = new Router()
   .detail('http', { internal: true })
@@ -64,4 +64,4 @@ export const adminPages = new Router()
  * still reaches the projects router and this only catches what nothing else did. Without it a browser typing
  * `/api/typo` would fall through to the client-route wildcard and be handed the application.
  */
-export const apiMisses = new Router('/api').get('/*', notFound)
+export const apiMisses = new Router('/api').get('/', notFound).get('/*', notFound)

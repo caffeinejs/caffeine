@@ -158,6 +158,33 @@ describe('HTTPServer', () => {
     expect((await fetchOn(served, '/s/%E0%A4%A')).status).toBe(400)
   })
 
+  it('refuses a path that cannot be decoded with a 400 whatever its method', async () => {
+    const served = await serve(new Router().get('/a').handler(() => 'a'))
+
+    expect((await fetchOn(served, '/%E0%A4%A', { method: 'DELETE' })).status).toBe(400)
+  })
+
+  // A fragment is no part of the query: `?b=1#c` holds `b=1`, and `#c?d=2` holds no query at all.
+  it('reads the query up to a fragment', async () => {
+    const served = await serve(new Router().get('/q').handler(ctx => ctx.req.query()))
+
+    expect([
+      await (await fetchOn(served, '/q?b=1#c')).json(),
+      await (await fetchOn(served, '/q#c?d=2')).json(),
+    ]).toEqual([{ b: '1' }, {}])
+  })
+
+  it('gives a refused request its path without the query', async () => {
+    const served = await serve(
+      new Router().get('/a').handler(() => 'a'),
+      a => a.hook('onSend', ctx => void ctx.header('x-path', ctx.req.path)),
+    )
+
+    const res = await fetchOn(served, '/%E0%A4%A?q=1')
+
+    expect([res.status, res.headers.get('x-path')]).toEqual([400, '/%E0%A4%A'])
+  })
+
   it('serves HEAD for a GET route with the length and no body', async () => {
     const served = await serve(new Router('/s').get('/').handler(() => 'héllo'))
 

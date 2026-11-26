@@ -255,8 +255,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-// Characters find-my-way reads as route syntax, or a URL path cannot carry: the file could never be reached as
-// itself, or would be reached as a pattern.
+// Characters the route syntax reads, or a URL path cannot carry: the file could never be reached as itself, or would be
+// reached as a pattern.
 const SYNTAX: ReadonlyArray<readonly [string, string]> = [
   [':', 'which the router reads as a parameter'],
   ['*', 'which the router reads as a wildcard'],

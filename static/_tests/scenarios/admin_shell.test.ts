@@ -39,7 +39,7 @@ function adminSite(authenticateByDefault: boolean): WebApplication<never, never,
         .authorize({ roles: ['admin'] })
         .get('/', shellOf(dist))
         .get('/index.html', shellOf(dist))
-        .get('/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!, dist))
+        .get('/assets/*', ctx => sendFile(ctx, ctx.req.path, dist))
         .get('/*', clientRouteOf(dist)),
     ) as WebApplication<never, never, unknown, NodeAdapter>
 

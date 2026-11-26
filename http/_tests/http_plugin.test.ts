@@ -511,15 +511,6 @@ describe('HTTPPlugin', () => {
       expect((await app.request('/a/child/y')).headers.get('x-child')).toBeNull()
     })
 
-    it('keeps a parameter and drops a constraint in the base', async () => {
-      const numbered = new Router('/num/:id(^\\d+)').with(() => new Stamping('x-num', '/x')).get('/x', () => ({}))
-
-      app = createWebApplication({ adapter: node() }).mount(numbered) as WebApplication
-      await app.bootstrap()
-
-      expect((await app.request('/num/7/x')).headers.get('x-num')).toBe('yes')
-    })
-
     it("builds a router's useFn middleware once, outside the slot", async () => {
       const building = new Building()
       const built = new Router('/built')

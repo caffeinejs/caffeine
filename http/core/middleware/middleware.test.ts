@@ -638,4 +638,24 @@ describe('application middleware registration with a path', () => {
     expect(await response.text()).toBe('blocked')
     expect(reached).toEqual([])
   })
+
+  // The router, the middleware and the handler read one path, so no spelling of a guarded path reaches its route
+  // without its middleware.
+  it('gives the route, every middleware path and ctx.req.path one path', async () => {
+    const server = newPathApp()
+    server.use('/admin', (ctx, next) => {
+      ctx.header('x-admin', '1')
+      next()
+    })
+    server.mount(new Router().get('/admin/:x', ctx => ctx.req.path))
+    await server.bootstrap()
+
+    const response = await server.request('/%61dmin/b%2Fc')
+
+    expect([response.status, response.headers.get('x-admin'), await response.text()]).toEqual([
+      200,
+      '1',
+      '/admin/b%2Fc',
+    ])
+  })
 })

@@ -239,9 +239,9 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    *
    * The first argument may be a path (`string` or `string[]`): a literal prefix on whole segments, matched
    * case-sensitively, so `/admin` covers `/admin` and `/admin/users`, not `/adminx` or `/ADMIN`. A parameter, `*`, a
-   * regex, `?` or `#` is refused. The path only decides whether the middleware runs: `ctx.req.url` reads the same as
-   * anywhere else in the request. The middleware may be a `(ctx, next)` function, an instance, a class, or a container
-   * key.
+   * regex, `?` or `#` is refused. The path only decides whether the middleware runs: it is compared with
+   * `ctx.req.path`, which reads the same everywhere in the request. The middleware may be a `(ctx, next)` function, an
+   * instance, a class, or a container key.
    *
    * `{ hook }` is a request hook point (`onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`); `onRequest` by
    * default. A middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call overrides
@@ -469,9 +469,10 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    *
    * The server takes the base off a request's path before routing, so everything the application declares stays
    * written as if it were served from the root: routes from any source, plugin routes such as the health probes,
-   * `app.use(path, …)` paths and fallback-policy exceptions. `ctx.req.url` is that path, and `ctx.req.basePath`
-   * is what was taken off. The redirects this package builds — a sign-in challenge, its return URL, a denied
-   * access — add the base back; one a handler builds itself writes `ctx.req.basePath + '/somewhere'`.
+   * `app.use(path, …)` paths and fallback-policy exceptions. `ctx.req.path` is that path, `ctx.req.url` that path with
+   * its query, and `ctx.req.basePath` is what was taken off. The redirects this package builds — a sign-in challenge,
+   * its return URL, a denied access — add the base back; one a handler builds itself writes
+   * `ctx.req.basePath + '/somewhere'`.
    *
    * A request without the base is routed as it is, and its `ctx.req.basePath` is `''`. The base must end on a
    * segment boundary (`/api` matches `/api/pets`, never `/apix`) and is compared with the path as sent:

@@ -57,11 +57,7 @@ function basePicker(p: ParameterPickOptions<Context>): Picker {
     case 'url':
       return ctx => ctx.req.url
     case 'path':
-      return ctx => {
-        const url = ctx.req.url
-        const i = url.indexOf('?')
-        return i === -1 ? url : url.slice(0, i)
-      }
+      return ctx => ctx.req.path
     case 'signal':
       return ctx => ctx.signal
     case 'port':

@@ -11,6 +11,9 @@ const NOOP = (): undefined => undefined
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/
 
+// The path a matcher is handed holds no query: find-my-way parses none, and allocates nothing for it.
+const NO_QUERY: Record<string, string> = Object.freeze({})
+
 /**
  * The default matcher: find-my-way. It generates code with `new Function`, so it runs where a runtime allows that.
  */
@@ -51,15 +54,12 @@ export const findMyWayMatcher: RouteMatcherFactory = <S>(strategies: Parameters<
         return null
       }
 
+      // A path `requestPath` read never gets here; a raw one handed straight to the matcher could.
       if (found.store === null) {
         throw new ErrHTTPBadRequest(`Cannot route "${path}": the path is not a valid URL`)
       }
 
-      return {
-        store: found.store as S,
-        params: found.params,
-        query: found.searchParams as unknown as string,
-      }
+      return { store: found.store as S, params: found.params }
     },
   }
 }
@@ -70,57 +70,10 @@ function routerOf(strategies: readonly ConstraintStrategy<unknown>[]): FindMyWay
     // A trailing slash never makes another route.
     ignoreTrailingSlash: true,
     constraints: Object.fromEntries(strategies.map(strategy => [strategy.name, findMyWayStrategy(strategy, NOOP)])),
-    // The query is parsed on first read, not on every match.
-    querystringParser: (query: string) => query as unknown as Record<string, string>,
+    querystringParser: () => NO_QUERY,
     // Set so a URL that cannot be decoded comes back as a result with no store, told apart from no route.
     onBadUrl: NOOP,
   } as FindMyWay.Config<FindMyWay.HTTPVersion.V1>)
-}
-
-// find-my-way's own: a path ending in an optional parameter registers twice, with it and without it.
-const OPTIONAL_PARAMETER = /(\/:[^/()]*?)\?/
-
-/**
- * The paths `on` registers `path` as, rewritten as it rewrites them: `findRoute` reads a path as written, so the table
- * rewrites it first.
- */
-function formsOf(path: string): string[] {
-  return OPTIONAL_PARAMETER.test(path)
-    ? [path.replace(OPTIONAL_PARAMETER, '$1'), path.replace(OPTIONAL_PARAMETER, '') || '/']
-    : [path]
-}
-
-/** Routes by method and path alone: those find-my-way takes for one route, filed together. */
-export interface PreflightTable<S> {
-  add(method: string, path: string, store: S): void
-  /** Every store filed where `method` and `url` match; `undefined` for none, and for a URL that cannot be decoded. */
-  match(method: string, url: string): readonly S[] | undefined
-}
-
-/**
- * The table a preflight is looked up in. `findRoute` finds the route a path is filed under as find-my-way's own
- * conflict check does: parameter names erased.
- */
-export function preflightTable<S>(): PreflightTable<S> {
-  const router = routerOf([])
-
-  return {
-    add(method, path, store) {
-      for (const form of formsOf(path)) {
-        const found = router.findRoute(method as FindMyWay.HTTPMethod, form)
-        if (found === null) {
-          router.on(method as FindMyWay.HTTPMethod, form, NOOP, [store])
-        } else {
-          ;(found.store as S[]).push(store)
-        }
-      }
-    },
-
-    match(method, url) {
-      // A URL that cannot be decoded comes back with no store: it names no route either.
-      return (router.find(method as FindMyWay.HTTPMethod, url)?.store as S[] | null | undefined) ?? undefined
-    },
-  }
 }
 
 /**

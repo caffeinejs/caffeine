@@ -92,6 +92,12 @@ describe('engine pickers', () => {
     })
   })
 
+  it('picks the request path decoded, without the query', async () => {
+    const res = await app.fetch(new Request('http://localhost/picks/%61b?q=1'))
+
+    expect(((await res.json()) as { path: string }).path).toBe('/picks/ab')
+  })
+
   it('picks a repeated query key as a list', async () => {
     const res = await app.fetch(new Request('http://localhost/picks/7?q=a&q=b'))
 

@@ -162,12 +162,13 @@ that rejects, Caffeine logs the host error with the request ID. In either case, 
 registration and Caffeine continues to observe the task. If the binding’s promise fulfills while the task is
 pending, shutdown still waits for the task. The host sets the invocation’s execution limits. [Cloudflare Workers context](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil)
 
-If you bootstrap inside the Worker’s `fetch` handler, `workerd` rejects the default matcher’s attempt to generate
-code during route registration. For request-time bootstrap, configure a matcher that can register those routes
-without generating code. A matcher supplied by an earlier `.server(() => ({ matcher }))` call stays in effect
-when you add `fetchWaitUntil` as shown above. The local integration test uses an exact-path matcher for its
-schema-free routes. It reads the entire response before releasing the registered task and observing its
-completion through a service binding. [Worker fixture](../../test/fixtures/http-wait-until/worker.mjs)
+If you bootstrap inside the Worker’s `fetch` handler, `workerd` rejects the default matcher’s attempt to generate code
+during route registration. For request-time bootstrap, configure a matcher that can register those routes without
+generating code. A matcher implements `add` and `match`, and matches `ctx.req.path` as it is given. A matcher supplied
+by an earlier `.server(() => ({ matcher }))` call stays in effect when you add `fetchWaitUntil` as shown above. The
+local integration test uses an exact-path matcher for its schema-free routes. It reads the entire response before
+releasing the registered task and observing its completion through a service binding. [Worker
+fixture](../../test/fixtures/http-wait-until/worker.mjs)
 
 ## HTTPS and HTTP/2
 
@@ -210,8 +211,9 @@ fallback-policy exceptions are all written as if served from the root. A request
 came, so the base is not an access boundary: every route also answers without it, and keeping a route private is
 the gateway's job or authorization's.
 
-- `ctx.req.url` is the path the application sees; `ctx.req.basePath` is what was taken off (`''` when nothing was),
-  so the base follows the request: a request that came without it is answered without it.
+- `ctx.req.path` is the path the application sees, and `ctx.req.url` that path with its query; `ctx.req.basePath` is
+  what was taken off (`''` when nothing was), so the base follows the request: a request that came without it is
+  answered without it.
 - Redirects the framework builds carry the base: cookie sign-in's `loginPath` / `accessDeniedPath` and the return
   URL, OAuth/OIDC's return URL and `defaultRedirectPath`. A handler's own redirect says so with `~/`:
   `ctx.redirect('~/done')` is `/api/done`, while `ctx.redirect('/done')` is sent as written.
@@ -442,12 +444,12 @@ pets.group('/:petID/orders', r =>
 app.mount(pets) // before app.bootstrap()
 ```
 
-- Paths drop a trailing `/` and get a missing leading `/`: `/x` and `/x/` are one route. A wildcard route answers its
-  bare parent too (`/files/*` answers `/files`, with an empty `*`) unless a route is declared at that path, whatever
-  its parameter names, or reaches it with its optional last segment. A router, group, controller or mount path holds
-  literal segments and parameters only: a wildcard or an optional segment there is refused at start-up. `staticFiles()` does not check application routes against its files: one at exactly a file's URL fails start-up as a
-  duplicate route, and one under a directory of files wins. Middleware paths match case-sensitively, so a guard on
-  `/admin` does not run for `/ADMIN`.
+- Paths drop a trailing `/` and get a missing leading `/`: `/x` and `/x/` are one route. A wildcard answers what follows
+  its parent, not the parent: `/files/*` does not answer `/files`. A router, group, controller or mount path holds
+  literal segments and parameters only: a wildcard or an optional segment there is refused at start-up. `staticFiles()`
+  does not check application routes against its files: one at exactly a file's URL fails start-up as a duplicate route,
+  and one under a directory of files wins; a top-level directory's own URL, when the directory holds an index, is a
+  route of its own. Middleware paths match case-sensitively, so a guard on `/admin` does not run for `/ADMIN`.
 - A verb takes `(path)`, `(path, handler)` or `(path, schema, handler)`. With a handler the route is closed there
   and then and the group comes back, so routes chain off one another either way:
 
@@ -697,11 +699,14 @@ middleware cover its routes and the scopes nested in it, never a sibling's.
 - **On a server** (`.with(...)`, `l.with(...)`): the server serves what it mounts. Its middleware joins that
   server's pipeline after the application's own `.use(...)` entries, and a path is the server's own.
 - **On a router** (`router.with(...)`): it registers on each server the router is mounted on, once per place it is
-  mounted at, after that server's own plugins; `context.server.prefix` is the router's path there. What it mounts
-  nests under the router, starting from its path, guards and plugins. Its middleware runs in front of the router's
-  routes alone, nested groups included, and a middleware path is a literal prefix on whole segments: `use('/jobs', mw)`
-  on a router at `/admin` covers `/admin/jobs` and below. A parameter, `*`, a regex, `?` or `#` is refused; use the
-  literal parent prefix.
+  mounted at, after that server's own plugins; `context.server.prefix` is the router's path there. What it mounts nests
+  under the router, starting from its path, guards and plugins. Its middleware runs in front of the router's routes
+  alone, nested groups included, and a middleware path is a literal prefix on whole segments: `use('/jobs', mw)` on a
+  router at `/admin` covers `/admin/jobs` and below. A parameter, `*`, a regex, `?` or `#` is refused; use the literal
+  parent prefix. A request's path is read once: the target's path, without the query or the base path, decoded once but
+  for the escapes of reserved characters and of `%`. The router, middleware, plugins and handlers all read it as
+  `ctx.req.path`, and `ctx.req.url` is the same target with its query, as sent. A path that cannot be decoded is a 400.
+  A middleware path added on a router is joined to the router's path, and is refused when that path holds a parameter.
 - **On a controller** (`@Use(...)`): it registers on the server serving the controller, after the routers'. Its
   middleware runs in front of the controller's routes alone, a path relative to the controller and its `@Prefix`, and
   what it mounts nests under the controller, starting from its declarations.
@@ -710,10 +715,11 @@ Register a plugin once, where it covers the routes it should, and tune a route t
 `cors(...)`, `.config({ html: ... })`): two copies over one route both run, each as it registered: no check refuses a
 second plugin of one name; two `authentication()` gates under one label over one route are refused, as which one
 authenticates would be ambiguous. `context.server.hasPlugin(name)` answers for the plugin's own scope and the ones
-around it: the routers or controller it is nested in, then the server. `corsPolicy()` on a server answers preflights
-to its routes, and one no route serves from its own settings; on a router or a controller it serves `OPTIONS /` and
-`OPTIONS /*` under that path, so an `OPTIONS` route of the application's at either path, or a second policy on a
-router at the same path, fails start-up with `ErrRouteConflict`.
+around it: the routers or controller it is nested in, then the server. `corsPolicy()` answers a preflight from the
+settings of the route it lands on, and on a server one no `OPTIONS` route takes from its own; a `cors(...)` sets a
+preflight only where it covers that `OPTIONS` route; on a router or a controller it serves `OPTIONS /` and `OPTIONS /*`
+under that path, so an `OPTIONS` route of the application's at either path, or a second policy on a router at the same
+path, fails start-up with `ErrRouteConflict`.
 
 - Mounted routes compile as `app.mount(...)` compiles them: guards, authorization and the fallback policy, CSRF
   marks, routers' own `.with(...)` and the start-up checks. Mark a group the application does not own

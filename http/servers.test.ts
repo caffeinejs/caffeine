@@ -371,7 +371,8 @@ describe('context.server', () => {
     ).toEqual([{ basePath: '', matcher: findMyWayMatcher }])
   })
 
-  // A plugin that keys on the router, as staticFiles() does, tells a matcher of the server's own from the default.
+  // A plugin that asks how the server ranks routes, as staticFiles() does, builds its probe with the server's own
+  // matcher.
   it("reports the server's own matcher", async () => {
     const matcher: RouteMatcherFactory = strategies => findMyWayMatcher(strategies)
 

@@ -19,8 +19,12 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
 
   return segmentsOf(path)
     .map(segment => {
-      if (segment === '*') {
-        return fillParams(path, ['*'], params, false)?.[0]
+      // A `*` in the text before the segment's first parameter starts a wildcard; after one it is text, as the route
+      // syntax reads it.
+      const lead = segment.includes('*') ? readSegment(segment)[0] : undefined
+      if (typeof lead === 'string' && lead.includes('*')) {
+        const value = fillParams(path, ['*'], params, false)?.[0]
+        return value === undefined ? undefined : escapeText(lead.slice(0, lead.indexOf('*')), true) + value
       }
 
       if (!segment.includes(':')) {
@@ -115,7 +119,7 @@ function fillParams(
 }
 
 /**
- * One segment as find-my-way reads it: text, and the parameters within it.
+ * One segment as the route syntax reads it: text, and the parameters within it.
  *
  * A single `:` starts a parameter, whose name ends at `(`, `-` or `.`. A `(` opens a constraint, which runs to its
  * balancing `)`, nested ones counted and a `\` escaping the character after it, or to the end of the segment when

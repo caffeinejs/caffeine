@@ -9,8 +9,7 @@ import { clientRouteOf, dist, expectNotFoundJSON, fixtures, isolated, NAVIGATION
  * Server-rendered pages at the root, a plain file mount at `/static`, and the application under `/app`.
  *
  * The client routes are written on a prefixed router: `new Router('/app')` with a route at `/` composes to
- * `/app`, which wins over the bare parent `/app/*` answers too. `/app/` is `/app`: a trailing slash never makes another
- * route. See `http/_tests/group_root_path.test.ts`.
+ * `/app`. `/app/` is `/app`: a trailing slash never makes another route. See `http/_tests/group_root_path.test.ts`.
  */
 function site(): WebApplication<never, never, unknown, NodeAdapter> {
   return isolated()

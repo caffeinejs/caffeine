@@ -12,7 +12,7 @@ Three different “404s”. `@Catch(ErrHTTPNotFound)` sees the first two.
 
 `ctx.notFound(body)` sets status 404 on a request that **already matched**.
 
-Same-origin SPA + `/api` is routing, not error handling: the application writes `GET /*` for its client routes and `new Router('/api').get('/*', …404)` so the API owns its own misses. See [spa.md](spa.md). Do not return `index.html` from `@Catch(ErrHTTPNotFound)`.
+Same-origin SPA + `/api` is routing, not error handling: the application writes `GET /*` for its client routes and `new Router('/api').get('/', …404).get('/*', …404)` so the API owns its own misses. See [spa.md](spa.md). Do not return `index.html` from `@Catch(ErrHTTPNotFound)`.
 
 ## Problem details
 

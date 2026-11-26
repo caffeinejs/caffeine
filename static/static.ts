@@ -6,11 +6,9 @@ import {
   ErrConfiguration,
   ErrHTTPNotFound,
   ErrRouteConflict,
-  findMyWayMatcher,
   HTTPPlugin,
   literalPrefix,
   normalizeRoutePath,
-  parseRoutePattern,
   Router,
   type HTTPPluginFactory,
   type HTTPPluginConfigurer,
@@ -100,12 +98,13 @@ const COMPUTED = new Set([
  * files it lists, so a miss under a directory is a `404` and a miss elsewhere falls through to the application's
  * routes. Compressed variants are negotiated by `Accept-Encoding` and are never URLs of their own.
  *
- * Start-up fails loudly: a missing or stale manifest, a listed file that is not there, and two files answering one
- * URL each name the file and the fix. Application routes are not checked against the files: one at exactly a file's
- * URL fails start-up as a duplicate route (`ErrRouteConflict`), and one under a directory of files wins. Install it
- * once where it serves: on the application or a listener it serves at the server's paths, on a router or a
- * controller under that one's path. A server with a matcher of its own is refused. One `staticFiles(...)` takes
- * several `.serve(...)` calls.
+ * Start-up fails loudly: a missing or stale manifest, a listed file that is not there, and two files answering one URL
+ * each name the file and the fix. Application routes are not checked against the files: one at exactly a file's URL
+ * fails start-up as a duplicate route (`ErrRouteConflict`), and one under a directory of files wins, except at a
+ * top-level directory's own URL when the directory holds an index, which is a route of its own. Install it once where
+ * it serves: on the application or a listener it serves at the server's paths, on a router or a controller under that
+ * one's path. It asks a matcher built with the server's own factory how its routes rank, so it serves under any
+ * matcher. One `staticFiles(...)` takes several `.serve(...)` calls.
  */
 export function staticFiles<C = unknown>(configure?: StaticConfigurer<C>): HTTPPluginFactory<C> {
   return async context => {
@@ -362,17 +361,6 @@ class StaticFiles extends HTTPPlugin {
     // A URL the plugin answers, as a refusal names it: where the server serves it.
     const atServer = (url: string): string => `${prefix}${url}`
 
-    if (server.matcher !== findMyWayMatcher) {
-      throw new ErrConfiguration(
-        errMessage(
-          'Cannot install staticFiles(): the server matches routes with a matcher of its own, and static routes are matched by find-my-way',
-        )
-          .solutions('Leave the matcher setting out of ".server(...)" on the server that serves static files')
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
-    }
-
     const routes = routesOf(mounts)
     // This registration's own routes, which its checks hold.
     const mine = Symbol('caffeine.static.route')
@@ -387,9 +375,9 @@ class StaticFiles extends HTTPPlugin {
 
     // Once every route is in, the router's own rules say what answers each file under a directory: a longer wildcard
     // between this registration's mounts ranks above the directory's wildcard and would answer the file under its
-    // own gate. Asked of a find-my-way, which is how the server matches.
+    // own gate. Asked of a matcher built with the server's own factory, which ranks routes as the server does.
     context.server.hook('onReady', () => {
-      const matcher: StaticMatcher = findMyWayMatcher<RouteTarget>([])
+      const matcher: StaticMatcher = server.matcher<RouteTarget>([])
       const hold = (method: string, url: string, store: RouteTarget) => {
         try {
           matcher.add(method, url, undefined, store)
@@ -404,15 +392,6 @@ class StaticFiles extends HTTPPlugin {
       for (const [url, target] of routes) {
         for (const method of ['GET', 'HEAD']) {
           hold(method, url, target)
-        }
-      }
-
-      // After every other route, as the server registers it: a directory's wildcard answers its bare parent too.
-      for (const [url, target] of routes) {
-        if (target.kind === 'directory' && url !== '/*') {
-          for (const method of ['GET', 'HEAD']) {
-            hold(method, url.slice(0, -2), target)
-          }
         }
       }
 
@@ -446,7 +425,7 @@ class StaticFiles extends HTTPPlugin {
       into
         .get(url)
         .name(`static_${n++}`)
-        .handler(target.kind === 'file' ? fileHandler(target.file, log) : directoryHandler(target.files, log, prefix))
+        .handler(target.kind === 'file' ? fileHandler(target.file, log) : directoryHandler(target.files, log))
     }
 
     context.server.mount(...mounted)
@@ -481,15 +460,6 @@ function paramsOf(matcher: StaticMatcher, method: string, url: string): Record<s
   }
 }
 
-/** The path of a request target, with the authority and query removed as the router removes them. */
-function pathOf(url: string): string {
-  // An absolute-form target reaches a directory route only with a path after its authority.
-  const path = url.startsWith('/') ? url : url.slice(url.indexOf('/', url.indexOf('://') + 3))
-  const end = path.search(/[?#]/)
-
-  return end === -1 ? path : path.slice(0, end)
-}
-
 /**
  * The directory route of another mount that the router hands `url` to, if one does: only to name its file in the
  * error, since the router has already said the URL is not the mount's.
@@ -500,7 +470,7 @@ function nestedDirectory(
   mount: PreparedMount,
   routes: ReadonlyMap<string, RouteTarget>,
 ): RouteTarget | undefined {
-  const params = paramsOf(matcher, 'GET', encodeURI(url))
+  const params = paramsOf(matcher, 'GET', asRequested(url))
   const star = params?.['*']
 
   if (star === undefined || !url.endsWith(star)) {
@@ -523,8 +493,8 @@ function nestedDirectory(
  * its directory, rather than to another route.
  */
 function answeredByMount(matcher: StaticMatcher, url: string, rest: string): boolean {
-  // Spelled as a browser sends it, which the router decodes as it does a request's.
-  const sent = encodeURI(url)
+  // As a request for the file reads it (`ctx.req.path`).
+  const sent = asRequested(url)
 
   return ['GET', 'HEAD'].every(method => {
     const params = paramsOf(matcher, method, sent)
@@ -534,9 +504,9 @@ function answeredByMount(matcher: StaticMatcher, url: string, rest: string): boo
 }
 
 /**
- * The routes every mount registers, checked for two files answering one URL as the router would match it: a file at
- * a mount's root and an index at a mount's root have their own route, and each directory under the root one route
- * answering from its files, index URLs included.
+ * The routes every mount registers, checked for two files answering one URL as the router would match it: a file at a
+ * mount's root, the index at a mount's root and the index of a top-level directory have their own route, and each
+ * directory under the root one route answering from its files, the URLs of deeper indexes included.
  */
 function routesOf(mounts: readonly PreparedMount[]): Map<string, RouteTarget> {
   const claimed = new Map<string, Claim>()
@@ -559,18 +529,25 @@ function routesOf(mounts: readonly PreparedMount[]): Map<string, RouteTarget> {
       const slash = file.path.indexOf('/')
       const index = mount.index !== false && posix.basename(file.path) === mount.index
 
+      let files: Map<string, PreparedFile> | undefined
       if (slash === -1) {
         routes.set(mount.prefix + file.path, { kind: 'file', file, mount })
       } else {
-        directoryRoute(routes, mount, file, slash, index)
+        files = directoryRoute(routes, mount, file, slash)
       }
 
       if (index) {
         const directory = indexURL(mount, file)
         claim(directory, mount, file)
 
-        if (directory === mount.prefix) {
+        // The index's directory as its top-level directory's wildcard captures it: `''` at the mount's root and
+        // directly in a top-level directory, whose URL is then a route of its own.
+        const capture = directory.slice(mount.prefix.length + slash + 1)
+        if (capture === '') {
           routes.set(normalizeRoutePath(directory), { kind: 'file', file, mount })
+        } else {
+          // Without its trailing slash, as the wildcard reaches it.
+          files!.set(capture.slice(0, -1), file)
         }
       }
     }
@@ -579,13 +556,13 @@ function routesOf(mounts: readonly PreparedMount[]): Map<string, RouteTarget> {
   return routes
 }
 
+/** Files `file` under its top-level directory's route, creating it: the map that route answers from. */
 function directoryRoute(
   routes: Map<string, RouteTarget>,
   mount: PreparedMount,
   file: PreparedFile,
   slash: number,
-  index: boolean,
-): void {
+): Map<string, PreparedFile> {
   const url = `${mount.prefix}${file.path.slice(0, slash)}/*`
   const lookup = file.path.slice(slash + 1)
   const route = routes.get(url)
@@ -602,14 +579,7 @@ function directoryRoute(
     throw new ErrStaticRouteConflict(url, describe(route.mount, firstOf(route)), describe(mount, file))
   }
 
-  if (index) {
-    // The directory's URL reaches this wildcard with the index's directory as its capture: `''` for `/docs/`.
-    const end = file.path.length - posix.basename(file.path).length
-    const capture = file.path.slice(slash + 1, end)
-
-    // Without its trailing slash, as the router hands it over: `''` stays `''`.
-    files.set(capture.slice(0, -1), file)
-  }
+  return files
 }
 
 /** The directory URL an index file answers at. */
@@ -632,42 +602,23 @@ function fileHandler(file: PreparedFile, log: FileLog): () => FileResponder {
   return () => responder
 }
 
-/** The escapes find-my-way keeps while matching: `#`, `$`, `&`, `+`, `,`, `/`, `:`, `;`, `=`, `?` and `@`. */
-const RESERVED_ESCAPE = /%(?:2[346BCF]|3[ABDF]|40)/i
+/** A file's URL as `ctx.req.path` reads a request for it: a `%` stays `%25`. */
+function asRequested(url: string): string {
+  return url.replaceAll('%', '%25')
+}
 
-function directoryHandler(
-  files: ReadonlyMap<string, PreparedFile>,
-  log: FileLog,
-  prefix: string,
-): (ctx: IContext) => FileResponder {
-  // The files are keyed by their URL under the plugin's scope, and a request's path starts with the scope's. The
-  // scope's path is a pattern whose every parameter is one segment, so its own segments are taken off, whatever they
-  // hold, before anything below reads the path.
-  const segments = segmentsOf(prefix)
+function directoryHandler(files: ReadonlyMap<string, PreparedFile>, log: FileLog): (ctx: IContext) => FileResponder {
   // One responder per file, built on its first request: it holds nothing of a request.
   const responders = new Map<PreparedFile, FileResponder>()
 
-  const withinScope = (path: string): string =>
-    segments === 0
-      ? path
-      : `/${path
-          .split('/')
-          .slice(segments + 1)
-          .join('/')}`
-
   return ctx => {
-    // The router matches these escapes as written, then decodes them in the wildcard. An exact route at a file's URL
-    // matches only the literal spelling, so the escaped one would reach the file here, under this route's gate; and
-    // `%2F`, read as `/`, would reach a file by a URL another route answers. So they name nothing here either.
-    const path = withinScope(pathOf(ctx.req.url))
-    let file: PreparedFile | undefined
+    // The router matches a reserved escape (`%2F`, `%2B`, …) as written and decodes it in the wildcard, which could
+    // then name a file by a URL another route answers. A file is served only when the request path ends in its URL as
+    // written; what the router matched before that is the scope's.
+    const lookup = ctx.req.param('*')
+    const file = lookup === undefined ? undefined : files.get(lookup)
 
-    if (!RESERVED_ESCAPE.test(path)) {
-      const lookup = ctx.req.param('*')
-      file = lookup === undefined ? undefined : files.get(lookup)
-    }
-
-    if (file === undefined) {
+    if (file === undefined || !normalizeRoutePath(ctx.req.path).endsWith(`/${asRequested(lookup!)}`)) {
       throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
     }
 
@@ -679,16 +630,4 @@ function directoryHandler(
 
     return responder
   }
-}
-
-/**
- * How many segments of a request path the scope's path spans, where the file URLs under it begin: a parameter is one
- * segment whatever its value. The scope's path holds literal segments and parameters only: `normalizeGroupPath` refuses
- * a wildcard or an optional segment in it.
- */
-function segmentsOf(prefix: string): number {
-  const joined = `${parseRoutePattern(prefix)
-    .map(part => (part.kind === 'text' ? part.text : 'p'))
-    .join('')}/x`
-  return joined.split('/').length - 2
 }

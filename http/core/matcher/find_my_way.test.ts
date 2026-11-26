@@ -1,9 +1,11 @@
+import FindMyWay from 'find-my-way'
 import { describe, expect, it } from 'vitest'
 
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
-import { findMyWayMatcher, preflightTable } from './find_my_way.js'
+import { requestPath } from '../server/context.js'
+import { findMyWayMatcher } from './find_my_way.js'
 import { ErrRouteConflict } from './matcher.js'
 
 function matcher() {
@@ -31,18 +33,7 @@ describe('findMyWayMatcher', () => {
     const m = matcher()
     m.add('GET', '/a', undefined, 'store-a')
 
-    expect(m.match('GET', '/a', undefined)).toEqual({ store: 'store-a', params: {}, query: '' })
-  })
-
-  // The query is parsed only when a handler reads it, so the matcher hands it on as it was sent.
-  it('decodes parameters and leaves the query raw', () => {
-    const m = matcher()
-    m.add('GET', '/u/:id', undefined, 'user')
-
-    const found = m.match('GET', '/u/a%20b?x=1+2', undefined)
-
-    expect({ ...found!.params }).toEqual({ id: 'a b' })
-    expect(found!.query).toBe('x=1+2')
+    expect(m.match('GET', '/a', undefined)).toEqual({ store: 'store-a', params: {} })
   })
 
   it('matches case-sensitively', () => {
@@ -159,46 +150,41 @@ describe('findMyWayMatcher', () => {
   })
 })
 
-// What a preflight finds: every route of a method and path, whatever constraints set them apart.
-describe('preflightTable', () => {
-  it('files routes find-my-way takes for one together, whatever their parameter names', () => {
-    const table = preflightTable<string>()
-    table.add('GET', '/pets/:id', 'a')
-    table.add('GET', '/pets/:petId', 'b')
+// The matcher is handed ctx.req.path and find-my-way decodes it again: that second decoding must change nothing, so the
+// router binds what it would bind from the target as sent.
+describe('a path requestPath read', () => {
+  const paths = ['/admin/:x', '/files/*', '/a', '/café', '/p100%']
 
-    expect(table.match('GET', '/pets/7')).toEqual(['a', 'b'])
-  })
+  it.each([
+    '/admin/%61b',
+    '/admin/a%2Fb',
+    '/admin/a%2fb',
+    '/files/a%2Fb/c%20d',
+    '/files/%E2%82%AC/%3F',
+    '/a?x=1',
+    '/%61',
+    '/admin/x/',
+    '/caf%C3%A9',
+    '/admin/100%25',
+    '/p100%25',
+    '/admin/%2525',
+    '/files/%2561/%252F',
+    '/files/%25%32%46',
+    '/admin/a%3Bb%2523',
+  ])('matches %s as find-my-way matches the target as sent', target => {
+    const raw = FindMyWay({ ignoreTrailingSlash: true })
+    const m = matcher()
+    for (const path of paths) {
+      raw.on('GET', path, () => undefined, path)
+      m.add('GET', path, undefined, path)
+    }
 
-  // `findRoute` reads a path as written: the table rewrites it as `on` does before looking it up.
-  it('files a route under an optional parameter with the route it shares a path with', () => {
-    const table = preflightTable<string>()
-    table.add('GET', '/users', 'a')
-    table.add('GET', '/users/:id?', 'b')
+    const sent = raw.find('GET', target)
+    const found = m.match('GET', requestPath(target), undefined)
 
-    expect(table.match('GET', '/users')).toEqual(['a', 'b'])
-  })
-
-  // An optional parameter at the root has "/" as its shorter form: a preflight to "/" finds the route declared there
-  // too.
-  it('files a root optional route with the root route', () => {
-    const table = preflightTable<string>()
-    table.add('GET', '/', 'a')
-    table.add('GET', '/:lang?', 'b')
-
-    expect([table.match('GET', '/'), table.match('GET', '/en')]).toEqual([['a', 'b'], ['b']])
-  })
-
-  it('finds nothing for a method no route of the path serves', () => {
-    const table = preflightTable<string>()
-    table.add('GET', '/pets/:id', 'a')
-
-    expect(table.match('POST', '/pets/7')).toBe(undefined)
-  })
-
-  it('finds nothing for a path that cannot be decoded', () => {
-    const table = preflightTable<string>()
-    table.add('GET', '/:p', 'p')
-
-    expect(table.match('GET', '/%E0%A4%A')).toBe(undefined)
+    expect(found === null ? null : { store: found.store, params: { ...found.params } }).toEqual(
+      sent === null ? null : { store: sent.store, params: { ...sent.params } },
+    )
+    expect(found).not.toBe(null)
   })
 })

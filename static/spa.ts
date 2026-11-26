@@ -3,7 +3,7 @@ import { isNavigation } from '@caffeinejs/http'
 /** The slice of an `IContext` {@link isDocumentRequest} reads. */
 export interface DocumentRequestContext {
   readonly req: {
-    readonly url: string
+    readonly path: string
     header(key: string): string | undefined
   }
 }
@@ -32,7 +32,7 @@ export interface DocumentRequestContext {
  * ```
  */
 export function isDocumentRequest(ctx: DocumentRequestContext, navigationOnly = true): boolean {
-  if (namesAFile(ctx.req.url)) {
+  if (namesAFile(ctx.req.path)) {
     return false
   }
 
@@ -50,14 +50,13 @@ export function isDocumentRequest(ctx: DocumentRequestContext, navigationOnly = 
 }
 
 /**
- * Whether the last path segment carries a file extension, the query ignored.
+ * Whether the last path segment carries a file extension.
  *
  * This is what keeps a missing `/assets/app-eZr2sdaR.js` a real 404: the browser asked for a script, and
  * handing it the shell would fail later and further away, as a syntax error inside a file that is not
  * JavaScript.
  */
-function namesAFile(url: string): boolean {
-  const path = url.split('?', 1)[0] ?? ''
+function namesAFile(path: string): boolean {
   const lastSegment = path.slice(path.lastIndexOf('/') + 1)
   const dot = lastSegment.lastIndexOf('.')
 

@@ -259,10 +259,3 @@ export function questionsOf(ctx: IContext, askable: OriginCheckAskable, options:
 
   return questions
 }
-
-// The query can carry a token a webhook sender was handed, and the check never reads it.
-export function pathOf(url: string): string {
-  const query = url.indexOf('?')
-
-  return query === -1 ? url : url.slice(0, query)
-}

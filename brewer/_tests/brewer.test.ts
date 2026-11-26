@@ -129,6 +129,8 @@ const shapes = new Router('/shapes')
   .handler(ctx => ctx.req.param())
   .get('/pre/100%-:id')
   .handler(ctx => ctx.req.param())
+  .get('/glob/files*')
+  .handler(ctx => ctx.req.param())
 
 const app = createWebApplication({ adapter: node() }).mount(pets, files, tags, catalog, legacy, hatch, shapes)
 
@@ -340,6 +342,14 @@ describe('brewer against a running server', () => {
       const client = brewer<typeof app>(origin)
 
       expect(await (await client.shapes.rgx({ id: '42' }).get()).json()).toEqual({ id: '42' })
+    })
+
+    it('should fill a wildcard written inside a segment, which the server binds whole', async () => {
+      const client = brewer<typeof app>(origin)
+
+      const res = await client.$request('GET', '/shapes/glob/files*', { params: { '*': 'a/b' } })
+
+      expect(await res.json()).toEqual({ '*': 'a/b' })
     })
   })
 

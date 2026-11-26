@@ -181,6 +181,17 @@ describe('staticFiles', () => {
     expect((await app!.request('/assets/private%2freport.txt')).status).toBe(404)
   })
 
+  // A "%" in a name is sent as "%25" and stays so in the request path: the file is found by that spelling alone.
+  it('serves a file whose name holds %, requested as %25', async () => {
+    const root = await tree('nested', ['assets/100%.txt'])
+    await start(s => s.serve(root, { anonymous: true })).bootstrap()
+
+    expect([
+      (await app!.request('/assets/100%25.txt')).status,
+      (await app!.request('/assets/100%2525.txt')).status,
+    ]).toEqual([200, 404])
+  })
+
   // The router matches these escapes as written and decodes them in the wildcard, as with "%2F": an exact route at
   // the file's URL, gated its own way, answers only the literal spelling, so the wildcard answers none but that.
   it.each(['%24', '%26', '%2B', '%2b', '%2C', '%3B', '%3D', '%40'])(
@@ -619,7 +630,7 @@ describe('staticFiles', () => {
     ])
   })
 
-  // A directory's index answers the directory's URL, either spelling, as the bare parent of the directory's route.
+  // A top-level directory's index answers the directory's URL, either spelling, as a route of its own.
   it("answers a directory's URL with its index", async () => {
     const root = await tree('docs', ['docs/index.html', 'docs/guide.html'])
     await start(s => s.serve(root)).bootstrap()
@@ -629,9 +640,9 @@ describe('staticFiles', () => {
     }
   })
 
-  // An application route at a directory's URL is the application's: the directory's index gives way, and its files
-  // stay served.
-  it("leaves a directory's URL to an application route there", async () => {
+  // A directory's index answers the directory's own URL as a route of its own: an application route there is a
+  // duplicate.
+  it("refuses an application route at a directory's own URL", async () => {
     const root = await tree('docs', ['docs/index.html', 'docs/guide.html'])
     app = start(s => s.serve(root)).mount(new Router().get('/docs', () => 'app')) as WebApplication<
       never,
@@ -639,13 +650,8 @@ describe('staticFiles', () => {
       unknown,
       NodeAdapter
     >
-    await app.bootstrap()
 
-    expect([
-      await (await app.request('/docs')).text(),
-      await (await app.request('/docs/')).text(),
-      await (await app.request('/docs/guide.html')).text(),
-    ]).toEqual(['app', 'app', 'docs/guide.html'])
+    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_ROUTE_CONFLICT' })
   })
 
   describe('on a router', () => {
@@ -697,16 +703,14 @@ describe('staticFiles', () => {
     })
   })
 
-  it('refuses staticFiles() on a server with a matcher of its own', async () => {
+  it("serves files under a matcher of the application's own", async () => {
     app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ matcher: strategies => findMyWayMatcher(strategies) }))
-      .with(staticFiles(s => s.serve(fixtures))) as WebApplication<never, never, unknown, NodeAdapter>
+      .with(staticFiles(s => s.serve(spa))) as WebApplication<never, never, unknown, NodeAdapter>
+    await app.bootstrap()
 
-    const err = await app.bootstrap().catch((err: unknown) => err)
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(firstLine(err as Error)).toBe(
-      'Cannot install staticFiles(): the server matches routes with a matcher of its own, and static routes are matched by find-my-way',
+    expect([(await app.request('/favicon.svg')).status, (await app.request('/assets/app-eZr2sdaR.js')).status]).toEqual(
+      [200, 200],
     )
   })
 })

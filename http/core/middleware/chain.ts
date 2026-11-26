@@ -2,19 +2,19 @@ import type { IContext } from '../../context.js'
 import { asError, isThenable, type Answerable, type HookEntry, type RequestHookName } from '../lifecycle/lifecycle.js'
 import { ErrNextCalledTwice } from './errors.js'
 import type { MiddlewareFn, Next } from './middleware.js'
-import { pathAfter, prefixMatcher, type PlacedMiddleware } from './path.js'
+import { prefixMatcher } from './path.js'
+import type { ResolvedMiddleware } from './pipeline.js'
 
 /** What the chain needs of the request it runs on. */
 export interface ChainTarget extends Answerable {
-  /** The request path as the router matches it, or the error a malformed one fails with. Computed once per request. */
-  normalizedPath(): { path: string; error: Error | undefined }
+  /** The request, whose path a middleware's path is compared with: `ctx.req.path`. */
+  readonly req: { readonly path: string }
   /** Where a middleware that fails after it called `next` is reported: nothing waits on it any more. */
   readonly logger: { error(fields: object, message: string): void }
 }
 
 interface Layer {
   readonly prefix: ((path: string) => boolean) | undefined
-  readonly skip: number | undefined
   readonly handle: MiddlewareFn
 }
 
@@ -25,7 +25,7 @@ interface Layer {
  * middleware runs. `undefined` when there is no middleware.
  */
 export function compileChain<X extends ChainTarget>(
-  middlewares: readonly PlacedMiddleware[],
+  middlewares: readonly ResolvedMiddleware[],
   point: RequestHookName,
 ): HookEntry<X> | undefined {
   if (middlewares.length === 0) {
@@ -34,7 +34,6 @@ export function compileChain<X extends ChainTarget>(
 
   const layers: Layer[] = middlewares.map(middleware => ({
     prefix: middleware.path === undefined ? undefined : prefixMatcher(middleware.path),
-    skip: middleware.skip,
     handle: middleware.handle,
   }))
 
@@ -80,17 +79,8 @@ function runChain<X extends ChainTarget>(
 
       const layer = layers[i]
 
-      if (layer.prefix !== undefined) {
-        const normalized = ctx.normalizedPath()
-        if (normalized.error !== undefined) {
-          complete(normalized.error)
-          return
-        }
-
-        const path = layer.skip === undefined ? normalized.path : pathAfter(normalized.path, layer.skip)
-        if (!layer.prefix(path)) {
-          continue
-        }
+      if (layer.prefix !== undefined && !layer.prefix(ctx.req.path)) {
+        continue
       }
 
       let called = false
