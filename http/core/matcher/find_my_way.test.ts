@@ -45,11 +45,12 @@ describe('findMyWayMatcher', () => {
     expect(found!.query).toBe('x=1+2')
   })
 
-  it('matches case-insensitively under caseSensitive: false', () => {
-    const m = matcher({ caseSensitive: false })
+  // Paths are case-sensitive: a flag the router no longer takes, carried over in a flags object, changes nothing.
+  it('matches case-sensitively whatever else its flags object holds', () => {
+    const m = findMyWayMatcher<string>({ ...DEFAULT_ROUTER_FLAGS, caseSensitive: false } as RouterFlags, [])
     m.add('GET', '/a', undefined, 'a')
 
-    expect(m.match('GET', '/A', undefined)?.store).toBe('a')
+    expect(m.match('GET', '/A', undefined)?.store).toBe(undefined)
   })
 
   it('matches a trailing slash under ignoreTrailingSlash', () => {
@@ -57,20 +58,6 @@ describe('findMyWayMatcher', () => {
     m.add('GET', '/a', undefined, 'a')
 
     expect(m.match('GET', '/a/', undefined)?.store).toBe('a')
-  })
-
-  it('collapses // under ignoreDuplicateSlashes', () => {
-    const m = matcher({ ignoreDuplicateSlashes: true })
-    m.add('GET', '/a/b', undefined, 'ab')
-
-    expect(m.match('GET', '//a//b', undefined)?.store).toBe('ab')
-  })
-
-  it('splits the query at ; under useSemicolonDelimiter', () => {
-    const m = matcher({ useSemicolonDelimiter: true })
-    m.add('GET', '/a', undefined, 'a')
-
-    expect(m.match('GET', '/a;x=1', undefined)?.query).toBe('x=1')
   })
 
   it('registers QUERY', () => {
@@ -208,18 +195,9 @@ describe('preflightTable', () => {
     expect(table.match('GET', '/pets/7')).toEqual(['a', 'b'])
   })
 
-  it('files paths of another case together under caseSensitive: false', () => {
-    const table = preflightTable<string>({ ...DEFAULT_ROUTER_FLAGS, caseSensitive: false })
-    table.add('GET', '/Pets', 'a')
-    table.add('GET', '/pets', 'b')
-
-    expect(table.match('GET', '/PETS')).toEqual(['a', 'b'])
-  })
-
   // `findRoute` reads a path as written: the table rewrites it as `on` does before looking it up.
   it.each<[string, Partial<RouterFlags>, string, string, string]>([
     ['an optional parameter', {}, '/users', '/users/:id?', '/users'],
-    ['duplicate slashes', { ignoreDuplicateSlashes: true }, '/a/b', '/a//b', '/a/b'],
     ['a trailing slash', { ignoreTrailingSlash: true }, '/a', '/a/', '/a'],
   ])('files a route under %s with the route it shares a path with', (_what, flags, first, second, url) => {
     const table = preflightTable<string>({ ...DEFAULT_ROUTER_FLAGS, ...flags })

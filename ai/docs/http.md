@@ -32,9 +32,10 @@ const { address } = await app.run() // or app.run({ port: 3000 }); address.origi
 ```
 
 `.server(configure)` configures the server it builds. `bodyLimit`, `handlerTimeout`, `trustProxy`, `router`,
-`requestIDHeader` and `schemaCompiler` are the engine's, under every adapter; the adapter adds its own. Under `node()`,
-`listen` takes node:net's listen options and `http`, `https` and `http2` the node server's own; `run(options)` takes
-node:net's `ListenOptions`, merged over `listen` key by key. `app.instance` is the node:http, node:https or node:http2
+`requestIDHeader` and `schemaCompiler` are the engine's, under every adapter; the adapter adds its own.
+`router: { ignoreTrailingSlash }` is the only router flag; paths are case-sensitive. Under `node()`, `listen` takes
+node:net's listen options and `http`, `https` and `http2` the node server's own; `run(options)` takes node:net's
+`ListenOptions`, merged over `listen` key by key. `app.instance` is the node:http, node:https or node:http2
 server, and `.serverCallback(callback)` gets the setup context, with the configuration, and that server before it
 listens. `factory` and `listener` are refused at start-up.
 
@@ -440,6 +441,11 @@ pets.group('/:petID/orders', r =>
 app.mount(pets) // before app.bootstrap()
 ```
 
+- A route path keeps a trailing `/`: `/x` and `/x/` are different routes. Group paths drop theirs and get a missing
+  leading `/`, and a path holding `//` is refused. A group's root route answers at both forms, `/pets` and `/pets/`.
+  `staticFiles()` does not check application routes against its files: one at exactly a file's URL fails start-up as a
+  duplicate route, and one under a directory of files wins. Middleware paths match case-sensitively, so a guard on
+  `/admin` does not run for `/ADMIN`.
 - A verb takes `(path)`, `(path, handler)` or `(path, schema, handler)`. With a handler the route is closed there
   and then and the group comes back, so routes chain off one another either way:
 
@@ -691,9 +697,10 @@ middleware cover its routes and the scopes nested in it, never a sibling's.
 - **On a router** (`router.with(...)`): it registers on each server the router is mounted on, once per place it is
   mounted at, after that server's own plugins; `context.server.prefix` is the router's path there. What it mounts
   nests under the router, starting from its path, guards and plugins. Its middleware runs in front of the router's
-  routes alone, nested groups included, and a path is relative to the router: `use('/jobs', mw)` on a router at
-  `/admin` covers `/admin/jobs`. A relative path under a router whose path holds a wildcard or an optional parameter
-  is refused at start-up.
+  routes alone, nested groups included, and a middleware path is a literal prefix on whole segments: `use('/jobs', mw)`
+  on a router at `/admin` covers `/admin/jobs` and below. A parameter, `*`, a regex, `?` or `#` is refused; use the
+  literal parent prefix. A relative path under a router whose path holds a wildcard or an optional parameter is
+  refused at start-up.
 - **On a controller** (`@Use(...)`): it registers on the server serving the controller, after the routers'. Its
   middleware runs in front of the controller's routes alone, a path relative to the controller and its `@Prefix`, and
   what it mounts nests under the controller, starting from its declarations.
@@ -994,5 +1001,6 @@ await client.pets.post({ body: { name: 'Rex' } })
   segment holding more than one parameter or text beside one (`/near/:lat-:lng`, `/files/:name.json`), or a method
   with no verb: `client.$request('GET', '/pets/:id', { params: { id: 1 } })`. A trailing `?` makes a segment
   optional only when the segment starts with its parameter and has no constraint (`:id?`, `:lat-:lng?`), and the
-  parameters of such a segment are given together or not at all.
+  parameters of such a segment are given together or not at all. A route whose path ends in `/` is reached with
+  `$request`.
 - Static: `.with(staticFiles(s => s.serve(root, { prefix: '/static' })))`, after `buildStatic({ root })` from `@caffeinejs/static/build` in the build. That serves the files the build listed. It is not SPA history fallback — for a single-page application see [spa.md](spa.md), which is routing the application writes. A miss under a directory of the mount is a 404, not `index.html`.

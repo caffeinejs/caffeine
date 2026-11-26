@@ -295,9 +295,9 @@ capabilities. The following are **not** implemented:
 
 Notes:
 
-- Trailing slashes are **not** ignored: `GET /pets/` does not list pets. It is matched as `/pets/:id` with an
-  empty `id`, which fails the parameter schema and answers `400`. That is the router's default, and this example does
-  not override it with `router: { ignoreTrailingSlash: true }` in `.server(...)`.
+- `GET /pets/` lists pets as `GET /pets` does: a controller's root route answers with and without the trailing
+  slash. Any other trailing slash is **not** ignored: `/pets/1/` is not `/pets/1`. That is the router's default, and
+  this example does not override it with `router: { ignoreTrailingSlash: true }` in `.server(...)`.
 - Passwords are stored in clear text to keep the example small — **never** do this in production; hash with
   argon2/bcrypt.
 - The Order model follows the specification's `#/components/schemas/Order` (id, petId, userId, status,

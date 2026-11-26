@@ -1,6 +1,7 @@
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { IContext } from '../../context.js'
+import { literalPrefix, underPrefix, type LiteralPrefix } from '../routing/paths.js'
 import { ErrCSRFConfiguration } from './errors.js'
 import { normalizeTrustedOrigin } from './origin.js'
 
@@ -29,17 +30,11 @@ export interface CSRFConfig {
   exclude?: readonly string[]
 }
 
-/** A path prefix the check leaves alone: the path itself, and everything under it. */
-export interface ExcludedPath {
-  readonly exact: string
-  readonly under: string
-}
-
 /** What one `csrf()` plugin runs on, resolved as its factory ran. */
 export interface CSRFOptions {
   readonly enabled: boolean
   readonly trustedOrigins: ReadonlySet<string>
-  readonly exclude: readonly ExcludedPath[]
+  readonly exclude: readonly LiteralPrefix[]
   /** Asked in the order written, ahead of {@link siteChecks}, about a refusal that leaves something to ask. */
   readonly originChecks: readonly OriginPredicate[]
   readonly siteChecks: readonly SecFetchSitePredicate[]
@@ -48,8 +43,8 @@ export interface CSRFOptions {
 /**
  * Folds a block onto the defaults. The checks are code, never configuration, and come in beside it.
  *
- * @throws ErrCSRFConfiguration for a trusted origin that is not one, or an excluded path not starting with `/` or
- * that is `/` itself.
+ * @throws ErrCSRFConfiguration for a trusted origin that is not one, or an excluded path that is `/` itself.
+ * @throws ErrConfiguration for an excluded path holding `//`.
  */
 export function resolveCSRFOptions(
   config: CSRFConfig,
@@ -64,44 +59,35 @@ export function resolveCSRFOptions(
 }
 
 /** Whether a registered route path is under one of `excluded`. */
-export function isExcluded(path: string, excluded: readonly ExcludedPath[]): boolean {
-  return excluded.some(({ exact, under }) => path === exact || path.startsWith(under))
+export function isExcluded(path: string, excluded: readonly LiteralPrefix[]): boolean {
+  return excluded.some(prefix => underPrefix(path, prefix))
 }
 
 // A prefix is a run of whole segments, written with or without its trailing slash: the path itself, and what is under
 // it. Compared as plain text, `/webhooks` would open `/webhooks-old` as well.
-function excludedPath(prefix: string): ExcludedPath {
-  if (prefix.startsWith('~/')) {
+function excludedPath(path: string): LiteralPrefix {
+  if (path.startsWith('~/')) {
     throw new ErrCSRFConfiguration(
       errMessage(
-        `Cannot exclude "${prefix}" from cross-origin protection: a path is matched after the base path is taken off`,
+        `Cannot exclude "${path}" from cross-origin protection: a path is matched after the base path is taken off`,
       )
-        .solutions(`Write it as "${prefix.slice(1)}"`)
+        .solutions(`Write it as "${path.slice(1)}"`)
         .reference('@caffeinejs/http', ErrCSRFConfiguration)
         .build(),
     )
   }
 
-  if (!prefix.startsWith('/')) {
-    throw new ErrCSRFConfiguration(
-      errMessage(`Cannot exclude "${prefix}" from cross-origin protection: a path starts with "/"`)
-        .solutions(`Write it as "/${prefix}"`)
-        .reference('@caffeinejs/http', ErrCSRFConfiguration)
-        .build(),
-    )
-  }
-
-  const exact = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
+  const prefix = literalPrefix(path)
 
   // Every route sits under `/`: excluding it would turn the check off without saying so.
-  if (exact === '') {
+  if (prefix.exact === '') {
     throw new ErrCSRFConfiguration(
-      errMessage(`Cannot exclude "${prefix}" from cross-origin protection: it covers every route`)
+      errMessage(`Cannot exclude "${path}" from cross-origin protection: it covers every route`)
         .solutions('Turn the check off with enabled(false)', 'Mark the route itself with @CSRFExempt() or csrfExempt()')
         .reference('@caffeinejs/http', ErrCSRFConfiguration)
         .build(),
     )
   }
 
-  return { exact, under: `${exact}/` }
+  return prefix
 }

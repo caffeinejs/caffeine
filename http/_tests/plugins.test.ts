@@ -354,13 +354,10 @@ describe('scoped plugin registration', () => {
   })
 
   // A router's group prefix leads its routes after its parent's path: its plugins see the path its routes start at,
-  // and what they mount or declare nests there. The server takes one trailing slash off a prefix, so a second one
-  // stays as an empty segment, as it did before plugins could see it.
+  // and what they mount or declare nests there.
   it.each([
     ['/v1', '/pets', '/api/v1/pets'],
     ['/v1/', '/pets', '/api/v1/pets'],
-    ['/v1//', '/pets', '/api/v1//pets'],
-    ['/v1//', '', '/api/v1/'],
   ])('scopes a router prefixed %j with path %j at its prefix and path', async (prefix, path, at) => {
     const seen: string[] = []
     const prefixed = new Router(path)
@@ -388,39 +385,6 @@ describe('scoped plugin registration', () => {
     expect(
       await Promise.all([at, `${at}/x`, `${at}/bare`, `${at}/kids`].map(async p => (await app!.request(p)).status)),
     ).toEqual([200, 200, 200, 200])
-  })
-
-  // An empty group prefix adds nothing: the child nests under its parent's path as written, an empty segment the
-  // parent's prefix ends with included.
-  it('nests a child with an empty group prefix under a parent whose prefix ends in an empty segment', async () => {
-    const seen: string[] = []
-    const child = new Router('/child')
-      .extend((group: { prefix(prefix: string): unknown }) => {
-        group.prefix('')
-      })
-      .with(
-        () =>
-          new (class extends HTTPPlugin {
-            register({ server }: HTTPSetupContext): void {
-              seen.push(server.prefix)
-            }
-          })(),
-      )
-      .get('/', () => ({ child: true }))
-    const parent = new Router('')
-      .extend((group: { prefix(prefix: string): unknown }) => {
-        group.prefix('/v2//')
-      })
-      .get('/own', () => ({ own: true }))
-      .mount(child)
-    app = createWebApplication({ adapter: node() }).mount(parent)
-    await app.bootstrap()
-
-    expect([seen, (await app.request('/v2//own')).status, (await app.request('/v2//child')).status]).toEqual([
-      ['/v2//child'],
-      200,
-      200,
-    ])
   })
 
   // A path given to mount(...) is where the router is mounted, as a group around it would be: its group prefix comes

@@ -105,7 +105,8 @@ export interface RemoteAuthenticationOptions {
   challengeMode: RemoteChallengeMode
 
   /**
-   * The path of the route that starts a sign-in, on the origin of `callbackURL`. `<callback path>/login` unless set.
+   * The path of the route that starts a sign-in, on the origin of `callbackURL`. `<callback path>/login` unless set;
+   * a missing leading `/` is added.
    *
    * A challenge that cannot redirect — a script's request — answers `401` with this URL as `loginURL`, carrying
    * where to come back to as `returnTo`. Sending the browser there is what begins the round trip to the provider.
@@ -146,7 +147,10 @@ export abstract class RemoteAuthenticationHandler<
     super(options)
     this.name = name
     this.#callbackPath = new URL(options.callbackURL).pathname
-    this.#loginPath = options.loginPath ?? `${this.#callbackPath.replace(/\/$/, '')}/login`
+    this.#loginPath =
+      options.loginPath === undefined
+        ? `${this.#callbackPath.replace(/\/$/, '')}/login`
+        : rootedLoginPath(options.loginPath)
 
     if (!isSafeReturnPath(this.#loginPath) || this.#loginPath === this.#callbackPath) {
       throw new ErrOAuthConfiguration(
@@ -790,4 +794,10 @@ export abstract class RemoteAuthenticationHandler<
  */
 function errorCode(error: string): string {
   return /^[\x20-\x21\x23-\x5B\x5D-\x7E]{1,64}$/.test(error) ? error : '(malformed error code)'
+}
+
+// A declared path gets a missing leading "/". An absolute URL is left as written, for the check that follows to refuse
+// it as a path on another origin; rooted, it would turn into a path of this origin no browser is sent to.
+function rootedLoginPath(path: string): string {
+  return path.startsWith('/') || URL.canParse(path) ? path : `/${path}`
 }

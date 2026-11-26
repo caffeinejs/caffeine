@@ -85,6 +85,14 @@ describe('healthProbes', () => {
     expect((await app.request('/readyz')).status).toBe(404)
   })
 
+  // A probe path is a declared path: a missing leading "/" is added, as on every other.
+  it('answers probe paths given without a leading slash', async () => {
+    const app = track(createWebApplication().with(healthProbes(h => h.enabled(true).paths({ live: 'live' }))))
+    await app.run()
+
+    expect((await app.request('/live')).status).toBe(200)
+  })
+
   it('mounts nothing when turned off', async () => {
     const app = track(createWebApplication().with(healthProbes(h => h.enabled(false))))
     await app.bootstrap()

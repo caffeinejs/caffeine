@@ -1,31 +1,39 @@
 import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrConfiguration } from '../error/common.js'
-import type { RouterFlags } from '../matcher/matcher.js'
 
-/** Joins a router base path and a route path, trimming a trailing slash (but never to empty). */
-export function joinPaths(base: string, path: string): string {
-  const joined = `${base}${path}`
-  return joined.length > 1 ? joined.replace(/\/$/, '') : joined
+/**
+ * The paths a route registers under. `base` is its group's whole path and `routePath` its own, both normalized. A
+ * route at `/` is the group's own path, served at `/r` and `/r/`, as Fastify's `prefixTrailingSlash: 'both'` serves
+ * it; once when the router ignores trailing slashes, under a wildcard, or under a group path that is one optional
+ * segment, whose two forms collide.
+ */
+export function pathsOf(base: string, routePath: string, ignoreTrailingSlash: boolean): string[] {
+  if (routePath !== '/') {
+    return [base + routePath]
+  }
+
+  if (base === '') {
+    return ['/']
+  }
+
+  const parts = partsOf(base)
+  if (ignoreTrailingSlash || parts.some(part => part.kind === 'wildcard') || parts[0]?.kind === 'optional') {
+    return [base]
+  }
+
+  return [base, `${base}/`]
 }
 
 /**
- * The paths a route registers under. A prefixed root is served at the prefix and with a trailing slash, as Fastify's
- * `prefixTrailingSlash: 'both'` serves it.
+ * The URL a route answers at first, its prefix, group path and route path joined as the server joins them. Each
+ * part is normalized here, so a raw path from configuration may be passed.
+ *
+ * @throws ErrConfiguration when a part holds an empty segment, "//".
  */
-export function pathsOf(prefix: string | undefined, url: string, ignoreTrailingSlash: boolean): string[] {
-  const path = url === '' ? '/' : url
-  const base = prefix === undefined ? '' : prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
-
-  if (base === '') {
-    return [path]
-  }
-
-  if (path === '/') {
-    return ignoreTrailingSlash ? [base] : [base, `${base}/`]
-  }
-
-  return [base + path]
+export function routeURL(prefix: string | undefined, groupPath: string, routePath: string): string {
+  const base = (prefix === undefined ? '' : normalizeGroupPath(prefix)) + normalizeGroupPath(groupPath)
+  return pathsOf(base, normalizeRoutePath(routePath), true)[0]!
 }
 
 /** One piece of a route path, as {@link parseRoutePattern} reads it. */
@@ -36,7 +44,10 @@ export type RoutePatternPart =
   | { readonly kind: 'param'; readonly name: string; readonly regex: string | undefined }
   /** `*`: the rest of the path. */
   | { readonly kind: 'wildcard' }
-  /** Where the path's optional last segment starts: the path also matches without what follows. */
+  /**
+   * Where the path's optional last segment starts: the path also matches without what follows. A `/` that ends the
+   * path stays: `/items/:id?/` also matches `/items/`.
+   */
   | { readonly kind: 'optional' }
 
 /** The router's optional segment: the path's last, starting with `:`, holding no regex, and ending in `?`. */
@@ -55,9 +66,29 @@ const OPTIONAL_SEGMENT = /\/:[^/()]*\?\/?$/
  * - `*` at the end of the path is a wildcard: it matches the rest of the path. After a parameter in its segment, a `*`
  *   is text: `/download/:id-file*name`.
  *
- * @throws ErrConfiguration when a parameter's regex is not closed.
+ * @throws ErrConfiguration when a parameter's regex is not closed, or a wildcard does not end the path.
  */
 export function parseRoutePattern(path: string): RoutePatternPart[] {
+  const parts = partsOf(path)
+  const wildcard = parts.findIndex(part => part.kind === 'wildcard')
+
+  if (wildcard !== -1 && wildcard !== parts.length - 1) {
+    throw new ErrConfiguration(
+      errMessage(`Cannot read the route path "${path}": a wildcard "*" must end the path`)
+        .solutions(
+          'Move the "*" to the end of the path',
+          'Put a literal "*" after text that ends a parameter\'s name, such as ":id-file*name"',
+        )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
+
+  return parts
+}
+
+// The parts of a route path, without the check on where a wildcard stands.
+function partsOf(path: string): RoutePatternPart[] {
   const optional = OPTIONAL_SEGMENT.exec(path)
   if (optional === null) {
     return scan(path, path)
@@ -125,16 +156,104 @@ function unclosedRegex(path: string, name: string): ErrConfiguration {
 }
 
 /**
- * How many segments of a request path a route path spans: where the paths of the routes under it begin. A parameter
- * is one segment whatever its value, and under `ignoreDuplicateSlashes` a trailing slash folds into the path that
- * follows: `/v2/` spans two segments, and one when slashes fold.
+ * A group, router, controller, prefix or mount path, or a plugin path that becomes one: rooted, without a trailing
+ * `/`. The root is `''`.
+ *
+ * @throws ErrConfiguration when the path holds an empty segment, `//`.
  */
-export function routePathSegments(path: string, flags: Partial<Pick<RouterFlags, 'ignoreDuplicateSlashes'>>): number {
+export function normalizeGroupPath(path: string): string {
+  assertNoEmptySegment(path)
+  return trimTrailingSlashes(rooted(path))
+}
+
+/**
+ * A route path: rooted, a trailing `/` kept. The root is `/`.
+ *
+ * @throws ErrConfiguration when the path holds an empty segment, `//`.
+ */
+export function normalizeRoutePath(path: string): string {
+  assertNoEmptySegment(path)
+  return rooted(path)
+}
+
+/**
+ * A path compared as plain text, such as a base path, a CSRF exclusion or a middleware prefix: rooted, without a
+ * trailing `/`. The root is `''`.
+ *
+ * @throws ErrConfiguration when the path holds `//`.
+ */
+export function normalizeLiteralPath(path: string): string {
+  if (path.includes('//')) {
+    throw emptySegment(path)
+  }
+
+  return trimTrailingSlashes(rooted(path))
+}
+
+/** A literal path prefix: the path itself, and everything under it on whole segments. */
+export interface LiteralPrefix {
+  readonly exact: string
+  readonly under: string
+}
+
+/**
+ * The prefix `path` names: `/a/` covers `/a` and `/a/b`, not `/ab`.
+ *
+ * @throws ErrConfiguration when the path holds `//`.
+ */
+export function literalPrefix(path: string): LiteralPrefix {
+  const exact = normalizeLiteralPath(path)
+  return { exact, under: `${exact}/` }
+}
+
+/** Whether `path` is `prefix` itself or under it. */
+export function underPrefix(path: string, prefix: LiteralPrefix): boolean {
+  return path === prefix.exact || path.startsWith(prefix.under)
+}
+
+// Read as text, so a "//" inside a parameter's regex is not an empty segment.
+function assertNoEmptySegment(path: string): void {
+  const text = partsOf(path)
+    .map(part => (part.kind === 'text' ? part.text : part.kind === 'param' ? 'p' : part.kind === 'wildcard' ? '*' : ''))
+    .join('')
+
+  if (text.includes('//')) {
+    throw emptySegment(path)
+  }
+}
+
+function emptySegment(path: string): ErrConfiguration {
+  return new ErrConfiguration(
+    errMessage(`Cannot use the path "${path}": it holds an empty segment, "//"`)
+      .solutions('Write a single "/" between segments')
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
+  )
+}
+
+function rooted(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`
+}
+
+// A loop, not `/\/+$/`: that backtracks quadratically over a long run of slashes followed by anything else.
+function trimTrailingSlashes(path: string): string {
+  let end = path.length
+  while (end > 0 && path[end - 1] === '/') {
+    end--
+  }
+
+  return path.slice(0, end)
+}
+
+/**
+ * How many segments of a request path a route path spans: where the paths of the routes under it begin. A parameter
+ * is one segment whatever its value: `/tenants/:id` spans two.
+ */
+export function routePathSegments(path: string): number {
   const joined = `${parseRoutePattern(path)
     .map(part => (part.kind === 'text' ? part.text : part.kind === 'optional' ? '' : 'p'))
     .join('')}/x`
-  const folded = flags.ignoreDuplicateSlashes ? joined.replace(/\/{2,}/g, '/') : joined
-  return folded.split('/').length - 2
+  return joined.split('/').length - 2
 }
 
 /** The index of the `)` closing the regex that opens at `at`, escapes and nested groups included. */

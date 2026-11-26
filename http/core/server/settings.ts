@@ -303,7 +303,7 @@ function routerFlags(router: unknown): RouterFlags {
   if (typeof router !== 'object' || router === null || Array.isArray(router)) {
     throw configurationError(
       `Cannot set router to "${String(router)}": it must be an object of router flags`,
-      'Return router as an object, such as { caseSensitive: false }',
+      'Return router as an object, such as { ignoreTrailingSlash: true }',
     )
   }
 
@@ -312,10 +312,7 @@ function routerFlags(router: unknown): RouterFlags {
 
   for (const [key, value] of Object.entries(router)) {
     if (!Object.hasOwn(DEFAULT_ROUTER_FLAGS, key)) {
-      throw configurationError(
-        `Cannot set router "${key}": it is not a router flag`,
-        'Use caseSensitive, ignoreTrailingSlash, ignoreDuplicateSlashes or useSemicolonDelimiter',
-      )
+      throw configurationError(`Cannot set router "${key}": it is not a router flag`, 'Use ignoreTrailingSlash')
     }
 
     if (value !== undefined && typeof value !== 'boolean') {

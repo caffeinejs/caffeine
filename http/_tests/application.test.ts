@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { ErrConfiguration } from '../core/error/common.js'
 import { Controller } from '../decorators/controller.js'
 import { getRouteGroup } from '../decorators/registrar/registrar.js'
 import { Get } from '../decorators/verbs.js'
@@ -74,7 +75,8 @@ describe('path normalization', () => {
     expect(r.routes[0].path).toBe('/action')
   })
 
-  it('collapses double slashes in path', () => {
+  // An empty segment is refused, never collapsed: collapsed, the route would answer somewhere it was not written.
+  it('refuses double slashes in path', () => {
     @Controller('/api')
     class C4 {
       @Get('//double')
@@ -83,8 +85,18 @@ describe('path normalization', () => {
       }
     }
     void C4
-    const r = getRouteGroup(C4)!.toRouteGroup()
-    expect(r.routes[0].path).toBe('/double')
+
+    let err: unknown
+    try {
+      getRouteGroup(C4)!.toRouteGroup()
+    } catch (caught) {
+      err = caught
+    }
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect((err as Error).message.split('\n')[0]).toBe(
+      'Cannot use the path "//double": it holds an empty segment, "//"',
+    )
   })
 
   it('preserves root path', () => {

@@ -3,19 +3,12 @@ import { ErrCaffeineWebApplication } from '../error/common.js'
 
 /** How a server's router matches a request's path. */
 export interface RouterFlags {
-  readonly caseSensitive: boolean
   readonly ignoreTrailingSlash: boolean
-  readonly ignoreDuplicateSlashes: boolean
-  /** Whether `;` starts the query, as `?` does. */
-  readonly useSemicolonDelimiter: boolean
 }
 
 // find-my-way's own defaults, which Fastify keeps.
 export const DEFAULT_ROUTER_FLAGS: RouterFlags = {
-  caseSensitive: true,
   ignoreTrailingSlash: false,
-  ignoreDuplicateSlashes: false,
-  useSemicolonDelimiter: false,
 }
 
 /** Constraint values derived from the request, matched against a route's own. */
@@ -26,15 +19,15 @@ export interface RouteMatch<S> {
   readonly store: S
   /** Decoded parameter values by name; a wildcard's under `*`. */
   readonly params: Readonly<Record<string, string | undefined>>
-  /** The query as sent, after `?` (or `;` under `useSemicolonDelimiter`), not decoded. `''` when there is none. */
+  /** The query as sent, after `?`, not decoded. `''` when there is none. */
   readonly query: string
 }
 
 /** Finds the route a request names. The engine registers every route before the first match. */
 export interface RouteMatcher<S> {
   /**
-   * Registers a route. `path` is written in Caffeine's route syntax, as `parseRoutePattern` reads it: a matcher for
-   * another router translates it to that router's own.
+   * Registers a route. `path` is written in Caffeine's route syntax, as `parseRoutePattern` reads it, and holds no
+   * empty segment: a matcher for another router translates it to that router's own.
    *
    * @throws ErrRouteConflict when a route of `method` already matches `path` under these constraints.
    * @throws ErrConfiguration when `path` or `method` is not one the matcher can register.

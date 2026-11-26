@@ -22,6 +22,12 @@ describe('fillPath', () => {
     expect(fillPath('/pets/:petID/orders/:orderID', { petID: 'a b', orderID: 'ø' })).toBe('/pets/a%20b/orders/%C3%B8')
   })
 
+  // A "/" inside a parameter's regex is part of the regex, not a segment boundary: the router reads it so.
+  it('fills a parameter whose regex holds a "/", keeping the text around it', () => {
+    expect(fillPath('/d/:p(a//b|abc)/', { p: 'abc' })).toBe('/d/abc/')
+    expect(fillPath('/d/:p((a|b)/c)/x', { p: 'a' })).toBe('/d/a/x')
+  })
+
   it('places an optional parameter when given and drops it when not', () => {
     expect(fillPath('/pets/:id?', { id: 7 })).toBe('/pets/7')
     expect(fillPath('/pets/:id?', {})).toBe('/pets')

@@ -1,12 +1,12 @@
 import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
+import type { LiteralPrefix } from '../routing/paths.js'
 import { ErrCSRFCrossOrigin } from './errors.js'
 import {
   isExcluded,
   resolveCSRFOptions,
   type CSRFConfig,
   type CSRFOptions,
-  type ExcludedPath,
   type OriginPredicate,
   type SecFetchSitePredicate,
 } from './options.js'
@@ -66,7 +66,10 @@ export class CSRFBuilder {
    * requested. For a route the application cannot mark itself; its own are marked with `@CSRFExempt()` or
    * `csrfExempt()`, and a route's own mark wins: `csrfExempt(false)` keeps it protected under an excluded prefix.
    *
-   * @throws ErrCSRFConfiguration at start-up when one does not start with `/`, or is `/` itself.
+   * A missing leading `/` is added.
+   *
+   * @throws ErrCSRFConfiguration at start-up when one is `/` itself.
+   * @throws ErrConfiguration at start-up when one holds `//`.
    */
   exclude(...prefixes: string[]): this {
     this.#exclude = [...(this.#exclude ?? []), ...prefixes]
@@ -150,8 +153,9 @@ export class CSRFBuilder {
  * path is under `.exclude(...)`. A URL no route matched is the not-found answer's. A listener is covered by its own
  * `.listener(name, l => l.with(csrf()))`, a route group by `router.with(csrf())`.
  *
- * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path not starting
- * with `/` or that is `/` itself.
+ * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path that is `/`
+ * itself.
+ * @throws ErrConfiguration at start-up for an excluded path holding `//`.
  */
 export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, C>): HTTPPluginFactory<C> {
   return context => {
@@ -171,12 +175,12 @@ const kCSRFCovers: unique symbol = Symbol('caffeine.http.csrf.covers')
 declare module '../routing/options.js' {
   interface RouteOptions {
     /** Written by every enabled `csrf()` covering the route in `onRoute`, for the route inventory. */
-    [kCSRFCovers]?: ReadonlyArray<readonly ExcludedPath[]>
+    [kCSRFCovers]?: ReadonlyArray<readonly LiteralPrefix[]>
   }
 }
 
 /** The `exclude(...)` list of every enabled `csrf()` covering `route`, outermost first; empty when none does. */
-export function csrfCoversOf(route: RouteDefinition): ReadonlyArray<readonly ExcludedPath[]> {
+export function csrfCoversOf(route: RouteDefinition): ReadonlyArray<readonly LiteralPrefix[]> {
   return route.options[kCSRFCovers] ?? []
 }
 

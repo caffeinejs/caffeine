@@ -215,7 +215,7 @@ export function buildEngine(input: EngineInput): HTTPServer {
     scoped: input.scoped.batches,
     of: (scopes: readonly RouteGroupScope[], at: number) => ({
       batches: input.scoped.batchesOf(scopes, at),
-      middlewares: placeMiddlewares(scopes[at]!.path, input.scoped.middlewaresOf(scopes, at), input.settings.router),
+      middlewares: placeMiddlewares(scopes[at]!.path, input.scoped.middlewaresOf(scopes, at)),
     }),
   }
 

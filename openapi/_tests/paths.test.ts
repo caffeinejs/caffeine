@@ -1,7 +1,7 @@
 import { ErrConfiguration } from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
-import { joinPaths, routeURL, templateParameters, translatePath } from '../generate/paths.js'
+import { templateParameters, translatePath } from '../generate/paths.js'
 
 describe('translatePath', () => {
   it('preserves an unmatched closing parenthesis before a constrained parameter', () => {
@@ -90,40 +90,5 @@ describe('templateParameters', () => {
 
   it('is empty for a static template', () => {
     expect(templateParameters('/pets')).toEqual([])
-  })
-})
-
-describe('routeURL', () => {
-  it('joins prefix, router path and route path the way the adapter does', () => {
-    expect(routeURL(undefined, '/pets', '/')).toBe('/pets')
-    expect(routeURL(undefined, '/pets', '/:id')).toBe('/pets/:id')
-    expect(routeURL('/api', '/pets', '/')).toBe('/api/pets')
-  })
-
-  // The server takes one trailing slash off a group prefix, as a controller's `@Prefix('/v1/')` writes it.
-  it('drops one trailing slash of the prefix, as the server does', () => {
-    expect(routeURL('/v1/', '/pets', '/')).toBe('/v1/pets')
-  })
-})
-
-// This is a deliberate copy of http's internal `joinPaths`, which is not exported and which the project's
-// no-passthrough rule forbids re-exporting. The table pins the behaviour being copied: if http's version ever
-// changes, these expectations are the record of what openapi assumed and the place the divergence surfaces.
-describe('joinPaths', () => {
-  const cases: Array<[string, string, string]> = [
-    ['', '', '/'],
-    ['', '/', '/'],
-    ['/', '/', '/'],
-    ['/pets', '/', '/pets'],
-    ['/pets', '', '/pets'],
-    ['/pets', '/:id', '/pets/:id'],
-    ['/pets', '/:id/', '/pets/:id'],
-    ['', '/pets', '/pets'],
-    ['/a/', '/b', '/a//b'],
-    ['/a', '/b/c/', '/a/b/c'],
-  ]
-
-  it.each(cases)('joinPaths(%o, %o) === %o', (base, path, expected) => {
-    expect(joinPaths(base, path)).toBe(expected)
   })
 })

@@ -179,3 +179,32 @@ describe('route names', () => {
     expect(names).toEqual(['EastV1Items', 'WestV1Items'])
   })
 })
+
+describe('group paths', () => {
+  const flatten = (router: object) => flattenRouter(stateOf(router)!, new CaffeineIoC())
+
+  // An empty segment is refused, never kept: kept, the router would serve under a path nobody can type.
+  it('refuses a router path holding // when flattened', () => {
+    let err: unknown
+    try {
+      flatten(new Router('/a//b').get('/', () => undefined))
+    } catch (caught) {
+      err = caught
+    }
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect((err as Error).message.split('\n')[0]).toBe('Cannot use the path "/a//b": it holds an empty segment, "//"')
+  })
+
+  // Each layer is normalized on its own and joined by concatenation: no slash is doubled or lost between them.
+  it('composes a mount path and a router path without a prefix', () => {
+    const groups = flatten(
+      new Router().mount(
+        '/api/',
+        new Router('v1').get('/x', () => undefined),
+      ),
+    )
+
+    expect(groups.map(({ spec }) => `${spec.prefix ?? ''}${spec.path}${spec.routes[0]!.path}`)).toEqual(['/api/v1/x'])
+  })
+})

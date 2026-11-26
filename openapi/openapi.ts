@@ -8,7 +8,9 @@ import {
   HTTPPlugin,
   kAuthSchemeDescriptors,
   kErrorHandlingOptions,
+  normalizeRoutePath,
   Router,
+  routeURL,
   type HTTPPluginFactory,
   type AuthSchemeDescriptor,
   type HTTPPluginConfigurer,
@@ -16,7 +18,6 @@ import {
   type IRoute,
   type IRouteGroup,
   type RouteAuthzOptions,
-  type RouterFlags,
 } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/err'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
@@ -24,7 +25,6 @@ import { parse as fromYAML, stringify as toYAML } from 'yaml'
 import { DEFAULT_DOCUMENT_NAME } from './_default_name.js'
 import { ErrOpenAPIConfiguration } from './errors.js'
 import { generateDocument, validateDocument } from './generate/generator.js'
-import { joinPaths } from './generate/paths.js'
 import { defaultOpenAPIOptions, toRouteAuthz, type OpenAPIOptions, type OpenAPISource } from './options.js'
 import { kBuild, OpenAPIOptionsBuilder } from './options_builder.js'
 import { kPublish, kReserve, OpenAPIProvider } from './provider.js'
@@ -201,10 +201,9 @@ class OpenAPIPlugin extends HTTPPlugin {
 
     // Under a prefix or a base that matches more than itself, the page's links are relative to where it was opened, so
     // they keep the path a browser asked for: the values the parameters matched, spelled as the request spelled them.
-    // A root starting with "//" would name a host: it is linked relative to the page too.
     const root = `${server.basePath}${server.prefix}`
     const parametric = /[:*]/.test(server.prefix + options.routes.base)
-    const docsPage = parametric || root.startsWith('//') ? undefined : uiPage(options, paths, root)
+    const docsPage = parametric ? undefined : uiPage(options, paths, root)
     // Relative to the base: the request path already holds the values it matched.
     const docsDepth = paths.docs === undefined ? 0 : segmentsOf(paths.docs)
     const asset = paths.docs === undefined ? undefined : readScalarBundle()
@@ -221,7 +220,7 @@ class OpenAPIPlugin extends HTTPPlugin {
     }
     if (paths.docs !== undefined) {
       endpoint(router, paths.docs, 'text/html', authz).handler(
-        ctx => docsPage ?? uiPage(options, paths, rootFrom(ctx.req.url, docsDepth, server.router), '/'),
+        ctx => docsPage ?? uiPage(options, paths, rootFrom(ctx.req.url, docsDepth), '/'),
       )
     }
     if (paths.asset !== undefined) {
@@ -339,7 +338,7 @@ function endpoint(router: Router, path: string, contentType: string, authz: Rout
  */
 function resolvePaths(options: OpenAPIOptions): EndpointPaths {
   const { routes } = options
-  // As the router routes them: the links name them as they are served.
+  // As the router routes them: the links name them as they are served, a trailing "/" kept.
   const docs = routed(routes.docs)
 
   return {
@@ -347,23 +346,18 @@ function resolvePaths(options: OpenAPIOptions): EndpointPaths {
     yaml: routed(routes.yaml),
     docs,
     // Trimmed first: a page at `/` would otherwise put its bundle at `//_scalar.js`, which a browser reads as a host.
-    asset: docs === undefined ? undefined : `${docs.replace(/\/+$/, '')}${ASSET_SEGMENT}`,
+    asset: docs === undefined ? undefined : docs.replace(/\/+$/, '') + ASSET_SEGMENT,
   }
 }
 
-/** A route path as the router routes it: with a leading `/`, without repeated ones or a trailing one. */
+/** A route path as the router routes it: rooted, a trailing `/` kept. */
 function routed(path: string | undefined): string | undefined {
-  if (path === undefined) {
-    return undefined
-  }
-  const collapsed = `/${path}`.replace(/\/+/g, '/')
-  return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
+  return path === undefined ? undefined : normalizeRoutePath(path)
 }
 
 /** The URL a browser requests, which includes the router base the routes are mounted under. */
 function publicURL(base: string, path: string): string {
-  // Without its trailing slashes, as the router the endpoints are mounted on is routed.
-  return joinPaths(base.replace(/\/+$/, ''), path)
+  return routeURL(undefined, base, path)
 }
 
 /**
@@ -407,35 +401,25 @@ function segmentsOf(path: string): number {
 }
 
 /**
- * Where the plugin's endpoints start, under its base, relative to the docs page a request opened. The path the router
- * matched ends with the page's `depth` segments, each after one or more `/`: the links climb one level for each `/`
- * after the page's own path starts, and one for each `/` a browser sees past where the router stopped reading, after a
- * `;` under `useSemicolonDelimiter`. A trailing `/` the router ignores lies past the page; one it does not ends the
- * page's own path, after an empty value. A relative link never names another origin.
+ * Where the plugin's endpoints start, under its base, relative to the docs page a request opened. The path the request
+ * names ends with the page's `depth` segments, each after one or more `/`: the links climb one level for each `/`
+ * after the page's own path starts. A page at a group's root answers at both forms: a trailing `/` lies past the page,
+ * and the links climb out of it. A relative link never names another origin.
  */
-function rootFrom(url: string, depth: number, router: RouterFlags | undefined): string {
-  const browsed = url.slice(0, endOf(url, /[?#]/))
-  const path = router?.useSemicolonDelimiter === true ? browsed.slice(0, endOf(browsed, /;/)) : browsed
-  const past = browsed.slice(path.length).split('/').length - 1
+function rootFrom(url: string, depth: number): string {
+  const path = url.slice(0, endOf(url, /[?#]/))
   let at = path.length
   let ups = 0
   let rest = ''
-  // The links start after the page's own path, which ends in a "/".
-  let slash = false
 
   if (depth === 0) {
-    // A page at the root itself: its last segment is where the links start.
+    // A page at a group's root: a trailing "/" is the root's second form, past the page.
     while (at > 0 && path[at - 1] === '/') {
       at--
       ups++
     }
-    const ignored =
-      router?.ignoreDuplicateSlashes === true ? ups : router?.ignoreTrailingSlash === true ? Math.min(ups, 1) : 0
     if (ups === 0) {
       rest = path.slice(path.lastIndexOf('/') + 1)
-    } else if (ups > ignored) {
-      slash = ignored === 0
-      ups = 0
     } else {
       ups--
     }
@@ -452,9 +436,8 @@ function rootFrom(url: string, depth: number, router: RouterFlags | undefined): 
     }
   }
 
-  const climb = Array.from({ length: ups + past }, () => '..')
-  const root = [...(climb.length === 0 ? ['.'] : climb), ...(rest === '' ? [] : [rest])].join('/')
-  return slash ? `${root}/` : root
+  const climb = Array.from({ length: ups }, () => '..')
+  return [...(climb.length === 0 ? ['.'] : climb), ...(rest === '' ? [] : [rest])].join('/')
 }
 
 function endOf(text: string, stop: RegExp): number {

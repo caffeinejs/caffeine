@@ -32,7 +32,7 @@ import { callOnRoute, openDefinition, type RouteDefinition } from '../lifecycle/
 import { findMyWayMatcher, preflightTable, type PreflightTable } from '../matcher/find_my_way.js'
 import { ErrRouteConflict, type DerivedConstraints, type RouteMatch, type RouteMatcher } from '../matcher/matcher.js'
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
-import { joinPaths, pathsOf } from '../routing/paths.js'
+import { pathsOf } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import { ScopeChains } from '../routing/scope_chain.js'
 import { assertGated, gateOf } from '../security/gate.js'
@@ -509,7 +509,7 @@ export class HTTPServer {
     for (const group of groups) {
       for (const route of group.routes) {
         const methods = [...new Set(route.method.map(method => method.toUpperCase()))]
-        const paths = pathsOf(group.prefix, joinPaths(group.path, route.path), settings.router.ignoreTrailingSlash)
+        const paths = pathsOf((group.prefix ?? '') + group.path, route.path, settings.router.ignoreTrailingSlash)
 
         assertServable(route, methods, paths[0])
         const declared = this.#constraints.of(route, methods, paths[0])

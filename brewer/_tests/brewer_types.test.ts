@@ -60,6 +60,14 @@ describe('the route contract', () => {
 })
 
 describe('the tree', () => {
+  // A path ending in "/" would need a member for an empty segment: the route is left to `$request`.
+  it('gives no member to a route whose path ends in a slash', () => {
+    const slashed = createWebApplication({ adapter: node() }).mount(new Router().get('/x/', () => 'slash'))
+    const tree = brewer<typeof slashed>('http://localhost')
+
+    expectTypeOf<'x' extends keyof typeof tree ? true : false>().toEqualTypeOf<false>()
+  })
+
   it('types the response body from the response schema', () => {
     typeOnly(async () => {
       const res = await client.pets({ id: 1 }).get()

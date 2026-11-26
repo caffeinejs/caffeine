@@ -3,11 +3,10 @@ import { $i, type Container, type ObjectInjectionSpec } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrConfiguration } from '../../error/index.js'
-import { normalizeGroupPath, normalizeRoutePath } from '../builder.js'
 import type { RouteGroupMeta } from '../compile.js'
 import { inheritGroupSpec } from '../inherit.js'
 import type { RouteOptionsLevel } from '../options.js'
-import { parseRoutePattern } from '../paths.js'
+import { normalizeGroupPath, normalizeRoutePath, parseRoutePattern } from '../paths.js'
 import { $p } from '../picker.js'
 import type { RouteGroupScope } from '../route.js'
 import type { ScopeChains } from '../scope_chain.js'
@@ -73,24 +72,8 @@ export interface FlatParent<R> {
  */
 export function scopePathOf(parentPath: string, prefix: string | undefined, state: RouterState): string {
   const { at, own } = placeOf(state)
-
-  // Composed as its routes are: a group prefix leads them less one trailing slash, and their path follows it.
-  return prefix === undefined
-    ? pathUnder(parentPath, state.path)
-    : `${parentPath}${leadOf(at, prefix)}${normalizeGroupPath(own)}`
-}
-
-/** What a router's mount path and group prefix add after its parent's path: the prefix less one trailing slash. */
-function leadOf(at: string, prefix: string): string {
-  return `${at}${prefix}`.replace(/\/$/, '')
-}
-
-/**
- * A router's path under its parent's. A router with no path of its own starts where its parent's routes start, an empty
- * segment its parent's prefix ends with included.
- */
-function pathUnder(parentPath: string, path: string): string {
-  return normalizeGroupPath(path) === '' ? parentPath : normalizeGroupPath(`${parentPath}${path}`)
+  const lead = parentPath + normalizeGroupPath(at)
+  return prefix === undefined ? lead + normalizeGroupPath(own) : lead + prefix + normalizeGroupPath(own)
 }
 
 /** A router's path split in two: where `mount(path, ...)` put it, and its own. */
@@ -125,13 +108,11 @@ function walk<R>(
   const own = state.builder.toRouteGroup<R>()
 
   // A group prefix comes after the parent's path, and the group's own path is relative to it: the server serves the
-  // group's root at its prefix with and without the trailing slash.
+  // group's root at its whole path with and without the trailing slash.
   const { at, own: ownPath } = placeOf(state)
-  // The server takes one trailing slash off a group prefix. The one taken is the router's own: a parent's path ending
-  // in an empty segment keeps it, so a slash is added for the server to take.
-  const lead = own.prefix === undefined ? undefined : `${parentPath}${leadOf(at, own.prefix)}`
-  const prefix = lead === undefined ? undefined : lead.endsWith('/') ? `${lead}/` : lead
-  const path = prefix === undefined ? pathUnder(parentPath, state.path) : normalizeGroupPath(ownPath)
+  const lead = parentPath + normalizeGroupPath(at)
+  const prefix = own.prefix === undefined ? undefined : lead + own.prefix
+  const path = own.prefix === undefined ? lead + normalizeGroupPath(ownPath) : normalizeGroupPath(ownPath)
   const scopePath = scopePathOf(parentPath, own.prefix, state)
   own.prefix = prefix
   own.path = path

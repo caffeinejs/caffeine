@@ -147,14 +147,15 @@ describe('csrf()', () => {
       })
     })
 
-    it('refuses an excluded path that does not start with a slash', async () => {
-      const app = createWebApplication({ adapter: node() }).with(csrf(c => c.exclude('webhooks')))
-      close = () => app.close().catch(() => undefined)
+    // Every declared path gets a missing leading "/": the exclusion covers the route it names.
+    it('adds a missing leading slash to an excluded path', async () => {
+      const app = await ready(
+        createWebApplication({ adapter: node() })
+          .with(csrf(c => c.exclude('webhooks')))
+          .mount(new Router('/webhooks').post('/x', ok)),
+      )
 
-      await expect(app.bootstrap()).rejects.toMatchObject({
-        code: 'ERR_CSRF_CONFIGURATION',
-        message: expect.stringContaining('"/webhooks"'),
-      })
+      expect((await post(app, '/webhooks/x', CROSS_SITE)).status).toBe(200)
     })
 
     // A path is matched after the base path is taken off, so one written from the base path would match nothing.

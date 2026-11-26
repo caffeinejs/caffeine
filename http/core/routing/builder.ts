@@ -11,6 +11,7 @@ import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 import { mergeValue } from './_merge.js'
 import { foldAuthz } from './inherit.js'
 import type { RouteOptionsInput, RouteOptionsLevel } from './options.js'
+import { normalizeGroupPath, normalizeRoutePath } from './paths.js'
 import type {
   BodyMode,
   RouteAuthz,
@@ -174,7 +175,7 @@ export class RouteGroupBuilder {
   toRouteGroup<R>(): RouteGroupSpec<R> {
     return {
       path: normalizeGroupPath(this.#path ?? ''),
-      prefix: this.#prefix,
+      prefix: this.#prefix === undefined ? undefined : normalizeGroupPath(this.#prefix),
       routes: (this.#routes ?? []).map(route => route.toRoute<R>()),
       header: this.#header,
       accept: [...(this.#consumes ?? [])],
@@ -395,20 +396,4 @@ function copyHooks(hooks: Hooks | undefined): AuthoredHooks | undefined {
   }
 
   return copy
-}
-
-export function normalizeGroupPath(prefix: string): string {
-  // A loop, not `/\/+$/`: that backtracks quadratically over a long run of slashes followed by anything else.
-  let end = prefix.length
-  while (end > 0 && prefix[end - 1] === '/') {
-    end--
-  }
-
-  return prefix.slice(0, end)
-}
-
-export function normalizeRoutePath(path: string): string {
-  const withLeading = path.startsWith('/') ? path : `/${path}`
-  const collapsed = withLeading.replace(/\/+/g, '/')
-  return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
 }

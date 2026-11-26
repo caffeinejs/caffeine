@@ -94,7 +94,7 @@ describe('ServerSet', () => {
   // Only `undefined` leaves an earlier section in place: `null` is a value like any other, and the router refuses it.
   it('takes null as a section that replaces the one before it', async () => {
     const app = createWebApplication({ adapter: node() })
-      .server(() => ({ router: { caseSensitive: false } }))
+      .server(() => ({ router: { ignoreTrailingSlash: true } }))
       .server(() => ({ router: null }) as never)
 
     try {
@@ -281,11 +281,11 @@ describe('context.server', () => {
     expect(
       await serverSeen(seen =>
         createWebApplication({ adapter: node() })
-          .server(() => ({ router: { caseSensitive: false } }))
           .server(() => ({ router: { ignoreTrailingSlash: true } }))
+          .server(() => ({ router: {} }))
           .with(recorder(seen)),
       ),
-    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false, ignoreTrailingSlash: true } }])
+    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, ignoreTrailingSlash: true } }])
   })
 
   it('reports an empty base path when the application set none', async () => {
@@ -368,10 +368,10 @@ describe('context.server', () => {
     expect(
       await serverSeen(seen =>
         createWebApplication()
-          .server(() => ({ router: { caseSensitive: false } }))
+          .server(() => ({ router: { ignoreTrailingSlash: true } }))
           .with(recorder(seen)),
       ),
-    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false } }])
+    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, ignoreTrailingSlash: true } }])
   })
 
   // Under a matcher of its own the flags say nothing of how a path is matched, so a plugin that keys on them refuses.
@@ -389,10 +389,10 @@ describe('context.server', () => {
     expect(
       await serverSeen(seen =>
         createWebApplication({ adapter: node() })
-          .server(() => ({ router: { caseSensitive: false } }))
+          .server(() => ({ router: { ignoreTrailingSlash: true } }))
           .with(recorder(seen)),
       ),
-    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false } }])
+    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, ignoreTrailingSlash: true } }])
   })
 
   // Read on each access: a plugin holding its server sees where it listens once it does, and nothing before.

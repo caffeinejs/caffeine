@@ -80,7 +80,8 @@ function routerOf(
   strategies: readonly ConstraintStrategy<unknown>[],
 ): FindMyWay.Instance<FindMyWay.HTTPVersion.V1> {
   return FindMyWay({
-    ...flags,
+    // The one flag the router takes: find-my-way's other options keep their defaults, whatever `flags` carries.
+    ignoreTrailingSlash: flags.ignoreTrailingSlash,
     constraints: Object.fromEntries(strategies.map(strategy => [strategy.name, findMyWayStrategy(strategy, NOOP)])),
     // The query is parsed on first read, not on every match.
     querystringParser: (query: string) => query as unknown as Record<string, string>,
@@ -104,9 +105,7 @@ function formsOf(path: string, flags: RouterFlags): string[] {
     ]
   }
 
-  let form = flags.ignoreDuplicateSlashes ? FindMyWay.removeDuplicateSlashes(path) : path
-  form = flags.ignoreTrailingSlash ? FindMyWay.trimLastSlash(form) : form
-  return [form]
+  return [flags.ignoreTrailingSlash ? FindMyWay.trimLastSlash(path) : path]
 }
 
 /** Routes by method and path alone: those find-my-way takes for one route, filed together. */
@@ -118,7 +117,7 @@ export interface PreflightTable<S> {
 
 /**
  * The table a preflight is looked up in, built with the server's router flags. `findRoute` finds the route a path is
- * filed under as find-my-way's own conflict check does: parameter names erased, case folded when it is insensitive.
+ * filed under as find-my-way's own conflict check does: parameter names erased.
  */
 export function preflightTable<S>(flags: RouterFlags): PreflightTable<S> {
   const router = routerOf(flags, [])
@@ -205,6 +204,8 @@ function spelled(value: unknown): string {
 /**
  * Why the route `url` cannot register, when it declares a parameter named `*`: find-my-way gives the wildcard's value
  * that name, so whoever reads `params['*']` could not tell the two apart.
+ *
+ * @throws ErrConfiguration when the route path cannot be read.
  */
 export function starParameterRefusal(url: string): ErrConfiguration | undefined {
   if (!parseRoutePattern(url).some(part => part.kind === 'param' && part.name === '*')) {

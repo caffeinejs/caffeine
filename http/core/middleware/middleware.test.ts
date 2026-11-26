@@ -111,13 +111,13 @@ describe('middleware pipeline', () => {
     const app = createWebApplication({ adapter: nodeAdapter(), container: new CaffeineIoC(), config: conf })
     const seen: string[] = []
 
-    app.useFn('*', ({ config }) => ({
+    app.useFn(({ config }) => ({
       handle(ctx, next) {
         ctx.header('x-tag', config.middleware.tag)
         next()
       },
     }))
-    app.use('*', (ctx, next) => {
+    app.use((ctx, next) => {
       seen.push(`caffeine:${ctx.req.url}`)
       next()
     })
@@ -493,11 +493,11 @@ describe('application middleware registration with a path', () => {
       seen.push(`array:${ctx.req.url}`)
       next()
     })
-    server.use('/api/orders/:id', (ctx, next) => {
+    server.use('/api/orders', (ctx, next) => {
       seen.push(`parameter:${ctx.req.url}`)
       next()
     })
-    server.use('*', (ctx, next) => {
+    server.use((ctx, next) => {
       seen.push(`global:${ctx.req.url}`)
       next()
     })
@@ -536,7 +536,7 @@ describe('application middleware registration with a path', () => {
       await barrier.promise
       next()
     }
-    server.use('/tenants/:tenant', tenancy)
+    server.use('/tenants', tenancy)
     server.mount(
       new Router().vars<State>().get('/tenants/:tenant/orders', ctx => ({
         tenant: ctx.state.get('tenant'),

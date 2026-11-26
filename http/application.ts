@@ -237,9 +237,11 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * Adds a middleware to the request pipeline. Order matters, and it is the order these calls are written
    * in — within a hook.
    *
-   * The first argument may be a path (`string` or `string[]`); `'*'` means every request. The path only decides
-   * whether the middleware runs: `ctx.req.url` reads the same as anywhere else in the request. The middleware may
-   * be a `(ctx, next)` function, an instance, a class, or a container key.
+   * The first argument may be a path (`string` or `string[]`): a literal prefix on whole segments, matched
+   * case-sensitively, so `/admin` covers `/admin` and `/admin/users`, not `/adminx` or `/ADMIN`. A parameter, `*`, a
+   * regex, `?` or `#` is refused. The path only decides whether the middleware runs: `ctx.req.url` reads the same as
+   * anywhere else in the request. The middleware may be a `(ctx, next)` function, an instance, a class, or a container
+   * key.
    *
    * `{ hook }` is a request hook point (`onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`); `onRequest` by
    * default. A middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call overrides
@@ -255,6 +257,8 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    *
    * The pipeline runs on the application's own server alone. A listener has its own:
    * `.listener(name, l => l.use(...))`.
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,
@@ -284,10 +288,12 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * method keeps the factory's setup context inferred without weakening inference for `use`'s middleware signatures.
    *
    * ```ts
-   * app.useFn('*', ({ config }) => rateLimit(config.limits))
+   * app.useFn('/api', ({ config }) => rateLimit(config.limits))
    * ```
    *
    * Like {@link use}, it reaches the application's own server and no listener.
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
    */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
   useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
@@ -480,8 +486,8 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * ```
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
-   * @throws ErrConfiguration from {@link ready}, when the base path does not start with a single "/" (never "//"
-   *   or "/\"), or holds a "?", a "#" or a control character.
+   * @throws ErrConfiguration from {@link ready}, when the base path starts with "//" or "/\" once rooted, or holds
+   *   "//", "?", "#" or a control character.
    */
   basePath(basePath: string | BasePathConfigurer<C>): this {
     this.assertConfigurable()

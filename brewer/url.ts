@@ -17,8 +17,7 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
     return path
   }
 
-  return path
-    .split('/')
+  return segmentsOf(path)
     .map(segment => {
       if (segment === '*') {
         return fillParams(path, ['*'], params, false)?.[0]
@@ -53,6 +52,34 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
     })
     .filter(segment => segment !== undefined)
     .join('/')
+}
+
+// The path's segments, split at each "/" outside a parameter's regex: a "/" a regex holds is part of it, as the router
+// reads it.
+function segmentsOf(path: string): string[] {
+  const segments: string[] = []
+  let start = 0
+  let i = 0
+
+  while (i < path.length) {
+    if (path[i] === '/') {
+      segments.push(path.slice(start, i))
+      start = ++i
+    } else if (path[i] === ':' && path[i + 1] === ':') {
+      i += 2
+    } else if (path[i] === ':') {
+      let end = i + 1
+      while (end < path.length && !'(-./'.includes(path[end]!)) {
+        end++
+      }
+      i = path[end] === '(' ? afterConstraint(path, end) : end
+    } else {
+      i++
+    }
+  }
+
+  segments.push(path.slice(start))
+  return segments
 }
 
 // Text beside a parameter, written the way find-my-way 9.9.0 matches it. Before the segment's first parameter it is a

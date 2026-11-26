@@ -95,9 +95,9 @@ describe('resolveServerSettings', () => {
   })
 
   it('merges given router flags over the defaults', () => {
-    expect(resolveServerSettings({ router: { caseSensitive: false } }).router).toEqual({
+    expect(resolveServerSettings({ router: { ignoreTrailingSlash: true } }).router).toEqual({
       ...DEFAULT_ROUTER_FLAGS,
-      caseSensitive: false,
+      ignoreTrailingSlash: true,
     })
   })
 
@@ -122,9 +122,23 @@ describe('resolveServerSettings', () => {
   })
 
   it('refuses a router flag that is not a boolean', () => {
-    expect(() => resolveServerSettings({ router: { caseSensitive: 'false' } })).toThrow(
-      'Cannot set router.caseSensitive to "false": a router flag is true or false',
+    expect(() => resolveServerSettings({ router: { ignoreTrailingSlash: 'false' } })).toThrow(
+      'Cannot set router.ignoreTrailingSlash to "false": a router flag is true or false',
     )
+  })
+
+  // Paths are case-sensitive, as find-my-way and Fastify match them by default: the flag is gone, and setting it fails
+  // rather than being dropped without a word.
+  it('refuses caseSensitive as a router flag', () => {
+    let err: unknown
+    try {
+      resolveServerSettings({ router: { caseSensitive: false } })
+    } catch (caught) {
+      err = caught
+    }
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect((err as Error).message.split('\n')[0]).toBe('Cannot set router "caseSensitive": it is not a router flag')
   })
 
   it('refuses an unknown router flag', () => {

@@ -17,8 +17,8 @@ import { node } from '../platform/node.testkit.js'
  *
  * Load-bearing for every prefixed application, and it was asserted only in prose until this file: the
  * documentation claimed `new Router('/app')` with a route at `/` produced `/app/` and therefore did not answer
- * `GET /app`. It produces `/app` — `joinPaths` trims the trailing slash — and since the application leaves
- * `ignoreTrailingSlash` off, `/app/` is then a different URL that nothing registered.
+ * `GET /app`. It produces `/app`, the group's own path, and the server answers it at `/app/` too, as every group
+ * root is answered at both forms.
  *
  * The consequence that survives is the wildcard's: `/dash/*` does not match the bare `/dash`, which is why a
  * gated subtree still needs two routes.
@@ -57,7 +57,7 @@ describe('a group prefix and a route at "/"', () => {
     }
   })
 
-  it('answers the bare path and not the trailing slash', async () => {
+  it('answers the bare path and the trailing slash', async () => {
     const app = createWebApplication({ adapter: node() }).mount(
       new Router('/app').get('/', () => ({ ok: true })),
     ) as WebApplication
@@ -65,8 +65,8 @@ describe('a group prefix and a route at "/"', () => {
 
     try {
       expect((await app.request('/app')).status).toBe(200)
-      // `ignoreTrailingSlash` is left at its default, so this is a different URL.
-      expect((await app.request('/app/')).status).toBe(404)
+      // A group root answers at both forms, with `ignoreTrailingSlash` left at its default.
+      expect((await app.request('/app/')).status).toBe(200)
     } finally {
       await app.close()
     }

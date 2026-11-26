@@ -1,15 +1,12 @@
 import { joinURL } from '@caffeinejs/brewer'
+import { routeURL } from '@caffeinejs/http'
 
 import type { RouterDescriptor } from './types.js'
 
-// Joins prefix + controller path + route path into a single leading-slash path template,
-// e.g. { prefix: '/api', path: '/tasks' } + '/:id' → '/api/tasks/:id'.
+// Joins prefix + controller path + route path as the server joins them, e.g. { prefix: '/api', path: '/tasks' } +
+// '/:id' → '/api/tasks/:id'.
 export function joinRoutePath(router: RouterDescriptor, routePath: string): string {
-  const prefix = router.prefix ?? ''
-  const segments = [prefix, router.path, routePath].filter(s => s.length > 0)
-  const joined = segments.join('/').replace(/\/+/g, '/')
-  const rawPath = joined.startsWith('/') ? joined : `/${joined}`
-  return trimTrailingSlash(rawPath)
+  return routeURL(router.prefix, router.path, routePath)
 }
 
 // Joined, not resolved: `new URL('/tasks', 'https://gateway.example/api/')` is `https://gateway.example/tasks`, and a
@@ -45,8 +42,4 @@ export function mergeRequest(request: Request, overrides: { method: string; url:
     referrer: request.referrer,
     referrerPolicy: request.referrerPolicy,
   } as RequestInit)
-}
-
-function trimTrailingSlash(path: string): string {
-  return path.length > 1 ? path.replace(/\/$/, '') : path || '/'
 }

@@ -2,29 +2,32 @@ import { describe, expect, it } from 'vitest'
 
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
-import { compilePrefix, normalizePath, pathAfter, placeMiddlewares, type PathFlags } from './path.js'
+import { normalizePath, pathAfter, placeMiddlewares, prefixMatcher, type PathFlags } from './path.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
 const noop = (): void => undefined
 
-describe('compilePrefix', () => {
+describe('prefixMatcher', () => {
   // `/admin` guards `/admin/...` and must not leak onto a sibling that merely starts with the same letters.
   it('matches on a segment boundary', () => {
-    const prefix = compilePrefix('/admin')
+    const matches = prefixMatcher('/admin')
 
-    expect(prefix.test('/admin/users')).toBe(true)
-    expect(prefix.test('/admin')).toBe(true)
-    expect(prefix.test('/adminx')).toBe(false)
+    expect([matches('/admin'), matches('/admin/users'), matches('/adminx')]).toEqual([true, true, false])
+  })
+
+  // Routes match case-sensitively, so a middleware does too: it covers what the router sends under its prefix.
+  it('matches case-sensitively', () => {
+    expect(prefixMatcher('/admin')('/ADMIN')).toBe(false)
+  })
+
+  it('matches an array', () => {
+    const matches = prefixMatcher(['/a', '/b'])
+
+    expect([matches('/b/x'), matches('/c')]).toEqual([true, false])
   })
 })
 
 describe('normalizePath', () => {
-  // The router ignores the duplicate slash: a guard that did not would be skipped by `//admin`.
-  it('drops a duplicate slash when the router does', () => {
-    expect(normalizePath('//admin//users', { ignoreDuplicateSlashes: true }).path).toBe('/admin/users')
-    expect(normalizePath('//admin', {}).path).toBe('//admin')
-  })
-
   it('fails a malformed escape with a 400', () => {
     const { error } = normalizePath('/%E0%A4%A', {})
 
@@ -41,12 +44,12 @@ describe('placeMiddlewares', () => {
 
   // What the middleware sees of a request to one of the scope's routes, as the chain matches it.
   const matches = (base: string, flags: PathFlags, path: string, url: string): boolean => {
-    const [placed] = placeMiddlewares(base, [middleware(path)], flags)
-    return compilePrefix(placed!.path!).test(pathAfter(normalizePath(url, flags).path, placed!.skip ?? 0))
+    const [placed] = placeMiddlewares(base, [middleware(path)])
+    return prefixMatcher(placed!.path!)(pathAfter(normalizePath(url, flags).path, placed!.skip ?? 0))
   }
 
   it('leaves a pathless middleware covering the whole scope', () => {
-    const [all] = placeMiddlewares('/admin', [middleware(undefined)], {})
+    const [all] = placeMiddlewares('/admin', [middleware(undefined)])
 
     expect([all!.path, all!.skip]).toEqual([undefined, undefined])
   })
@@ -76,16 +79,14 @@ describe('placeMiddlewares', () => {
       '/1/2/3/4/5/6/7/8/9/jobs',
       '/1/2/3/4/5/6/7/8/9/x',
     ],
-    // A trailing empty segment stays one, unless the router folds it into the path that follows.
+    // A trailing empty segment stays one.
     ['/v2/', {}, '/v2//jobs', '/v2/jobs'],
-    ['/v2/', { ignoreDuplicateSlashes: true }, '/v2//jobs', '/v2/other'],
-    ['/a//b', { ignoreDuplicateSlashes: true }, '/a//b/jobs', '/a/b/other'],
   ])('matches a path under %s %j after its segments', (base, flags, served, unserved) => {
     expect([matches(base, flags, '/jobs', served), matches(base, flags, '/jobs', unserved)]).toEqual([true, false])
   })
 
   // Neither spans a fixed number of segments: the path after them has no start.
   it.each(['/files/*', '/items/:id?'])('refuses a path under %s', base => {
-    expect(() => placeMiddlewares(base, [middleware('/x')], {})).toThrow(ErrConfiguration)
+    expect(() => placeMiddlewares(base, [middleware('/x')])).toThrow(ErrConfiguration)
   })
 })

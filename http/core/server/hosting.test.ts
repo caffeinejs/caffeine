@@ -479,11 +479,6 @@ describe("a router plugin's path-scoped middleware", () => {
 
   it.each([
     ['/tenants/:id', undefined, {}, '/tenants//jobs'],
-    ['/a//b', undefined, { ignoreDuplicateSlashes: true }, '/a//b/jobs'],
-    ['/a//b', undefined, { ignoreDuplicateSlashes: true }, '/a/b/jobs'],
-    ['', '/v2//', { ignoreDuplicateSlashes: true }, '/v2/jobs'],
-    ['', '/v2//', { ignoreDuplicateSlashes: true }, '/v2//jobs'],
-    ['', '/v2//', {}, '/v2//jobs'],
     [nine, undefined, {}, '/1/2/3/4/5/6/7/8/9/jobs'],
   ])('under %j prefixed %j with %j runs for %s', async (path, prefix, router, url) => {
     const a = createWebApplication()

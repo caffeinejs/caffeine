@@ -95,6 +95,11 @@ const DISCOVERY_DOCUMENT = {
 }
 
 describe('OIDCAuthenticationHandler', () => {
+  // A declared path: a missing leading "/" is added, as on the OAuth 2.0 handler they share.
+  it('adds a missing leading slash to loginPath', () => {
+    expect(new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ loginPath: 'sign-in' })).loginPath).toBe('/sign-in')
+  })
+
   describe('authenticate() — session validation', () => {
     it('returns none() when no session cookie', async () => {
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())

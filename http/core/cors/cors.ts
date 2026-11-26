@@ -188,28 +188,19 @@ class CORSPolicy extends HTTPPlugin {
     // A request no route matches runs the server's own hooks, so a policy there sees every preflight. A router's or a
     // controller's sees those to its routes alone: it serves `OPTIONS` routes at its path and below for preflights to
     // match, answered in `onRequest` before their handler runs, which gives one it does not grant a path's 404. They
-    // select on no constraint: a browser sends none with a preflight. A path ending in a wildcard or an optional
-    // parameter has nothing below it.
+    // select on no constraint: a browser sends none with a preflight. The scope's root is served at both forms, as
+    // every group root is. A path ending in a wildcard or an optional parameter has nothing below it.
     if (!isServerScope(context.server)) {
-      const { prefix } = context.server
-      const parts = parseRoutePattern(prefix)
-      const wildcard = parts.some(part => part.kind === 'wildcard')
-      const optional = parts.some(part => part.kind === 'optional')
+      const parts = parseRoutePattern(context.server.prefix)
       const preflights = new Router()
-
-      // A group prefix of its own: its root is served with and without the trailing slash, as a prefixed router's is.
-      // Nothing follows a wildcard; and a path that is one optional segment is `/` both ways without it.
-      if (!wildcard && parts[0]?.kind !== 'optional') {
-        preflights.extend(group => {
-          group.prefix('')
-        })
-      }
-
-      preflights
         .detail('http', { internal: true })
         .config(accessControlExempt(), { [kPreflightRoute]: true, constraints: null })
         .options('/', notFound)
-      context.server.mount(wildcard || optional ? preflights : preflights.options('/*', notFound))
+      context.server.mount(
+        parts.some(part => part.kind === 'wildcard' || part.kind === 'optional')
+          ? preflights
+          : preflights.options('/*', notFound),
+      )
     }
 
     const own = this.#own

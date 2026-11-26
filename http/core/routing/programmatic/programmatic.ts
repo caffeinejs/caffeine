@@ -19,7 +19,15 @@ import type { RouteOptionsInput } from '../options.js'
 import type { RouteAuthzOptions, RouteGroupDetail, RouteValidationSchema } from '../spec.js'
 import { RouteChain } from './route_chain.js'
 import { attachState, stateOf, type RouterState } from './state.js'
-import type { DeclaredRoute, JoinPath, MergeDeps, PrefixRoutePaths, RouteHandler, RoutesOf } from './types.js'
+import type {
+  DeclaredRoute,
+  JoinGroupPath,
+  JoinPath,
+  MergeDeps,
+  PrefixRoutePaths,
+  RouteHandler,
+  RoutesOf,
+} from './types.js'
 
 const ALL_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 
@@ -175,11 +183,17 @@ export class Router<
    */
   group<CP extends string, CR>(
     path: CP,
-    configure: (router: Router<V, C, GD, JoinPath<GP, CP>, never>) => Router<any, any, any, any, CR>,
+    configure: (router: Router<V, C, GD, JoinGroupPath<GP, CP>, never>) => Router<any, any, any, any, CR>,
   ): Router<V, C, GD, GP, R | CR>
-  group<CP extends string>(path: CP, configure: (router: Router<V, C, GD, JoinPath<GP, CP>, never>) => unknown): this
-  group<CP extends string>(path: CP, configure: (router: Router<V, C, GD, JoinPath<GP, CP>, never>) => unknown): this {
-    const child = new Router<V, C, GD, JoinPath<GP, CP>, never>(path as unknown as JoinPath<GP, CP>)
+  group<CP extends string>(
+    path: CP,
+    configure: (router: Router<V, C, GD, JoinGroupPath<GP, CP>, never>) => unknown,
+  ): this
+  group<CP extends string>(
+    path: CP,
+    configure: (router: Router<V, C, GD, JoinGroupPath<GP, CP>, never>) => unknown,
+  ): this {
+    const child = new Router<V, C, GD, JoinGroupPath<GP, CP>, never>(path as unknown as JoinGroupPath<GP, CP>)
     configure(child)
     this.#state.children.push(stateOf(child)!)
     return this
@@ -198,13 +212,13 @@ export class Router<
   mount<MP extends string, const RS extends ReadonlyArray<Router<any, any, any, any, any>>>(
     path: MP,
     ...routers: RS
-  ): Router<V, C, GD, GP, R | PrefixRoutePaths<RoutesOf<RS[number]>, JoinPath<GP, MP>>>
+  ): Router<V, C, GD, GP, R | PrefixRoutePaths<RoutesOf<RS[number]>, JoinGroupPath<GP, MP>>>
   mount<const RS extends ReadonlyArray<Router<any, any, any, any, any>>>(
     ...routers: RS
   ): Router<V, C, GD, GP, R | PrefixRoutePaths<RoutesOf<RS[number]>, GP>>
   mount(...args: Array<string | Router<any, any, any, any, any>>): this {
     const path = typeof args[0] === 'string' ? args[0] : ''
-    const routers = (path === '' ? args : args.slice(1)) as Array<Router<any, any, any, any, any>>
+    const routers = (typeof args[0] === 'string' ? args.slice(1) : args) as Array<Router<any, any, any, any, any>>
 
     for (const router of routers) {
       const state = stateOf(router)!

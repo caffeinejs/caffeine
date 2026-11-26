@@ -4,6 +4,7 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import type { RequestHookName } from '../lifecycle/lifecycle.js'
+import { literalPrefix } from '../routing/paths.js'
 import { ErrPipelineSealed } from './errors.js'
 import {
   type Middleware,
@@ -44,12 +45,20 @@ export class MiddlewarePipeline {
   readonly #entries: Entry[] = []
   #sealed = false
 
-  /** Registers `target` at `hook`, optionally restricted to `path`. Throws once the pipeline has been resolved. */
+  /**
+   * Registers `target` at `hook`, optionally restricted to `path`. Throws once the pipeline has been resolved.
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
+   */
   add(path: MiddlewarePath | undefined, target: unknown, hook?: RequestHookName): this {
     return this.#add(path, target, hook, false)
   }
 
-  /** Registers a factory that produces middleware once at start-up. */
+  /**
+   * Registers a factory that produces middleware once at start-up.
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
+   */
   addFactory(path: MiddlewarePath | undefined, target: unknown, hook?: RequestHookName): this {
     return this.#add(path, target, hook, true)
   }
@@ -59,7 +68,12 @@ export class MiddlewarePipeline {
       throw new ErrPipelineSealed()
     }
 
-    this.#entries.push({ path: path === '*' ? undefined : path, hook, target, factory })
+    if (path !== undefined) {
+      assertLiteralPrefixes(path)
+    }
+
+    // A copy of what was checked: the caller's list may change after this call.
+    this.#entries.push({ path: typeof path === 'object' ? [...path] : path, hook, target, factory })
     return this
   }
 
@@ -78,6 +92,44 @@ export class MiddlewarePipeline {
 
       return { path: entry.path, hook, handle: resolved.handle }
     })
+  }
+}
+
+// A middleware path is matched as a literal prefix on whole segments: route syntax in it, or a "?" or "#" no request
+// path holds, could never match, and would leave the middleware silently skipped.
+function assertLiteralPrefixes(path: MiddlewarePath): void {
+  if (typeof path !== 'string' && path.length === 0) {
+    throw new ErrConfiguration(
+      errMessage('Cannot add middleware at []: the list of paths is empty')
+        .solutions('Leave the path out to cover every request')
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
+
+  for (const entry of typeof path === 'string' ? [path] : path) {
+    if (/[:*(]/.test(entry)) {
+      throw new ErrConfiguration(
+        errMessage(`Cannot add middleware at "${entry}": a middleware path is a literal prefix`)
+          .solutions(
+            'Use the literal prefix before the parameter, such as "/tenants", and read the value in the middleware',
+            "Or add it from a plugin on a Router at that path: it then covers that router's routes only",
+          )
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    if (/[?#]/.test(entry)) {
+      throw new ErrConfiguration(
+        errMessage(`Cannot add middleware at "${entry}": a request path holds no "?" or "#"`)
+          .solutions('Leave the query and fragment out of the path')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    literalPrefix(entry)
   }
 }
 

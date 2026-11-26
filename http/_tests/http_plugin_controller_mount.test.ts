@@ -113,59 +113,7 @@ class ConfiguredController {
   }
 }
 
-const doubled: string[] = []
-
-@Prefix('/v2//')
-@Use(
-  () =>
-    new (class extends HTTPPlugin {
-      register({ server }: HTTPSetupContext): void {
-        doubled.push(server.prefix)
-        server.mount(new Router('/x').get('/', () => ({ mounted: true })))
-      }
-    })(),
-)
-@Controller('/doubled')
-class DoubledController {
-  @Get('/')
-  get() {
-    return {}
-  }
-}
-
-const doubledRoot: string[] = []
-
-@Prefix('/v2//')
-@Use(
-  () =>
-    new (class extends HTTPPlugin {
-      register({ server }: HTTPSetupContext): void {
-        doubledRoot.push(server.prefix)
-        server.mount(
-          new Router('/child').get('/', () => ({ mounted: true })),
-          new Router().get('/bare', () => ({ bare: true })),
-        )
-      }
-    })(),
-)
-@Controller('/')
-class DoubledRootController {
-  @Get('/own')
-  get() {
-    return {}
-  }
-}
-
-void [
-  MountingController,
-  GuardedController,
-  CORSController,
-  HookedController,
-  PrefixedController,
-  ConfiguredController,
-  DoubledController,
-  DoubledRootController,
-]
+void [MountingController, GuardedController, CORSController, HookedController, PrefixedController, ConfiguredController]
 
 describe('HTTPPlugin on a controller, mounting', () => {
   it("serves what a controller's plugin mounts under the controller's path", async () => {
@@ -221,42 +169,6 @@ describe('HTTPPlugin on a controller, mounting', () => {
 
       expect(prefixes).toEqual(['/v1/prefixed'])
       expect((await app.request('/v1/prefixed/x')).status).toBe(200)
-    } finally {
-      await app.close()
-    }
-  })
-
-  // A controller's scope starts where its routes are served, an empty segment in its prefix kept as its routes keep it.
-  it('scopes a controller where its routes are served when its prefix holds an empty segment', async () => {
-    doubled.length = 0
-    const app = createWebApplication({ adapter: node() })
-
-    try {
-      await app.bootstrap()
-
-      expect([
-        doubled,
-        (await app.request('/v2//doubled')).status,
-        (await app.request('/v2//doubled/x')).status,
-      ]).toEqual([['/v2//doubled'], 200, 200])
-    } finally {
-      await app.close()
-    }
-  })
-
-  it('scopes a controller with an empty path at its prefix when the prefix holds an empty segment', async () => {
-    doubledRoot.length = 0
-    const app = createWebApplication({ adapter: node() })
-
-    try {
-      await app.bootstrap()
-
-      expect([
-        doubledRoot,
-        (await app.request('/v2//own')).status,
-        (await app.request('/v2//child')).status,
-        (await app.request('/v2//bare')).status,
-      ]).toEqual([['/v2/'], 200, 200, 200])
     } finally {
       await app.close()
     }

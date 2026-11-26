@@ -64,6 +64,7 @@ export interface ScopedServer<C = unknown> {
    * controller it runs in front of that router's or controller's routes alone, after its plugins, and a path is
    * relative to it: `use('/jobs', mw)` on a router at `/admin` covers `/admin/jobs`.
    *
+   * @throws ErrConfiguration when a path is not a literal prefix.
    * @throws ErrConfiguration from start-up, for a relative path under a router whose path holds a wildcard or an
    *   optional parameter: neither has a prefix to start from.
    */
@@ -79,7 +80,11 @@ export interface ScopedServer<C = unknown> {
   ): this
   use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions): this
 
-  /** Adds a factory that builds a middleware once at start-up, as `app.useFn(...)` does, where `use` would put it. */
+  /**
+   * Adds a factory that builds a middleware once at start-up, as `app.useFn(...)` does, where `use` would put it.
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
+   */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
   useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
 

@@ -1,10 +1,9 @@
 import { errMessage } from '@caffeinejs/std/err'
-import { pathToRegexp } from 'path-to-regexp'
 
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import type { RouterFlags } from '../matcher/matcher.js'
-import { parseRoutePattern, routePathSegments } from '../routing/paths.js'
+import { literalPrefix, parseRoutePattern, routePathSegments, underPrefix } from '../routing/paths.js'
 import type { MiddlewarePath } from './middleware.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
@@ -12,16 +11,18 @@ import type { ResolvedMiddleware } from './pipeline.js'
 // middleware cannot be skipped by a request the router still sends to the guarded route.
 
 /** The router flags path matching follows. */
-export type PathFlags = Partial<
-  Pick<RouterFlags, 'ignoreTrailingSlash' | 'ignoreDuplicateSlashes' | 'useSemicolonDelimiter'>
->
+export type PathFlags = Partial<Pick<RouterFlags, 'ignoreTrailingSlash'>>
 
 // Encoded characters where decodeURIComponent(x) !== decodeURI(x): % # $ & + , / : ; = ? @
 const RESERVED_ENCODINGS = new Set(['25', '23', '24', '26', '2B', '2C', '2F', '3A', '3B', '3D', '3F', '40'])
 
-/** What a middleware's path matches: a prefix, on a segment boundary. */
-export function compilePrefix(path: MiddlewarePath): RegExp {
-  return pathToRegexp(typeof path === 'string' ? sanitizePrefix(path) : path.map(sanitizePrefix), { end: false }).regexp
+/**
+ * What a middleware's path matches: each of its literal prefixes, on whole segments and case-sensitively, as the router
+ * matches a route.
+ */
+export function prefixMatcher(path: MiddlewarePath): (path: string) => boolean {
+  const prefixes = (typeof path === 'string' ? [path] : path).map(literalPrefix)
+  return request => prefixes.some(prefix => underPrefix(request, prefix))
 }
 
 /** The path of `url`, before its `?` or `#`. */
@@ -50,12 +51,8 @@ export function normalizePath(url: string, flags: PathFlags): { path: string; er
     path = absolute
   }
 
-  if (flags.ignoreDuplicateSlashes) {
-    path = removeDuplicateSlashes(path)
-  }
-
   try {
-    path = safeDecodeURI(path, flags.useSemicolonDelimiter === true)
+    path = safeDecodeURI(path)
   } catch {
     return { path: url, error: malformedURL() }
   }
@@ -85,17 +82,12 @@ export interface PlacedMiddleware extends ResolvedMiddleware {
  * already, and keeps none.
  *
  * It runs only for the scope's routes, whose paths the router matched from `base`: the path is matched after as many
- * segments as `base` spans, whatever its parameters hold. Under `ignoreDuplicateSlashes`, they are counted with
- * duplicate slashes folded, as the router folds them.
+ * segments as `base` spans, whatever its parameters hold.
  *
  * @throws ErrConfiguration when a path would be placed under a wildcard or an optional parameter: neither spans a
  *   fixed number of segments.
  */
-export function placeMiddlewares(
-  base: string,
-  middlewares: readonly ResolvedMiddleware[],
-  flags: PathFlags,
-): PlacedMiddleware[] {
+export function placeMiddlewares(base: string, middlewares: readonly ResolvedMiddleware[]): PlacedMiddleware[] {
   const relative = middlewares.filter(middleware => middleware.path !== undefined)
   if (relative.length === 0) {
     return [...middlewares]
@@ -117,18 +109,9 @@ export function placeMiddlewares(
     )
   }
 
-  const skip = routePathSegments(base, flags)
-  const rooted = (path: string): string => (path.startsWith('/') ? path : `/${path}`)
+  const skip = routePathSegments(base)
 
-  return middlewares.map(middleware =>
-    middleware.path === undefined
-      ? middleware
-      : {
-          ...middleware,
-          path: typeof middleware.path === 'string' ? rooted(middleware.path) : middleware.path.map(rooted),
-          skip,
-        },
-  )
+  return middlewares.map(middleware => (middleware.path === undefined ? middleware : { ...middleware, skip }))
 }
 
 /**
@@ -144,13 +127,6 @@ export function pathAfter(path: string, skip: number): string {
     }
   }
   return skip === 0 ? path : path.slice(at)
-}
-
-function sanitizePrefix(prefix: string): string {
-  if (prefix === '/') {
-    return ''
-  }
-  return prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
 }
 
 function pathFromAbsoluteURL(url: string): string | null {
@@ -175,7 +151,7 @@ function pathFromAbsoluteURL(url: string): string | null {
 
 // Decodes the path the way find-my-way does: reserved encodings stay encoded, and `%25` is re-encoded so it
 // is not decoded twice.
-function safeDecodeURI(path: string, useSemicolonDelimiter: boolean): string {
+function safeDecodeURI(path: string): string {
   let shouldDecode = false
 
   for (let i = 1; i < path.length; i++) {
@@ -193,17 +169,13 @@ function safeDecodeURI(path: string, useSemicolonDelimiter: boolean): string {
         }
         i += 2
       }
-    } else if (charCode === 63 || charCode === 35 || (charCode === 59 && useSemicolonDelimiter)) {
+    } else if (charCode === 63 || charCode === 35) {
       path = path.slice(0, i)
       break
     }
   }
 
   return shouldDecode ? decodeURI(path) : path
-}
-
-function removeDuplicateSlashes(path: string): string {
-  return path.includes('//') ? path.replace(/\/\/+/g, '/') : path
 }
 
 function trimLastSlash(path: string): string {

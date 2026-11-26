@@ -24,7 +24,17 @@ type Entry<S extends readonly string[], R extends RouteContract> = { segs: S; ro
 /** Any entry, as the constraint every walk step carries. */
 type AnyEntry = Entry<readonly string[], RouteContract>
 
-type EntriesOf<R> = R extends RouteContract ? Entry<Split<R['path']>, R> : never
+/**
+ * Every route as an entry of the tree. A route whose path ends in `/` has no member of its own, as its last segment
+ * would be empty: `client.$request(...)` reaches it.
+ */
+type EntriesOf<R> = R extends RouteContract
+  ? R['path'] extends '/'
+    ? Entry<Split<R['path']>, R>
+    : R['path'] extends `${string}/`
+      ? never
+      : Entry<Split<R['path']>, R>
+  : never
 
 /**
  * The name a segment binds when it is that parameter alone, read from the path as the router reads it: `*`, or

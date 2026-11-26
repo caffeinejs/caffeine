@@ -151,7 +151,6 @@ describe('an application under a base path', () => {
     })
 
     it.each([
-      ['api', 'does not start with "/"'],
       ['/api?x', 'contains "?"'],
       ['/api#x', 'contains "#"'],
     ])('fails start-up on %s, given directly or by a callback', async (value, reason) => {

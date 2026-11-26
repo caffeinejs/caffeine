@@ -139,8 +139,32 @@ export type MergeDeps<OUTER, INNER> = [OUTER] extends [undefined]
     ? OUTER
     : Simplify<Omit<OUTER, keyof INNER> & INNER>
 
-/** Concatenates a group path with a route path, keeping both literal so parameters stay inferable. */
-export type JoinPath<A extends string, B extends string> = A extends '' ? B : B extends '' | '/' ? A : `${A}${B}`
+type Trimmed<P extends string> = P extends `${infer H}/` ? Trimmed<H> : P
+type Rooted<P extends string> = P extends '' ? '' : P extends `/${string}` ? P : `/${P}`
+/** A group path as the runtime keeps it: rooted, without a trailing "/". */
+type GroupPath<P extends string> = Trimmed<Rooted<P>>
+/**
+ * Joins two group paths: a router's and a group or mount path under it. A path that is not a literal type joins to
+ * `string`.
+ */
+export type JoinGroupPath<A extends string, B extends string> = string extends A | B
+  ? string
+  : `${GroupPath<A>}${GroupPath<B>}`
+/**
+ * Joins a group path and a route path as the server does, keeping both literal so parameters stay inferable: `/` is
+ * the group's own path. A path that is not a literal type joins to `string`.
+ */
+export type JoinPath<A extends string, B extends string> = string extends A | B
+  ? string
+  : A extends unknown
+    ? B extends unknown
+      ? Rooted<B extends '' ? '/' : B> extends '/'
+        ? GroupPath<A> extends ''
+          ? '/'
+          : GroupPath<A>
+        : `${GroupPath<A>}${Rooted<B>}`
+      : never
+    : never
 
 /**
  * One route, as a type: everything a client generated from the router needs to call it.

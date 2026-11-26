@@ -22,24 +22,6 @@ export interface TranslatedPath {
 }
 
 /**
- * Joins a router base path and a route path, trimming a trailing slash (but never to empty).
- *
- * A deliberate copy of http's internal `joinPaths`: it is not exported, and the project forbids re-export
- * passthroughs across packages. `openapi/_tests/paths.test.ts` asserts the two agree on a fixture table, so a
- * change on either side surfaces as a failing test rather than as silently divergent URLs.
- */
-export function joinPaths(base: string, path: string): string {
-  const joined = `${base}${path}`
-  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
-}
-
-/** The full URL a route answers on, matching how the server registers it: the prefix loses one trailing slash. */
-export function routeURL(prefix: string | undefined, routerPath: string, routePath: string): string {
-  const base = prefix === undefined ? '' : prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
-  return `${base}${joinPaths(routerPath, routePath)}`
-}
-
-/**
  * Translates a route path, in Caffeine's route syntax, into OpenAPI path templates.
  *
  * The route syntax and OpenAPI disagree about more than the sigil:

@@ -1,4 +1,4 @@
-import { Router, createWebApplication } from '@caffeinejs/http'
+import { ErrConfiguration, Router, createWebApplication } from '@caffeinejs/http'
 import { node } from '@caffeinejs/http-node'
 import { describe, expect, it } from 'vitest'
 
@@ -64,36 +64,14 @@ describe('openapi', () => {
     ['an escaped ":"', '/service::name', {}, '/service:name/docs', '/service:name'],
     ['a parameter named wildcard', '/w/:wildcard', {}, '/w/x/docs', '/w/x'],
     ['a parameter name with "$"', '/teams/:$team', {}, '/teams/red/docs', '/teams/red'],
-    ['an empty segment kept', '/a//b', {}, '/a//b/docs', '/a//b'],
-    ['a plain prefix starting with "//"', '//catalog', {}, '//catalog/docs', '//catalog'],
-    [
-      'a ";" the router ends the path at',
-      '/teams/:team',
-      { useSemicolonDelimiter: true },
-      '/teams/red/docs;f=a/b',
-      '/teams/red',
-    ],
-    [
-      'a request path naming another host',
-      '/:tenant',
-      { ignoreDuplicateSlashes: true, ignoreTrailingSlash: true },
-      '//evil.example/docs/',
-      '//evil.example',
-    ],
   ])('links the docs page under %s to where it was opened', async (_, path, router, url, root) => {
     await expectLinks(path, router, url, root, o => o.public())
   })
 
-  // A route path is routed with a leading "/" and without repeated ones: the links name it where it is served.
+  // A route path is routed with a leading "/" and a trailing one kept: the links name it where it is served.
   it.each([
     ['without a leading slash', 'spec.json', 'docs', '/api/docs', ['/api/spec.json', '/api/docs/_scalar.js']],
-    [
-      'with a repeated slash',
-      '/v2//schema',
-      '/guide//docs',
-      '/api/guide/docs',
-      ['/api/v2/schema', '/api/guide/docs/_scalar.js'],
-    ],
+    ['with a trailing slash', '/openapi.json', '/docs/', '/api/docs/', ['/api/openapi.json', '/api/docs/_scalar.js']],
   ])('links the docs page to endpoints given %s, where they are served', async (_, json, docs, page, served) => {
     const app = createWebApplication({ adapter: node() })
       .install(OpenAPI())
@@ -128,15 +106,32 @@ describe('openapi', () => {
     )
   })
 
-  // A page served at the scope's own path is opened with the scope's last value as its last segment, an empty one
-  // included: a trailing slash is the page's own unless the router ignores it.
+  // A page served at the scope's own path is opened with the scope's last value as its last segment; the scope's root
+  // answers at both forms, so a trailing slash lies past the page.
   it.each([
     [{}, '/tenants/42', '/tenants/42'],
-    [{}, '/tenants/', '/tenants/'],
+    [{}, '/tenants/42/', '/tenants/42'],
     [{ ignoreTrailingSlash: true }, '/tenants/42/', '/tenants/42'],
-    [{ ignoreTrailingSlash: true }, '/tenants//', '/tenants/'],
   ])('links a docs page served at the scope path to the scope, under %j at %s', async (router, url, root) => {
     await expectLinks('/tenants/:id', router, url, root, o => o.public().docs('/'), '')
+  })
+
+  // A browser reads a link starting with "//" as naming another host: a base spelled that way is refused at start-up.
+  it('never links the docs page to another host', async () => {
+    const app = createWebApplication({ adapter: node() })
+      .install(OpenAPI())
+      .mount(new Router('').with(openapi(o => o.public().base('//catalog'))).get('/pets', () => 'pets'))
+
+    try {
+      const err = await app.bootstrap().catch((err: unknown) => err)
+
+      expect(err).toBeInstanceOf(ErrConfiguration)
+      expect((err as Error).message.split('\n')[0]).toBe(
+        'Cannot use the path "//catalog": it holds an empty segment, "//"',
+      )
+    } finally {
+      await app.close()
+    }
   })
 })
 

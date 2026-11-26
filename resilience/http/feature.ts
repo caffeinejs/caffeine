@@ -8,7 +8,7 @@ import {
   kFeatureName,
 } from '@caffeinejs/application'
 import type { AnyClass } from '@caffeinejs/di'
-import { Keys, SAFE_METHODS } from '@caffeinejs/http'
+import { Keys, routeURL, SAFE_METHODS } from '@caffeinejs/http'
 import { getRouteGroup } from '@caffeinejs/http/decorators/registrar'
 import { errMessage } from '@caffeinejs/std/err'
 
@@ -17,15 +17,6 @@ import { type MethodStages, stagesOf, written } from '../aop/stages.js'
 import { ResilienceTransport } from '../aop/transport.js'
 import { ErrInvalidOption } from '../errors.js'
 import { isClientError } from './http.js'
-
-// The route's path as a request names it: no trailing slash, and `/` for the root.
-function routePath(joined: string): string {
-  let path = joined
-  while (path.length > 1 && path.endsWith('/')) {
-    path = path.slice(0, -1)
-  }
-  return path || '/'
-}
 
 // Refuses a retry on `route` that replaying the request would make unsafe.
 function checkReplay(
@@ -140,7 +131,7 @@ export class ResilienceHTTPBuilder<C = unknown> extends FeatureBuilder<C> {
       }
 
       for (const route of group.routes) {
-        const path = routePath(`${group.prefix ?? ''}${group.path}${route.path}`)
+        const path = routeURL(group.prefix, group.path, route.path)
         checkReplay(cls, path, route, stagesOf(cls, route.name, registry), retryableMethods)
       }
     }

@@ -108,6 +108,8 @@ export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
    * ```ts
    * .listener('admin', l => l.use(AuditLog).use('/jobs', kRateLimiter, { hook: 'preHandler' }))
    * ```
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,
@@ -137,6 +139,8 @@ export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
    * ```ts
    * .listener('admin', l => l.useFn(({ config }) => rateLimit(config.app.adminLimits)))
    * ```
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
    */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
   useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions): this

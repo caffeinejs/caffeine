@@ -5,10 +5,14 @@ import { createWebApplication, type WebApplication } from '../../application.js'
 import type { IContext } from '../../context.js'
 import { Controller } from '../../decorators/controller.js'
 import { OnRequest, OnSend } from '../../decorators/hooks.js'
+import { Prefix } from '../../decorators/prefix.js'
+import { Use } from '../../decorators/use.js'
 import { Get } from '../../decorators/verbs.js'
 import { node, type NodeAdapter } from '../../platform/node.testkit.js'
+import { HTTPPlugin } from '../../plugin.js'
 import { Keys } from '../../symbols.js'
 import { ErrConfiguration } from '../error/common.js'
+import { ControllerRouteSource } from './decorated.js'
 
 type App = WebApplication<never, never, unknown, NodeAdapter>
 let app: App | undefined
@@ -84,5 +88,34 @@ describe('a controller with hook methods', () => {
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('early')
     expect(res.headers.get('x-stamped')).toBe(null)
+  })
+})
+
+describe('a controller scope', () => {
+  // A controller's relative middleware paths start where its routes do: its prefix and path, each normalized.
+  it('scopes a controller at its prefix and path', async () => {
+    @Use(
+      () =>
+        new (class extends HTTPPlugin {
+          override readonly name = 'noop'
+          register(): void {}
+        })(),
+    )
+    @Prefix('/v1/')
+    @Controller('pets')
+    class Pets {
+      @Get('/')
+      list() {
+        return []
+      }
+    }
+
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Pets, t => t.toSelf().labels(Keys.CONTROLLER))
+    await container.init()
+
+    const [group] = new ControllerRouteSource().collect(container)
+
+    expect(group!.scopes?.map(scope => scope.path)).toEqual(['/v1/pets'])
   })
 })

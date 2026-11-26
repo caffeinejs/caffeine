@@ -52,11 +52,8 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
             binding.scopeID === Scopes.SINGLETON,
             container.wrap(key as InjectionToken<ControllerInstance>),
           ),
-        // A controller's routes live under its prefix plus its path: its relative middleware paths start there. Joined as
-        // its routes' paths are: the prefix loses one trailing slash.
-        scopes: spec.plugins?.length
-          ? [{ key, path: `${(spec.prefix ?? '').replace(/\/$/, '')}${spec.path}` }]
-          : undefined,
+        // A controller's routes live under its prefix plus its path: its relative middleware paths start there.
+        scopes: spec.plugins?.length ? [{ key, path: (spec.prefix ?? '') + spec.path }] : undefined,
       }
     })
   }
