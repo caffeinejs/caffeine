@@ -21,7 +21,8 @@ import { node } from '../platform/node.testkit.js'
  * `GET /app`. It produces `/app`, the group's own path, and the server answers it at `/app/` too: a trailing slash
  * never makes another route.
  *
- * A wildcard answers its bare parent too: `/dash/*` matches `/dash`, unless a route is declared at exactly that path.
+ * A wildcard answers its bare parent too: `/dash/*` matches `/dash`, unless a route is declared at that path, whatever
+ * its parameter names, or reaches it with its optional last segment.
  */
 
 /**
@@ -167,6 +168,48 @@ describe('a group prefix and a route at "/"', () => {
     try {
       expect((await app.request('/dash')).status).toBe(404)
       expect(await (await app.request('/dash', { headers: { 'accept-version': '1.0.0' } })).text()).toBe('parent')
+    } finally {
+      await app.close()
+    }
+  })
+
+  // find-my-way files a path by its parameters' places, not their names, and a route with an optional last segment at
+  // both of its forms: the bare parent gives way to a route declared at any of them.
+  it.each([
+    ['another parameter name', '/t/:id', '/t/:tid/*', '/t/1'],
+    ['an optional segment, at its shorter form', '/t/:id?', '/t/*', '/t'],
+    ['an optional segment, at its longer form', '/t/:id?', '/t/:x/*', '/t/1'],
+  ])('leaves the bare parent to a constrained route declared there under %s', async (_, declared, wildcard, url) => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router().get(wildcard, () => 'wildcard'),
+      new Router().config(version('1.0.0')).get(declared, () => 'parent'),
+    ) as WebApplication
+    await app.bootstrap()
+
+    try {
+      expect([
+        (await app.request(url)).status,
+        await (await app.request(url, { headers: { 'accept-version': '1.0.0' } })).text(),
+      ]).toEqual([404, 'parent'])
+    } finally {
+      await app.close()
+    }
+  })
+
+  // A constrained GET registers a HEAD twin: a wildcard that declares HEAD itself gives its bare parent's HEAD way too,
+  // so HEAD answers where GET does.
+  it("leaves the bare parent's HEAD to a constrained route's HEAD twin", async () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router().all('/t/:x/*', () => 'wildcard'),
+      new Router().config(version('1.0.0')).get('/t/:id', () => 'parent'),
+    ) as WebApplication
+    await app.bootstrap()
+
+    try {
+      expect([
+        (await app.request('/t/1', { method: 'HEAD' })).status,
+        (await app.request('/t/1', { method: 'HEAD', headers: { 'accept-version': '1.0.0' } })).status,
+      ]).toEqual([404, 200])
     } finally {
       await app.close()
     }

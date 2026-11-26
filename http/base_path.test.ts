@@ -61,6 +61,16 @@ describe('normalizeBasePath', () => {
     expect(normalizeBasePath('/api//')).toBe('/api')
   })
 
+  it.each([
+    ['/api?x', '?'],
+    ['/api#x', '#'],
+  ])('refuses %s, which no request path could ever start with', (value, char) => {
+    const err = captureError(() => normalizeBasePath(value))
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(err.message).toContain(`"${value}" contains "${char}"`)
+  })
+
   // The base goes in front of every redirect the framework builds, so it must never be one a browser reads as naming
   // another host: `~/done` under `//evil.example` is `//evil.example/done`.
   // A "/" is added first, so a value starting with "\\" is still refused once rooted.

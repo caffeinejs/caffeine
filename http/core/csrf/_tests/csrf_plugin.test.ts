@@ -158,6 +158,31 @@ describe('csrf()', () => {
       expect((await post(app, '/webhooks/x', CROSS_SITE)).status).toBe(200)
     })
 
+    // A path is matched after the base path is taken off, so one written from the base path would match nothing.
+    it('refuses an excluded path written from the base path, naming the path to write instead', async () => {
+      const app = createWebApplication({ adapter: node() }).with(csrf(c => c.exclude('~/webhooks')))
+      close = () => app.close().catch(() => undefined)
+
+      await expect(app.bootstrap()).rejects.toMatchObject({
+        code: 'ERR_CSRF_CONFIGURATION',
+        message: expect.stringContaining('Write it as "/webhooks"'),
+      })
+    })
+
+    // Without its "~", "~/" is the root, which is refused too: the advice is the root's own, not to write "/".
+    it('refuses "~/" with what to do instead of excluding every route', async () => {
+      const app = createWebApplication({ adapter: node() }).with(csrf(c => c.exclude('~/')))
+      close = () => app.close().catch(() => undefined)
+
+      const err = (await app.bootstrap().catch((failure: unknown) => failure)) as Error
+
+      expect([
+        (err as Error & { code?: string }).code,
+        err.message.includes('Turn the check off with enabled(false)'),
+        err.message.includes('Write it as'),
+      ]).toEqual(['ERR_CSRF_CONFIGURATION', true, false])
+    })
+
     // Every route sits under `/`, so excluding it turns the check off without saying so; `CSRF__EXCLUDE__0=/`
     // would do it from the environment.
     it.each([

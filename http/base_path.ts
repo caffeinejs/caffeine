@@ -25,8 +25,9 @@ export interface BasePathCarrier {
  * A missing leading `/` is added and trailing slashes are dropped, so `'api/'` is `/api`, and `'/'` and `''` mean no
  * base at all.
  *
- * @throws ErrConfiguration when the value, once rooted, starts with "//" or "/\", or holds a control character: put in
- *   front of a redirect, such a base would send the browser off the origin.
+ * @throws ErrConfiguration when the value, once rooted, starts with "//" or "/\", or holds "?", "#" or a control
+ *   character: such a base could never match the path of a request or, put in front of a redirect, would send the
+ *   browser off the origin.
  */
 export function normalizeBasePath(value: string | undefined): string | undefined {
   if (value === undefined) {
@@ -53,6 +54,17 @@ export function normalizeBasePath(value: string | undefined): string | undefined
       throw new ErrConfiguration(
         errMessage(`Cannot set the base path: ${JSON.stringify(base)} contains a control character`)
           .solutions('Give the base path as path segments only')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+  }
+
+  for (const char of ['?', '#']) {
+    if (base.includes(char)) {
+      throw new ErrConfiguration(
+        errMessage(`Cannot set the base path: "${base}" contains "${char}"`)
+          .solutions('Give the base path as path segments only, without a query or a fragment')
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
       )

@@ -268,13 +268,65 @@ describe('corsPolicy() on a preflight', () => {
     expect(res.headers.get('access-control-allow-methods')).toBe('GET')
   })
 
-  it('leaves a preflight for a method no route serves to the 404, with no CORS header', async () => {
+  // No route serves it, so the request it clears would get the 404: granted, the browser sends it and reads that 404,
+  // not a CORS error.
+  it('grants a preflight for a method no route serves from its own settings', async () => {
     const res = await (await serve()).request('/r', preflight(A, 'DELETE'))
 
-    expect(res.status).toBe(404)
-    expect(corsHeaders(res)).toEqual({})
-    // The problem answer's own: the policy adds nothing.
-    expect(res.headers.get('vary')).toBe('Accept')
+    expect([
+      res.status,
+      res.headers.get('access-control-allow-origin'),
+      res.headers.get('access-control-allow-methods'),
+    ]).toEqual([204, A, 'DELETE'])
+  })
+
+  it('grants a preflight to a path no route serves from its own settings', async () => {
+    const res = await (await serve()).request('/nope', preflight(A, 'GET'))
+
+    expect([res.status, res.headers.get('access-control-allow-origin')]).toEqual([204, A])
+  })
+
+  it('leaves a preflight to a path no route serves from an origin it does not list to the 404', async () => {
+    const res = await (await serve()).request('/nope', preflight('https://evil.example', 'GET'))
+
+    expect([res.status, corsHeaders(res)]).toEqual([404, {}])
+  })
+
+  // With a constrained route the server finds a preflight's route in a table of its own: a miss there is certain too.
+  it('grants a preflight to a path no route serves beside a constrained route', async () => {
+    const built = createWebApplication()
+      .with(corsPolicy(c => c.origins(A)))
+      .mount(
+        new Router('/v')
+          .config(version('1.0.0'))
+          .get('/')
+          .handler(() => 'v1'),
+      )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/nope', preflight(A, 'GET'))
+
+    expect([res.status, res.headers.get('access-control-allow-origin')]).toEqual([204, A])
+  })
+
+  // Server policy and router policy: the server's hooks run first, so its own settings answer a path under the
+  // router that no route serves.
+  it('grants a preflight under a router with a policy of its own from the server policy', async () => {
+    const built = createWebApplication()
+      .with(corsPolicy(c => c.origins(A)))
+      .mount(
+        new Router('/s')
+          .with(corsPolicy(c => c.origins('https://b.example')))
+          .get('/x')
+          .handler(() => 's'),
+      )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/s/missing', preflight(A, 'GET'))
+
+    expect([res.status, res.headers.get('access-control-allow-origin')]).toEqual([204, A])
   })
 
   it('leaves a preflight from an origin it does not list to the 404, with no CORS header', async () => {
@@ -298,11 +350,32 @@ describe('corsPolicy() on a preflight', () => {
   })
 
   // A path that cannot be decoded names no route: the preflight goes on to the not-found answer.
-  it('leaves a preflight for a path that cannot be decoded alone', async () => {
-    const res = await (await serve()).request('/%E0%A4%A', preflight(A, 'GET'))
+  it.each([
+    ['a method a route serves', 'GET', () => serve()],
+    // No route of the method: find-my-way answers without decoding the path.
+    ['a method no route serves', 'DELETE', () => serve()],
+    // The constrained route sends the lookup to the server's own table.
+    [
+      'beside a constrained route',
+      'GET',
+      async () => {
+        const built = createWebApplication()
+          .with(corsPolicy(c => c.origins(A)))
+          .mount(
+            new Router('/v')
+              .config(version('1.0.0'))
+              .get('/')
+              .handler(() => 'v1'),
+          )
+        app = built
+        await built.bootstrap()
+        return built
+      },
+    ],
+  ])('leaves a preflight for a path that cannot be decoded alone, %s', async (_, method, build) => {
+    const res = await (await build()).request('/%E0%A4%A', preflight(A, method))
 
-    expect(res.status).toBe(404)
-    expect(corsHeaders(res)).toEqual({})
+    expect([res.status, corsHeaders(res)]).toEqual([404, {}])
   })
 
   it('leaves the preflight of a route marked cors(false) to the 404', async () => {
@@ -428,6 +501,30 @@ describe('corsPolicy() on a preflight', () => {
 
     expect(res.status).toBe(404)
     expect(corsHeaders(res)).toEqual({})
+  })
+
+  // Under a matcher of its own the lookup finds an unconstrained route first: a router policy's own `OPTIONS` route
+  // can stand in front of a constrained route of the application's, so finding only that route is not finding none.
+  it("grants no preflight that finds only a router policy's own OPTIONS route under a matcher of its own", async () => {
+    const built = createWebApplication()
+      .server(() => ({ matcher: strategies => findMyWayMatcher(strategies) }))
+      .with(corsPolicy(c => c.origins(A)))
+      .mount(
+        new Router('/s')
+          .with(corsPolicy(c => c.origins(A)))
+          .get('/x')
+          .handler(() => 's'),
+        new Router('/s')
+          .config(version('1.0.0'), cors(false))
+          .options('/x')
+          .handler(() => 'own'),
+      )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/s/x', preflight(A, 'OPTIONS'))
+
+    expect([res.status, corsHeaders(res)]).toEqual([404, {}])
   })
 
   it('answers on the Node application the same way', async () => {

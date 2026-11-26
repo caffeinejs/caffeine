@@ -69,8 +69,10 @@ export interface ServerShared extends Pick<
   /** `undefined` when the cookie feature is off. */
   readonly cookies: ServerCookies<Context> | undefined
   /**
-   * The routes a preflight asks about: every route `method` and `url` match, whatever constraints each declares.
-   * `undefined` for none, and for a URL that cannot be decoded.
+   * The routes a preflight asks about: every route `method` and `url` match, whatever constraints each declares, except
+   * under a matcher of the application's own, which finds unconstrained routes only. Empty when no route serves them;
+   * `undefined` when the server cannot tell: for a URL that cannot be decoded, and under a matcher of the application's
+   * own with constrained routes.
    */
   readonly routeOf: (method: string, url: string) => readonly RouteDefinition[] | undefined
 }

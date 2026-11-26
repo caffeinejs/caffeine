@@ -25,7 +25,7 @@ export interface CSRFConfig {
   /**
    * Registered route paths the check leaves alone, each a prefix of whole segments: `/webhooks` covers `/webhooks`
    * and `/webhooks/stripe`, not `/webhooks-old`. Written without the base path. `/` is refused: it would cover every
-   * route.
+   * route; so is a path starting with `~/`, written from the base path.
    */
   exclude?: readonly string[]
 }
@@ -43,7 +43,8 @@ export interface CSRFOptions {
 /**
  * Folds a block onto the defaults. The checks are code, never configuration, and come in beside it.
  *
- * @throws ErrCSRFConfiguration for a trusted origin that is not one, or an excluded path that is `/` itself.
+ * @throws ErrCSRFConfiguration for a trusted origin that is not one, or an excluded path that is `/` itself or starts
+ *   with `~/`.
  */
 export function resolveCSRFOptions(
   config: CSRFConfig,
@@ -62,16 +63,36 @@ export function isExcluded(path: string, excluded: readonly LiteralPrefix[]): bo
   return excluded.some(prefix => underPrefix(path, prefix))
 }
 
+// What to do instead of excluding a prefix that covers every route.
+const COVERS_EVERY_ROUTE = [
+  'Turn the check off with enabled(false)',
+  'Mark the route itself with @CSRFExempt() or csrfExempt()',
+] as const
+
 // A prefix is a run of whole segments, written with or without its trailing slash: the path itself, and what is under
 // it. Compared as plain text, `/webhooks` would open `/webhooks-old` as well.
 function excludedPath(path: string): LiteralPrefix {
+  if (path.startsWith('~/')) {
+    const rest = path.slice(1)
+    // Without its "~", "~/" is the root, refused below: "/" would be refused too.
+    const solutions = literalPrefix(rest).exact === '' ? COVERS_EVERY_ROUTE : [`Write it as "${rest}"`]
+    throw new ErrCSRFConfiguration(
+      errMessage(
+        `Cannot exclude "${path}" from cross-origin protection: a path is matched after the base path is taken off`,
+      )
+        .solutions(...solutions)
+        .reference('@caffeinejs/http', ErrCSRFConfiguration)
+        .build(),
+    )
+  }
+
   const prefix = literalPrefix(path)
 
   // Every route sits under `/`: excluding it would turn the check off without saying so.
   if (prefix.exact === '') {
     throw new ErrCSRFConfiguration(
       errMessage(`Cannot exclude "${path}" from cross-origin protection: it covers every route`)
-        .solutions('Turn the check off with enabled(false)', 'Mark the route itself with @CSRFExempt() or csrfExempt()')
+        .solutions(...COVERS_EVERY_ROUTE)
         .reference('@caffeinejs/http', ErrCSRFConfiguration)
         .build(),
     )

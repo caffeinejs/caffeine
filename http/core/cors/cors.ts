@@ -118,14 +118,17 @@ export class CORSBuilder {
  * it asks for unless `allowedHeaders(...)` lists them.
  *
  * It covers the routes of the scope it is registered in: a server's with `.with(...)`, a router's, or a controller's.
- * On a server it answers preflights whatever route they match, none included. On a router or a controller it serves
- * `OPTIONS /` and `OPTIONS /*` under that path, outside access control and whatever constraints the scope selects on,
- * which its preflights match: an `OPTIONS` route of the application's at either path, or a second policy on a router at
- * the same path, fails start-up with `ErrRouteConflict`, and its `OPTIONS /*` answers a plain `OPTIONS` request under
- * the path before a broader route of the application's would. An `OPTIONS` route of the application's in its scope
- * still has its preflights answered by the policy first; one outside it, such as a sibling router's, answers them
- * itself. Register it once, where it covers the routes it should, and tune a route with `cors(...)`; of two over one
- * route, the first registered decides its settings.
+ * On a server it also answers a preflight no route serves, from its own settings, so the browser sends the request and
+ * reads its 404 rather than a CORS failure; one for a path that cannot be decoded, or under a `matcher` of the
+ * application's own with constrained routes, where the server cannot tell, it does not grant, nor one asking for
+ * `OPTIONS` whose path only a policy's own `OPTIONS` routes serve. On a router or a controller it serves `OPTIONS /`
+ * and `OPTIONS /*` under that path, outside access control and whatever constraints the scope selects on, which its
+ * preflights match: an `OPTIONS` route of the application's at either path, or a second policy on a router at the same
+ * path, fails start-up with `ErrRouteConflict`, and its `OPTIONS /*` answers a plain `OPTIONS` request under the path
+ * before a broader route of the application's would. An `OPTIONS` route of the
+ * application's in its scope still has its preflights answered by the policy first; one outside it, such as a sibling
+ * router's, answers them itself. Register it once, where it covers the routes it should, and tune a route with
+ * `cors(...)`; of two over one route, the first registered decides its settings.
  *
  * The headers of an answer are set as it goes out, so a refusal by `authentication()` carries them too. When a
  * protected route declares `OPTIONS` itself, register the policy before `authentication()` in the gate's scope or an
@@ -188,7 +191,8 @@ class CORSPolicy extends HTTPPlugin {
     // controller's sees those to its routes alone: it serves `OPTIONS` routes at its path and below for preflights to
     // match, answered in `onRequest` before their handler runs, which gives one it does not grant a path's 404. They
     // select on no constraint: a browser sends none with a preflight.
-    if (!isServerScope(context.server)) {
+    const serverScope = isServerScope(context.server)
+    if (!serverScope) {
       context.server.mount(
         new Router()
           .detail('http', { internal: true })
@@ -240,13 +244,22 @@ class CORSPolicy extends HTTPPlugin {
 
       const origin = ctx.req.header('origin')!
       const requested = ctx.req.header('access-control-request-method')!
-      // The policy's own `OPTIONS` routes are where preflights land, never what one asks for.
-      const targets = (ctx as unknown as Context)
-        [kRouteOf](requested)
-        ?.filter(target => target.options[kPreflightRoute] !== true)
-      const found = targets?.map(target => target.options[kCORSPolicy])
+      const routes = (ctx as unknown as Context)[kRouteOf](requested)
+      // The server cannot tell whether a route serves it, or none does on a router or a controller: not one to grant.
+      // On a server, none serving it, the plugin's own settings decide, so the browser sends the request and reads the
+      // 404.
+      if (routes === undefined || (routes.length === 0 && !serverScope)) {
+        return
+      }
+      // The policy's own `OPTIONS` routes are where preflights land, never what one asks for. Finding only those is not
+      // finding none: under a matcher of the application's own they can stand in front of a constrained route.
+      const targets = routes.filter(target => target.options[kPreflightRoute] !== true)
+      if (routes.length > 0 && targets.length === 0) {
+        return
+      }
+      const found = targets.length === 0 ? [own] : targets.map(target => target.options[kCORSPolicy])
       // A route no policy covers is not one to grant.
-      if (targets === undefined || found === undefined || targets.length === 0 || found.includes(undefined)) {
+      if (found.includes(undefined)) {
         return
       }
 

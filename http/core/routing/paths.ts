@@ -186,6 +186,42 @@ export function routePathSegments(path: string): number {
   return joined.split('/').length - 2
 }
 
+/**
+ * The keys the router files a route path under, to tell whether two route paths are one path to it: a parameter by
+ * its place and its regex, not its name, and a path with an optional last segment under each of its forms.
+ */
+export function routeKeys(path: string): string[] {
+  const keys: string[] = []
+  let key = ''
+
+  for (const part of parseRoutePattern(path)) {
+    switch (part.kind) {
+      case 'text':
+        key += part.text
+        break
+      case 'param':
+        // Not a character a path holds: a parameter never reads as text. The router files a regex without its
+        // anchors.
+        key += `\u0000${anchorless(part.regex ?? '')}\u0000`
+        break
+      case 'wildcard':
+        key += '\u0001'
+        break
+      case 'optional':
+        keys.push(key || '/')
+        break
+    }
+  }
+
+  return [key, ...keys]
+}
+
+function anchorless(regex: string): string {
+  const start = regex.startsWith('^') ? 1 : 0
+  const end = regex.endsWith('$') ? regex.length - 1 : regex.length
+  return regex.slice(start, Math.max(start, end))
+}
+
 /** The index of the `)` closing the regex that opens at `at`, escapes and nested groups included. */
 function endOfRegex(pattern: string, at: number): number {
   let depth = 0

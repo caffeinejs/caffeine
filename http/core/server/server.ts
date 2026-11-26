@@ -31,8 +31,9 @@ import {
 import { callOnRoute, openDefinition, type RouteDefinition } from '../lifecycle/route_definition.js'
 import { findMyWayMatcher, preflightTable, type PreflightTable } from '../matcher/find_my_way.js'
 import { ErrRouteConflict, type DerivedConstraints, type RouteMatch, type RouteMatcher } from '../matcher/matcher.js'
+import { normalizePath, sanitizeURL } from '../middleware/path.js'
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
-import { joinRoutePath } from '../routing/paths.js'
+import { joinRoutePath, routeKeys } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import { ScopeChains } from '../routing/scope_chain.js'
 import { assertGated, gateOf } from '../security/gate.js'
@@ -91,6 +92,8 @@ export interface HTTPServerInput {
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, string | undefined>> = Object.freeze({})
+
+const NO_ROUTES: readonly RouteDefinition[] = Object.freeze([])
 
 // A wildcard route's bare parent reads its `*` as empty.
 function paramsOf(
@@ -174,20 +177,31 @@ export class HTTPServer {
       bodyLimit: settings.bodyLimit,
       cookies: cookieSettings.enabled ? ServerCookies.resolve(cookieSettings, container, writeCookies) : undefined,
       routeOf: (method, url) => {
-        if (this.#preflight !== undefined) {
-          return this.#preflight.match(method, url)
+        let found: readonly RouteDefinition[] | undefined
+        if (this.#preflight === undefined) {
+          try {
+            const definition = this.#matcher.match(method, url, undefined)?.store.definition
+            found = definition === undefined ? undefined : [definition]
+          } catch (err) {
+            // A URL that cannot be decoded names no route.
+            if (err instanceof ErrHTTPBadRequest) {
+              return undefined
+            }
+            throw err
+          }
+        } else {
+          found = this.#preflight.match(method, url)
         }
 
-        try {
-          const definition = this.#matcher.match(method, url, undefined)?.store.definition
-          return definition === undefined ? undefined : [definition]
-        } catch (err) {
-          // A URL that cannot be decoded names no route.
-          if (err instanceof ErrHTTPBadRequest) {
-            return undefined
-          }
-          throw err
+        if (found !== undefined) {
+          return found
         }
+        // A miss is certain only for a path that decodes, and where the lookup sees every route: a matcher of the
+        // application's own finds unconstrained routes only.
+        const certain =
+          normalizePath(sanitizeURL(url)).error === undefined &&
+          (this.#preflight !== undefined || !this.#constraints.derives)
+        return certain ? NO_ROUTES : undefined
       },
     }
     this.#basePath = input.basePath
@@ -535,8 +549,9 @@ export class HTTPServer {
     const twins: Later[] = []
     // A wildcard route's bare parent: `/dash/*` answers `/dash` too, with an empty `*`.
     const bares: Later[] = []
-    // Every method and path a route was declared at, whatever its constraints: find-my-way reports a conflict only
-    // when the constraints match too, and a bare parent gives way to a declared route either way.
+    // Every method and path a route was declared at, as the router files it (`routeKeys`), whatever its constraints:
+    // find-my-way reports a conflict only when the constraints match too, and a bare parent gives way to a declared
+    // route either way.
     const declaredAt = new Set<string>()
 
     for (const group of groups) {
@@ -549,10 +564,13 @@ export class HTTPServer {
 
         const store = this.#storeOf(group, route, methods, path, settings)
 
+        const keys = routeKeys(path)
         for (const method of methods) {
           this.#matcher.add(method, path, declared, store)
           this.#preflight?.add(method, path, store.definition!)
-          declaredAt.add(`${method} ${path}`)
+          for (const key of keys) {
+            declaredAt.add(`${method} ${key}`)
+          }
         }
 
         registered.push({ route, group, definition: store.definition!, methods, url: path })
@@ -570,23 +588,31 @@ export class HTTPServer {
 
     // After every explicit route, so an explicit HEAD route wins whichever was declared first.
     for (const twin of twins) {
-      if (this.#yielding('HEAD', twin.path, twin.declared, twin.store) && !twin.methods.includes('HEAD')) {
-        twin.methods.push('HEAD')
+      if (this.#yielding('HEAD', twin.path, twin.declared, twin.store)) {
+        // Declared there now, as a bare parent sees it: its HEAD gives way to the twin, as its GET does to the route.
+        for (const key of routeKeys(twin.path)) {
+          declaredAt.add(`HEAD ${key}`)
+        }
+        if (!twin.methods.includes('HEAD')) {
+          twin.methods.push('HEAD')
+        }
       }
     }
 
     // After every explicit route and HEAD twin, so a route at a wildcard's parent keeps its GET and its HEAD.
     for (const bare of bares) {
+      // A bare path has no optional segment: an optional one is a path's last.
+      const [key] = routeKeys(bare.path)
       let get = false
 
       for (const method of bare.methods) {
-        if (!declaredAt.has(`${method} ${bare.path}`)) {
+        if (!declaredAt.has(`${method} ${key}`)) {
           const added = this.#yielding(method, bare.path, bare.declared, bare.store)
           get ||= added && method === 'GET'
         }
       }
 
-      if (get && !bare.methods.includes('HEAD') && !declaredAt.has(`HEAD ${bare.path}`)) {
+      if (get && !bare.methods.includes('HEAD') && !declaredAt.has(`HEAD ${key}`)) {
         this.#yielding('HEAD', bare.path, bare.declared, { ...bare.store, twin: true })
       }
     }

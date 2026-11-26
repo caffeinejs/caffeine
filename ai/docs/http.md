@@ -336,7 +336,8 @@ new Router('/hooks').config(csrfExempt()) // the programmatic form; csrfExempt(f
   requested. For a route the application cannot mark; its own take `@CSRFExempt()` or `csrfExempt()`. A URL no route
   matched stays a 404.
 - A route's own mark wins over a path: `csrfExempt(false)` keeps a route under an excluded prefix protected.
-  `c.exclude('/')`, which would cover every route, is refused at start-up; `c.enabled(false)` turns the check off.
+  `c.exclude('/')`, which would cover every route, is refused at start-up; so is a prefix written from the base path,
+  `c.exclude('~/webhooks')`; `c.enabled(false)` turns the check off.
 - The check is a root `onRequest` hook of the server it is registered on, ahead of body parsing, in the slot
   `.with(csrf())` was written in: ahead of `.with(authentication())`, a cross-origin request is refused before anyone
   is authenticated; behind it, an anonymous one meets the challenge first. A [listener](#listeners) is covered by its
@@ -442,9 +443,9 @@ app.mount(pets) // before app.bootstrap()
 ```
 
 - Paths drop a trailing `/` and get a missing leading `/`: `/x` and `/x/` are one route. A wildcard route answers its
-  bare parent too (`/files/*` answers `/files`, with an empty `*`) unless a route is declared at exactly that path. A router,
-  group, controller or mount path holds literal segments and parameters only: a wildcard or an optional segment there
-  is refused at start-up. `staticFiles()` does not check application routes against its files: one at exactly a file's URL fails start-up as a
+  bare parent too (`/files/*` answers `/files`, with an empty `*`) unless a route is declared at that path, whatever
+  its parameter names, or reaches it with its optional last segment. A router, group, controller or mount path holds
+  literal segments and parameters only: a wildcard or an optional segment there is refused at start-up. `staticFiles()` does not check application routes against its files: one at exactly a file's URL fails start-up as a
   duplicate route, and one under a directory of files wins. Middleware paths match case-sensitively, so a guard on
   `/admin` does not run for `/ADMIN`.
 - A verb takes `(path)`, `(path, handler)` or `(path, schema, handler)`. With a handler the route is closed there
@@ -710,9 +711,9 @@ Register a plugin once, where it covers the routes it should, and tune a route t
 second plugin of one name; two `authentication()` gates under one label over one route are refused, as which one
 authenticates would be ambiguous. `context.server.hasPlugin(name)` answers for the plugin's own scope and the ones
 around it: the routers or controller it is nested in, then the server. `corsPolicy()` on a server answers preflights
-whatever route they match; on a router or a controller it serves `OPTIONS /` and `OPTIONS /*` under that path, so an
-`OPTIONS` route of the application's at either path, or a second policy on a router at the same path, fails start-up
-with `ErrRouteConflict`.
+to its routes, and one no route serves from its own settings; on a router or a controller it serves `OPTIONS /` and
+`OPTIONS /*` under that path, so an `OPTIONS` route of the application's at either path, or a second policy on a
+router at the same path, fails start-up with `ErrRouteConflict`.
 
 - Mounted routes compile as `app.mount(...)` compiles them: guards, authorization and the fallback policy, CSRF
   marks, routers' own `.with(...)` and the start-up checks. Mark a group the application does not own
