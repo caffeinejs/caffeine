@@ -6,9 +6,7 @@ import { Second, type Duration } from '@caffeinejs/std/duration'
 import type { HTTPSetupContext } from '../../plugin.js'
 import type { IServer, ServerAddress } from '../../server.js'
 import type { HookBatch } from '../lifecycle/batch.js'
-import { findMyWayMatcher } from '../matcher/find_my_way.js'
-import type { RouterFlags } from '../matcher/matcher.js'
-import { rebaseMiddlewares } from '../middleware/path.js'
+import { placeMiddlewares } from '../middleware/path.js'
 import type { MiddlewarePipeline, ResolvedMiddleware } from '../middleware/pipeline.js'
 import type { RouteRecord } from '../routing/inventory.js'
 import type { IRouteGroup, RouteGroupScope } from '../routing/route.js'
@@ -169,17 +167,14 @@ export interface EngineInput {
   readonly root: readonly HookBatch[]
   /** What routers and controllers installed in front of their own routes. */
   readonly scoped: {
-    batchesOf(scope: object): readonly HookBatch[]
-    middlewaresOf(scope: object): readonly ResolvedMiddleware[]
+    batchesOf(scopes: readonly RouteGroupScope[], at: number): readonly HookBatch[]
+    middlewaresOf(scopes: readonly RouteGroupScope[], at: number): readonly ResolvedMiddleware[]
+    /** Every scope's hooks, in the order they registered. */
+    readonly batches: Iterable<HookBatch>
   }
   readonly basePath: string | undefined
   readonly settings: ResolvedServerSettings
   recordRoutes(routes: readonly RouteRecord[]): void
-}
-
-/** The router flags of an engine whose settings are `settings`, when it matches with find-my-way. */
-export function findMyWayFlags(settings: ResolvedServerSettings): RouterFlags | undefined {
-  return settings.matcher === findMyWayMatcher ? settings.router : undefined
 }
 
 /**
@@ -210,9 +205,10 @@ export function buildEngine(input: EngineInput): HTTPServer {
   const { container } = input.context
   const levels = {
     root: { batches: input.root, middlewares: input.middlewares.resolve(input.context) },
-    of: (scope: RouteGroupScope) => ({
-      batches: input.scoped.batchesOf(scope.key),
-      middlewares: rebaseMiddlewares(scope.path, input.scoped.middlewaresOf(scope.key)),
+    scoped: input.scoped.batches,
+    of: (scopes: readonly RouteGroupScope[], at: number) => ({
+      batches: input.scoped.batchesOf(scopes, at),
+      middlewares: placeMiddlewares(scopes[at]!.path, input.scoped.middlewaresOf(scopes, at)),
     }),
   }
 

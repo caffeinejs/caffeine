@@ -3,11 +3,18 @@ import type { Container } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
-import { closedApplicationOps } from '../../../plugin_slot.js'
+import { PluginSlot, type SlotIdentity } from '../../../plugin_slot.js'
 import { HookBatch } from '../../lifecycle/batch.js'
+import { findMyWayMatcher } from '../../matcher/find_my_way.js'
 import { Router } from './programmatic.js'
 import { ScopedPlugins } from './scoped_plugins.js'
 import { stateOf } from './state.js'
+
+/** The server every scope belongs to. */
+const identity: SlotIdentity = { name: undefined, basePath: '', matcher: findMyWayMatcher, address: () => undefined }
+
+const server = new PluginSlot()
+server.forServer(identity)
 
 const context: HTTPSetupContext = {
   container: {} as Container,
@@ -15,7 +22,7 @@ const context: HTTPSetupContext = {
   store: {} as never,
   logger: newNoopLogger(),
   hasFeature: () => false,
-  app: closedApplicationOps(),
+  server,
 }
 
 class Hooking extends HTTPPlugin {
@@ -23,8 +30,8 @@ class Hooking extends HTTPPlugin {
     super()
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRequest', this.hook)
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRequest', this.hook)
   }
 }
 
@@ -33,12 +40,29 @@ describe('ScopedPlugins', () => {
     const first = (): void => undefined
     const second = (): void => undefined
     const router = new Router('/r').with(() => new Hooking(first)).with(() => new Hooking(second))
-    const plugins = new ScopedPlugins()
+    const plugins = new ScopedPlugins(server, identity)
 
     await plugins.resolveRouters([router], context)
 
-    const batches = plugins.batchesOf(stateOf(router)!)
+    const batches = plugins.batchesOf([{ key: stateOf(router)!, path: '/r' }], 0)
     expect(batches.every(entry => entry instanceof HookBatch)).toBe(true)
     expect(batches.map(batch => batch.request.onRequest)).toEqual([[first], [second]])
+  })
+
+  // Each place a router is mounted at is one registration: what its plugins add there covers that place alone.
+  it('registers a router mounted at two places once per place', async () => {
+    const seen: string[] = []
+    const shared = new Router('/s').with(() => {
+      return new (class extends HTTPPlugin {
+        register({ server: scoped }: HTTPSetupContext): void {
+          seen.push(scoped.prefix)
+        }
+      })()
+    })
+    const plugins = new ScopedPlugins(server, identity)
+
+    await plugins.resolveRouters([new Router('/a').mount(shared), new Router('/b').mount(shared)], context)
+
+    expect(seen).toEqual(['/a/s', '/b/s'])
   })
 })

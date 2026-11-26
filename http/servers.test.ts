@@ -1,10 +1,14 @@
+import type { Server as HTTPServer } from 'node:http'
+
 import { kFeatureConfigure, kFeatureName, type Feature } from '@caffeinejs/application'
+import { newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { Byte } from '@caffeinejs/std/bytes'
-import { describe, expect, it } from 'vitest'
+import { Second } from '@caffeinejs/std/duration'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication, type WebApplication } from './application.js'
 import { findMyWayMatcher } from './core/matcher/find_my_way.js'
-import { DEFAULT_ROUTER_FLAGS } from './core/matcher/matcher.js'
+import type { RouteMatcherFactory } from './core/matcher/matcher.js'
 import { Router } from './core/routing/programmatic/programmatic.js'
 import { node } from './platform/node.testkit.js'
 import { HTTPPlugin, type HTTPSetupContext } from './plugin.js'
@@ -51,7 +55,7 @@ describe('ServerSet', () => {
       .with(
         () =>
           new (class extends HTTPPlugin {
-            register({ app: ops }: HTTPSetupContext): void {
+            register({ server: ops }: HTTPSetupContext): void {
               ops.hook('onRequest', () => void order.push('plugin'))
             }
           })(),
@@ -90,14 +94,14 @@ describe('ServerSet', () => {
     }
   })
 
-  // Only `undefined` leaves an earlier section in place: `null` is a value like any other, and the router refuses it.
+  // Only `undefined` leaves an earlier section in place: `null` is a value like any other, and the setting refuses it.
   it('takes null as a section that replaces the one before it', async () => {
     const app = createWebApplication({ adapter: node() })
-      .server(() => ({ router: { caseSensitive: false } }))
-      .server(() => ({ router: null }) as never)
+      .server(() => ({ handlerTimeout: 5 * Second }))
+      .server(() => ({ handlerTimeout: null }) as never)
 
     try {
-      await expect(app.bootstrap()).rejects.toThrow('Cannot set router to "null"')
+      await expect(app.bootstrap()).rejects.toThrow('Cannot set handlerTimeout to "null"')
     } finally {
       await app.close()
     }
@@ -146,13 +150,104 @@ const slotless = {
   [kFeatureConfigure]() {},
 } as Feature
 
-describe('context.app.server', () => {
-  /** A plugin that records what its slot says of the server it registers on. */
+describe('ServerSet teardown', () => {
+  // A server plugin that registered holds what it opened until its `onClose` runs: a later plugin failing start-up
+  // leaves no engine to run it, so the server's teardown does.
+  it("runs the onClose of the plugins that registered when a router's plugin fails start-up", async () => {
+    const closed: string[] = []
+    const app = createWebApplication({ adapter: node() })
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              server.hook('onClose', () => void closed.push('server'))
+            }
+          })(),
+      )
+      .mount(
+        new Router('/r')
+          .with(() => {
+            throw new Error('router plugin failed')
+          })
+          .get('/', () => 'r'),
+      )
+
+    const err = await app.bootstrap().catch((err: unknown) => err)
+    await app.close()
+
+    expect([(err as Error).message, closed]).toEqual(['router plugin failed', ['server']])
+  })
+
+  // A plugin that registered its `onClose` before it failed holds what it opened too: its own hook runs, once.
+  it('runs the onClose a plugin registered before its own registration failed, once', async () => {
+    const closed: string[] = []
+    const app = createWebApplication({ adapter: node() }).with(
+      () =>
+        new (class extends HTTPPlugin {
+          register({ server }: HTTPSetupContext): void {
+            server.hook('onClose', () => void closed.push('self'))
+            throw new Error('register failed')
+          }
+        })(),
+    )
+
+    const err = await app.bootstrap().catch((err: unknown) => err)
+    await app.close()
+    await app.close()
+
+    expect([(err as Error).message, closed]).toEqual(['register failed', ['self']])
+  })
+
+  // Every close that fails is reported, not the first alone: a failed start-up's close logs what its teardown hit.
+  it('reports every onClose that failed after start-up failed', async () => {
+    const failing = (message: string) => () =>
+      new (class extends HTTPPlugin {
+        register({ server }: HTTPSetupContext): void {
+          server.hook('onClose', () => {
+            throw new Error(message)
+          })
+        }
+      })()
+    const errors = vi.fn()
+    const logger: Logger = { ...newNoopLogger(), error: errors }
+    const app = createWebApplication({ adapter: node() })
+      .logger(b => b.use(logger))
+      .with(failing('first'))
+      .with(failing('second'))
+      .mount(
+        new Router('/r')
+          .with(() => {
+            throw new Error('router plugin failed')
+          })
+          .get('/', () => 'r'),
+      )
+
+    await app.bootstrap().catch(() => undefined)
+    await app.close()
+
+    const logged = errors.mock.calls.map(([fields]) => (fields as { err: unknown }).err)
+    const aggregate = logged.find((err): err is AggregateError => err instanceof AggregateError)
+    expect(aggregate?.errors.map((err: Error) => err.message)).toEqual(['first', 'second'])
+  })
+})
+
+describe('context.server', () => {
+  /** A plugin that records what its scoped server says of the server it registers on. */
   function recorder(seen: unknown[]): () => HTTPPlugin {
     return () =>
       new (class extends HTTPPlugin {
-        register(context: HTTPSetupContext): void {
-          seen.push(context.app.server)
+        register({ server }: HTTPSetupContext): void {
+          seen.push({ basePath: server.basePath, matcher: server.matcher })
+        }
+      })()
+  }
+
+  /** A plugin that records the server's name and the scope's prefix. */
+  function placer(seen: unknown[]): () => HTTPPlugin {
+    return () =>
+      new (class extends HTTPPlugin {
+        register({ server }: HTTPSetupContext): void {
+          seen.push({ name: server.name, basePath: server.basePath, prefix: server.prefix })
         }
       })()
   }
@@ -172,7 +267,7 @@ describe('context.app.server', () => {
 
   it("reports the base path on the application's own slot", async () => {
     expect(await serverSeen(seen => createWebApplication().basePath('/api').with(recorder(seen)))).toEqual([
-      { basePath: '/api', router: DEFAULT_ROUTER_FLAGS },
+      { basePath: '/api', matcher: findMyWayMatcher },
     ])
   })
 
@@ -181,29 +276,33 @@ describe('context.app.server', () => {
     ['/', ''],
   ])('normalizes the base path %s to %s', async (given, expected) => {
     expect(await serverSeen(seen => createWebApplication().basePath(given).with(recorder(seen)))).toEqual([
-      { basePath: expected, router: DEFAULT_ROUTER_FLAGS },
+      { basePath: expected, matcher: findMyWayMatcher },
     ])
   })
 
   it('merges an object section over the one before it', async () => {
-    expect(
-      await serverSeen(seen =>
-        createWebApplication({ adapter: node() })
-          .server(() => ({ router: { caseSensitive: false } }))
-          .server(() => ({ router: { ignoreTrailingSlash: true } }))
-          .with(recorder(seen)),
-      ),
-    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false, ignoreTrailingSlash: true } }])
+    const app = createWebApplication({ adapter: node() })
+      .server(() => ({ http: { keepAliveTimeout: 1234 } }))
+      .server(() => ({ http: { headersTimeout: 5678 } }))
+
+    try {
+      await app.bootstrap()
+
+      const server = app.instance as HTTPServer
+      expect([server.keepAliveTimeout, server.headersTimeout]).toEqual([1234, 5678])
+    } finally {
+      await app.close()
+    }
   })
 
   it('reports an empty base path when the application set none', async () => {
     expect(await serverSeen(seen => createWebApplication().with(recorder(seen)))).toEqual([
-      { basePath: '', router: DEFAULT_ROUTER_FLAGS },
+      { basePath: '', matcher: findMyWayMatcher },
     ])
   })
 
-  // A router's slot is shared by every server that serves it: it belongs to none.
-  it("reports no server on a router's slot", async () => {
+  // A router's plugins register on the server it is mounted on, so they know that server as the server's own do.
+  it("reports the server a router's plugin registers on", async () => {
     expect(
       await serverSeen(seen =>
         createWebApplication().mount(
@@ -213,7 +312,53 @@ describe('context.app.server', () => {
             .handler(() => 'ok'),
         ),
       ),
-    ).toEqual([undefined])
+    ).toEqual([{ basePath: '', matcher: findMyWayMatcher }])
+  })
+
+  // What a plugin builds URLs from: the server it is on, and where its scope starts on that server.
+  it('reports the server name and the scope prefix wherever a plugin registers', async () => {
+    const seen: unknown[] = []
+    const nested = new Router('/n')
+      .with(placer(seen))
+      .get('/')
+      .handler(() => 'ok')
+    const app = createWebApplication({ adapter: node() })
+      .basePath('/api')
+      .with(placer(seen))
+      .mount(new Router('/r').with(placer(seen)).mount(nested))
+      .listener('admin', l => l.with(placer(seen)).mount(new Router('/ops').with(placer(seen)).mount(nested)))
+
+    try {
+      await app.bootstrap()
+    } finally {
+      await app.close()
+    }
+
+    expect(seen).toEqual([
+      { name: undefined, basePath: '/api', prefix: '' },
+      { name: undefined, basePath: '/api', prefix: '/r' },
+      { name: undefined, basePath: '/api', prefix: '/r/n' },
+      { name: 'admin', basePath: '', prefix: '' },
+      { name: 'admin', basePath: '', prefix: '/ops' },
+      { name: 'admin', basePath: '', prefix: '/ops/n' },
+    ])
+  })
+
+  // `.server(...)` builds the server: its context has none, and the type says so.
+  it('hands .server(...) a context without a server', async () => {
+    const seen: unknown[] = []
+    const app = createWebApplication().server(context => {
+      seen.push('server' in context)
+      return {}
+    })
+
+    try {
+      await app.bootstrap()
+    } finally {
+      await app.close()
+    }
+
+    expect(seen).toEqual([false])
   })
 
   it("reports the listener's server on a listener's slot", async () => {
@@ -223,37 +368,48 @@ describe('context.app.server', () => {
           .basePath('/api')
           .listener('admin', l => l.with(recorder(seen))),
       ),
-    ).toEqual([{ basePath: '', router: DEFAULT_ROUTER_FLAGS }])
+    ).toEqual([{ basePath: '', matcher: findMyWayMatcher }])
   })
 
-  it('reports the router flags .server(...) set', async () => {
+  // A plugin that asks how the server ranks routes, as staticFiles() does, builds its probe with the server's own
+  // matcher.
+  it("reports the server's own matcher", async () => {
+    const matcher: RouteMatcherFactory = strategies => findMyWayMatcher(strategies)
+
     expect(
       await serverSeen(seen =>
         createWebApplication()
-          .server(() => ({ router: { caseSensitive: false } }))
+          .server(() => ({ matcher }))
           .with(recorder(seen)),
       ),
-    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false } }])
+    ).toEqual([{ basePath: '', matcher }])
   })
 
-  // Under a matcher of its own the flags say nothing of how a path is matched, so a plugin that keys on them refuses.
-  it("reports no router flags under a matcher of the server's own", async () => {
-    expect(
-      await serverSeen(seen =>
-        createWebApplication()
-          .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
-          .with(recorder(seen)),
-      ),
-    ).toEqual([{ basePath: '', router: undefined }])
-  })
+  // Read on each access: a plugin holding its server sees where it listens once it does, and nothing before.
+  it('reports where the server listens once it does', async () => {
+    let held: HTTPSetupContext['server'] | undefined
+    const app = createWebApplication({ adapter: node() })
+      .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              held = server
+            }
+          })(),
+      )
+      .mount(new Router('/ping').get('/', () => 'pong'))
 
-  it("reports the Node application's router flags", async () => {
-    expect(
-      await serverSeen(seen =>
-        createWebApplication({ adapter: node() })
-          .server(() => ({ router: { caseSensitive: false } }))
-          .with(recorder(seen)),
-      ),
-    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, caseSensitive: false } }])
+    try {
+      await app.bootstrap()
+      const before = held!.address
+      await app.run()
+      const address = held!.address!
+
+      const res = await fetch(`http://127.0.0.1:${address.port}/ping`)
+      expect([before, address.host, res.status, await res.text()]).toEqual([undefined, '127.0.0.1', 200, 'pong'])
+    } finally {
+      await app.close()
+    }
   })
 })

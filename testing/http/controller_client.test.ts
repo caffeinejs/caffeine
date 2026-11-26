@@ -62,7 +62,16 @@ class TaskController {
   }
 }
 
-void [TaskStore, TaskController]
+// A route's trailing slash is part of the route: the client calls the URL as written.
+@Controller('/slash')
+class SlashController {
+  @Get('x/')
+  x() {
+    return 'slash'
+  }
+}
+
+void [TaskStore, TaskController, SlashController]
 
 class NoRouteController {}
 
@@ -131,6 +140,13 @@ describe('controllerClient()', () => {
 
   it('throws when controller has no routes', () => {
     expect(() => controllerClient(NoRouteController, baseURL)).toThrow(ErrNoRoutesForController)
+  })
+
+  // A trailing slash never makes another route: the route is called where the server serves it.
+  it('calls a controller route declared with a trailing slash where it is served', async () => {
+    const res = await controllerClient(SlashController, baseURL).x()
+
+    expect([res.status, new URL(res.url).pathname, await res.text()]).toEqual([200, '/slash/x', 'slash'])
   })
 
   it('returns independent clients for same controller with different targets', async () => {

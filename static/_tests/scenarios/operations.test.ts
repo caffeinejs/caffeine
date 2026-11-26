@@ -33,8 +33,8 @@ const pages = () =>
 function mounting(router: AnyRouter): HTTPPluginFactory {
   return () =>
     new (class extends HTTPPlugin {
-      register({ app }: HTTPSetupContext) {
-        app.mount(router)
+      register({ server }: HTTPSetupContext) {
+        server.mount(router)
       }
     })()
 }

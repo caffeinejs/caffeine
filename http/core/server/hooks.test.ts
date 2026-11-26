@@ -34,7 +34,7 @@ describe('composeRouteHooks', () => {
         trace.push('middleware')
         next()
       })
-      .with(plugin(({ app: ops }) => ops.hook('onRequest', step('plugin'))))
+      .with(plugin(({ server: ops }) => ops.hook('onRequest', step('plugin'))))
       .mount(new Router('/x').get('/').handler(() => 'x'))
     app = a
     await a.bootstrap()
@@ -67,7 +67,7 @@ describe('composeRouteHooks', () => {
   it("runs a router plugin's path-scoped middleware under every parent", async () => {
     const shared = new Router('/r')
       .with(
-        plugin(({ app: ops }) =>
+        plugin(({ server: ops }) =>
           ops.use('/jobs', (ctx, next) => {
             trace.push(ctx.req.url)
             next()

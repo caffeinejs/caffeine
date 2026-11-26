@@ -54,8 +54,9 @@ The only path that crosses the boundary is `api/spa/site.ts`, which points the m
 `/pricing` is a fallback, so it is a page for a browser and a `404` for anything else — which is what keeps a
 missing `/assets/main-ABC123.js` a real 404 instead of HTML under a JavaScript content type.
 
-**The API owns its own misses.** One line — `new Router('/api').get('/*', notFound)` — covers a router base and
-two controller bases, and every future one. Without it a browser typing `/api/typo` is handed the application.
+**The API owns its own misses.** One line — `new Router('/api').get('/', notFound).get('/*', notFound)` — covers a
+router base and two controller bases, and every future one. Without it a browser typing `/api/typo` is handed the
+application.
 
 ## Run it
 

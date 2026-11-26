@@ -1,7 +1,7 @@
 import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrConfiguration } from './core/error/common.js'
-import { normalizeGroupPath } from './core/routing/builder.js'
+import { normalizeLiteralPath } from './core/routing/paths.js'
 
 const SLASH = 47
 const QUESTION_MARK = 63
@@ -22,37 +22,26 @@ export interface BasePathCarrier {
 /**
  * Turns what `.basePath(...)` resolved to into the base the server strips, or `undefined` when there is none.
  *
- * Trailing slashes are dropped, so `'/'` and `''` mean no base at all.
+ * A missing leading `/` is added and trailing slashes are dropped, so `'api/'` is `/api`, and `'/'` and `''` mean no
+ * base at all.
  *
- * @throws ErrConfiguration when the value does not start with "/", or holds a "?" or a "#": such a base could
- *   never match the path of a request. Also when it starts with "//" or "/\", or holds a control character: put in
- *   front of a redirect, such a base would send the browser off the origin.
+ * @throws ErrConfiguration when the value, once rooted, starts with "//" or "/\", or holds "?", "#" or a control
+ *   character: such a base could never match the path of a request or, put in front of a redirect, would send the
+ *   browser off the origin.
  */
 export function normalizeBasePath(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined
   }
 
-  const base = normalizeGroupPath(value)
-  if (base === '') {
-    return undefined
-  }
-
-  if (base.charCodeAt(0) !== SLASH) {
-    throw new ErrConfiguration(
-      errMessage(`Cannot set the base path: "${value}" does not start with "/"`)
-        .solutions(`Write it as "/${base}"`)
-        .reference('@caffeinejs/http', ErrConfiguration)
-        .build(),
-    )
-  }
+  const base = value.startsWith('/') ? value : `/${value}`
 
   // A browser reads a URL starting with `//` or `/\` as naming another host, and drops tabs and line breaks before it
   // reads one, so a control character can smuggle the same start past the check.
   const second = base.charCodeAt(1)
   if (second === SLASH || second === BACKSLASH) {
     throw new ErrConfiguration(
-      errMessage(`Cannot set the base path: "${value}" starts with "${base.slice(0, 2)}"`)
+      errMessage(`Cannot set the base path: "${base}" starts with "${base.slice(0, 2)}"`)
         .solutions('Start it with a single "/": a browser reads "//" or "/\\" as the start of another host')
         .reference('@caffeinejs/http', ErrConfiguration)
         .build(),
@@ -63,7 +52,7 @@ export function normalizeBasePath(value: string | undefined): string | undefined
     const code = base.charCodeAt(i)
     if (code < 0x20 || code === 0x7f) {
       throw new ErrConfiguration(
-        errMessage(`Cannot set the base path: ${JSON.stringify(value)} contains a control character`)
+        errMessage(`Cannot set the base path: ${JSON.stringify(base)} contains a control character`)
           .solutions('Give the base path as path segments only')
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
@@ -74,7 +63,7 @@ export function normalizeBasePath(value: string | undefined): string | undefined
   for (const char of ['?', '#']) {
     if (base.includes(char)) {
       throw new ErrConfiguration(
-        errMessage(`Cannot set the base path: "${value}" contains "${char}"`)
+        errMessage(`Cannot set the base path: "${base}" contains "${char}"`)
           .solutions('Give the base path as path segments only, without a query or a fragment')
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
@@ -82,7 +71,8 @@ export function normalizeBasePath(value: string | undefined): string | undefined
     }
   }
 
-  return base
+  const normalized = normalizeLiteralPath(base)
+  return normalized === '' ? undefined : normalized
 }
 
 /**

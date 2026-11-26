@@ -3,6 +3,7 @@ import { errMessage } from '@caffeinejs/std/err'
 
 import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
+import { routeURL } from '../routing/paths.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { accessControlExempt } from '../security/exempt.js'
 import { ErrHealthConfiguration } from './errors.js'
@@ -69,9 +70,11 @@ class HealthProbes extends HTTPPlugin {
     }
 
     const { live, ready, startup } = options.paths
-    const taken = new Set([live, ready, startup])
+    // Where the probes serve: under the scope's path, as what it mounts nests there, joined as a route's path is.
+    const prefix = context.server.prefix
+    const taken = new Set([live, ready, startup].map(path => routeURL(undefined, prefix, path)))
 
-    context.app.hook('onRoute', route => {
+    context.server.hook('onRoute', route => {
       if (!taken.has(route.url) || route.options.healthProbe === PROBE) {
         return
       }
@@ -84,7 +87,7 @@ class HealthProbes extends HTTPPlugin {
       )
     })
 
-    context.app.mount(
+    context.server.mount(
       new Router()
         .detail('http', { internal: true })
         .config(accessControlExempt(), { healthProbe: PROBE })

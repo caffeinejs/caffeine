@@ -3,7 +3,6 @@ import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { IContext } from '../../context.js'
 import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import { ErrHTTPUnsupportedMediaType } from '../error/http.js'
-import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import type { RouteOptions } from '../routing/options.js'
 import { BODY_METHODS } from '../server/body.js'
 import { kDecodeBody, type BodyDecoder, type Context } from '../server/context.js'
@@ -64,8 +63,9 @@ export class DecompressionBuilder {
  * and `Content-Length` headers, and `ctx.req.raw` is the request as received. On a route that decodes nothing, a coded
  * body reaches the parser as it is.
  *
- * Only the routes of its slot are covered. With several over one route, a server's, a router's and a controller's, the
- * innermost one alone decodes it, by its own codings and the route's `decompress(...)`.
+ * Only the routes of its scope are covered. Register it once, where it covers the routes it should, and tune a route
+ * with `decompress(...)`: two over one route both run, the outer one first, so a coding the outer one does not decode
+ * is refused before the inner one sees it.
  *
  * @throws ErrConfiguration at start-up for a setting that is not one, an unknown or repeated coding, an empty list of
  * codings, and a route's `decompress(...)` that lists none.
@@ -91,10 +91,6 @@ export function decompress(encodings: ContentCoding | readonly ContentCoding[] |
     decompression: encodings === false ? false : { codings: typeof encodings === 'string' ? [encodings] : encodings },
   }
 }
-
-// The `decompression()` that owns each route: the innermost over it, whose `onRoute` runs last. Keyed by the
-// definition, one per route and server.
-const OWNERS = new WeakMap<RouteDefinition, DecompressionPlugin>()
 
 class DecompressionPlugin extends HTTPPlugin {
   override readonly name = 'caffeine-decompression'
@@ -124,15 +120,14 @@ class DecompressionPlugin extends HTTPPlugin {
   register(context: HTTPSetupContext): void {
     const own = this.#codings
 
-    context.app.hook('onRoute', route => {
-      OWNERS.set(route, this)
+    context.server.hook('onRoute', route => {
       const where = `serve "${route.methods.join('|')} ${route.url}"`
 
       const decoding = route.options.decompression
       const codings = decoding === undefined ? own : routeCodings(decoding, where)
       // A route that takes no body never decodes one.
       if (codings.length > 0 && route.methods.some(method => BODY_METHODS.has(method))) {
-        route.hook('onRequest', ctx => (OWNERS.get(route) === this ? decodeRequest(ctx, codings) : undefined))
+        route.hook('onRequest', ctx => decodeRequest(ctx, codings))
       }
     })
   }

@@ -205,17 +205,6 @@ describe('cachePlugin given its dependencies, with nobody observing', () => {
     expect(stored.map(event => event.size)).toEqual([bytes.length])
   })
 
-  // A second install on one context would give every cached route two read hooks and two store hooks, each
-  // install overwriting the other's per-request state.
-  it('refuses a second registration on the same server', async () => {
-    const app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .with(() => cachePlugin(deps()))
-      .with(() => cachePlugin(deps()))
-    close = () => app.close()
-
-    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching" twice/)
-  })
-
   it('evicts after a mutation with nobody observing', async () => {
     let calls = 0
     const app = await serve(r => {

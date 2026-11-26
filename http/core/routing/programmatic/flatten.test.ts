@@ -6,13 +6,17 @@ import { Router } from './programmatic.js'
 import { stateOf, type RouterState } from './state.js'
 
 describe('default route names', () => {
-  it('ignores long malformed constraints without retrying at every parenthesis', () => {
-    const router = new Router('/pets').get('/:id' + '('.repeat(100_000) + '\nx', () => undefined)
-    const started = performance.now()
-    const groups = flattenRouter(stateOf(router)!, new CaffeineIoC())
-    expect(groups[0].spec.routes[0].name).toBe('get_id')
-    expect(performance.now() - started).toBeLessThan(1000)
-  })
+  // A path the router cannot register is refused when it registers: naming it reads the path once, without retrying
+  // at every parenthesis.
+  it.each([['/:id' + '('.repeat(100_000) + '\nx'], ['/:a(' + '('.repeat(100_000) + '-:b']])(
+    'names a long unclosed constraint in time linear in the path',
+    path => {
+      const router = new Router('/pets').get(path, () => undefined)
+      const started = performance.now()
+      expect(flattenRouter(stateOf(router)!, new CaffeineIoC())[0]!.spec.routes.length).toBe(1)
+      expect(performance.now() - started).toBeLessThan(1000)
+    },
+  )
 
   it('keeps parameter, optional and wildcard names stable', () => {
     const router = new Router('/pets')
@@ -42,6 +46,7 @@ describe('default route names', () => {
     ['/esc/a::b/:id', 'get_esc_a:b_id'],
     ['/tail/:id-:rev/*', 'get_tail_id-rev_all'],
     ['/k/:lat:lng', 'get_k_lat:lng'],
+    ['/d/:p((a|b)/c)/x', 'get_d_p_x'],
   ])('names %s %s', (path, name) => {
     const groups = flattenRouter(stateOf(new Router('/').get(path, () => undefined))!, new CaffeineIoC())
     expect(groups[0].spec.routes[0].name).toBe(name)
@@ -58,18 +63,10 @@ describe('default route names', () => {
     const groups = flattenRouter(stateOf(router)!, new CaffeineIoC())
     expect(groups[0].spec.routes.map(route => route.name)).toEqual(['get_name.json', 'get_name.xml'])
   })
-
-  it('reads a second parameter after a long malformed constraint without retrying at every parenthesis', () => {
-    const router = new Router('/pets').get('/:a(' + '('.repeat(100_000) + '-:b', () => undefined)
-    const started = performance.now()
-    const groups = flattenRouter(stateOf(router)!, new CaffeineIoC())
-    expect(groups[0].spec.routes[0].name).toBe('get_a')
-    expect(performance.now() - started).toBeLessThan(1000)
-  })
 })
 
 /**
- * A router nested in itself, by `.mount(...)` or by a plugin's `context.app.mount(...)`, would nest without end: the
+ * A router nested in itself, by `.mount(...)` or by a plugin's `context.server.mount(...)`, would nest without end: the
  * walk refuses it, naming the loop, rather than running out of stack.
  */
 describe('a router nested in itself', () => {
@@ -163,5 +160,38 @@ describe('route names', () => {
     })
 
     expect(flatten(pets).map(group => group.name)).toEqual(['Pets', 'PetsArchived'])
+  })
+
+  // A default name follows the whole path the group serves at: two prefixed routers nested under different parents
+  // serve at different paths, and get different names.
+  it('names a prefixed nested group after its parent path, prefix and path', () => {
+    const items = () =>
+      new Router('/items')
+        .extend((group: { prefix(prefix: string): unknown }) => {
+          group.prefix('/v1')
+        })
+        .get('/', () => undefined)
+
+    const names = [new Router('/east').mount(items()), new Router('/west').mount(items())].flatMap(router =>
+      flatten(router).map(group => group.name),
+    )
+
+    expect(names).toEqual(['EastV1Items', 'WestV1Items'])
+  })
+})
+
+describe('group paths', () => {
+  const flatten = (router: object) => flattenRouter(stateOf(router)!, new CaffeineIoC())
+
+  // Each layer is normalized on its own and joined by concatenation: no slash is doubled or lost between them.
+  it('composes a mount path and a router path without a prefix', () => {
+    const groups = flatten(
+      new Router().mount(
+        '/api/',
+        new Router('v1').get('/x', () => undefined),
+      ),
+    )
+
+    expect(groups.map(({ spec }) => `${spec.prefix ?? ''}${spec.path}${spec.routes[0]!.path}`)).toEqual(['/api/v1/x'])
   })
 })

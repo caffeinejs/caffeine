@@ -57,7 +57,7 @@ function assets() {
   return new Router()
     .detail('http', { internal: true })
     .authorize()
-    .get('/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!, dist))
+    .get('/assets/*', ctx => sendFile(ctx, ctx.req.path, dist))
 }
 
 function api() {

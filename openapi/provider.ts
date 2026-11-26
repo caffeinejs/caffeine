@@ -30,6 +30,8 @@ export const kPublish = Symbol('caffeine.openapi.publish')
 export class OpenAPIProvider {
   // `undefined` while the plugin is set up and the server is not ready yet.
   readonly #documents = new Map<string, OpenAPIDocument | undefined>()
+  /** The `openapi(...)` declaration that reserved each name. */
+  readonly #reservedBy = new Map<string, object>()
 
   /**
    * The document registered under `name`, exactly as it is served.
@@ -57,9 +59,27 @@ export class OpenAPIProvider {
     return document
   }
 
-  /** @throws ErrOpenAPIConfiguration when another plugin already claimed the name. */
-  [kReserve](name: string): void {
-    if (this.#documents.has(name)) {
+  /**
+   * @param by - The `openapi(...)` declaration reserving it: one that runs again, at a second place, is told so.
+   * @throws ErrOpenAPIConfiguration when a plugin already claimed the name.
+   */
+  [kReserve](name: string, by: object): void {
+    const holder = this.#reservedBy.get(name)
+    if (holder === by) {
+      throw new ErrOpenAPIConfiguration(
+        errMessage(
+          `Cannot register the OpenAPI document "${name}": the openapi() that registers it serves at more than one place`,
+        )
+          .solutions(
+            'Mount the router or controller that registers openapi(...) at one place',
+            'Or register openapi(...) on the application or a listener, where it runs once',
+          )
+          .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+          .build(),
+      )
+    }
+
+    if (holder !== undefined) {
       throw new ErrOpenAPIConfiguration(
         errMessage(`Cannot register the OpenAPI document "${name}": another openapi() plugin already registered it`)
           .solutions(
@@ -72,6 +92,7 @@ export class OpenAPIProvider {
     }
 
     this.#documents.set(name, undefined)
+    this.#reservedBy.set(name, by)
   }
 
   [kPublish](name: string, document: OpenAPIDocument): void {

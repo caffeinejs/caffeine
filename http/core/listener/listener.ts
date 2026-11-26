@@ -76,7 +76,7 @@ export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
   /**
    * Registers a server plugin on this server from a factory, the way the application's `.with(...)` registers one on
    * its own: after the framework's head slots (error handling, cookies), in the order these calls are written. What
-   * its plugin mounts or adds with `context.app` lands on this server.
+   * its plugin mounts or adds with `context.server` lands on this server.
    *
    * ```ts
    * .listener('admin', l => l.with(authentication()).with(healthProbes()))
@@ -108,6 +108,8 @@ export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
    * ```ts
    * .listener('admin', l => l.use(AuditLog).use('/jobs', kRateLimiter, { hook: 'preHandler' }))
    * ```
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,
@@ -137,6 +139,8 @@ export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
    * ```ts
    * .listener('admin', l => l.useFn(({ config }) => rateLimit(config.app.adminLimits)))
    * ```
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
    */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
   useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
@@ -152,12 +156,13 @@ export class ListenerBuilder<C = unknown, S extends object = ServerSettings> {
 }
 
 /**
- * Fills a listener's builder. Runs at start-up, once the container has initialized, with the context a plugin
- * factory gets: `config`, `store`, `logger`, a container that resolves, and `hasFeature`.
+ * Fills a listener's builder. Runs at start-up, once the container has initialized, with what a plugin factory
+ * gets but the server, which the builder is still describing: `config`, `store`, `logger`, a container that
+ * resolves, and `hasFeature`.
  */
 export type ListenerConfigurer<C = unknown, S extends object = ServerSettings> = (
   listener: ListenerBuilder<C, S>,
-  context: HTTPSetupContext<C>,
+  context: Omit<HTTPSetupContext<C>, 'server'>,
 ) => void
 
 /**
@@ -200,7 +205,7 @@ export class Listeners<C = unknown> implements ListenerAdder<C, object> {
   }
 
   /** Runs every listener's callback, in add order, and hands back what each server is built from. */
-  build(context: HTTPSetupContext<C>): ServerDefinition<C>[] {
+  build(context: Omit<HTTPSetupContext<C>, 'server'>): ServerDefinition<C>[] {
     this.#built = true
 
     return this.#added.map(({ definition, configure }) => {

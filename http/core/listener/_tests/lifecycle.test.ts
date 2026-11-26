@@ -229,8 +229,8 @@ describe('the lifecycle of a listener', () => {
     /** A plugin whose server fails to close with `failure`, once it has stopped listening. */
     const failingToClose = (failure: Error) => () =>
       new (class extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.hook('onClose', () => {
+        register({ server }: HTTPSetupContext): void {
+          server.hook('onClose', () => {
             throw failure
           })
         }

@@ -43,23 +43,22 @@ describe('normalizeBasePath', () => {
   it.each([
     ['/api', '/api'],
     ['/api/', '/api'],
-    ['/api//', '/api'],
     ['/v1/api/', '/v1/api'],
   ])('reads %s as %s', (value, expected) => {
     expect(normalizeBasePath(value)).toBe(expected)
   })
 
-  it.each([[undefined], [''], ['/'], ['//']])('reads %s as no base path at all', value => {
+  it.each([[undefined], [''], ['/']])('reads %s as no base path at all', value => {
     expect(normalizeBasePath(value)).toBeUndefined()
   })
 
-  it('refuses a base path that does not start with "/", naming it and the fix', () => {
-    const err = captureError(() => normalizeBasePath('api/'))
+  // Every declared path gets a missing leading "/".
+  it('adds a missing leading "/"', () => {
+    expect(normalizeBasePath('api/')).toBe('/api')
+  })
 
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(err).toMatchObject({ code: 'ERR_CONFIGURATION' })
-    expect(err.message).toContain('"api/" does not start with "/"')
-    expect(err.message).toContain('Write it as "/api"')
+  it('drops the trailing slashes of a base path', () => {
+    expect(normalizeBasePath('/api//')).toBe('/api')
   })
 
   it.each([
@@ -74,14 +73,17 @@ describe('normalizeBasePath', () => {
 
   // The base goes in front of every redirect the framework builds, so it must never be one a browser reads as naming
   // another host: `~/done` under `//evil.example` is `//evil.example/done`.
+  // A "/" is added first, so a value starting with "\\" is still refused once rooted.
   it.each([
-    ['//evil.example', '//'],
-    ['/\\evil.example', '/\\'],
-  ])('refuses %s, which a browser reads as another host, naming the fix', (value, start) => {
+    ['//evil.example', '//', '//evil.example'],
+    ['/\\evil.example', '/\\', '/\\evil.example'],
+    ['\\evil.example', '/\\', '/\\evil.example'],
+    ['//', '//', '//'],
+  ])('refuses %s, which a browser reads as another host, naming the fix', (value, start, named) => {
     const err = captureError(() => normalizeBasePath(value))
 
     expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(err.message).toContain(`"${value}" starts with "${start}"`)
+    expect(err.message).toContain(`"${named}" starts with "${start}"`)
     expect(err.message).toContain('Start it with a single "/"')
   })
 

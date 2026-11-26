@@ -17,11 +17,10 @@ import { node } from '../platform/node.testkit.js'
  *
  * Load-bearing for every prefixed application, and it was asserted only in prose until this file: the
  * documentation claimed `new Router('/app')` with a route at `/` produced `/app/` and therefore did not answer
- * `GET /app`. It produces `/app` — `joinPaths` trims the trailing slash — and since the application leaves
- * `ignoreTrailingSlash` off, `/app/` is then a different URL that nothing registered.
+ * `GET /app`. It produces `/app`, the group's own path, and the server answers it at `/app/` too: a trailing slash
+ * never makes another route.
  *
- * The consequence that survives is the wildcard's: `/dash/*` does not match the bare `/dash`, which is why a
- * gated subtree still needs two routes.
+ * A wildcard answers what follows its parent, never the parent itself: `/dash/*` does not answer `/dash`.
  */
 
 /**
@@ -35,8 +34,8 @@ function collectURLs(urls: string[]) {
     new (class extends HTTPPlugin {
       override readonly name = 'collect-urls'
 
-      register({ app }: HTTPSetupContext): void {
-        app.hook('onRoute', r => void urls.push(r.url))
+      register({ server }: HTTPSetupContext): void {
+        server.hook('onRoute', r => void urls.push(r.url))
       }
     })()
 }
@@ -57,7 +56,7 @@ describe('a group prefix and a route at "/"', () => {
     }
   })
 
-  it('answers the bare path and not the trailing slash', async () => {
+  it('answers the bare path and the trailing slash', async () => {
     const app = createWebApplication({ adapter: node() }).mount(
       new Router('/app').get('/', () => ({ ok: true })),
     ) as WebApplication
@@ -65,8 +64,8 @@ describe('a group prefix and a route at "/"', () => {
 
     try {
       expect((await app.request('/app')).status).toBe(200)
-      // `ignoreTrailingSlash` is left at its default, so this is a different URL.
-      expect((await app.request('/app/')).status).toBe(404)
+      // A trailing slash never makes another route.
+      expect((await app.request('/app/')).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -107,17 +106,43 @@ describe('a group prefix and a route at "/"', () => {
     }
   })
 
-  // The half of the documented papercut that is real: a wildcard covers the empty match but not the bare path.
-  it('does not match a bare path against a sibling wildcard', async () => {
+  // A wildcard answers what follows its parent, not the parent.
+  it('leaves the parent of a wildcard to a route of its own', async () => {
     const app = createWebApplication({ adapter: node() }).mount(
-      new Router().get('/dash/*', () => ({ ok: true })),
+      new Router().get('/dash/*', ctx => `[${(ctx.req.param('*') ?? 'missing').split('/').join(',')}]`),
     ) as WebApplication
     await app.bootstrap()
 
     try {
-      expect((await app.request('/dash')).status).toBe(404)
-      expect((await app.request('/dash/')).status).toBe(200)
-      expect((await app.request('/dash/deep')).status).toBe(200)
+      const bodies = []
+      for (const url of ['/dash', '/dash/', '/dash/a/b']) {
+        const res = await app.request(url)
+        bodies.push([res.status, await res.text()])
+      }
+
+      expect([bodies.map(([status]) => status), bodies[2]![1]]).toEqual([[404, 404, 200], '[a,b]'])
+    } finally {
+      await app.close()
+    }
+  })
+
+  // A route at the parent answers it, its HEAD included.
+  it("answers a route declared at a wildcard's parent", async () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router()
+        .get('/dash/*', () => 'wildcard')
+        .get('/dash', ctx => {
+          ctx.header('x-route', 'parent')
+          return 'parent'
+        }),
+    ) as WebApplication
+    await app.bootstrap()
+
+    try {
+      const get = await app.request('/dash')
+      const head = await app.request('/dash', { method: 'HEAD' })
+
+      expect([await get.text(), head.status, head.headers.get('x-route')]).toEqual(['parent', 200, 'parent'])
     } finally {
       await app.close()
     }

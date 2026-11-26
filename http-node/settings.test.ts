@@ -55,7 +55,7 @@ describe('resolveNodeServerSettings', () => {
 
   it('names the Node application and its sections when refusing an unknown setting', () => {
     expect(() => resolveNodeServerSettings({ port: 3000 })).toThrow(
-      'Return only handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler, listen, http, https, http2',
+      'Return only handlerTimeout, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler, listen, http, https, http2',
     )
   })
 

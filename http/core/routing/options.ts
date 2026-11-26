@@ -4,10 +4,11 @@ import { configureRoute, configureRouteGroup } from '../../decorators/registrar/
 import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { asError, isThenable } from '../lifecycle/lifecycle.js'
-import { mergeInto, mergeValue, ownKeys } from './_merge.js'
+import { mergeInto, mergeValue, ownKeys, ReplacingMap } from './_merge.js'
 
 /**
- * What a route carries for the plugins that serve it: read with `ctx.options`, or `route.options` in an `onRoute` hook.
+ * What a route carries for the plugins that serve it: read with `ctx.options`, or `route.options` in an `onRoute` hook,
+ * where a plugin may also add keys of its own.
  *
  * Empty here. A plugin that takes per-route settings augments it with its own field, so a route that sets it is
  * checked and a reader gets the real type:
@@ -45,15 +46,15 @@ declare const kRouteOptions: unique symbol
  *
  * It runs while routes compile: once per route for a route's, and once per router or controller for theirs, each time
  * the router is mounted. It sees and writes its own level's object only, and a more specific level's key replaces what
- * it writes. `context.config` is the start-up snapshot, and `context.app` is closed. What it throws fails start-up,
- * naming the route, the router or the controller that set it.
+ * it writes. `context.config` is the start-up snapshot, and it has no `server`: the options belong to the route, not to
+ * the server serving it. What it throws fails start-up, naming the route, the router or the controller that set it.
  *
  * It must be synchronous. Replace a nested value rather than mutate one it did not create: an input object is shared by
  * every route it covers.
  */
 export type RouteOptionsConfigurer<C = unknown> = (
   options: Partial<RouteOptions>,
-  context: HTTPSetupContext<C>,
+  context: Omit<HTTPSetupContext<C>, 'server'>,
 ) => void | undefined
 
 /** A plain object merged key by key over the level's options, or a function that writes them. */
@@ -93,12 +94,16 @@ export const kNoRouteOptions: Readonly<Partial<RouteOptions>> = Object.freeze({}
  */
 export function applyRouteOptions(
   inputs: readonly RouteOptionsInput[],
-  context: HTTPSetupContext,
+  context: Omit<HTTPSetupContext, 'server'>,
   owner: string,
 ): Partial<RouteOptions> {
   const target: Record<PropertyKey, unknown> = {}
 
   for (const input of inputs) {
+    // `constraints: null` drops what the groups set: a Map the level sets after it replaces theirs. Marked here, where
+    // the level's inputs fold, since it is the one key whose null reaches past its own level.
+    const cleared = target.constraints === null || target.constraints instanceof ReplacingMap
+
     if (typeof input === 'function') {
       let result: unknown
       try {
@@ -124,11 +129,14 @@ export function applyRouteOptions(
             .build(),
         )
       }
-
-      continue
+    } else {
+      mergeInto(target, input)
     }
 
-    mergeInto(target, input)
+    const constraints = target.constraints
+    if (cleared && constraints instanceof Map && !(constraints instanceof ReplacingMap)) {
+      target.constraints = new ReplacingMap(constraints)
+    }
   }
 
   return target as Partial<RouteOptions>
@@ -148,7 +156,7 @@ export interface RouteOptionsLevel {
  */
 export function resolveRouteOptionLevels(
   levels: readonly RouteOptionsLevel[],
-  context: HTTPSetupContext,
+  context: Omit<HTTPSetupContext, 'server'>,
   owner: string,
   resolved: WeakMap<RouteOptionsLevel, Partial<RouteOptions>>,
 ): Partial<RouteOptions> {

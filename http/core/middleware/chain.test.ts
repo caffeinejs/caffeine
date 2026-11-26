@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { compileChain, type ChainTarget } from './chain.js'
 import { ErrNextCalledTwice } from './errors.js'
 import type { MiddlewareFn, Next } from './middleware.js'
-import { normalizePath, sanitizeURL } from './path.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
 class Target implements ChainTarget {
@@ -12,14 +11,10 @@ class Target implements ChainTarget {
   readonly logger = { error: (fields: { err?: unknown }) => void this.failures.push(fields.err) }
   readonly log: string[] = []
 
-  readonly #url: string
+  readonly req: { readonly path: string }
 
   constructor(url: string) {
-    this.#url = url
-  }
-
-  normalizedPath(): { path: string; error: Error | undefined } {
-    return normalizePath(sanitizeURL(this.#url), {})
+    this.req = { path: url }
   }
 }
 

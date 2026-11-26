@@ -9,6 +9,16 @@ export {
   type RouteSecurityRecord,
   type ServerRoutes,
 } from './inventory.js'
+export {
+  literalPrefix,
+  normalizeGroupPath,
+  normalizeRoutePath,
+  parseRoutePattern,
+  routeURL,
+  underPrefix,
+  type LiteralPrefix,
+  type RoutePatternPart,
+} from './paths.js'
 export { RouteOptions, type RouteOptionsConfigurer, type RouteOptionsInput, type RouteOptionsLevel } from './options.js'
 export * from './picker.js'
 export * from './programmatic/index.js'

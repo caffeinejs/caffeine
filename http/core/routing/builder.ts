@@ -10,7 +10,8 @@ import { assertHookName, REQUEST_HOOK_NAMES, type RequestHookName, type RequestH
 import type { AuthoredHooks } from '../lifecycle/route_definition.js'
 import { mergeValue } from './_merge.js'
 import { foldAuthz } from './inherit.js'
-import type { RouteOptionsInput } from './options.js'
+import type { RouteOptionsInput, RouteOptionsLevel } from './options.js'
+import { normalizeGroupPath, normalizeRoutePath } from './paths.js'
 import type {
   BodyMode,
   RouteAuthz,
@@ -34,6 +35,9 @@ export class RouteGroupBuilder {
   #timeout?: Duration
   #authorize?: RouteAuthz
   #options?: RouteOptionsInput[]
+  // One level for every spec built from the same options: the compiler resolves a level once, so a configurer runs once
+  // however often the group is built.
+  #levels?: RouteOptionsLevel[]
   #detail?: RouteGroupDetail
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
@@ -147,6 +151,7 @@ export class RouteGroupBuilder {
   /** Adds route options covering every route of the group, after those already added. */
   options<C = unknown>(...inputs: RouteOptionsInput<C>[]): this {
     this.#options = [...(this.#options ?? []), ...(inputs as RouteOptionsInput[])]
+    this.#levels = undefined
     return this
   }
 
@@ -168,9 +173,13 @@ export class RouteGroupBuilder {
   }
 
   toRouteGroup<R>(): RouteGroupSpec<R> {
+    if (this.#options !== undefined) {
+      this.#levels ??= [{ inputs: this.#options }]
+    }
+
     return {
       path: normalizeGroupPath(this.#path ?? ''),
-      prefix: this.#prefix,
+      prefix: this.#prefix === undefined ? undefined : normalizeGroupPath(this.#prefix),
       routes: (this.#routes ?? []).map(route => route.toRoute<R>()),
       header: this.#header,
       accept: [...(this.#consumes ?? [])],
@@ -178,7 +187,7 @@ export class RouteGroupBuilder {
       bodyLimit: this.#bodyLimit,
       timeout: this.#timeout,
       authz: this.#authorize,
-      options: this.#options === undefined ? undefined : [{ inputs: [...this.#options] }],
+      options: this.#levels,
       detail: this.#detail,
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,
@@ -391,20 +400,4 @@ function copyHooks(hooks: Hooks | undefined): AuthoredHooks | undefined {
   }
 
   return copy
-}
-
-export function normalizeGroupPath(prefix: string): string {
-  // A loop, not `/\/+$/`: that backtracks quadratically over a long run of slashes followed by anything else.
-  let end = prefix.length
-  while (end > 0 && prefix[end - 1] === '/') {
-    end--
-  }
-
-  return prefix.slice(0, end)
-}
-
-export function normalizeRoutePath(path: string): string {
-  const withLeading = path.startsWith('/') ? path : `/${path}`
-  const collapsed = withLeading.replace(/\/+/g, '/')
-  return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
 }

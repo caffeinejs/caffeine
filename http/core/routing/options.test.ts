@@ -98,6 +98,20 @@ describe('route options', () => {
     expect(await optionsAt(built, '/r')).toEqual({ a: 1, b: 2 })
   })
 
+  // Only `constraints` reads a null as "drop what the groups set": any other Map-valued option merges with its router's
+  // as before, whatever the route set ahead of its Map.
+  it('merges a Map value set after null with its router’s by key', async () => {
+    const built = await serve(
+      new Router('/r')
+        .config({ testMap: new Map([['a', 1]]) })
+        .get('/')
+        .config({ testMap: null } as never, { testMap: new Map([['b', 2]]) })
+        .handler(ctx => Object.fromEntries(ctx.options.testMap ?? [])),
+    )
+
+    expect(await optionsAt(built, '/r')).toEqual({ a: 1, b: 2 })
+  })
+
   it('lets a nested router replace its parent’s key', async () => {
     const built = await serve(
       new Router('/outer')

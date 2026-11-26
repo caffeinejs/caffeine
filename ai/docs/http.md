@@ -31,10 +31,11 @@ const app = createWebApplication({ adapter: node() }).server(({ config }) => ({ 
 const { address } = await app.run() // or app.run({ port: 3000 }); address.origin is the URL it serves
 ```
 
-`.server(configure)` configures the server it builds. `bodyLimit`, `handlerTimeout`, `trustProxy`, `router`,
-`requestIDHeader` and `schemaCompiler` are the engine's, under every adapter; the adapter adds its own. Under `node()`,
-`listen` takes node:net's listen options and `http`, `https` and `http2` the node server's own; `run(options)` takes
-node:net's `ListenOptions`, merged over `listen` key by key. `app.instance` is the node:http, node:https or node:http2
+`.server(configure)` configures the server it builds. `bodyLimit`, `handlerTimeout`, `trustProxy`,
+`requestIDHeader` and `schemaCompiler` are the engine's, under every adapter; the adapter adds its own.
+A trailing `/` never makes another route, and paths are case-sensitive. Under `node()`, `listen` takes
+node:net's listen options and `http`, `https` and `http2` the node server's own; `run(options)` takes node:net's
+`ListenOptions`, merged over `listen` key by key. `app.instance` is the node:http, node:https or node:http2
 server, and `.serverCallback(callback)` gets the setup context, with the configuration, and that server before it
 listens. `factory` and `listener` are refused at start-up.
 
@@ -161,12 +162,13 @@ that rejects, Caffeine logs the host error with the request ID. In either case, 
 registration and Caffeine continues to observe the task. If the binding’s promise fulfills while the task is
 pending, shutdown still waits for the task. The host sets the invocation’s execution limits. [Cloudflare Workers context](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil)
 
-If you bootstrap inside the Worker’s `fetch` handler, `workerd` rejects the default matcher’s attempt to generate
-code during route registration. For request-time bootstrap, configure a matcher that can register those routes
-without generating code. A matcher supplied by an earlier `.server(() => ({ matcher }))` call stays in effect
-when you add `fetchWaitUntil` as shown above. The local integration test uses an exact-path matcher for its
-schema-free routes. It reads the entire response before releasing the registered task and observing its
-completion through a service binding. [Worker fixture](../../test/fixtures/http-wait-until/worker.mjs)
+If you bootstrap inside the Worker’s `fetch` handler, `workerd` rejects the default matcher’s attempt to generate code
+during route registration. For request-time bootstrap, configure a matcher that can register those routes without
+generating code. A matcher implements `add` and `match`, and matches `ctx.req.path` as it is given. A matcher supplied
+by an earlier `.server(() => ({ matcher }))` call stays in effect when you add `fetchWaitUntil` as shown above. The
+local integration test uses an exact-path matcher for its schema-free routes. It reads the entire response before
+releasing the registered task and observing its completion through a service binding. [Worker
+fixture](../../test/fixtures/http-wait-until/worker.mjs)
 
 ## HTTPS and HTTP/2
 
@@ -209,8 +211,9 @@ fallback-policy exceptions are all written as if served from the root. A request
 came, so the base is not an access boundary: every route also answers without it, and keeping a route private is
 the gateway's job or authorization's.
 
-- `ctx.req.url` is the path the application sees; `ctx.req.basePath` is what was taken off (`''` when nothing was),
-  so the base follows the request: a request that came without it is answered without it.
+- `ctx.req.path` is the path the application sees, and `ctx.req.url` that path with its query; `ctx.req.basePath` is
+  what was taken off (`''` when nothing was), so the base follows the request: a request that came without it is
+  answered without it.
 - Redirects the framework builds carry the base: cookie sign-in's `loginPath` / `accessDeniedPath` and the return
   URL, OAuth/OIDC's return URL and `defaultRedirectPath`. A handler's own redirect says so with `~/`:
   `ctx.redirect('~/done')` is `/api/done`, while `ctx.redirect('/done')` is sent as written.
@@ -335,7 +338,8 @@ new Router('/hooks').config(csrfExempt()) // the programmatic form; csrfExempt(f
   requested. For a route the application cannot mark; its own take `@CSRFExempt()` or `csrfExempt()`. A URL no route
   matched stays a 404.
 - A route's own mark wins over a path: `csrfExempt(false)` keeps a route under an excluded prefix protected.
-  `c.exclude('/')`, which would cover every route, is refused at start-up; `c.enabled(false)` turns the check off.
+  `c.exclude('/')`, which would cover every route, is refused at start-up; so is a prefix written from the base path,
+  `c.exclude('~/webhooks')`; `c.enabled(false)` turns the check off.
 - The check is a root `onRequest` hook of the server it is registered on, ahead of body parsing, in the slot
   `.with(csrf())` was written in: ahead of `.with(authentication())`, a cross-origin request is refused before anyone
   is authenticated; behind it, an anonymous one meets the challenge first. A [listener](#listeners) is covered by its
@@ -440,6 +444,12 @@ pets.group('/:petID/orders', r =>
 app.mount(pets) // before app.bootstrap()
 ```
 
+- Paths drop a trailing `/` and get a missing leading `/`: `/x` and `/x/` are one route. A wildcard answers what follows
+  its parent, not the parent: `/files/*` does not answer `/files`. A router, group, controller or mount path holds
+  literal segments and parameters only: a wildcard or an optional segment there is refused at start-up. `staticFiles()`
+  does not check application routes against its files: one at exactly a file's URL fails start-up as a duplicate route,
+  and one under a directory of files wins; a top-level directory's own URL, when the directory holds an index, is a
+  route of its own. Middleware paths match case-sensitively, so a guard on `/admin` does not run for `/ADMIN`.
 - A verb takes `(path)`, `(path, handler)` or `(path, schema, handler)`. With a handler the route is closed there
   and then and the group comes back, so routes chain off one another either way:
 
@@ -466,7 +476,8 @@ app.mount(pets) // before app.bootstrap()
 - `.config(...)` on a route or a router sets the options a plugin reads for it:
   `cors(options)`, `csrfExempt()`, `compress(options)`, `decompress(codings)`, `version(v)`, `constraint(name, value)`
   and, from the caching package, `cacheControl(options)` and `cacheInvalidate(options)`. Each is the same
-  implementation as its decorator, and `@RouteOptions(...)` sets them on a controller or a method.
+  implementation as its decorator, and `@RouteOptions(...)` sets them on a controller or a method. A route's
+  constraints add to its router's by name; `.config({ constraints: null })` drops every one it inherits.
 - `.extend(ext, ...)` applies the other extensions — how a package configures a route it does not own. http ships
   `bodyAsBuffer()` and `bodyAsStream()`; openapi ships `operation(detail)` and `apiGroup(detail)`.
   Each is the same implementation as its decorator.
@@ -584,7 +595,8 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
 
 ## Compression
 
-`compression()`, from `@caffeinejs/http/compress`, compresses answers. It is off until registered, on the application, a listener, a router or a controller, and covers that slot's routes.
+`compression()`, from `@caffeinejs/http/compress`, compresses answers. It is off until registered, on the application,
+a listener, a router or a controller, and covers that scope's routes.
 
 ```ts
 import { compression } from '@caffeinejs/http/compress'
@@ -618,21 +630,23 @@ app.with(
   off, `compress(true)` turns it back on under a group's `false`. `@Gzip()`, `@Brotli()`, `@Zstd()` and `@Deflate()`
   offer that coding alone, identity otherwise, and take its level or quality: `@Gzip({ level: 9 })`. One coding
   decorator per method; for several, `@Compress({ encodings: [...] })`.
-- With several over one route, a server's, a router's and a controller's, the innermost one alone compresses it, by
-  its own settings and the route's `compress(...)`.
-- Order: its hooks run after a route's own and after those of plugins registered before it in its slot or in an
-  outer slot. Register `HTTPCaching` before it in the same slot, or in an outer one, so the cache stores identity
+- Register it once, where it covers the routes it should, and tune a route with `compress(...)`: two over one route
+  both run, and the inner one finds the answer already coded.
+- Order: its hooks run after a route's own and after those of plugins registered before it in its scope or in an
+  outer scope. Register `HTTPCaching` before it in the same scope, or in an outer one, so the cache stores identity
   bytes; under it on a router, the cache stores none of the answers it coded, unless the route's key varies on
   `Accept-Encoding`.
-- A static mount is the server's own, so `compress(false)` cannot reach it: register `compression()` on the routers
-  that should compress to keep a mount's files identity. A variant the build wrote goes out as it is.
+- A static mount's routes nest under the scope `staticFiles()` is registered in and take its route options: on a
+  router, `.config(compress(false))` reaches its files. On the server's `.with(...)`, nothing reaches them: register
+  `compression()` on the routers that should compress to keep a mount's files identity. A variant the build wrote
+  goes out as it is.
 - Compressing a secret beside input the request reflects lets an attacker who sees response sizes guess the secret
   (BREACH). Turn such a route off with `compress(false)`.
 
 ## Request decompression
 
 `decompression()`, from `@caffeinejs/http/compress`, decodes request bodies sent with a `Content-Encoding`. It is
-off until registered, on the application, a listener, a router or a controller, and covers that slot's routes.
+off until registered, on the application, a listener, a router or a controller, and covers that scope's routes.
 
 ```ts
 import { decompression } from '@caffeinejs/http/compress'
@@ -649,23 +663,24 @@ app.with(decompression(d => d.encodings('gzip', 'br')))
   start-up with `ErrConfiguration`.
 - Per route: `decompress('gzip')` or `@Decompress('gzip')` sets a route's own list, `decompress(false)` decodes
   nothing, and a method's list replaces its controller's.
-- With several over one route, the innermost one alone decodes it, by its own codings and the route's
-  `decompress(...)`.
+- Register it once, where it covers the routes it should, and tune a route with `decompress(...)`.
 
 ## Plugins
 
 A `.with(...)` factory returns an `HTTPPlugin`: a class whose `register(context)` does the work, handed the same
-context the factory got. `context.app` is what it may do to the application: `mount(...routers)`, `use(...)`,
-`useFn(...)` and `hook(name, fn)`, taking what `app.mount`, `app.use`, `app.useFn` and `app.hook` take.
+context the factory got. `context.server` is the server the plugin is registered on, scoped to where it is
+registered: its `name` (a listener's, `undefined` for the application's own), `basePath`, `prefix` (where the scope's
+routes start), `matcher` and `address` once it listens, and what the plugin may do there: `mount(...routers)`,
+`use(...)`, `useFn(...)` and `hook(name, fn)`, taking what `app.mount`, `app.use`, `app.useFn` and `app.hook` take.
 
 ```ts
 import { HTTPPlugin, Router, type HTTPPluginFactory, type HTTPSetupContext } from '@caffeinejs/http'
 
 class Metrics extends HTTPPlugin {
-  register({ app, container }: HTTPSetupContext): void {
+  register({ server, container }: HTTPSetupContext): void {
     const registry = container.get(MetricsRegistry)
-    app.mount(new Router('/metrics').get('/', () => registry.render()))
-    app.use(countRequests)
+    server.mount(new Router('/metrics').get('/', () => registry.render()))
+    server.use(countRequests)
   }
 }
 
@@ -678,17 +693,33 @@ app.listener('admin', l => l.with(metrics())) // that listener alone
 new Router('/api').with(metrics()) // that router alone: /api/metrics
 ```
 
-Where it is registered decides what `context.app` reaches:
+Where it is registered decides what `context.server` reaches. Each place is a scope of its own: its hooks and
+middleware cover its routes and the scopes nested in it, never a sibling's.
 
 - **On a server** (`.with(...)`, `l.with(...)`): the server serves what it mounts. Its middleware joins that
   server's pipeline after the application's own `.use(...)` entries, and a path is the server's own.
-- **On a router** (`router.with(...)`): it registers once, before routing is built. What it mounts nests under the
-  router, starting from its path, guards and plugins. Its middleware runs in front of the router's routes
-  alone, nested groups included, and a path is relative to the router: `use('/jobs', mw)` on a router at `/admin`
-  covers `/admin/jobs`, under every parent the router is nested in. A relative path under a router whose path holds
-  a wildcard or an optional parameter is refused at start-up.
-- **On a controller** (`@Use(...)`): its middleware runs in front of the controller's routes, a path relative to the
-  controller and its `@Prefix`. It cannot mount: a class has no children to nest routers under.
+- **On a router** (`router.with(...)`): it registers on each server the router is mounted on, once per place it is
+  mounted at, after that server's own plugins; `context.server.prefix` is the router's path there. What it mounts nests
+  under the router, starting from its path, guards and plugins. Its middleware runs in front of the router's routes
+  alone, nested groups included, and a middleware path is a literal prefix on whole segments: `use('/jobs', mw)` on a
+  router at `/admin` covers `/admin/jobs` and below. A parameter, `*`, a regex, `?` or `#` is refused; use the literal
+  parent prefix. A request's path is read once: the target's path, without the query or the base path, decoded once but
+  for the escapes of reserved characters and of `%`. The router, middleware, plugins and handlers all read it as
+  `ctx.req.path`, and `ctx.req.url` is the same target with its query, as sent. A path that cannot be decoded is a 400.
+  A middleware path added on a router is joined to the router's path, and is refused when that path holds a parameter.
+- **On a controller** (`@Use(...)`): it registers on the server serving the controller, after the routers'. Its
+  middleware runs in front of the controller's routes alone, a path relative to the controller and its `@Prefix`, and
+  what it mounts nests under the controller, starting from its declarations.
+
+Register a plugin once, where it covers the routes it should, and tune a route through its options (`compress(...)`,
+`cors(...)`, `.config({ html: ... })`): two copies over one route both run, each as it registered: no check refuses a
+second plugin of one name; two `authentication()` gates under one label over one route are refused, as which one
+authenticates would be ambiguous. `context.server.hasPlugin(name)` answers for the plugin's own scope and the ones
+around it: the routers or controller it is nested in, then the server. `corsPolicy()` answers a preflight from the
+settings of the route it lands on, and on a server one no `OPTIONS` route takes from its own; a `cors(...)` sets a
+preflight only where it covers that `OPTIONS` route; on a router or a controller it serves `OPTIONS /` and `OPTIONS /*`
+under that path, so an `OPTIONS` route of the application's at either path, or a second policy on a router at the same
+path, fails start-up with `ErrRouteConflict`.
 
 - Mounted routes compile as `app.mount(...)` compiles them: guards, authorization and the fallback policy, CSRF
   marks, routers' own `.with(...)` and the start-up checks. Mark a group the application does not own
@@ -698,14 +729,17 @@ Where it is registered decides what `context.app` reaches:
 - An `HTTPPlugin` mounts `new Router(...)` routers and runs on both applications; a handler it mounts narrows
   `ctx.platform` on `name` to reach Node's request.
 - A plugin that depends on a feature asks `context.hasFeature(name)` and throws `ErrFeatureNotInstalled`.
-- `context.app` is open only while the plugin registers. A middleware factory, a server callback and a context kept
-  past its slot are refused.
+- `context.server`'s operations are open only while the plugin registers. A middleware factory, a server callback
+  and a context kept past its registration are refused. `.server(...)`, `.basePath(...)`, a listener's callback and
+  a route-option configurer run before any server exists, and their context has no `server`.
 
 Hooks:
 
-- `app.hook(name, fn)` adds one to the application's own server, `l.hook(...)` to a listener's, and `context.app.hook(...)`
-  to a plugin's slot. The names are `onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`, `onRoute`, `onReady`
-  and `onClose`. A request hook has no path and no `next`: it answers with `ctx.body(...)` and fails by throwing.
+- `app.hook(name, fn)` adds one to the application's own server, `l.hook(...)` to a listener's, and
+  `context.server.hook(...)` to a plugin's scope. An `onRoute` hook may write `route.options` under keys of its own,
+  frozen once `onRoute` returns, and `ctx.options` reads them on each request. The names are `onRequest`,
+  `preHandler`, `onSend`, `onResponse`, `onError`, `onRoute`, `onReady` and `onClose`. A request hook has no path and
+  no `next`: it answers with `ctx.body(...)` and fails by throwing.
 - Plugin hooks run in the order the plugins are installed, and all of them run before the middleware chain. Headers
   that must reach a 401 the gate answers go in an `onRequest` hook of a plugin installed before `authentication()`:
   `examples/04-spa-dashboard/api/spa/security.ts` writes `helmet`'s headers that way: it checks that
@@ -829,7 +863,7 @@ app.listeners.get('admin')?.address // { host, port, path, origin }
   application's `.with(...)`, `.use(...)` and `.useFn(...)` take, and install on that server alone, after the same
   head slots. Nothing registered on the application reaches a listener, an authentication gate included, and
   `.basePath(...)` and `.serverCallback(...)` never do. What a plugin registered with `l.with(...)` mounts or adds
-  through `context.app` lands on that server alone.
+  through `context.server` lands on that server alone.
 - **Settings.** `l.server(...)` takes what the application's `.server(...)` takes: `NodeServerSettings` under
   `node()`, `BunServerSettings` under `bun()`, `ServerSettings` under none. TLS and HTTP/2 are switched by configuration there too.
 - **Authorization.** There is nothing listener-specific: a route on a listener requires what its router or controller
@@ -974,5 +1008,6 @@ await client.pets.post({ body: { name: 'Rex' } })
   segment holding more than one parameter or text beside one (`/near/:lat-:lng`, `/files/:name.json`), or a method
   with no verb: `client.$request('GET', '/pets/:id', { params: { id: 1 } })`. A trailing `?` makes a segment
   optional only when the segment starts with its parameter and has no constraint (`:id?`, `:lat-:lng?`), and the
-  parameters of such a segment are given together or not at all.
+  parameters of such a segment are given together or not at all. A route whose path ends in `/` is reached with
+  `$request`.
 - Static: `.with(staticFiles(s => s.serve(root, { prefix: '/static' })))`, after `buildStatic({ root })` from `@caffeinejs/static/build` in the build. That serves the files the build listed. It is not SPA history fallback — for a single-page application see [spa.md](spa.md), which is routing the application writes. A miss under a directory of the mount is a 404, not `index.html`.

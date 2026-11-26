@@ -74,7 +74,8 @@ describe('path normalization', () => {
     expect(r.routes[0].path).toBe('/action')
   })
 
-  it('collapses double slashes in path', () => {
+  // A leading run of slashes is one: a path starting "//" names another host to a browser.
+  it('reads a leading run of slashes as one', () => {
     @Controller('/api')
     class C4 {
       @Get('//double')
@@ -83,8 +84,8 @@ describe('path normalization', () => {
       }
     }
     void C4
-    const r = getRouteGroup(C4)!.toRouteGroup()
-    expect(r.routes[0].path).toBe('/double')
+
+    expect(getRouteGroup(C4)!.toRouteGroup().routes[0].path).toBe('/double')
   })
 
   it('preserves root path', () => {

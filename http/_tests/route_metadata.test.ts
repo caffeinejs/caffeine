@@ -43,8 +43,8 @@ class Observer extends HTTPPlugin {
     super()
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRoute', route => {
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRoute', route => {
       this.seen.push({ methods: route.methods, url: route.url, route: route.route, group: route.group })
     })
   }

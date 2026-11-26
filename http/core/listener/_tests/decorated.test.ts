@@ -42,8 +42,8 @@ class Marking extends HTTPPlugin {
     this.name = `marking:${header}`
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRequest', ctx => void ctx.header(this.#header, 'yes'))
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRequest', ctx => void ctx.header(this.#header, 'yes'))
   }
 }
 

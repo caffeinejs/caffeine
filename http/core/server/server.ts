@@ -7,14 +7,13 @@ import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 
 import { stripBasePath } from '../../base_path.js'
 import { ErrWaitUntilClosed, type ServerContext } from '../../context.js'
-import { CACHING_PLUGIN } from '../../plugin_marks.js'
 import { compileConstraints, type CompiledConstraints } from '../constraints/derive.js'
 import { kCookieSettings } from '../cookie/keys.js'
 import { kCookieFlush, kPendingCookies, ServerCookies, type CookieWriter } from '../cookie/server_cookies.js'
 import { csrfCoversOf } from '../csrf/csrf.js'
 import { problemEncoder } from '../error/encode.js'
 import { ErrorHandlerProvider } from '../error/handler.js'
-import { ErrHTTPBadRequest, ErrHTTPNotFound, ErrHTTPServiceUnavailable } from '../error/http.js'
+import { ErrHTTPNotFound, ErrHTTPServiceUnavailable } from '../error/http.js'
 import { kErrorHandlingOptions } from '../error/keys.js'
 import { newProblem } from '../error/problem.js'
 import type { GuardTarget } from '../guards/guard.js'
@@ -30,15 +29,15 @@ import {
   type SendPayload,
 } from '../lifecycle/lifecycle.js'
 import { callOnRoute, openDefinition, type RouteDefinition } from '../lifecycle/route_definition.js'
-import { findMyWayMatcher, preflightTable, type PreflightTable } from '../matcher/find_my_way.js'
 import { ErrRouteConflict, type DerivedConstraints, type RouteMatch, type RouteMatcher } from '../matcher/matcher.js'
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
-import { joinPaths, pathsOf } from '../routing/paths.js'
+import { joinRoutePath } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
+import { ScopeChains } from '../routing/scope_chain.js'
 import { assertGated, gateOf } from '../security/gate.js'
 import type { CompiledSerializer } from '../validation/validation.js'
 import { answer, compileSerializers, connectionFields, HeldStream, NO_SERIALIZER } from './answer.js'
-import { Context, kAppendCookies, type ServerShared } from './context.js'
+import { Context, kAppendCookies, pathEnd, requestPath, type ServerShared } from './context.js'
 import { answerError, configurationError, defaultProblem, sendProblem } from './error.js'
 import { compileLevel, composeRouteHooks, type LevelInput, type StoreHooks } from './hooks.js'
 import { compileRouteInput, readInput, type RouteInput } from './input.js'
@@ -76,8 +75,16 @@ export interface HTTPServerInput {
   /** The slot of each request's frame that holds its context: what the container resolves `Context` from. */
   readonly contextKey: ContextKey<Context>
   readonly logger: Logger
-  /** What sits in front of the routes: the server's root level, and each scope's at one path. */
-  readonly levels: { readonly root: LevelInput; of(scope: RouteGroupScope): LevelInput }
+  /**
+   * What sits in front of the routes: the server's root level, and each scope's at one place, the mount chain
+   * `scopes[0..at]`. `scoped` is every scope's hooks, in the order they registered: their server hooks run whatever
+   * routes the scope holds.
+   */
+  readonly levels: {
+    readonly root: LevelInput
+    readonly scoped: Iterable<HookBatch>
+    of(scopes: readonly RouteGroupScope[], at: number): LevelInput
+  }
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, string | undefined>> = Object.freeze({})
@@ -97,8 +104,6 @@ export class HTTPServer {
   readonly #shared: ServerShared
   readonly #matcher: RouteMatcher<RouteStore>
   readonly #constraints: CompiledConstraints
-  /** Where a preflight looks its route up once some route is constrained: a table that ignores constraints. */
-  readonly #preflight: PreflightTable<RouteDefinition> | undefined
   readonly #notFound: RouteStore
   readonly #basePath: string | undefined
   readonly #container: Container
@@ -107,9 +112,9 @@ export class HTTPServer {
   readonly #settings: ResolvedServerSettings
   readonly #input: HTTPServerInput
   readonly #root: StoreHooks
-  /** Each scope's level, by key then path: one router nested under two parents is one key at two paths. */
-  readonly #scoped = new Map<object, Map<string, ScopeLevel>>()
-  /** Every batch whose server hooks run on this server: the root's, then each served scope's, once each. */
+  /** Each scope's level, by mount chain. */
+  readonly #scoped = new ScopeChains<ScopeLevel>()
+  /** Every batch whose server hooks run on this server: the root's, then each scope's, in the order they registered. */
   readonly #batches = new Set<HookBatch>()
 
   /** Each request still in flight, to cut: abort its handler, or its answer once it has one. */
@@ -150,25 +155,8 @@ export class HTTPServer {
       application: settings.application,
       trustProxy: settings.trustProxy,
       requestIDHeader: settings.requestIDHeader,
-      router: settings.router,
       bodyLimit: settings.bodyLimit,
       cookies: cookieSettings.enabled ? ServerCookies.resolve(cookieSettings, container, writeCookies) : undefined,
-      routeOf: (method, url) => {
-        if (this.#preflight !== undefined) {
-          return this.#preflight.match(method, url)
-        }
-
-        try {
-          const definition = this.#matcher.match(method, url, undefined)?.store.definition
-          return definition === undefined ? undefined : [definition]
-        } catch (err) {
-          // A URL that cannot be decoded names no route.
-          if (err instanceof ErrHTTPBadRequest) {
-            return undefined
-          }
-          throw err
-        }
-      },
     }
     this.#basePath = input.basePath
     this.#container = container
@@ -178,16 +166,11 @@ export class HTTPServer {
     this.#settings = settings
     this.#input = input
     this.#constraints = compileConstraints(input.routeGroups, settings.constraints)
-    // Without a constrained route a preflight finds its route in the matcher itself. The table is find-my-way's: under
-    // a matcher of the application's own, a preflight finds only unconstrained routes, and a constrained one goes
-    // unanswered.
-    this.#preflight =
-      this.#constraints.derives && settings.matcher === findMyWayMatcher ? preflightTable(settings.router) : undefined
-    this.#matcher = settings.matcher<RouteStore>(settings.router, settings.constraints)
+    this.#matcher = settings.matcher<RouteStore>(settings.constraints)
     const root = compileLevel(input.levels.root, settings)
     const vary = this.#constraints.vary
     this.#root = vary === undefined ? root : { ...root, onSend: [vary, ...root.onSend] }
-    for (const batch of input.levels.root.batches) {
+    for (const batch of [...input.levels.root.batches, ...input.levels.scoped]) {
       this.#batches.add(batch)
     }
     this.#notFound = {
@@ -255,21 +238,25 @@ export class HTTPServer {
 
       let failure: Error | undefined
       let match: RouteMatch<RouteStore> | null = null
+      const end = pathEnd(url)
+      // As sent until it is read: what a request refused before that carries.
+      let path = url.slice(0, end)
 
-      if (this.#closing) {
-        failure = new ErrHTTPServiceUnavailable('The server is closing')
-      } else {
-        try {
+      try {
+        path = requestPath(path)
+        if (this.#closing) {
+          failure = new ErrHTTPServiceUnavailable('The server is closing')
+        } else {
           match = this.#matcher.match(
             method,
-            url,
+            path,
             this.#constraints.derives
               ? this.#constraints.derive({ header: name => platform.header(native, name) })
               : undefined,
           )
-        } catch (err) {
-          failure = asError(err)
         }
+      } catch (err) {
+        failure = asError(err)
       }
 
       const store = match?.store ?? this.#notFound
@@ -281,9 +268,10 @@ export class HTTPServer {
         id,
         method,
         url,
+        path,
         seenBase,
         match?.params ?? EMPTY_PARAMS,
-        match?.query ?? queryAfter(url),
+        queryAfter(url, end),
         store,
         !this.#closing,
       )
@@ -335,7 +323,7 @@ export class HTTPServer {
     flight.sent()
   }
 
-  /** Runs every `onReady`, the root's plugins' first, then each served scope's, in order. */
+  /** Runs every `onReady`, the root's plugins' first, then each scope's, in the order they registered. */
   async ready(): Promise<void> {
     for (const batch of this.#batches) {
       for (const onReady of batch.onReady) {
@@ -483,6 +471,19 @@ export class HTTPServer {
     }
   }
 
+  /** Registers a route that gives way to one already at its method and path: whether it registered. */
+  #yielding(method: string, path: string, declared: DerivedConstraints | undefined, store: RouteStore): boolean {
+    try {
+      this.#matcher.add(method, path, declared, store)
+      return true
+    } catch (err) {
+      if (!(err instanceof ErrRouteConflict)) {
+        throw err
+      }
+      return false
+    }
+  }
+
   #register(groups: readonly IRouteGroup<Context>[], settings: ResolvedServerSettings): RouteRecord[] {
     const registered: Array<{
       readonly route: IRoute<Context>
@@ -491,55 +492,40 @@ export class HTTPServer {
       readonly methods: string[]
       readonly url: string
     }> = []
-    const twins: Array<{
+    // A GET route's HEAD twin, registered after every explicit route, giving way to what is there.
+    type Twin = {
       readonly store: RouteStore
-      readonly paths: readonly string[]
+      readonly path: string
       readonly methods: string[]
       readonly declared: DerivedConstraints | undefined
-    }> = []
+    }
+    const twins: Twin[] = []
 
     for (const group of groups) {
       for (const route of group.routes) {
         const methods = [...new Set(route.method.map(method => method.toUpperCase()))]
-        const paths = pathsOf(group.prefix, joinPaths(group.path, route.path), settings.router.ignoreTrailingSlash)
+        const path = joinRoutePath((group.prefix ?? '') + group.path, route.path)
 
-        assertServable(route, methods, paths[0])
-        const declared = this.#constraints.of(route, methods, paths[0])
+        assertServable(route, methods, path)
+        const declared = this.#constraints.of(route, methods, path)
 
-        const store = this.#storeOf(group, route, methods, paths[0], settings)
+        const store = this.#storeOf(group, route, methods, path, settings)
 
         for (const method of methods) {
-          for (const path of paths) {
-            this.#matcher.add(method, path, declared, store)
-            this.#preflight?.add(method, path, store.definition!)
-          }
+          this.#matcher.add(method, path, declared, store)
         }
 
-        registered.push({ route, group, definition: store.definition!, methods, url: paths[0] })
+        registered.push({ route, group, definition: store.definition!, methods, url: path })
 
         if (methods.includes('GET')) {
-          twins.push({ store: { ...store, twin: true }, paths, methods, declared })
+          twins.push({ store: { ...store, twin: true }, path, methods, declared })
         }
       }
     }
 
     // After every explicit route, so an explicit HEAD route wins whichever was declared first.
     for (const twin of twins) {
-      let served = false
-
-      for (const path of twin.paths) {
-        try {
-          this.#matcher.add('HEAD', path, twin.declared, twin.store)
-          this.#preflight?.add('HEAD', path, twin.store.definition!)
-          served = true
-        } catch (err) {
-          if (!(err instanceof ErrRouteConflict)) {
-            throw err
-          }
-        }
-      }
-
-      if (served && !twin.methods.includes('HEAD')) {
+      if (this.#yielding('HEAD', twin.path, twin.declared, twin.store) && !twin.methods.includes('HEAD')) {
         twin.methods.push('HEAD')
       }
     }
@@ -579,10 +565,9 @@ export class HTTPServer {
     }
 
     const scopes = group.scopes ?? []
-    const levels = scopes.map(scope => this.#level(scope))
+    const levels = scopes.map((_scope, at) => this.#level(scopes, at))
 
     const batches = [this.#input.levels.root.batches, ...levels.map(level => level.batches)]
-    assertCachingCovered(route, batches, name, settings.application)
 
     // A copy: the automatic HEAD route is added to `methods` later, and is not one the route declared.
     const open = openDefinition(route, group, Object.freeze([...methods]), url)
@@ -612,26 +597,16 @@ export class HTTPServer {
     }
   }
 
-  // A scope's level at one path, compiled on first use; its batches join the server's once.
-  #level(scope: RouteGroupScope): ScopeLevel {
-    let byPath = this.#scoped.get(scope.key)
-    if (byPath === undefined) {
-      byPath = new Map()
-      this.#scoped.set(scope.key, byPath)
-    }
-
-    let level = byPath.get(scope.path)
-    if (level === undefined) {
-      const input = this.#input.levels.of(scope)
-      level = { hooks: compileLevel(input, this.#settings), batches: input.batches }
-      byPath.set(scope.path, level)
-
-      for (const batch of input.batches) {
-        this.#batches.add(batch)
-      }
-    }
-
-    return level
+  // A scope's level at one place, the mount chain `scopes[0..at]`, compiled on first use.
+  #level(scopes: readonly RouteGroupScope[], at: number): ScopeLevel {
+    return this.#scoped.at(
+      scopes,
+      () => {
+        const input = this.#input.levels.of(scopes, at)
+        return { hooks: compileLevel(input, this.#settings), batches: input.batches }
+      },
+      at,
+    )
   }
 }
 
@@ -1242,42 +1217,6 @@ function assertServable(route: IRoute<Context>, methods: readonly string[], url:
   }
 }
 
-/**
- * Refuses a route that declares caching with no HTTP caching over it, which would answer as if it declared nothing, and
- * a route with two, which would run two caches. `batches` are the server's and each scope's around the route.
- */
-function assertCachingCovered(
-  route: IRoute<Context>,
-  batches: readonly (readonly HookBatch[])[],
-  name: string,
-  application: string,
-): void {
-  let installs = 0
-  for (const level of batches) {
-    for (const batch of level) {
-      if (batch.name === CACHING_PLUGIN) {
-        installs++
-      }
-    }
-  }
-
-  if (installs > 1) {
-    throw configurationError(
-      `Cannot serve "${name}" on the ${application}: HTTP caching is installed more than once over it, among its server, routers and controller`,
-      'Keep one ".with(HTTPCaching(...))" or "@Use(HTTPCaching(...))" over the route, and remove the others',
-    )
-  }
-
-  if (installs === 0 && (Object.hasOwn(route.options, 'cache') || Object.hasOwn(route.options, 'cacheInvalidate'))) {
-    throw configurationError(
-      `Cannot serve "${name}" on the ${application}: it declares @CacheControl or @CacheInvalidate and no HTTP caching covers it`,
-      'Add ".with(HTTPCaching(...))" to the application builder',
-      'On a listener, add it there: ".listener(name, l => l.with(HTTPCaching(...)))"',
-      'Install it on the route group with "router.with(HTTPCaching(...))" or "@Use(HTTPCaching(...))"',
-    )
-  }
-}
-
 function lengthOf(payload: SendPayload | HeldStream): number | undefined {
   if (typeof payload === 'string') {
     return Buffer.byteLength(payload)
@@ -1286,9 +1225,14 @@ function lengthOf(payload: SendPayload | HeldStream): number | undefined {
   return payload instanceof Uint8Array ? payload.byteLength : undefined
 }
 
-function queryAfter(url: string): string {
-  const at = url.indexOf('?')
-  return at === -1 ? '' : url.slice(at + 1)
+// The query of the request target `url` whose path ends at `end`: what follows a `?` there, up to a fragment.
+function queryAfter(url: string, end: number): string {
+  if (url.charCodeAt(end) !== 63) {
+    return ''
+  }
+
+  const hash = url.indexOf('#', end + 1)
+  return hash === -1 ? url.slice(end + 1) : url.slice(end + 1, hash)
 }
 
 // A body that will not go out: a stream is cancelled, so its source stops.

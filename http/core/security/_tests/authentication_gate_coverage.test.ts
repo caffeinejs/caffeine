@@ -56,8 +56,8 @@ function pluginRoute(path: string) {
     new (class extends HTTPPlugin {
       override readonly name = `plugin-route:${path}`
 
-      register({ app }: HTTPSetupContext): void {
-        app.mount(new Router(path).get('/', ok))
+      register({ server }: HTTPSetupContext): void {
+        server.mount(new Router(path).get('/', ok))
       }
     })()
 }

@@ -1,5 +1,15 @@
+/**
+ * A Map that replaces what outer levels hold under its key rather than merging with it when the levels are laid over
+ * each other: route options make one where a key's `null` drops what the groups set.
+ */
+export class ReplacingMap<K, V> extends Map<K, V> {}
+
 export function mergeValue(existing: unknown, incoming: unknown): unknown {
   if (existing === undefined) {
+    return incoming
+  }
+
+  if (incoming instanceof ReplacingMap) {
     return incoming
   }
 

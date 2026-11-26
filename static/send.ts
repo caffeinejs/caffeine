@@ -1,17 +1,17 @@
-import { ErrHTTPNotFound, type Responder, type RouteDefinition } from '@caffeinejs/http'
+import { ErrHTTPNotFound, type Responder, type ServedRoute } from '@caffeinejs/http'
 
 import { resolveRoot } from './builder.js'
 import type { StaticRoot } from './config.js'
 import { ErrSendFileUnavailable } from './errors.js'
 import { FileResponder } from './serve.js'
-import { mountsByRoute } from './static.js'
+import { kServedMounts } from './static.js'
 
 /**
  * The slice of an `IContext` {@link sendFile} reads: the route, whose server's mounts it sends from. A structural
  * slice, so every context fits.
  */
 export interface StaticContext {
-  readonly route: RouteDefinition | undefined
+  readonly route: ServedRoute | undefined
 }
 
 /**
@@ -43,7 +43,7 @@ export function sendFile(ctx: StaticContext, path: string, root?: StaticRoot): R
     throw new ErrSendFileUnavailable(undefined, false, false)
   }
 
-  const served = mountsByRoute.get(route)
+  const served = route.options[kServedMounts]
 
   if (served === undefined) {
     throw new ErrSendFileUnavailable()

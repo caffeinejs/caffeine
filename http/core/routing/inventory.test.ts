@@ -227,7 +227,7 @@ describe('route inventory across listeners', () => {
   it('lists the routes a plugin mounted on a listener under that listener', async () => {
     class Metrics extends HTTPPlugin {
       register(context: HTTPSetupContext): void {
-        context.app.mount(new Router('/metrics').get('/', () => 'up'))
+        context.server.mount(new Router('/metrics').get('/', () => 'up'))
       }
     }
 

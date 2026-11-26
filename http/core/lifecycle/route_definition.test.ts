@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../../plugin.js'
+import { createWebApplication } from '../../application.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
+import { Router } from '../routing/programmatic/programmatic.js'
 import type { IRoute, IRouteGroup } from '../routing/route.js'
 import { HookBatch } from './batch.js'
 import { callOnRoute, openDefinition } from './route_definition.js'
@@ -9,6 +11,7 @@ import { callOnRoute, openDefinition } from './route_definition.js'
 declare module '../routing/options.js' {
   interface RouteOptions {
     testOpened?: boolean
+    testWritten?: string
   }
 }
 
@@ -36,6 +39,26 @@ describe('openDefinition', () => {
     expect(() => open.definition.hook('onRequest', () => undefined)).toThrow(
       'Cannot add a hook to "GET|POST /pets": onRoute has returned',
     )
+  })
+
+  // What a hook writes is this route's on this server: the compiled route, which every server shares, keeps its own.
+  it('hands each definition a copy of the route options to write', () => {
+    const open = openDefinition(route, group, ['GET'], '/pets')
+
+    open.definition.options.testWritten = 'here'
+
+    expect(open.definition.options).toEqual({ testOpened: true, testWritten: 'here' })
+    expect(route.options).toEqual({ testOpened: true })
+  })
+
+  // Read on every request: a write after start-up would change a route's setting under requests in flight.
+  it('freezes the options once onRoute has returned', () => {
+    const open = openDefinition(route, group, ['GET'], '/pets')
+    open.close()
+
+    expect(() => {
+      open.definition.options.testWritten = 'late'
+    }).toThrow(TypeError)
   })
 
   it('refuses a point that is not a request hook', () => {
@@ -68,5 +91,56 @@ describe('callOnRoute', () => {
     expect(() => callOnRoute([batch], openDefinition(route, group, ['GET'], '/pets').definition)).toThrow(
       'Cannot run the onRoute hook for "GET /pets": it returned a promise',
     )
+  })
+})
+
+describe('route options written in onRoute', () => {
+  class Writing extends HTTPPlugin {
+    register({ server }: HTTPSetupContext): void {
+      server.hook('onRoute', route => {
+        route.options.testWritten = 'written'
+      })
+    }
+  }
+
+  class Reading extends HTTPPlugin {
+    constructor(readonly seen: unknown[]) {
+      super()
+    }
+
+    register({ server }: HTTPSetupContext): void {
+      server.hook('onRoute', route => void this.seen.push(route.options.testWritten))
+    }
+  }
+
+  // How a plugin keeps a setting per route without a map of its own: the request reads it back.
+  it('reaches the request through ctx.options', async () => {
+    const app = createWebApplication()
+      .with(() => new Writing())
+      .mount(new Router('/w').get('/', ctx => ({ written: ctx.options.testWritten ?? null })))
+
+    try {
+      await app.bootstrap()
+
+      expect(await (await app.request('/w')).json()).toEqual({ written: 'written' })
+    } finally {
+      await app.close()
+    }
+  })
+
+  it("is seen by a later plugin's onRoute", async () => {
+    const seen: unknown[] = []
+    const app = createWebApplication()
+      .with(() => new Writing())
+      .with(() => new Reading(seen))
+      .mount(new Router('/w').get('/', () => 'ok'))
+
+    try {
+      await app.bootstrap()
+
+      expect(seen).toEqual(['written'])
+    } finally {
+      await app.close()
+    }
   })
 })

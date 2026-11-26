@@ -158,6 +158,33 @@ describe('HTTPServer', () => {
     expect((await fetchOn(served, '/s/%E0%A4%A')).status).toBe(400)
   })
 
+  it('refuses a path that cannot be decoded with a 400 whatever its method', async () => {
+    const served = await serve(new Router().get('/a').handler(() => 'a'))
+
+    expect((await fetchOn(served, '/%E0%A4%A', { method: 'DELETE' })).status).toBe(400)
+  })
+
+  // A fragment is no part of the query: `?b=1#c` holds `b=1`, and `#c?d=2` holds no query at all.
+  it('reads the query up to a fragment', async () => {
+    const served = await serve(new Router().get('/q').handler(ctx => ctx.req.query()))
+
+    expect([
+      await (await fetchOn(served, '/q?b=1#c')).json(),
+      await (await fetchOn(served, '/q#c?d=2')).json(),
+    ]).toEqual([{ b: '1' }, {}])
+  })
+
+  it('gives a refused request its path without the query', async () => {
+    const served = await serve(
+      new Router().get('/a').handler(() => 'a'),
+      a => a.hook('onSend', ctx => void ctx.header('x-path', ctx.req.path)),
+    )
+
+    const res = await fetchOn(served, '/%E0%A4%A?q=1')
+
+    expect([res.status, res.headers.get('x-path')]).toEqual([400, '/%E0%A4%A'])
+  })
+
   it('serves HEAD for a GET route with the length and no body', async () => {
     const served = await serve(new Router('/s').get('/').handler(() => 'héllo'))
 
@@ -249,6 +276,20 @@ describe('HTTPServer', () => {
 
     expect(await (await fetchOn(served, '/v1')).text()).toBe('root')
     expect(await (await fetchOn(served, '/v1/')).text()).toBe('root')
+  })
+
+  // A trailing slash never makes another route, a group root's included.
+  it("answers a router's root at its path with and without the slash", async () => {
+    const served = await serve(new Router('/r').get('/', () => 'root'))
+
+    expect([(await fetchOn(served, '/r')).status, (await fetchOn(served, '/r/')).status]).toEqual([200, 200])
+  })
+
+  // A trailing slash never makes another route: a route declared with one answers both forms.
+  it('answers a route declared with a trailing slash at both forms', async () => {
+    const served = await serve(new Router('/r').get('/x/', () => 'x'))
+
+    expect([(await fetchOn(served, '/r/x/')).status, (await fetchOn(served, '/r/x')).status]).toEqual([200, 200])
   })
 
   it('strips the base path, and routes a request without it as it came', async () => {
@@ -1363,84 +1404,25 @@ describe('HTTPServer hooks', () => {
   })
 })
 
-/**
- * What the caching package does to a server and a route, without the package: a plugin registered under its name, and
- * a `cache` entry in the route's options. The plugin adds a hook, as the real one does, so its batch is kept.
- */
+/** A route's caching options are data for a plugin: with none over the route to read them, it is served as declared. */
 describe('a route that declares caching', () => {
-  class Caching extends HTTPPlugin {
-    override readonly name = '@caffeinejs/caching'
-
-    register(context: HTTPSetupContext): void {
-      context.app.hook('onRoute', () => {})
-    }
-  }
-
-  const caching = () => new Caching()
-  function cached<R extends AnyRouter>(router: R): R {
+  // Declaring caching is the route's setting for a plugin; with none to read it, the route answers as it would anyway.
+  it('serves every request when nothing installed caching', async () => {
+    let calls = 0
+    const router = new Router('/cache-none')
     router
       .get('/x')
       .config({ cache: { ttl: 60 * Second } } as never)
-      .handler(() => 'x')
-    return router
-  }
-
-  async function failure(): Promise<unknown> {
-    return app!.bootstrap().then(
-      () => undefined,
-      (err: unknown) => err,
-    )
-  }
-
-  // It would answer every request as if it declared nothing.
-  it('is refused when nothing installed caching', async () => {
-    app = createWebApplication().mount(cached(new Router('/cache-none')))
-
-    const err = await failure()
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect((err as Error).message).toContain(
-      'Cannot serve "GET /cache-none/x" on the fetch application: it declares @CacheControl or @CacheInvalidate and no HTTP caching covers it',
-    )
-  })
-
-  it('starts when the application installed caching', async () => {
-    app = createWebApplication()
-      .with(caching)
-      .mount(cached(new Router('/cache-root')))
+      .handler(() => {
+        calls++
+        return 'x'
+      })
+    app = createWebApplication().mount(router)
     await app.bootstrap()
 
-    expect((await fetchOn(app, '/cache-root/x')).status).toBe(200)
-  })
+    await fetchOn(app, '/cache-none/x')
+    await fetchOn(app, '/cache-none/x')
 
-  // A router's install covers its own routes and says nothing about its sibling's.
-  it('starts when its own router installed caching, and still refuses a sibling without it', async () => {
-    app = createWebApplication().mount(cached(new Router('/cache-own').with(caching)))
-    await app.bootstrap()
-    expect((await fetchOn(app, '/cache-own/x')).status).toBe(200)
-    await app.close()
-
-    app = createWebApplication().mount(
-      cached(new Router('/cache-own').with(caching)),
-      cached(new Router('/cache-sibling')),
-    )
-
-    const err = await failure()
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect((err as Error).message).toContain('"GET /cache-sibling/x"')
-    expect((err as Error).message).toContain('no HTTP caching covers it')
-  })
-
-  // Two installs over one route would run two caches, each reporting every outcome.
-  it('is refused when its router installed caching under a server that did', async () => {
-    const nested = new Router('/cache-twice').with(caching)
-    nested.get('/x').handler(() => 'x')
-    app = createWebApplication().with(caching).mount(nested)
-
-    const err = await failure()
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect((err as Error).message).toContain('HTTP caching is installed more than once over it')
+    expect(calls).toBe(2)
   })
 })

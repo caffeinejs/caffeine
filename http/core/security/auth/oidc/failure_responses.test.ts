@@ -67,8 +67,8 @@ class SlowSend extends HTTPPlugin {
     super()
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onSend', async (_ctx, payload) => {
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onSend', async (_ctx, payload) => {
       this.runs.n++
       await sleep(20)
       return payload

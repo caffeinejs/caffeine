@@ -2,6 +2,7 @@ import { errMessage } from '@caffeinejs/std/err'
 
 import { stripBasePath } from '../../../../base_path.js'
 import type { HTTPSetupContext } from '../../../../plugin.js'
+import { isServerScope } from '../../../../plugin_slot.js'
 import { Router } from '../../../routing/programmatic/programmatic.js'
 import { accessControlExempt } from '../../exempt.js'
 import { ErrAuthConfiguration } from '../errors.js'
@@ -59,20 +60,48 @@ export function callbackFailure(err: unknown): {
 }
 
 /**
- * Serves each strategy's sign-in and callback routes on the engine, as a router outside access control, and
- * refuses a route of the application at either path.
+ * Serves each strategy's sign-in and callback routes in the scope `context.server` is, as a router outside access
+ * control, and refuses a route of that scope at either path. Each is served at its own path: under a router or a
+ * controller, that path must start with the scope's.
  *
  * Both are where a user who is not signed in yet arrives — sent back by the identity provider, or on the way to
- * it — so no gate, guard or fallback policy may stand in front of them.
+ * it — so they stand outside the gate and the fallback policy. Under a router or a controller, the guards it declares
+ * cover them as they cover its other routes.
+ *
+ * @throws ErrAuthConfiguration when a path is outside the scope, where the identity provider's redirect never lands.
  */
-export function mountOIDCRoutes(context: HTTPSetupContext, oidc: OIDCMeta, basePath: string): void {
+export function mountOIDCRoutes(context: HTTPSetupContext, oidc: OIDCMeta): void {
+  const { basePath, prefix } = context.server
   const routed = (path: string): string => routedPath(path, basePath)
+  // What the router below mounts nests under the scope's prefix: each path relative to it.
+  const local = (path: string): string => {
+    const at = routed(path)
+    const within = prefix === '' ? at : stripBasePath(at, prefix)
+    if (within === undefined) {
+      throw new ErrAuthConfiguration(
+        errMessage(`Cannot serve the OIDC route "${at}" from a gate under "${prefix}": the path is outside it`)
+          .solutions(
+            'Give the strategy a callback and a sign-in path under that path with "callbackURL(...)" and "loginPath(...)"',
+            'Or register a gate on the server, which serves them at any path',
+            'Or turn them off on this gate: "authentication(g => g.oidcRoutes(false))"',
+          )
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
+      )
+    }
+
+    return within
+  }
   const ownPaths = new Set(
     oidc.handlers.flatMap(({ callbackPath, handler }) => [routed(callbackPath), routed(handler.loginPath)]),
   )
+  const paths = oidc.handlers.map(({ callbackPath, handler }) => ({
+    callback: local(callbackPath),
+    login: local(handler.loginPath),
+  }))
   const named = new Set<string>()
 
-  context.app.hook('onRoute', route => {
+  context.server.hook('onRoute', route => {
     if (route.options.oidcRoute === OIDC_ROUTE) {
       return
     }
@@ -95,7 +124,13 @@ export function mountOIDCRoutes(context: HTTPSetupContext, oidc: OIDCMeta, baseP
     }
   })
 
-  context.app.hook('onReady', () => {
+  context.server.hook('onReady', () => {
+    // A gate on a router or a controller sees that one's routes alone: a route elsewhere may name a scheme it cannot
+    // see, so only a gate that sees every route of its server warns.
+    if (!isServerScope(context.server)) {
+      return
+    }
+
     const unreachable = unreachableStrategies(oidc, named)
     if (unreachable.length > 0) {
       const { message, detail } = unreachableText(unreachable)
@@ -107,16 +142,16 @@ export function mountOIDCRoutes(context: HTTPSetupContext, oidc: OIDCMeta, baseP
     .detail('http', { internal: true })
     .config(accessControlExempt(), { oidcRoute: OIDC_ROUTE })
 
-  for (const { handler } of oidc.handlers) {
+  for (const [at, { handler }] of oidc.handlers.entries()) {
     // A failure here — the provider cannot be reached — goes to the error handlers, which answer with the error's
     // public message.
-    router.get(routed(handler.loginPath)).handler(async ctx => {
+    router.get(paths[at]!.login).handler(async ctx => {
       await handler.startSignIn(ctx)
     })
   }
 
-  for (const { callbackPath, handler } of oidc.handlers) {
-    router.get(routed(callbackPath)).handler(async ctx => {
+  for (const [at, { handler }] of oidc.handlers.entries()) {
+    router.get(paths[at]!.callback).handler(async ctx => {
       try {
         await handler.processCallback(ctx)
         return undefined
@@ -141,5 +176,5 @@ export function mountOIDCRoutes(context: HTTPSetupContext, oidc: OIDCMeta, baseP
     })
   }
 
-  context.app.mount(router)
+  context.server.mount(router)
 }

@@ -1,13 +1,15 @@
+import FindMyWay from 'find-my-way'
 import { describe, expect, it } from 'vitest'
 
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
-import { findMyWayMatcher, preflightTable, starParameterRefusal } from './find_my_way.js'
-import { DEFAULT_ROUTER_FLAGS, ErrRouteConflict, type RouterFlags } from './matcher.js'
+import { requestPath } from '../server/context.js'
+import { findMyWayMatcher } from './find_my_way.js'
+import { ErrRouteConflict } from './matcher.js'
 
-function matcher(flags: Partial<RouterFlags> = {}) {
-  return findMyWayMatcher<string>({ ...DEFAULT_ROUTER_FLAGS, ...flags }, [])
+function matcher() {
+  return findMyWayMatcher<string>([])
 }
 
 /** An exact-match strategy: routes register under a string, a request derives it from `x-flavor`. */
@@ -31,46 +33,30 @@ describe('findMyWayMatcher', () => {
     const m = matcher()
     m.add('GET', '/a', undefined, 'store-a')
 
-    expect(m.match('GET', '/a', undefined)).toEqual({ store: 'store-a', params: {}, query: '' })
+    expect(m.match('GET', '/a', undefined)).toEqual({ store: 'store-a', params: {} })
   })
 
-  // The query is parsed only when a handler reads it, so the matcher hands it on as it was sent.
-  it('decodes parameters and leaves the query raw', () => {
+  it('matches case-sensitively', () => {
     const m = matcher()
-    m.add('GET', '/u/:id', undefined, 'user')
-
-    const found = m.match('GET', '/u/a%20b?x=1+2', undefined)
-
-    expect({ ...found!.params }).toEqual({ id: 'a b' })
-    expect(found!.query).toBe('x=1+2')
-  })
-
-  it('matches case-insensitively under caseSensitive: false', () => {
-    const m = matcher({ caseSensitive: false })
     m.add('GET', '/a', undefined, 'a')
 
-    expect(m.match('GET', '/A', undefined)?.store).toBe('a')
+    expect(m.match('GET', '/A', undefined)).toBe(null)
   })
 
-  it('matches a trailing slash under ignoreTrailingSlash', () => {
-    const m = matcher({ ignoreTrailingSlash: true })
+  // A trailing slash never makes another route.
+  it('matches a path with a trailing slash as the path without it', () => {
+    const m = matcher()
     m.add('GET', '/a', undefined, 'a')
 
     expect(m.match('GET', '/a/', undefined)?.store).toBe('a')
   })
 
-  it('collapses // under ignoreDuplicateSlashes', () => {
-    const m = matcher({ ignoreDuplicateSlashes: true })
-    m.add('GET', '/a/b', undefined, 'ab')
+  // The router reads the route syntax: what it cannot register is refused as configuration, naming the route.
+  it.each(['/a/*/b', '/a/:id(\\d+'])('refuses %s as ErrConfiguration, naming the route', path => {
+    const add = () => matcher().add('GET', path, undefined, 'x')
 
-    expect(m.match('GET', '//a//b', undefined)?.store).toBe('ab')
-  })
-
-  it('splits the query at ; under useSemicolonDelimiter', () => {
-    const m = matcher({ useSemicolonDelimiter: true })
-    m.add('GET', '/a', undefined, 'a')
-
-    expect(m.match('GET', '/a;x=1', undefined)?.query).toBe('x=1')
+    expect(add).toThrow(ErrConfiguration)
+    expect(add).toThrow(`Cannot register "GET ${path}"`)
   })
 
   it('registers QUERY', () => {
@@ -90,7 +76,7 @@ describe('findMyWayMatcher', () => {
   })
 
   it('selects a route by a custom strategy handed to the factory', () => {
-    const m = findMyWayMatcher<string>(DEFAULT_ROUTER_FLAGS, [flavorStrategy()])
+    const m = findMyWayMatcher<string>([flavorStrategy()])
     m.add('GET', '/d', { flavor: 'spicy' }, 'S')
     m.add('GET', '/d', { flavor: 'mild' }, 'M')
 
@@ -100,7 +86,7 @@ describe('findMyWayMatcher', () => {
 
   // find-my-way marks the strategy it is given: the caller's own object is never the one it marks.
   it('takes a frozen strategy', () => {
-    const m = findMyWayMatcher<string>(DEFAULT_ROUTER_FLAGS, [Object.freeze(flavorStrategy())])
+    const m = findMyWayMatcher<string>([Object.freeze(flavorStrategy())])
     m.add('GET', '/d', { flavor: 'spicy' }, 'S')
 
     expect(m.match('GET', '/d', { flavor: 'spicy' })!.store).toBe('S')
@@ -108,7 +94,7 @@ describe('findMyWayMatcher', () => {
 
   // find-my-way writes a strategy's name into the code it generates.
   it('refuses a strategy name that is not an identifier', () => {
-    const build = () => findMyWayMatcher<string>(DEFAULT_ROUTER_FLAGS, [{ ...flavorStrategy(), name: 'x-tenant' }])
+    const build = () => findMyWayMatcher<string>([{ ...flavorStrategy(), name: 'x-tenant' }])
 
     expect(build).toThrow(ErrConfiguration)
     expect(build).toThrow('Cannot use the constraint strategy "x-tenant": its name is not a JavaScript identifier')
@@ -133,40 +119,6 @@ describe('findMyWayMatcher', () => {
     m.add('GET', '/h', { host }, 'A')
 
     expect(() => m.add('GET', '/h', { host }, 'B')).toThrow('Cannot register "GET /h" for host "/.*\\.example$/"')
-  })
-
-  // find-my-way gives such a parameter the wildcard's name: whoever reads params['*'] could not tell the two apart.
-  describe('a parameter named *', () => {
-    it('is refused, naming the route', () => {
-      const add = () => matcher().add('GET', '/assets/:*', undefined, 'x')
-
-      expect(add).toThrow(ErrConfiguration)
-      expect(add).toThrow('a parameter named "*" reads as a wildcard, whose value has that name')
-      expect(add).toThrow('"/assets/:*"')
-    })
-
-    it.each(['/:*', '/a/:x-:*', '/a/:*?'])('is refused in %s', url => {
-      expect(() => matcher().add('GET', url, undefined, 'x')).toThrow(ErrConfiguration)
-    })
-
-    it('leaves a wildcard and a named parameter alone', () => {
-      expect(() => matcher().add('GET', '/assets/:name/*', undefined, 'x')).not.toThrow()
-    })
-
-    it.each(['*tail', 'name:*'])('serves a route with the distinct parameter name %s', name => {
-      const m = matcher()
-      m.add('GET', `/assets/:${name}`, undefined, 'x')
-
-      expect(m.match('GET', '/assets/report.txt', undefined)?.params[name]).toBe('report.txt')
-    })
-
-    // An escaped colon is text, and a parameter's regular expression is the parameter's, whatever it holds.
-    it.each([['/a::*'], ['/files/:name(^[a-z]+:*$)'], ['/files/:name(^\\(:*\\)$)'], ['/files/:name(:*']])(
-      'reads no parameter named * in %s',
-      url => {
-        expect(starParameterRefusal(url)).toBe(undefined)
-      },
-    )
   })
 
   it('refuses a path not starting with / as ErrConfiguration, not an assertion', () => {
@@ -198,48 +150,41 @@ describe('findMyWayMatcher', () => {
   })
 })
 
-// What a preflight finds: every route of a method and path, whatever constraints set them apart.
-describe('preflightTable', () => {
-  it('files routes find-my-way takes for one together, whatever their parameter names', () => {
-    const table = preflightTable<string>(DEFAULT_ROUTER_FLAGS)
-    table.add('GET', '/pets/:id', 'a')
-    table.add('GET', '/pets/:petId', 'b')
+// The matcher is handed ctx.req.path and find-my-way decodes it again: that second decoding must change nothing, so the
+// router binds what it would bind from the target as sent.
+describe('a path requestPath read', () => {
+  const paths = ['/admin/:x', '/files/*', '/a', '/café', '/p100%']
 
-    expect(table.match('GET', '/pets/7')).toEqual(['a', 'b'])
-  })
+  it.each([
+    '/admin/%61b',
+    '/admin/a%2Fb',
+    '/admin/a%2fb',
+    '/files/a%2Fb/c%20d',
+    '/files/%E2%82%AC/%3F',
+    '/a?x=1',
+    '/%61',
+    '/admin/x/',
+    '/caf%C3%A9',
+    '/admin/100%25',
+    '/p100%25',
+    '/admin/%2525',
+    '/files/%2561/%252F',
+    '/files/%25%32%46',
+    '/admin/a%3Bb%2523',
+  ])('matches %s as find-my-way matches the target as sent', target => {
+    const raw = FindMyWay({ ignoreTrailingSlash: true })
+    const m = matcher()
+    for (const path of paths) {
+      raw.on('GET', path, () => undefined, path)
+      m.add('GET', path, undefined, path)
+    }
 
-  it('files paths of another case together under caseSensitive: false', () => {
-    const table = preflightTable<string>({ ...DEFAULT_ROUTER_FLAGS, caseSensitive: false })
-    table.add('GET', '/Pets', 'a')
-    table.add('GET', '/pets', 'b')
+    const sent = raw.find('GET', target)
+    const found = m.match('GET', requestPath(target), undefined)
 
-    expect(table.match('GET', '/PETS')).toEqual(['a', 'b'])
-  })
-
-  // `findRoute` reads a path as written: the table rewrites it as `on` does before looking it up.
-  it.each<[string, Partial<RouterFlags>, string, string, string]>([
-    ['an optional parameter', {}, '/users', '/users/:id?', '/users'],
-    ['duplicate slashes', { ignoreDuplicateSlashes: true }, '/a/b', '/a//b', '/a/b'],
-    ['a trailing slash', { ignoreTrailingSlash: true }, '/a', '/a/', '/a'],
-  ])('files a route under %s with the route it shares a path with', (_what, flags, first, second, url) => {
-    const table = preflightTable<string>({ ...DEFAULT_ROUTER_FLAGS, ...flags })
-    table.add('GET', first, 'a')
-    table.add('GET', second, 'b')
-
-    expect(table.match('GET', url)).toEqual(['a', 'b'])
-  })
-
-  it('finds nothing for a method no route of the path serves', () => {
-    const table = preflightTable<string>(DEFAULT_ROUTER_FLAGS)
-    table.add('GET', '/pets/:id', 'a')
-
-    expect(table.match('POST', '/pets/7')).toBe(undefined)
-  })
-
-  it('finds nothing for a path that cannot be decoded', () => {
-    const table = preflightTable<string>(DEFAULT_ROUTER_FLAGS)
-    table.add('GET', '/:p', 'p')
-
-    expect(table.match('GET', '/%E0%A4%A')).toBe(undefined)
+    expect(found === null ? null : { store: found.store, params: { ...found.params } }).toEqual(
+      sent === null ? null : { store: sent.store, params: { ...sent.params } },
+    )
+    expect(found).not.toBe(null)
   })
 })

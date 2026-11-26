@@ -2,7 +2,6 @@ export { controllerClient, type ControllerTestClient } from './controller_client
 export { controllerTypedClient, type ControllerTypedTestClient } from './controller_typed_client.js'
 export {
   ErrFetchFailed,
-  ErrMissingRouteParam,
   ErrNoRouter as ErrNoRoutesForController,
   ErrTestClientAlreadyReady,
   ErrTestClientTarget,

@@ -1,183 +1,49 @@
-import { errMessage } from '@caffeinejs/std/err'
-import { pathToRegexp } from 'path-to-regexp'
-
-import { ErrConfiguration } from '../error/common.js'
-import { ErrHTTPBadRequest } from '../error/http.js'
-import type { RouterFlags } from '../matcher/matcher.js'
+import { joinRoutePath, literalPrefix, normalizeRoutePath, parseRoutePattern, underPrefix } from '../routing/paths.js'
+import { configurationError } from '../server/error.js'
 import type { MiddlewarePath } from './middleware.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
-// Path matching for middleware registered under a path. It normalizes the URL the way the router does, so a path-scoped
-// middleware cannot be skipped by a request the router still sends to the guarded route.
+// Path matching for middleware registered under a path, against `ctx.req.path`.
 
-/** The router flags path matching follows. */
-export type PathFlags = Partial<
-  Pick<RouterFlags, 'ignoreTrailingSlash' | 'ignoreDuplicateSlashes' | 'useSemicolonDelimiter'>
->
-
-// Encoded characters where decodeURIComponent(x) !== decodeURI(x): % # $ & + , / : ; = ? @
-const RESERVED_ENCODINGS = new Set(['25', '23', '24', '26', '2B', '2C', '2F', '3A', '3B', '3D', '3F', '40'])
-
-/** What a middleware's path matches: a prefix, on a segment boundary. */
-export function compilePrefix(path: MiddlewarePath): RegExp {
-  return pathToRegexp(typeof path === 'string' ? sanitizePrefix(path) : path.map(sanitizePrefix), { end: false }).regexp
-}
-
-/** The path of `url`, before its `?` or `#`. */
-export function sanitizeURL(url: string): string {
-  for (let i = 0; i < url.length; i++) {
-    const charCode = url.charCodeAt(i)
-    if (charCode === 63 || charCode === 35) {
-      return url.slice(0, i)
-    }
-  }
-  return url
+/**
+ * What a middleware's path matches: each of its literal prefixes, on whole segments and case-sensitively, as the router
+ * matches a route.
+ */
+export function prefixMatcher(path: MiddlewarePath): (path: string) => boolean {
+  const prefixes = pathsOf(path).map(literalPrefix)
+  return request => prefixes.some(prefix => underPrefix(request, prefix))
 }
 
 /**
- * The path of `url` as the router matches it, or the `ErrHTTPBadRequest` a malformed one fails with. `url` is a path
- * without its query: see {@link sanitizeURL}.
- */
-export function normalizePath(url: string, flags: PathFlags): { path: string; error: Error | undefined } {
-  let path = url
-
-  if (path.charCodeAt(0) !== 47) {
-    const absolute = pathFromAbsoluteURL(path)
-    if (absolute === null) {
-      return { path: url, error: malformedURL() }
-    }
-    path = absolute
-  }
-
-  if (flags.ignoreDuplicateSlashes) {
-    path = removeDuplicateSlashes(path)
-  }
-
-  try {
-    path = safeDecodeURI(path, flags.useSemicolonDelimiter === true)
-  } catch {
-    return { path: url, error: malformedURL() }
-  }
-
-  // The router keeps encoded slashes, but a literal `%` can still introduce one more encoded byte.
-  path = path.replace(/%25([0-9A-Fa-f]{2})/g, '%$1')
-
-  if (flags.ignoreTrailingSlash) {
-    path = trimLastSlash(path)
-  }
-
-  return { path, error: undefined }
-}
-
-/**
- * A router's or a controller's middleware with each relative path rebased under `base`, that scope's full path:
- * `/jobs` added by a router at `/admin` matches `/admin/jobs`. A middleware with no path covers every route of the
- * scope already, and keeps none.
+ * A router's or a controller's middleware with each path joined to `base`, that scope's path: `/jobs` added by a
+ * router at `/admin` covers `/admin/jobs`. A middleware with no path covers every route of the scope already.
  *
- * A named parameter in `base` is kept and its regular expression dropped, which only widens a prefix the route
- * itself still checks.
- *
- * @throws ErrConfiguration when a path would be rebased under a wildcard or an optional parameter: neither has a
- *   prefix form.
+ * @throws ErrConfiguration when a middleware has a path and `base` holds a parameter: a middleware path is
+ *   compared with `ctx.req.path` as text.
  */
-export function rebaseMiddlewares(base: string, middlewares: readonly ResolvedMiddleware[]): ResolvedMiddleware[] {
-  return middlewares.map(middleware =>
-    middleware.path === undefined ? middleware : { ...middleware, path: rebase(base, middleware.path) },
-  )
-}
+export function placeMiddlewares(base: string, middlewares: readonly ResolvedMiddleware[]): ResolvedMiddleware[] {
+  const placed = middlewares.find(middleware => middleware.path !== undefined)
+  if (placed === undefined) {
+    return [...middlewares]
+  }
 
-function rebase(base: string, path: MiddlewarePath): MiddlewarePath {
-  // `:name(regex)` reads as `:name` to the matcher; nothing else in a route path differs from it but these two.
-  const prefix = base.replace(/:(\w+)\([^/]*\)/g, ':$1')
-
-  if (/[*?]/.test(prefix)) {
-    throw new ErrConfiguration(
-      errMessage(
-        `Cannot add middleware "${String(path)}" under "${base}": a relative path cannot start from a wildcard or ` +
-          'an optional parameter',
-      )
-        .solutions(
-          'Leave the path out, so the middleware covers every route of the router',
-          'Or register it on the application with an absolute path, ".use(path, ...)"',
-        )
-        .reference('@caffeinejs/http', ErrConfiguration)
-        .build(),
+  const parts = parseRoutePattern(base)
+  if (parts.some(part => part.kind !== 'text')) {
+    throw configurationError(
+      `Cannot add a middleware under "${String(placed.path)}" to the routes at "${base}": that path holds a parameter, and a middleware path is compared with the request path as text`,
+      'Add the middleware without a path on a router or controller of its own at that sub-path, which it then covers whole',
     )
   }
 
-  // `use('/')` joins to `/admin/`, which the matcher reads as `/admin`, as it reads a trailing slash on any prefix.
-  const join = (relative: string): string => {
-    const rooted = relative.startsWith('/') ? relative : `/${relative}`
-    return `${prefix}${rooted}`
-  }
-
-  return typeof path === 'string' ? join(path) : path.map(join)
+  // `::` reads as `:`, as the request path holds it.
+  const text = parts.map(part => (part.kind === 'text' ? part.text : '')).join('')
+  return middlewares.map(middleware =>
+    middleware.path === undefined
+      ? middleware
+      : { ...middleware, path: pathsOf(middleware.path).map(path => joinRoutePath(text, normalizeRoutePath(path))) },
+  )
 }
 
-function sanitizePrefix(prefix: string): string {
-  if (prefix === '/') {
-    return ''
-  }
-  return prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
-}
-
-function pathFromAbsoluteURL(url: string): string | null {
-  const schemeEnd = url.indexOf('://')
-  if (schemeEnd === -1) {
-    return url
-  }
-
-  const scheme = url.slice(0, schemeEnd).toLowerCase()
-  if (scheme !== 'http' && scheme !== 'https') {
-    return url
-  }
-
-  const authorityStart = schemeEnd + 3
-  const pathStart = url.indexOf('/', authorityStart)
-  if (pathStart === authorityStart || !URL.canParse(url)) {
-    return null
-  }
-
-  return pathStart === -1 ? '/' : url.slice(pathStart)
-}
-
-// Decodes the path the way find-my-way does: reserved encodings stay encoded, and `%25` is re-encoded so it
-// is not decoded twice.
-function safeDecodeURI(path: string, useSemicolonDelimiter: boolean): string {
-  let shouldDecode = false
-
-  for (let i = 1; i < path.length; i++) {
-    const charCode = path.charCodeAt(i)
-
-    if (charCode === 37) {
-      const hex = path.slice(i + 1, i + 3).toUpperCase()
-      if (!RESERVED_ENCODINGS.has(hex)) {
-        shouldDecode = true
-      } else {
-        if (hex === '25') {
-          shouldDecode = true
-          path = path.slice(0, i + 1) + '25' + path.slice(i + 1)
-          i += 2
-        }
-        i += 2
-      }
-    } else if (charCode === 63 || charCode === 35 || (charCode === 59 && useSemicolonDelimiter)) {
-      path = path.slice(0, i)
-      break
-    }
-  }
-
-  return shouldDecode ? decodeURI(path) : path
-}
-
-function removeDuplicateSlashes(path: string): string {
-  return path.includes('//') ? path.replace(/\/\/+/g, '/') : path
-}
-
-function trimLastSlash(path: string): string {
-  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path
-}
-
-function malformedURL(): Error {
-  return new ErrHTTPBadRequest('Cannot match the request path: the URL is malformed')
+function pathsOf(path: MiddlewarePath): readonly string[] {
+  return typeof path === 'string' ? [path] : path
 }

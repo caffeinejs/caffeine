@@ -1,53 +1,91 @@
 import { describe, expect, it } from 'vitest'
 
 import { ErrConfiguration } from '../error/common.js'
-import { ErrHTTPBadRequest } from '../error/http.js'
-import { compilePrefix, normalizePath, rebaseMiddlewares } from './path.js'
+import { requestPath } from '../server/context.js'
+import { placeMiddlewares, prefixMatcher } from './path.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
 const noop = (): void => undefined
 
-describe('compilePrefix', () => {
+describe('prefixMatcher', () => {
   // `/admin` guards `/admin/...` and must not leak onto a sibling that merely starts with the same letters.
   it('matches on a segment boundary', () => {
-    const prefix = compilePrefix('/admin')
+    const matches = prefixMatcher('/admin')
 
-    expect(prefix.test('/admin/users')).toBe(true)
-    expect(prefix.test('/admin')).toBe(true)
-    expect(prefix.test('/adminx')).toBe(false)
+    expect([matches('/admin'), matches('/admin/users'), matches('/adminx')]).toEqual([true, true, false])
+  })
+
+  // Routes match case-sensitively, so a middleware does too: it covers what the router sends under its prefix.
+  it('matches case-sensitively', () => {
+    expect(prefixMatcher('/admin')('/ADMIN')).toBe(false)
+  })
+
+  it('matches an array', () => {
+    const matches = prefixMatcher(['/a', '/b'])
+
+    expect([matches('/b/x'), matches('/c')]).toEqual([true, false])
   })
 })
 
-describe('normalizePath', () => {
-  // The router ignores the duplicate slash: a guard that did not would be skipped by `//admin`.
-  it('drops a duplicate slash when the router does', () => {
-    expect(normalizePath('//admin//users', { ignoreDuplicateSlashes: true }).path).toBe('/admin/users')
-    expect(normalizePath('//admin', {}).path).toBe('//admin')
-  })
-
-  it('fails a malformed escape with a 400', () => {
-    const { error } = normalizePath('/%E0%A4%A', {})
-
-    expect(error).toBeInstanceOf(ErrHTTPBadRequest)
-  })
-})
-
-describe('rebaseMiddlewares', () => {
+describe('placeMiddlewares', () => {
   const middleware = (path: string | undefined): ResolvedMiddleware => ({
     path,
     hook: undefined,
     handle: noop,
   })
 
-  it('starts a relative path from the scope and leaves a pathless one alone', () => {
-    const [jobs, all] = rebaseMiddlewares('/admin', [middleware('jobs'), middleware(undefined)])
+  // What the middleware sees of a request to one of the scope's routes, as the chain matches it.
+  const matches = (base: string, path: string, url: string): boolean =>
+    prefixMatcher(placeMiddlewares(base, [middleware(path)])[0]!.path!)(requestPath(url))
 
-    expect(jobs.path).toBe('/admin/jobs')
-    expect(all.path).toBe(undefined)
+  it('leaves a pathless middleware covering the whole scope', () => {
+    const [all] = placeMiddlewares('/admin', [middleware(undefined)])
+
+    expect([all!.path]).toEqual([undefined])
   })
 
-  // A wildcard has no prefix form: a rebased path under one could never match what the router serves.
-  it('refuses a path under a wildcard', () => {
-    expect(() => rebaseMiddlewares('/files/*', [middleware('/x')])).toThrow(ErrConfiguration)
+  it('reads a relative path without its leading slash as one with it', () => {
+    expect([matches('/admin', 'jobs', '/admin/jobs'), matches('/admin', 'jobs', '/admin/other')]).toEqual([true, false])
+  })
+
+  // A scope's path is a route path: the middleware matches after its segments in every request the router sends to the
+  // scope's routes, whatever its parameters hold, joined to the router's path.
+  it.each([
+    ['/service::name', '/service:name/jobs', '/service:name/other'],
+    ['/release(v1)', '/release(v1)/jobs', '/release(v1)/other'],
+    // A trailing slash never makes another route, so the middleware covers both forms.
+    ['/admin', '/admin/jobs/', '/admin/other/'],
+  ])('matches a path under %s after its segments', (base, served, unserved) => {
+    expect([matches(base, '/jobs', served), matches(base, '/jobs', unserved)]).toEqual([true, false])
+  })
+
+  it.each([
+    '/at/:hour(^\\d{2})h:minute(^\\d{2})m',
+    '/teams/:$team([a-z]+)',
+    '/d/:p((a|b)/c)',
+    '/tenants/:id',
+    '/v:major(\\d*)',
+    '/' + Array.from({ length: 9 }, (_, i) => `:p${i}`).join('/'),
+  ])('refuses a middleware path under %s, whose path holds a parameter', base => {
+    expect(() => placeMiddlewares(base, [middleware('/jobs')])).toThrow(ErrConfiguration)
+  })
+
+  // A middleware at "/" covers the scope's routes, the scope's own path among them; one at a sub-path does not reach
+  // it.
+  it("covers the scope's own path with a middleware at its root", () => {
+    expect([
+      matches('/admin', '/', '/admin'),
+      matches('/admin', '/', '/admin/'),
+      matches('/admin', '/jobs', '/admin'),
+    ]).toEqual([true, true, false])
+  })
+
+  // A router at the root spans no segment: its middleware paths match the whole request path, still on whole segments.
+  it('matches a path-scoped middleware of a root router against the whole path', () => {
+    expect([
+      matches('', '/admin', '/admin/users'),
+      matches('', '/admin', '/admin'),
+      matches('', '/admin', '/adminx'),
+    ]).toEqual([true, true, false])
   })
 })

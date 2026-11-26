@@ -35,21 +35,27 @@ describe('caching is opt-in', () => {
     expect(res.headers.get('x-cache')).toBeNull()
   })
 
-  it('fails at bootstrap() when a route is decorated but the plugin is not installed', async () => {
+  // The decorator is the route's setting for the plugin: with no plugin to read it, the route answers uncached.
+  it('serves a decorated route uncached when the plugin is not installed', async () => {
+    let calls = 0
     @Controller('/optin-missing')
     class MissingController {
       @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
-        return { ok: true }
+        return { calls: ++calls }
       }
     }
     void [MissingController]
 
     const app = createWebApplication({ adapter: node() })
     close = () => app.close()
+    await app.bootstrap()
 
-    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
+    await app.request('/optin-missing/data')
+    const second = await app.request('/optin-missing/data')
+
+    expect([second.headers.get('x-cache'), await second.json()]).toEqual([null, { calls: 2 }])
   })
 
   // A generator someone named and forgot to bind is a mistake, not a request for the default one.

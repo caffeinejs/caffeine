@@ -147,14 +147,15 @@ describe('csrf()', () => {
       })
     })
 
-    it('refuses an excluded path that does not start with a slash', async () => {
-      const app = createWebApplication({ adapter: node() }).with(csrf(c => c.exclude('webhooks')))
-      close = () => app.close().catch(() => undefined)
+    // Every declared path gets a missing leading "/": the exclusion covers the route it names.
+    it('adds a missing leading slash to an excluded path', async () => {
+      const app = await ready(
+        createWebApplication({ adapter: node() })
+          .with(csrf(c => c.exclude('webhooks')))
+          .mount(new Router('/webhooks').post('/x', ok)),
+      )
 
-      await expect(app.bootstrap()).rejects.toMatchObject({
-        code: 'ERR_CSRF_CONFIGURATION',
-        message: expect.stringContaining('"/webhooks"'),
-      })
+      expect((await post(app, '/webhooks/x', CROSS_SITE)).status).toBe(200)
     })
 
     // A path is matched after the base path is taken off, so one written from the base path would match nothing.
@@ -166,6 +167,20 @@ describe('csrf()', () => {
         code: 'ERR_CSRF_CONFIGURATION',
         message: expect.stringContaining('Write it as "/webhooks"'),
       })
+    })
+
+    // Without its "~", "~/" is the root, which is refused too: the advice is the root's own, not to write "/".
+    it('refuses "~/" with what to do instead of excluding every route', async () => {
+      const app = createWebApplication({ adapter: node() }).with(csrf(c => c.exclude('~/')))
+      close = () => app.close().catch(() => undefined)
+
+      const err = (await app.bootstrap().catch((failure: unknown) => failure)) as Error
+
+      expect([
+        (err as Error & { code?: string }).code,
+        err.message.includes('Turn the check off with enabled(false)'),
+        err.message.includes('Write it as'),
+      ]).toEqual(['ERR_CSRF_CONFIGURATION', true, false])
     })
 
     // Every route sits under `/`, so excluding it turns the check off without saying so; `CSRF__EXCLUDE__0=/`
@@ -201,20 +216,21 @@ describe('csrf()', () => {
       ])
     })
 
-    // Two plugins on one chain would check every request twice; refused at once by name, and admitted apart.
-    it('refuses a second plugin under the same name, and admits one named apart', async () => {
-      const twice = createWebApplication({ adapter: node() }).with(csrf()).with(csrf())
-      close = () => twice.close().catch(() => undefined)
-
-      await expect(twice.bootstrap()).rejects.toThrow(/Cannot register plugin "caffeine-csrf" twice/)
-
-      const apart = await ready(
+    // Two plugins on one chain check every request twice: the user's to decide, so both register and each refuses
+    // what the other's exclusion lets through.
+    it('registers a second plugin under the same name, and both check a request', async () => {
+      const twice = await ready(
         createWebApplication({ adapter: node() })
-          .with(csrf())
-          .with(csrf(c => c.name('api'))),
+          .with(csrf(c => c.exclude('/a')))
+          .with(csrf(c => c.exclude('/b')))
+          .mount(new Router('/a').post('/', ok), new Router('/b').post('/', ok), new Router('/c').post('/', ok)),
       )
 
-      expect((await post(apart, '/nothing', CROSS_SITE)).status).toBe(404)
+      const statuses = await Promise.all(
+        ['/a', '/b', '/c'].map(async path => (await post(twice, path, CROSS_SITE)).status),
+      )
+      expect(statuses).toEqual([403, 403, 403])
+      expect((await post(twice, '/c', SAME_ORIGIN)).status).toBe(200)
     })
   })
 
@@ -723,8 +739,8 @@ describe('csrf()', () => {
         new (class extends HTTPPlugin {
           override readonly name = 'afterwards'
 
-          register({ app }: HTTPSetupContext): void {
-            app.hook('onRequest', () => {
+          register({ server }: HTTPSetupContext): void {
+            server.hook('onRequest', () => {
               later++
             })
           }

@@ -31,7 +31,7 @@ export interface StoreHooks {
 /** One level in front of routes, the server's root or one scope at one path: its plugins' hooks, then its middleware. */
 export interface LevelInput {
   readonly batches: readonly HookBatch[]
-  /** Already rebased under the scope's path. */
+  /** Each path already joined to the scope's path. */
   readonly middlewares: readonly ResolvedMiddleware[]
 }
 

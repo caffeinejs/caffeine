@@ -7,7 +7,7 @@ import type { IRoute, IRouteGroup } from '../routing/route.js'
 import type { ConstraintRequest, ConstraintStrategy } from './constraints.js'
 import { kVersionHeader, VERSION_CONSTRAINT } from './keys.js'
 
-// The constraints find-my-way matches without a strategy, and the header each reads.
+// The built-in constraints every matcher implements, and the header each reads.
 const BUILT_IN: ReadonlyMap<string, string> = new Map([
   [VERSION_CONSTRAINT, kVersionHeader],
   ['host', 'host'],
@@ -94,7 +94,7 @@ export function compileConstraints(
 
     of(route, methods, url) {
       const declared = route.options.constraints
-      if (declared === undefined || (declared instanceof Map && declared.size === 0)) {
+      if (declared === undefined || declared === null || (declared instanceof Map && declared.size === 0)) {
         return undefined
       }
 

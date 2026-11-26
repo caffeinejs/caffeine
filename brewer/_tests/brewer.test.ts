@@ -129,6 +129,8 @@ const shapes = new Router('/shapes')
   .handler(ctx => ctx.req.param())
   .get('/pre/100%-:id')
   .handler(ctx => ctx.req.param())
+  .get('/glob/files*')
+  .handler(ctx => ctx.req.param())
 
 const app = createWebApplication({ adapter: node() }).mount(pets, files, tags, catalog, legacy, hatch, shapes)
 
@@ -341,6 +343,14 @@ describe('brewer against a running server', () => {
 
       expect(await (await client.shapes.rgx({ id: '42' }).get()).json()).toEqual({ id: '42' })
     })
+
+    it('should fill a wildcard written inside a segment, which the server binds whole', async () => {
+      const client = brewer<typeof app>(origin)
+
+      const res = await client.$request('GET', '/shapes/glob/files*', { params: { '*': 'a/b' } })
+
+      expect(await res.json()).toEqual({ '*': 'a/b' })
+    })
   })
 
   describe('given a query', () => {
@@ -489,6 +499,20 @@ describe('brewer against a running server', () => {
 
 // No socket here: the application is handed over as the target, so requests go through its own `request`.
 describe('brewer against an application in process', () => {
+  // The tree has no member for a path ending in "/": the escape hatch reaches it at the URL as written.
+  it('reaches a route whose path ends in a slash with $request', async () => {
+    const slashed = createWebApplication({ adapter: node() }).mount(new Router().get('/x/', () => 'slash'))
+    await slashed.bootstrap()
+
+    try {
+      const res = await brewer(slashed).$request('GET', '/x/')
+
+      expect([res.status, await res.text()]).toEqual([200, 'slash'])
+    } finally {
+      await slashed.close()
+    }
+  })
+
   describe('given the application itself rather than a URL', () => {
     it('should reach its routes with neither a type argument nor an origin', async () => {
       const client = brewer(app)

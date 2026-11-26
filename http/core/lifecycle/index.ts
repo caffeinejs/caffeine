@@ -9,4 +9,4 @@ export type {
   SendPayload,
   ServerHooks,
 } from './lifecycle.js'
-export type { AuthoredHooks, RouteDefinition } from './route_definition.js'
+export type { AuthoredHooks, RouteDefinition, ServedRoute } from './route_definition.js'

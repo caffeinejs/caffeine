@@ -1,6 +1,7 @@
+import { ErrBrewPathParam } from '@caffeinejs/brewer'
 import { describe, expect, it } from 'vitest'
 
-import { ErrMissingRouteParam, newURL } from './index.js'
+import { newURL } from './index.js'
 
 describe('newURL()', () => {
   it('substitutes path params into the template', () => {
@@ -30,7 +31,49 @@ describe('newURL()', () => {
     )
   })
 
-  it('throws ErrMissingRouteParam when a param is absent', () => {
-    expect(() => newURL('/tasks/:id').build()).toThrow(ErrMissingRouteParam)
+  it('keeps a full URL as it is, its port included', () => {
+    expect(newURL('http://localhost:3000/tasks/1').build()).toBe('http://localhost:3000/tasks/1')
+  })
+
+  // The route syntax, as the typed client fills it: what the router would match is what gets built.
+  it.each([
+    ['/pets/:id?', {}, '/pets'],
+    ['/a::b/:id', { id: 1 }, '/a:b/1'],
+    ['/at/:hour(^\\d{2})h', { hour: 12 }, '/at/12h'],
+    ['/dash/*', { '*': 'a b/c' }, '/dash/a%20b/c'],
+    ['/files*', { '*': 'a/b' }, '/filesa/b'],
+    ['/rgx/:id(^(?:\\d+)$)', { id: 42 }, '/rgx/42'],
+  ])('builds %s with %j as the route reads it', (path, params: Record<string, string | number>, pathname) => {
+    const builder = newURL(path)
+    for (const [name, value] of Object.entries(params)) {
+      builder.param(name, value)
+    }
+
+    expect(new URL(builder.build()).pathname).toBe(pathname)
+  })
+
+  // Only the path is a template: a query is request data, sent as written, `*` and `:` included.
+  it('fills the path of a template and keeps its query as written', () => {
+    expect([
+      newURL('/search?q=*').build(),
+      newURL('/pets/:id?view=full').param('id', 7).build(),
+      newURL('/pets/:id?').build(),
+      newURL('/items/:id?/').build(),
+    ]).toEqual([
+      'http://localhost/search?q=*',
+      'http://localhost/pets/7?view=full',
+      'http://localhost/pets',
+      'http://localhost/items/',
+    ])
+  })
+
+  it('fills the path of a full URL template, keeping its host, port and query', () => {
+    expect(newURL('https://api.test:8443/tasks/:id?x=1').param('id', 7).build()).toBe(
+      'https://api.test:8443/tasks/7?x=1',
+    )
+  })
+
+  it('throws ErrBrewPathParam when a param is absent', () => {
+    expect(() => newURL('/tasks/:id').build()).toThrow(ErrBrewPathParam)
   })
 })

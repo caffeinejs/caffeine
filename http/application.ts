@@ -28,7 +28,6 @@ import { parseUse } from './core/middleware/middleware.js'
 import { ControllerRouteSource } from './core/routing/decorated.js'
 import { buildRouting, RouteInventory, type RouteSource } from './core/routing/index.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
-import { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './core/routing/programmatic/source.js'
 import type { RoutesOf } from './core/routing/programmatic/types.js'
 import type { IRouteGroup } from './core/routing/route.js'
@@ -47,14 +46,11 @@ import {
   type AdapterListen,
   type AdapterSettings,
 } from './core/server/hosting.js'
-import { getRouteGroup } from './decorators/registrar/registrar.js'
 import type { HTTPPluginFactory, HTTPSetupContext } from './plugin.js'
 import { assertPluginFactory } from './plugin_factory.js'
-import { closedApplicationOps } from './plugin_slot.js'
 import type { IServer, ServerAddress, ServerConfigurer, ServerCustomizer } from './server.js'
 import { ServerDefinition, type BasePathConfigurer } from './server_definition.js'
 import { ServerSet } from './servers.js'
-import { Keys } from './symbols.js'
 
 /** {@link RunInfo} widened with where the HTTP server bound. */
 export interface WebRunInfo extends RunInfo {
@@ -128,8 +124,6 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
   #listenerServers: ReadonlyMap<string, IServer> | undefined
   #routeGroups: IRouteGroup<Context>[] = []
   #built = false
-  /** What routers and controllers registered for themselves, resolved once during start-up. */
-  readonly #plugins = new ScopedPlugins()
   /** Every server's routes, filled as each is built. */
   readonly #inventory = new RouteInventory()
 
@@ -202,7 +196,7 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
 
   /**
    * Every route group the application declared, compiled, whichever server serves it: the mounted routers' and the
-   * controllers'. What a plugin adds, with `context.app.mount(...)` or `$route`, is not among them.
+   * controllers'. What a plugin adds, with `context.server.mount(...)` or `$route`, is not among them.
    *
    * @throws ErrApplicationNotReady before {@link ready} has built them.
    */
@@ -243,9 +237,11 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * Adds a middleware to the request pipeline. Order matters, and it is the order these calls are written
    * in — within a hook.
    *
-   * The first argument may be a path (`string` or `string[]`); `'*'` means every request. The path only decides
-   * whether the middleware runs: `ctx.req.url` reads the same as anywhere else in the request. The middleware may
-   * be a `(ctx, next)` function, an instance, a class, or a container key.
+   * The first argument may be a path (`string` or `string[]`): a literal prefix on whole segments, matched
+   * case-sensitively, so `/admin` covers `/admin` and `/admin/users`, not `/adminx` or `/ADMIN`. A parameter, `*`, a
+   * regex, `?` or `#` is refused. The path only decides whether the middleware runs: it is compared with
+   * `ctx.req.path`, which reads the same everywhere in the request. The middleware may be a `(ctx, next)` function, an
+   * instance, a class, or a container key.
    *
    * `{ hook }` is a request hook point (`onRequest`, `preHandler`, `onSend`, `onResponse`, `onError`); `onRequest` by
    * default. A middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call overrides
@@ -261,6 +257,8 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    *
    * The pipeline runs on the application's own server alone. A listener has its own:
    * `.listener(name, l => l.use(...))`.
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,
@@ -290,10 +288,12 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * method keeps the factory's setup context inferred without weakening inference for `use`'s middleware signatures.
    *
    * ```ts
-   * app.useFn('*', ({ config }) => rateLimit(config.limits))
+   * app.useFn('/api', ({ config }) => rateLimit(config.limits))
    * ```
    *
    * Like {@link use}, it reaches the application's own server and no listener.
+   *
+   * @throws ErrConfiguration when a path is not a literal prefix.
    */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
   useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions): this
@@ -320,11 +320,11 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    *
    * A listener installs none of them. It has its own: `.listener(name, l => l.with(...))`.
    *
-   * A factory is never deduplicated — two calls register two plugins. A plugin `name` already on that server is
-   * refused at start-up, and so is a factory that returns anything but an `HTTPPlugin`.
+   * A factory is never deduplicated — two calls register two plugins, a plugin `name` already on that server
+   * included. A factory that returns anything but an `HTTPPlugin` is refused at start-up.
    *
-   * The plugin's `register` runs in this slot. A factory may mount routers on this server and add middleware to its
-   * pipeline with `context.app`.
+   * The plugin's `register` runs on this server. A factory may mount routers on it and add middleware to its pipeline
+   * with `context.server`.
    *
    * A feature is not a plugin: install it with {@link Application.install}, at any position in the chain — a
    * feature binds into the container before any factory here runs, so only `.with(...)` order matters.
@@ -469,9 +469,10 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    *
    * The server takes the base off a request's path before routing, so everything the application declares stays
    * written as if it were served from the root: routes from any source, plugin routes such as the health probes,
-   * `app.use(path, …)` paths and fallback-policy exceptions. `ctx.req.url` is that path, and `ctx.req.basePath`
-   * is what was taken off. The redirects this package builds — a sign-in challenge, its return URL, a denied
-   * access — add the base back; one a handler builds itself writes `ctx.req.basePath + '/somewhere'`.
+   * `app.use(path, …)` paths and fallback-policy exceptions. `ctx.req.path` is that path, `ctx.req.url` that path with
+   * its query, and `ctx.req.basePath` is what was taken off. The redirects this package builds — a sign-in challenge,
+   * its return URL, a denied access — add the base back; one a handler builds itself writes
+   * `ctx.req.basePath + '/somewhere'`.
    *
    * A request without the base is routed as it is, and its `ctx.req.basePath` is `''`. The base must end on a
    * segment boundary (`/api` matches `/api/pets`, never `/apix`) and is compared with the path as sent:
@@ -486,8 +487,8 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * ```
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
-   * @throws ErrConfiguration from {@link ready}, when the base path does not start with a single "/" (never "//"
-   *   or "/\"), or holds a "?", a "#" or a control character.
+   * @throws ErrConfiguration from {@link ready}, when the base path starts with "//" or "/\" once rooted, or holds a
+   *   control character.
    */
   basePath(basePath: string | BasePathConfigurer<C>): this {
     this.assertConfigurable()
@@ -535,16 +536,6 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
     return this
   }
 
-  /** Resolves what each controller's `@Use(...)` asked for, keyed by its class. */
-  async #controllerPlugins(context: HTTPSetupContext): Promise<void> {
-    // Registered when the container compiled, so every controller the application can resolve is already known here.
-    for (const { key } of this.container.getBindingsByLabel(Keys.CONTROLLER)) {
-      if (typeof key === 'function') {
-        await this.#plugins.resolveController(key, getRouteGroup(key)?.toRouteGroup().plugins ?? [], context)
-      }
-    }
-  }
-
   /**
    * Mounts programmatic routers, whose routes are then compiled and registered exactly like a controller's.
    *
@@ -565,7 +556,10 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
     if (this.#built) {
       throw new ErrConfiguration(
         errMessage('Cannot mount a router: routing has already been built')
-          .solutions('Call "mount()" before the application is started')
+          .solutions(
+            'Call "mount()" before the application is started',
+            'From a plugin, mount it on the server the plugin registers on: "context.server.mount(...)"',
+          )
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
       )
@@ -594,39 +588,31 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
   }
 
   protected override async setup(): Promise<void> {
-    // One context for everything built from here on. `log` is the configured logger by now. Its `app` is closed:
-    // each plugin slot hands its plugins an `app` of its own.
-    const context: HTTPSetupContext = {
+    // One context for everything built from here on. `log` is the configured logger by now. It has no `server`: each
+    // server hands its plugins one of its own, scoped to where they are registered.
+    const context: Omit<HTTPSetupContext, 'server'> = {
       container: this.container,
       config: this.configSnapshot,
       store: this.configStore,
       logger: this.log,
       hasFeature: name => this.hasFeature(name),
-      app: closedApplicationOps(),
     }
 
-    // Before routing is built: a router's plugins may nest the routers it is built from.
-    await resolveMounted(this.#plugins, [this.#own], context)
-    await this.#controllerPlugins(context)
+    // The application's own server first, then each listener.
+    const definitions = [this.#own, ...this.#listeners.build(context as Omit<HTTPSetupContext<C>, 'server'>)]
 
-    // The application's own server first, then each listener. A listener's callback runs once every plugin above has,
-    // and the routers it mounts have their plugins run in turn.
-    const definitions = [this.#own, ...this.#listeners.build(context as HTTPSetupContext<C>)]
-    await resolveMounted(this.#plugins, definitions, context)
-
-    const routing = buildRouting<Context>(routeSources(definitions, this.#plugins.childrenOf), context)
+    const routing = buildRouting<Context>(routeSources(definitions), context)
     const servers = new ServerSet(definitions as unknown as ServerDefinition[])
     this.#servers = servers
 
-    // Every group compiles here, before any server is built, so a route that cannot compile fails before anything
-    // has started. Each server serves the routers mounted on it and the controllers bound to it; the application's
-    // own, the unbound controllers too.
+    // Every declared group compiles here, before any server is built, so a route that cannot compile fails before
+    // anything has started; what a plugin mounts compiles as its server is built. Each server serves the routers
+    // mounted on it and the controllers bound to it; the application's own, the unbound controllers too.
     this.#routeGroups = servers.select(routing)
     this.#built = true
 
     await servers.setup({
       context,
-      plugins: this.#plugins,
       compileRouteGroup: routing.compileRouteGroup,
       inventory: this.#inventory,
       contextKey: this.#contextKey,
@@ -718,35 +704,12 @@ export function createWebApplication<TConfig, A extends AnyServerAdapter>(
  * Where routes come from: the controllers, and what each server in `definitions` has mounted. A route declared any
  * way is compiled the same and registered the same.
  */
-function routeSources<C>(
-  definitions: readonly ServerDefinition<C>[],
-  childrenOf: ScopedPlugins['childrenOf'],
-): RouteSource<Context>[] {
+function routeSources<C>(definitions: readonly ServerDefinition<C>[]): RouteSource<Context>[] {
   return [
     new ControllerRouteSource<Context>(),
-    ...definitions.map(definition => new FluentRouteSource<Context>(definition.routers, childrenOf, definition.name)),
+    ...definitions.map(
+      definition =>
+        new FluentRouteSource<Context>(definition.routers, { server: definition.name, levels: definition.levels }),
+    ),
   ]
-}
-
-/**
- * Runs the plugins of every router mounted on `definitions` that has not run them yet. A plugin may mount more routers,
- * on any of them, whose plugins run in turn: each list is read live, and all are read again while one grew.
- */
-async function resolveMounted<C>(
-  plugins: ScopedPlugins,
-  definitions: readonly ServerDefinition<C>[],
-  context: HTTPSetupContext,
-): Promise<void> {
-  let mounted: number
-  do {
-    mounted = countRouters(definitions)
-    for (const definition of definitions) {
-      await plugins.resolveRouters(definition.routers, context)
-    }
-  } while (countRouters(definitions) !== mounted)
-}
-
-/** How many routers `definitions` hold between them. */
-function countRouters<C>(definitions: readonly ServerDefinition<C>[]): number {
-  return definitions.reduce((count, definition) => count + definition.routers.length, 0)
 }

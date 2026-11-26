@@ -111,8 +111,15 @@ export interface GateEntry {
   readonly labels: ReadonlyMap<string, symbol>
 }
 
-// Keyed by the definition, one per route and server: a GET's automatic HEAD route shares it.
-const OWNERS = new WeakMap<RouteDefinition, GateEntry>()
+/** Where a route's gate entry lives: on its definition's options, one per route and server. */
+const kGateEntry: unique symbol = Symbol('caffeine.http.gate')
+
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    /** Written by the gates covering the route in `onRoute`: the one that authenticates it, and every one by label. */
+    [kGateEntry]?: GateEntry
+  }
+}
 
 /**
  * Records gate `id` as the owner of `route`. Hooks run outermost first, so the innermost gate's `onRoute` runs last
@@ -121,7 +128,7 @@ const OWNERS = new WeakMap<RouteDefinition, GateEntry>()
  * @throws ErrConfiguration when another gate under the same label covered the route already.
  */
 export function ownRoute(route: RouteDefinition, id: symbol, label: string): void {
-  const previous = OWNERS.get(route)
+  const previous = route.options[kGateEntry]
   const holder = previous?.labels.get(label)
 
   if (holder !== undefined && holder !== id) {
@@ -140,12 +147,12 @@ export function ownRoute(route: RouteDefinition, id: symbol, label: string): voi
   labels.set(label, id)
   // What the route declares does not change from one covering gate to the next.
   const { skip, gated } = previous ?? gatedRouteOf(route.route)
-  OWNERS.set(route, { id, label, labels, skip, gated })
+  route.options[kGateEntry] = { id, label, labels, skip, gated }
 }
 
 /** The gate that owns `route`, or `undefined` when no gate covers it. */
 export function gateOf(route: RouteDefinition): GateEntry | undefined {
-  return OWNERS.get(route)
+  return route.options[kGateEntry]
 }
 
 /**
@@ -162,7 +169,7 @@ export function assertGated(
   }[],
 ): void {
   const ungated = routes
-    .filter(({ definition }) => definition.route.authorization.authorizer != null && !OWNERS.has(definition))
+    .filter(({ definition }) => definition.route.authorization.authorizer != null && gateOf(definition) === undefined)
     .map(({ methods, url }) => `${methods.join('|')} ${url}`)
 
   if (ungated.length > 0) {

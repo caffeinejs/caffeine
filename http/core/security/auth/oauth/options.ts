@@ -85,7 +85,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
    * goes there.
    *
    * Like `callbackURL`, it is the path the browser sees, so it includes the application's base path. The route is
-   * registered without it.
+   * registered without it. A missing leading `/` is added.
    */
   loginPath?: string
 
@@ -408,7 +408,7 @@ export class OAuth2AuthenticationOptionsBuilder {
   }
 
   /**
-   * The path of the route that starts a sign-in. `<callback path>/login` unless set.
+   * The path of the route that starts a sign-in. `<callback path>/login` unless set; a missing leading `/` is added.
    *
    * On `callbackURL`'s origin and as the browser sees it, base path included — unlike the cookie scheme's
    * `loginPath`, which is written as the application sees it.

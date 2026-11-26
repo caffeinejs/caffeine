@@ -5,16 +5,14 @@ import { describe, expect, it } from 'vitest'
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { ErrConfiguration } from '../error/common.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
-import { DEFAULT_ROUTER_FLAGS } from '../matcher/matcher.js'
 import { typeBoxSchemaCompiler } from '../validation/typebox.js'
 import type { SchemaCompiler } from '../validation/validation.js'
 import { resolveServerSettings } from './settings.js'
 
 describe('resolveServerSettings', () => {
-  it("defaults to find-my-way's flags, the default matcher, no timeout, a 1 MiB body and TypeBox", () => {
+  it('defaults to the default matcher, no timeout, a 1 MiB body and TypeBox', () => {
     expect(resolveServerSettings({})).toEqual({
       handlerTimeout: undefined,
-      router: DEFAULT_ROUTER_FLAGS,
       matcher: findMyWayMatcher,
       constraints: [],
       trustProxy: undefined,
@@ -94,13 +92,6 @@ describe('resolveServerSettings', () => {
     )
   })
 
-  it('merges given router flags over the defaults', () => {
-    expect(resolveServerSettings({ router: { caseSensitive: false } }).router).toEqual({
-      ...DEFAULT_ROUTER_FLAGS,
-      caseSensitive: false,
-    })
-  })
-
   // A section it does not know would otherwise be dropped without a word.
   it('refuses a section it does not know', () => {
     const resolve = () => resolveServerSettings({ factory: { bodyLimit: 1 } })
@@ -117,19 +108,19 @@ describe('resolveServerSettings', () => {
     )
   })
 
-  it('refuses a router that is not an object', () => {
-    expect(() => resolveServerSettings({ router: true })).toThrow('Cannot set router to "true"')
-  })
+  // A trailing slash never makes another route, and paths are case-sensitive: the router takes no flags, and the
+  // setting that carried them fails rather than being dropped without a word.
+  it('refuses router, which is not a setting', () => {
+    let err: unknown
+    try {
+      resolveServerSettings({ router: { ignoreTrailingSlash: true } })
+    } catch (caught) {
+      err = caught
+    }
 
-  it('refuses a router flag that is not a boolean', () => {
-    expect(() => resolveServerSettings({ router: { caseSensitive: 'false' } })).toThrow(
-      'Cannot set router.caseSensitive to "false": a router flag is true or false',
-    )
-  })
-
-  it('refuses an unknown router flag', () => {
-    expect(() => resolveServerSettings({ router: { caseInsensitive: true } })).toThrow(
-      'Cannot set router "caseInsensitive": it is not a router flag',
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect((err as Error).message.split('\n')[0]).toBe(
+      'Cannot build the server: "router" is not a setting of the fetch application',
     )
   })
 
@@ -200,7 +191,7 @@ describe('resolveServerSettings', () => {
 
   it('lists every setting the application takes when refusing an unknown one', () => {
     expect(() => resolveServerSettings({ port: 3000 })).toThrow(
-      'Return only handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler, fetchWaitUntil from ".server(...)"',
+      'Return only handlerTimeout, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler, fetchWaitUntil from ".server(...)"',
     )
   })
 })

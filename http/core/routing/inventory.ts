@@ -2,9 +2,10 @@ import { ErrApplicationNotReady } from '@caffeinejs/application'
 import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
-import { isExcluded, type ExcludedPath } from '../csrf/options.js'
+import { isExcluded } from '../csrf/options.js'
 import { SAFE_METHODS } from '../csrf/origin.js'
 import { gatedRouteOf } from '../security/gate.js'
+import type { LiteralPrefix } from './paths.js'
 import type { IRoute, IRouteGroup } from './route.js'
 
 /** Adds one server's routes, as its engine is built; nothing else writes the inventory. */
@@ -130,7 +131,7 @@ export interface RecordSecurity {
   /** The label of the gate that owns the route; `undefined` when no gate covers it. */
   readonly gate: string | undefined
   /** The `exclude(...)` list of every enabled `csrf()` covering the route. */
-  readonly csrf: ReadonlyArray<readonly ExcludedPath[]>
+  readonly csrf: ReadonlyArray<readonly LiteralPrefix[]>
 }
 
 /**
@@ -198,7 +199,7 @@ export function csrfOf(
   methods: readonly string[],
   url: string,
   mark: boolean | undefined,
-  covers: ReadonlyArray<readonly ExcludedPath[]>,
+  covers: ReadonlyArray<readonly LiteralPrefix[]>,
 ): RouteSecurityRecord['csrf'] {
   if (mark === true) {
     return 'exempt'

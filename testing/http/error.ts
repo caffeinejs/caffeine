@@ -13,19 +13,6 @@ export class ErrNoRouter extends Error {
   }
 }
 
-export class ErrMissingRouteParam extends Error {
-  readonly code = 'CAFFEINE_ERR_MISSING_ROUTE_PARAM'
-  override readonly name = 'ErrMissingRouteParam'
-
-  constructor(param: string, path: string) {
-    super(
-      errMessage(`Cannot build route URL: missing path parameter ":${param}" for "${path}"`)
-        .reference('@caffeinejs/testing', ErrMissingRouteParam)
-        .build(),
-    )
-  }
-}
-
 export class ErrTestClientTarget extends Error {
   readonly code = 'CAFFEINE_ERR_TEST_CLIENT_TARGET'
   override readonly name = 'ErrTestClientTarget'

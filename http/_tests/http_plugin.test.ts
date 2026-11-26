@@ -20,7 +20,7 @@ import { node } from '../platform/node.testkit.js'
 
 /**
  * Scenario: a plugin written against Caffeine alone. An `HTTPPlugin` registers in its `.with(...)` slot, and
- * `context.app` mounts routers and adds middleware where that slot belongs: on a server, or on a router. What a
+ * `context.server` mounts routers and adds middleware where that slot belongs: on a server, or on a router. What a
  * factory returning a plugin does in that slot is `plugins.test.ts`'s; a controller's `@Use(...)` is in its own files.
  */
 
@@ -37,8 +37,8 @@ class Marking extends HTTPPlugin {
     this.name = `marking:${header}`
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRequest', ctx => void ctx.header(this.#header, this.#value))
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRequest', ctx => void ctx.header(this.#header, this.#value))
   }
 }
 
@@ -79,8 +79,8 @@ void [DenyGuard, TokenGuard, Greeter]
 
 /** The simplest plugin: one router, mounted from `register`. */
 class Metrics extends HTTPPlugin {
-  register({ app }: HTTPSetupContext): void {
-    app.mount(new Router('/metrics').get('/', () => ({ metrics: true })))
+  register({ server }: HTTPSetupContext): void {
+    server.mount(new Router('/metrics').get('/', () => ({ metrics: true })))
   }
 }
 
@@ -95,8 +95,8 @@ class Keeper extends HTTPPlugin {
 
 /** Mounts `/jobs` wherever it registers. */
 class Nester extends HTTPPlugin {
-  register({ app }: HTTPSetupContext): void {
-    app.mount(new Router('/jobs').get('/', () => ({ jobs: true })))
+  register({ server }: HTTPSetupContext): void {
+    server.mount(new Router('/jobs').get('/', () => ({ jobs: true })))
   }
 }
 
@@ -106,8 +106,8 @@ class Collector extends HTTPPlugin {
     super()
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRoute', route => {
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRoute', route => {
       this.seen.push(route.url)
     })
   }
@@ -124,11 +124,11 @@ class Stamping extends HTTPPlugin {
     this.#path = path
   }
 
-  register({ app }: HTTPSetupContext): void {
+  register({ server }: HTTPSetupContext): void {
     if (this.#path === undefined) {
-      app.use(stamp(this.#header))
+      server.use(stamp(this.#header))
     } else {
-      app.use(this.#path, stamp(this.#header))
+      server.use(this.#path, stamp(this.#header))
     }
   }
 }
@@ -138,8 +138,8 @@ class Building extends HTTPPlugin {
   calls = 0
   seen: HTTPSetupContext | undefined
 
-  register({ app }: HTTPSetupContext): void {
-    app.useFn(context => {
+  register({ server }: HTTPSetupContext): void {
+    server.useFn(context => {
       this.calls++
       this.seen = context
       return stamp('x-built')
@@ -156,8 +156,8 @@ class Mounter extends HTTPPlugin {
     this.#routers = routers
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.mount(...this.#routers)
+  register({ server }: HTTPSetupContext): void {
+    server.mount(...this.#routers)
   }
 }
 
@@ -210,9 +210,9 @@ describe('HTTPPlugin', () => {
     app = undefined
   })
 
-  it('lets a plugin factory mount from context.app and still return its plugin', async () => {
+  it('lets a plugin factory mount from context.server and still return its plugin', async () => {
     app = createWebApplication({ adapter: node() }).with(context => {
-      context.app.mount(new Router('/from-factory').get('/', () => ({ ok: true })))
+      context.server.mount(new Router('/from-factory').get('/', () => ({ ok: true })))
       return new Marking('x-marked')
     })
     await app.bootstrap()
@@ -226,9 +226,9 @@ describe('HTTPPlugin', () => {
     const shared = new Router('/shared').get('/', () => ({ shared: true }))
 
     class Twice extends HTTPPlugin {
-      register({ app }: HTTPSetupContext): void {
-        app.mount(shared)
-        app.mount(shared)
+      register({ server }: HTTPSetupContext): void {
+        server.mount(shared)
+        server.mount(shared)
       }
     }
 
@@ -317,8 +317,8 @@ describe('HTTPPlugin', () => {
         }
 
       class Ordered extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.use(order('plugin'))
+        register({ server }: HTTPSetupContext): void {
+          server.use(order('plugin'))
         }
       }
 
@@ -343,8 +343,8 @@ describe('HTTPPlugin', () => {
 
     it("matches a path of the server's own and takes a request hook point", async () => {
       class Hooked extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.use('/only', stamp('x-hooked'), { hook: 'preHandler' })
+        register({ server }: HTTPSetupContext): void {
+          server.use('/only', stamp('x-hooked'), { hook: 'preHandler' })
         }
       }
 
@@ -369,7 +369,7 @@ describe('HTTPPlugin', () => {
 
       expect((await app.request('/built')).headers.get('x-built')).toBe('yes')
       expect(building.calls).toBe(1)
-      expect(() => building.seen!.app.mount(new Router('/late'))).toThrow(/^Cannot call "app\.mount" here/)
+      expect(() => building.seen!.server.mount(new Router('/late'))).toThrow(/^Cannot call "server\.mount" here/)
     })
 
     it('refuses use and useFn from a context kept past the slot', async () => {
@@ -377,8 +377,8 @@ describe('HTTPPlugin', () => {
       app = createWebApplication({ adapter: node() }).with(() => keeper)
       await app.bootstrap()
 
-      expect(() => keeper.context!.app.use(stamp('x-late'))).toThrow(/^Cannot call "app\.use" here/)
-      expect(() => keeper.context!.app.useFn(() => stamp('x-late'))).toThrow(/^Cannot call "app\.useFn" here/)
+      expect(() => keeper.context!.server.use(stamp('x-late'))).toThrow(/^Cannot call "server\.use" here/)
+      expect(() => keeper.context!.server.useFn(() => stamp('x-late'))).toThrow(/^Cannot call "server\.useFn" here/)
     })
 
     // The slot closes on every way out of it: a plugin that kept its context cannot mount after a later one failed.
@@ -391,7 +391,7 @@ describe('HTTPPlugin', () => {
         })
 
       await expect(app.bootstrap()).rejects.toThrow('boom')
-      expect(() => keeper.context!.app.mount(new Router('/late'))).toThrow(/^Cannot call "app\.mount" here/)
+      expect(() => keeper.context!.server.mount(new Router('/late'))).toThrow(/^Cannot call "server\.mount" here/)
       app = undefined
     })
   })
@@ -401,11 +401,11 @@ describe('HTTPPlugin', () => {
 
     it('refuses it from a middleware factory', async () => {
       app = createWebApplication({ adapter: node() }).useFn(context => {
-        context.app.mount(late())
+        context.server.mount(late())
         return (_ctx: IContext, next: () => void) => next()
       })
 
-      await expect(app.bootstrap()).rejects.toThrow(/^Cannot call "app\.mount" here/)
+      await expect(app.bootstrap()).rejects.toThrow(/^Cannot call "server\.mount" here/)
       app = undefined
     })
 
@@ -414,7 +414,7 @@ describe('HTTPPlugin', () => {
       app = createWebApplication({ adapter: node() }).with(() => keeper)
       await app.bootstrap()
 
-      expect(() => keeper.context!.app.mount(late())).toThrow(/^Cannot call "app\.mount" here/)
+      expect(() => keeper.context!.server.mount(late())).toThrow(/^Cannot call "server\.mount" here/)
     })
   })
 
@@ -447,8 +447,8 @@ describe('HTTPPlugin', () => {
 
     it("nests what the router's own factory mounts", async () => {
       const host = new Router('/host')
-        .with(({ app }) => {
-          app.mount(new Router('/direct').get('/', () => ({ direct: true })))
+        .with(({ server }) => {
+          server.mount(new Router('/direct').get('/', () => ({ direct: true })))
           return new Nester()
         })
         .get('/', () => ({}))
@@ -511,24 +511,6 @@ describe('HTTPPlugin', () => {
       expect((await app.request('/a/child/y')).headers.get('x-child')).toBeNull()
     })
 
-    it('keeps a parameter and drops a constraint in the base', async () => {
-      const numbered = new Router('/num/:id(^\\d+)').with(() => new Stamping('x-num', '/x')).get('/x', () => ({}))
-
-      app = createWebApplication({ adapter: node() }).mount(numbered) as WebApplication
-      await app.bootstrap()
-
-      expect((await app.request('/num/7/x')).headers.get('x-num')).toBe('yes')
-    })
-
-    it('refuses a relative path under an optional parameter, which has no prefix', async () => {
-      const optional = new Router('/opt/:id?').with(() => new Stamping('x-opt', '/x')).get('/', () => ({}))
-
-      app = createWebApplication({ adapter: node() }).mount(optional) as WebApplication
-
-      await expect(app.bootstrap()).rejects.toThrow(/^Cannot add middleware "\/x" under "\/opt\/:id\?"/)
-      app = undefined
-    })
-
     it("builds a router's useFn middleware once, outside the slot", async () => {
       const building = new Building()
       const built = new Router('/built')
@@ -542,7 +524,7 @@ describe('HTTPPlugin', () => {
       expect((await app.request('/built')).headers.get('x-built')).toBe('yes')
       expect((await app.request('/built/child')).headers.get('x-built')).toBe('yes')
       expect(building.calls).toBe(1)
-      expect(() => building.seen!.app.mount(new Router('/late'))).toThrow(/^Cannot call "app\.mount" here/)
+      expect(() => building.seen!.server.mount(new Router('/late'))).toThrow(/^Cannot call "server\.mount" here/)
     })
 
     it('nests a router mounted twice once', async () => {
@@ -550,8 +532,8 @@ describe('HTTPPlugin', () => {
       const declared = new Router('/declared').get('/', () => ({ declared: true }))
 
       class Twice extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.mount(fresh, fresh, declared)
+        register({ server }: HTTPSetupContext): void {
+          server.mount(fresh, fresh, declared)
         }
       }
 
@@ -568,8 +550,8 @@ describe('HTTPPlugin', () => {
     // new router each time would otherwise carry both into the second application, and fail there on a duplicate.
     it('starts from what the router declared in every application', async () => {
       class FreshNester extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.mount(new Router('/inner').get('/', () => ({ inner: true })))
+        register({ server }: HTTPSetupContext): void {
+          server.mount(new Router('/inner').get('/', () => ({ inner: true })))
         }
       }
 
@@ -585,8 +567,8 @@ describe('HTTPPlugin', () => {
 
     it("resolves the plugins of a router a server's plugin mounted", async () => {
       class Outer extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.mount(new Router('/outer-mounted').with(() => new Nester()))
+        register({ server }: HTTPSetupContext): void {
+          server.mount(new Router('/outer-mounted').with(() => new Nester()))
         }
       }
 
@@ -608,7 +590,7 @@ describe('HTTPPlugin', () => {
       app = createWebApplication({ adapter: node() }).mount(failing) as WebApplication
 
       await expect(app.bootstrap()).rejects.toThrow('router boom')
-      expect(() => keeper.context!.app.mount(new Router('/late'))).toThrow(/^Cannot call "app\.mount" here/)
+      expect(() => keeper.context!.server.mount(new Router('/late'))).toThrow(/^Cannot call "server\.mount" here/)
       app = undefined
     })
 
@@ -648,8 +630,8 @@ describe('HTTPPlugin', () => {
   describe('compiled like a mounted router', () => {
     it("denies with the router's own guards", async () => {
       class Guarded extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.mount(new Router('/closed').guards([DenyGuard]).get('/', () => ({ ok: true })))
+        register({ server }: HTTPSetupContext): void {
+          server.mount(new Router('/closed').guards([DenyGuard]).get('/', () => ({ ok: true })))
         }
       }
 
@@ -671,8 +653,8 @@ describe('HTTPPlugin', () => {
 
     it('takes part in the start-up check for a protected route with no authentication configured', async () => {
       class Secret extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.mount(new Router('/secret').authorize().get('/', () => ({ ok: true })))
+        register({ server }: HTTPSetupContext): void {
+          server.mount(new Router('/secret').authorize().get('/', () => ({ ok: true })))
         }
       }
 
@@ -697,8 +679,8 @@ describe('HTTPPlugin', () => {
 
     it("installs a mounted router's own plugin in front of its routes only", async () => {
       class Stamped extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.mount(
+        register({ server }: HTTPSetupContext): void {
+          server.mount(
             new Router('/stamped').with(marking('x-router-plugin')).get('/', () => ({ stamped: true })),
             new Router('/plain').get('/', () => ({ plain: true })),
           )
@@ -712,9 +694,9 @@ describe('HTTPPlugin', () => {
       expect((await app.request('/plain')).headers.get('x-router-plugin')).toBeNull()
     })
 
-    // The application resolved the router's plugin for its own mount: a plugin mounting the same router on another
-    // server must not resolve it again, or that server would install it twice in front of the group.
-    it("resolves a router's own plugin once when the application and a plugin both mount it", async () => {
+    // Each server a router is mounted on registers its plugins in its own scope: once on each, and once in front of
+    // the group there.
+    it("registers a router's own plugin on each server it is mounted on", async () => {
       let resolved = 0
       const shared = new Router('/shared')
         .with(() => {
@@ -724,8 +706,8 @@ describe('HTTPPlugin', () => {
         .get('/', () => ({ shared: true }))
 
       class Sharing extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.mount(shared)
+        register({ server }: HTTPSetupContext): void {
+          server.mount(shared)
         }
       }
 
@@ -734,15 +716,15 @@ describe('HTTPPlugin', () => {
         .mount(shared) as WebApplication
       await app.bootstrap()
 
-      expect(resolved).toBe(1)
+      expect(resolved).toBe(2)
       expect((await app.listeners.get('admin')!.request('/shared')).headers.get('x-shared')).toBe('yes')
       expect((await app.request('/shared')).headers.get('x-shared')).toBe('yes')
     })
 
     it('flattens nested groups and resolves what the router injected', async () => {
       class Nested extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.mount(
+        register({ server }: HTTPSetupContext): void {
+          server.mount(
             new Router('/outer')
               .inject({ greeter: Greeter })
               .group('/inner', r => r.get('/', (_ctx, deps) => ({ text: deps.greeter.greet() }))),
@@ -775,8 +757,8 @@ describe('HTTPPlugin', () => {
       }
 
       class Counted extends HTTPPlugin {
-        register({ app }: HTTPSetupContext): void {
-          app.mount(new Router('/counted').guards([CountingGuard]).get('/', () => ({ ok: true })))
+        register({ server }: HTTPSetupContext): void {
+          server.mount(new Router('/counted').guards([CountingGuard]).get('/', () => ({ ok: true })))
         }
       }
 

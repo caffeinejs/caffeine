@@ -1,8 +1,10 @@
 import type { Container } from '@caffeinejs/di'
 
 import { bindGroup } from '../../../binding.js'
+import type { RouteOptionsLevel } from '../options.js'
 import type { DeclaredRouteGroup, RouteSource } from '../routing.js'
-import { flattenRouter } from './flatten.js'
+import type { ScopeChains } from '../scope_chain.js'
+import { flattenRouter, type ChildrenOf, type FlatParent } from './flatten.js'
 import type { Router } from './programmatic.js'
 import { stateOf, type RouterState } from './state.js'
 
@@ -18,21 +20,11 @@ export class FluentRouteSource<R = unknown> implements RouteSource<R> {
   readonly name = 'programmatic'
 
   readonly #routers: readonly Router<any, any, any, any, any>[]
-  readonly #childrenOf: ((state: RouterState) => readonly RouterState[]) | undefined
-  readonly #server: string | undefined
+  readonly #options: FluentRouteOptions<R>
 
-  /**
-   * @param childrenOf - A router's children as start-up sees them, when its plugins mounted more than it declared.
-   * @param server - The listener these routers are mounted on; `undefined` for the application's own server.
-   */
-  constructor(
-    routers: readonly Router<any, any, any, any, any>[],
-    childrenOf?: (state: RouterState) => readonly RouterState[],
-    server?: string,
-  ) {
+  constructor(routers: readonly Router<any, any, any, any, any>[], options: FluentRouteOptions<R> = {}) {
     this.#routers = routers
-    this.#childrenOf = childrenOf
-    this.#server = server
+    this.#options = options
   }
 
   collect(container: Container): DeclaredRouteGroup<R>[] {
@@ -52,13 +44,26 @@ export class FluentRouteSource<R = unknown> implements RouteSource<R> {
 
       seen.add(state)
 
-      for (const flat of flattenRouter<R>(state, container, this.#childrenOf)) {
-        const spec = this.#server === undefined ? flat.spec : bindGroup(flat.spec, this.#server)
+      const { childrenOf, server, parent, levels } = this.#options
+      for (const flat of flattenRouter<R>(state, container, childrenOf, parent, levels)) {
+        const spec = server === undefined ? flat.spec : bindGroup(flat.spec, server)
 
-        groups.push({ name: flat.name, spec, meta: () => ({ name: flat.name }), scopes: flat.scopes })
+        groups.push({ name: flat.name, spec, meta: () => ({ ...parent?.meta, name: flat.name }), scopes: flat.scopes })
       }
     }
 
     return groups
   }
+}
+
+/** Where and how a {@link FluentRouteSource} flattens its routers. */
+export interface FluentRouteOptions<R> {
+  /** A router's children as start-up sees them, when its plugins mounted more than it declared. */
+  readonly childrenOf?: ChildrenOf
+  /** The listener these routers are mounted on; `undefined` for the application's own server. */
+  readonly server?: string
+  /** What the routers nest under when a controller's plugin mounted them. */
+  readonly parent?: FlatParent<R>
+  /** Each place's own route-option levels, kept across the walks of one server. */
+  readonly levels?: ScopeChains<RouteOptionsLevel[] | undefined>
 }

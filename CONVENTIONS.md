@@ -147,14 +147,16 @@ Build a message that carries solutions or links with `errMessage(...)` from `@ca
 ```ts
 // correct
 throw new ErrConfiguration(
-  errMessage(`Cannot set the base path: "${value}" does not start with "/"`)
-    .solutions(`Write it as "/${base}"`)
+  errMessage(`Cannot set the base path: "${base}" contains "${char}"`)
+    .solutions('Give the base path as path segments only, without a query or a fragment')
     .reference('@caffeinejs/http', ErrConfiguration)
     .build(),
 )
 
 // wrong
-throw new ErrConfiguration(`Cannot set the base path: "${value}" does not start with "/"\n  - Write it as "/${base}"`)
+throw new ErrConfiguration(
+  `Cannot set the base path: "${base}" contains "${char}"\n  - Give the base path as path segments only, without a query or a fragment`,
+)
 ```
 
 - A solution is one action the reader can take now: imperative, naming the exact method, option or decorator, most likely fix first. `Check your configuration` is not a solution.

@@ -5,7 +5,6 @@ import { getRouteGroup, hookDecoratorName } from '../../decorators/registrar/reg
 import { Keys } from '../../symbols.js'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../error/index.js'
 import { REQUEST_HOOK_NAMES } from '../lifecycle/lifecycle.js'
-import { normalizeGroupPath } from './builder.js'
 import type { RouteGroupMeta } from './compile.js'
 import { kErrorUnhandled, type CompiledHooks, type RouteDispatch, type RouteGroupErrorHandler } from './route.js'
 import type { DeclaredRouteGroup, RouteSource } from './routing.js'
@@ -54,12 +53,30 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
             container.wrap(key as InjectionToken<ControllerInstance>),
           ),
         // A controller's routes live under its prefix plus its path: its relative middleware paths start there.
-        scopes: spec.plugins?.length
-          ? [{ key, path: normalizeGroupPath(`${spec.prefix ?? ''}${spec.path}`) }]
-          : undefined,
+        scopes: spec.plugins?.length ? [{ key, path: (spec.prefix ?? '') + spec.path }] : undefined,
       }
     })
   }
+}
+
+/**
+ * What a controller's routes run with besides their spec, for the routers its plugins mount: its instance for the
+ * request, its hook methods and its `@Catch` methods. The routers keep their own handlers.
+ */
+export function controllerSetup<R>(
+  key: Function,
+  spec: RouteGroupSpec<R>,
+  container: Container,
+): Pick<RouteGroupMeta<R>, 'onRequest' | 'handleError' | 'hooks'> {
+  const binding = container.getBinding(key as InjectionToken<ControllerInstance>)
+  const { onRequest, handleError, hooks } = controllerMeta<R>(
+    spec,
+    key,
+    binding?.scopeID === Scopes.SINGLETON,
+    container.wrap(key as InjectionToken<ControllerInstance>),
+  )
+
+  return { onRequest, handleError, hooks }
 }
 
 function missingRouteDefinition(name: string): ErrCaffeineWebApplication {

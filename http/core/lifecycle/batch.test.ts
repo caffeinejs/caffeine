@@ -18,12 +18,4 @@ describe('HookBatch', () => {
     expect(batch.request.preHandler).toEqual([first, second])
     expect(batch.onReady).toEqual([first])
   })
-
-  it('is empty until a hook is added', () => {
-    const batch = new HookBatch(kit)
-    expect(batch.empty).toBe(true)
-
-    batch.add('onClose', () => undefined)
-    expect(batch.empty).toBe(false)
-  })
 })

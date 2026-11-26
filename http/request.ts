@@ -23,6 +23,13 @@ export interface IRequest<
   get url(): string
 
   /**
+   * The request's path, decoded: without the query, every escape decoded but those of `#`, `$`, `&`, `+`, `,`, `/`,
+   * `:`, `;`, `=`, `?`, `@` and `%`, which stay as sent. Like {@link url}, it is without the {@link basePath}. Its
+   * route was matched with it, and every middleware path is compared with it.
+   */
+  get path(): string
+
+  /**
    * What the server took off the front of the request's path before routing it — the application's
    * `.basePath(...)` — or `''` when there is none, or when the request came without it.
    *

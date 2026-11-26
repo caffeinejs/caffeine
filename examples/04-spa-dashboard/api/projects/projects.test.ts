@@ -87,6 +87,10 @@ describe('the API', () => {
       expect(await res.text()).not.toContain('<div id="root">')
     })
 
+    it('answers /api itself with the problem, as any unknown API path', async () => {
+      await expectNotFoundJSON(await app.request('/api', { headers: { ...NAVIGATION, cookie: member.cookie } }))
+    })
+
     it('keeps a miss gated, so an anonymous caller learns nothing about what exists', async () => {
       expect((await app.request('/api/typo', { headers: XHR })).status).toBe(401)
     })

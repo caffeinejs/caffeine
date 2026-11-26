@@ -6,9 +6,6 @@ import { type HookFn, type HookName, type RequestHookName, type RequestHooks, ty
  * `app.hook(...)` call. Kept where that entry stands among the slot's plugins, which is the order its hooks run in.
  */
 export class HookBatch {
-  /** The name of the plugin that added these hooks, when it has one. */
-  name: string | undefined = undefined
-
   /** The context the entry registered with: what its server hooks are handed. */
   readonly kit: HTTPSetupContext
 
@@ -33,16 +30,6 @@ export class HookBatch {
     const list = name in this.request ? this.request[name as RequestHookName] : this[name as keyof ServerHooks]
     ;(list as unknown[]).push(fn)
   }
-
-  /** Whether the entry added no hook. */
-  get empty(): boolean {
-    return (
-      this.onRoute.length === 0 &&
-      this.onReady.length === 0 &&
-      this.onClose.length === 0 &&
-      Object.values(this.request).every(list => list.length === 0)
-    )
-  }
 }
 
 /** What `app.hook(...)` and `listener.hook(...)` add to `.with(...)`'s list, so the hook keeps its written position. */
@@ -57,6 +44,6 @@ export class HookRegistration extends HTTPPlugin {
   }
 
   register(context: HTTPSetupContext): void {
-    context.app.hook(this.#name, this.#fn as never)
+    context.server.hook(this.#name, this.#fn as never)
   }
 }

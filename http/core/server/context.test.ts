@@ -12,7 +12,7 @@ import { ErrConfiguration } from '../error/common.js'
 import type { ErrorHandler } from '../error/handler.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import { Router } from '../routing/programmatic/programmatic.js'
-import { withholdValidators } from './context.js'
+import { requestPath, withholdValidators } from './context.js'
 
 const routes = new Router('/c')
 routes
@@ -936,5 +936,24 @@ describe('withholdValidators', () => {
 
   it('refuses a context the engine did not build', () => {
     expect(() => withholdValidators({} as IContext)).toThrow(ErrConfiguration)
+  })
+})
+
+describe('requestPath', () => {
+  it.each([
+    ['/%61dmin/a%2Fb?x=1', '/admin/a%2Fb'],
+    ['/a/b/', '/a/b/'],
+    ['/a?b#c', '/a'],
+    ['/caf%C3%A9', '/café'],
+    ['/100%25', '/100%25'],
+    ['/%2561', '/%2561'],
+    ['http://h.example/a/b?c', '/a/b'],
+    ['http://h.example?x/admin', '/'],
+  ])('reads %s as %s', (target, expected) => {
+    expect(requestPath(target)).toBe(expected)
+  })
+
+  it.each(['/%E0%A4%A', 'http:///x'])('fails %s with a 400', target => {
+    expect(() => requestPath(target)).toThrow(ErrHTTPBadRequest)
   })
 })

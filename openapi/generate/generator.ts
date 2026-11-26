@@ -1,4 +1,10 @@
-import { defaultProblemFormats, type AuthSchemeDescriptor, type IRoute, type IRouteGroup } from '@caffeinejs/http'
+import {
+  defaultProblemFormats,
+  routeURL,
+  type AuthSchemeDescriptor,
+  type IRoute,
+  type IRouteGroup,
+} from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
@@ -19,7 +25,7 @@ import type {
 import { ComponentRegistry } from './components.js'
 import { defaultOperationId, operationSite, routerBaseName } from './naming.js'
 import { deriveParameters } from './parameters.js'
-import { routeURL, translatePath } from './paths.js'
+import { translatePath } from './paths.js'
 import { deriveRequestBody } from './request_body.js'
 import { deriveResponses } from './responses.js'
 import { authorizationNote, buildSecuritySchemes, deriveSecurity } from './security.js'

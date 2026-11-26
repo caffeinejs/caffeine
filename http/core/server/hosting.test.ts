@@ -59,7 +59,7 @@ describe('the fetch application', () => {
         () =>
           new (class extends HTTPPlugin {
             register(context: Parameters<HTTPPlugin['register']>[0]): void {
-              context.app.use((ctx, next) => {
+              context.server.use((ctx, next) => {
                 ctx.header('x-plugin', '1')
                 next()
               })
@@ -81,7 +81,7 @@ describe('the fetch application', () => {
       () =>
         new (class extends HTTPPlugin {
           register(context: Parameters<HTTPPlugin['register']>[0]): void {
-            context.app.mount(new Router('/mounted').get('/').handler(() => 'mounted'))
+            context.server.mount(new Router('/mounted').get('/').handler(() => 'mounted'))
           }
         })(),
     )

@@ -7,9 +7,10 @@ import { CaffeineIoC, token } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
+import { version } from '../core/constraints/route.js'
 import { ErrHTTPBadRequest } from '../core/error/http.js'
 import { healthProbes } from '../core/health/index.js'
-import { Router } from '../core/routing/programmatic/programmatic.js'
+import { Router, type AnyRouter } from '../core/routing/programmatic/programmatic.js'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { HTTPPlugin, type WebApplication } from '../index.js'
 import { node } from '../platform/node.testkit.js'
@@ -33,9 +34,9 @@ function stamping(name: string, header: string, log?: string[]) {
     new (class extends HTTPPlugin {
       override readonly name = name
 
-      register({ app }: HTTPSetupContext): void {
+      register({ server }: HTTPSetupContext): void {
         log?.push(name)
-        app.hook('onRequest', ctx => void ctx.header(header, 'yes'))
+        server.hook('onRequest', ctx => void ctx.header(header, 'yes'))
       }
     })()
 }
@@ -53,8 +54,8 @@ class Marking extends HTTPPlugin {
     this.name = `marking:${header}`
   }
 
-  register({ app }: HTTPSetupContext): void {
-    app.hook('onRequest', ctx => void ctx.header(this.#header, this.#value))
+  register({ server }: HTTPSetupContext): void {
+    server.hook('onRequest', ctx => void ctx.header(this.#header, this.#value))
   }
 }
 
@@ -126,8 +127,8 @@ describe('plugin registration', () => {
 
   // The logger feature configures alongside every other feature, so the logger is only final once they all have.
   // What the factories are handed is built after that, which is why it carries the one `.logger(...)` asked for
-  // rather than the default the application started with.
-  it('hands every factory one context carrying the configured logger', async () => {
+  // rather than the default the application started with. Each gets a server of its own, open while it registers.
+  it('hands every factory a context carrying the configured logger', async () => {
     const custom: Logger = { ...newNoopLogger() }
     const seen: { first?: HTTPSetupContext; second?: HTTPSetupContext } = {}
 
@@ -144,9 +145,9 @@ describe('plugin registration', () => {
 
     await app.bootstrap()
 
-    expect(seen.first).toBe(seen.second)
-    expect(seen.first?.logger).toBe(custom)
-    expect(seen.first?.container).toBe(app.container)
+    expect([seen.first?.logger, seen.second?.logger]).toEqual([custom, custom])
+    expect([seen.first?.container, seen.second?.container]).toEqual([app.container, app.container])
+    expect(seen.first?.server).not.toBe(seen.second?.server)
   })
 
   // An app-level factory is called once the container has initialized — not while features configure, where
@@ -232,6 +233,261 @@ describe('scoped plugin registration', () => {
   afterEach(async () => {
     await app?.close()
     app = undefined
+  })
+
+  // A router's plugins register on the server it is mounted on, after that server's own: they may rely on them.
+  it("registers a router's plugins after the server's own", async () => {
+    const log: string[] = []
+    app = createWebApplication({ adapter: node() })
+      .with(stamping('server', 'x-server', log))
+      .mount(new Router('/order').with(stamping('router', 'x-router', log)).get('/', () => ({ ok: true })))
+    await app.bootstrap()
+
+    expect(log).toEqual(['server', 'router'])
+  })
+
+  // Its plugins run whatever it declares itself: what they mount is the router's to serve.
+  it('serves what the plugin of a router with no routes of its own mounts', async () => {
+    const empty = new Router('/empty').with(
+      () =>
+        new (class extends HTTPPlugin {
+          register({ server }: HTTPSetupContext): void {
+            server.mount(new Router('/inner').get('/', () => ({ inner: true })))
+          }
+        })(),
+    )
+    app = createWebApplication({ adapter: node() }).mount(empty)
+    await app.bootstrap()
+
+    const res = await app.request('/empty/inner')
+    expect([res.status, await res.json()]).toEqual([200, { inner: true }])
+  })
+
+  // A router the application and a server plugin both mount is served once, with what its own plugin mounted.
+  it('serves once what a router plugin mounts when a server plugin mounts that router too', async () => {
+    const child = new Router('/child').get('/', () => ({ child: true }))
+    const api = new Router('/api').with(
+      () =>
+        new (class extends HTTPPlugin {
+          register({ server }: HTTPSetupContext): void {
+            server.mount(child)
+          }
+        })(),
+    )
+    app = createWebApplication({ adapter: node() })
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              server.mount(api)
+            }
+          })(),
+      )
+      .mount(api)
+    await app.bootstrap()
+
+    const res = await app.request('/api/child')
+    expect([res.status, await res.json()]).toEqual([200, { child: true }])
+  })
+
+  // A middleware factory gets the context its plugin registered with: the scope, not the server's root.
+  it("hands a router plugin's middleware factory the router's scope", async () => {
+    const seen: string[] = []
+    const router = new Router('/admin')
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              server.useFn(({ server: at }) => {
+                seen.push(at.prefix)
+                return (_ctx, next) => next()
+              })
+            }
+          })(),
+      )
+      .get('/', () => ({ ok: true }))
+    app = createWebApplication({ adapter: node() }).mount(router)
+    await app.bootstrap()
+
+    expect(seen).toEqual(['/admin'])
+  })
+
+  // A server hook belongs to the server, whatever routes its scope holds: one a plugin acquires a resource in must run.
+  it('runs the server hooks of a router plugin whose router serves no route', async () => {
+    const seen: string[] = []
+    const empty = new Router('/empty').with(
+      () =>
+        new (class extends HTTPPlugin {
+          register({ server }: HTTPSetupContext): void {
+            server.hook('onReady', () => void seen.push('ready'))
+            server.hook('onClose', () => void seen.push('close'))
+          }
+        })(),
+    )
+    const built = createWebApplication({ adapter: node() }).mount(empty)
+    await built.bootstrap()
+    await built.close()
+
+    expect(seen).toEqual(['ready', 'close'])
+  })
+
+  // A place is the whole mount chain: one router under two parents at one path registers in each.
+  it('registers a router under two parents at one path once for each parent', async () => {
+    let registered = 0
+    const child = new Router('/child')
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register(): void {
+              registered++
+            }
+          })(),
+      )
+      .get('/', () => ({ ok: true }))
+    app = createWebApplication({ adapter: node() }).mount(
+      new Router('/api').config(version('1.0.0')).mount(child),
+      new Router('/api').config(version('2.0.0')).mount(child),
+    )
+    await app.bootstrap()
+
+    expect(registered).toBe(2)
+  })
+
+  // A router's group prefix leads its routes after its parent's path: its plugins see the path its routes start at,
+  // and what they mount or declare nests there.
+  it.each([
+    ['/v1', '/pets', '/api/v1/pets'],
+    ['/v1/', '/pets', '/api/v1/pets'],
+  ])('scopes a router prefixed %j with path %j at its prefix and path', async (prefix, path, at) => {
+    const seen: string[] = []
+    const prefixed = new Router(path)
+      .extend((group: { prefix(prefix: string): unknown }) => {
+        group.prefix(prefix)
+      })
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              seen.push(server.prefix)
+              server.mount(
+                new Router('/x').get('/', () => ({ x: true })),
+                new Router().get('/bare', () => ({ bare: true })),
+              )
+            }
+          })(),
+      )
+      .get('/', () => ({ pets: true }))
+      .mount(new Router('/kids').get('/', () => ({ kids: true })))
+    app = createWebApplication({ adapter: node() }).mount(new Router('/api').mount(prefixed))
+    await app.bootstrap()
+
+    expect(seen).toEqual([at])
+    expect(
+      await Promise.all([at, `${at}/x`, `${at}/bare`, `${at}/kids`].map(async p => (await app!.request(p)).status)),
+    ).toEqual([200, 200, 200, 200])
+  })
+
+  // A path given to mount(...) is where the router is mounted, as a group around it would be: its group prefix comes
+  // after it, and both forms serve and scope the router at one path.
+  it.each([
+    ['mount(path, router)', (child: AnyRouter) => new Router('/api').mount('/external', child)],
+    ['a group around it', (child: AnyRouter) => new Router('/api').group('/external', g => g.mount(child))],
+  ])('scopes a prefixed router mounted with %s after the mount path', async (_, mount) => {
+    const seen: string[] = []
+    const child = new Router('/things')
+      .extend((group: { prefix(prefix: string): unknown }) => {
+        group.prefix('/v1')
+      })
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              seen.push(server.prefix)
+            }
+          })(),
+      )
+      .get('/', () => ({ things: true }))
+    app = createWebApplication({ adapter: node() }).mount(mount(child))
+    await app.bootstrap()
+
+    expect([seen, (await app.request('/api/external/v1/things')).status]).toEqual([['/api/external/v1/things'], 200])
+  })
+
+  // Its plugins' scope is where its routes are: a trailing slash on the mount path joins as its routes join it.
+  it('scopes a router with an empty group prefix where its routes are when mounted at a path ending in a slash', async () => {
+    const seen: string[] = []
+    const child = new Router('/child')
+      .extend((group: { prefix(prefix: string): unknown }) => {
+        group.prefix('')
+      })
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              seen.push(server.prefix)
+              server.mount(new Router('/extra').get('/', () => ({ extra: true })))
+            }
+          })(),
+      )
+      .get('/', () => ({ child: true }))
+    app = createWebApplication({ adapter: node() }).mount(new Router().mount('/api/', child))
+    await app.bootstrap()
+
+    expect([seen, (await app.request('/api/child')).status, (await app.request('/api/child/extra')).status]).toEqual([
+      ['/api/child'],
+      200,
+      200,
+    ])
+  })
+
+  // A configurer runs once per place: compiling what a router's plugin mounted reuses the router's own options.
+  it("runs a router's configurer once when its plugin mounts a router under it", async () => {
+    let calls = 0
+    const parent = new Router('/conf')
+      .config(() => {
+        calls++
+      })
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              server.mount(new Router('/child').get('/', () => ({ child: true })))
+            }
+          })(),
+      )
+      .get('/', () => ({ parent: true }))
+    app = createWebApplication({ adapter: node() }).mount(parent)
+    await app.bootstrap()
+
+    expect([calls, (await app.request('/conf/child')).status]).toEqual([1, 200])
+  })
+
+  // A plugin sees what the scopes around it registered: the server's plugins, then the routers it is nested in.
+  it("answers hasPlugin for the plugins of the scopes around a router's plugin, and not a sibling's", async () => {
+    const seen: boolean[] = []
+    const asking = new Router('/asking')
+      .with(
+        () =>
+          new (class extends HTTPPlugin {
+            register({ server }: HTTPSetupContext): void {
+              seen.push(
+                server.hasPlugin('server-named'),
+                server.hasPlugin('parent-named'),
+                server.hasPlugin('sibling-named'),
+              )
+            }
+          })(),
+      )
+      .get('/', () => ({ ok: true }))
+    app = createWebApplication({ adapter: node() })
+      .with(stamping('server-named', 'x-a'))
+      .mount(
+        new Router('/sibling').with(stamping('sibling-named', 'x-b')).get('/', () => ({ ok: true })),
+        new Router('/parent').with(stamping('parent-named', 'x-c')).mount(asking),
+      )
+    await app.bootstrap()
+
+    expect(seen).toEqual([true, true, false])
   })
 
   // The capability the extension mechanism did not have. A route group has a plugin scope of its own, so
@@ -338,15 +594,18 @@ describe('scoped plugin registration', () => {
     expect(log).toEqual(['twice', 'twice'])
   })
 
-  it('refuses a second plugin a router installs under the same name', async () => {
+  // Registering a plugin twice is the user's to decide: both register, and both run.
+  it('registers two plugins of one name a router installs, and runs both', async () => {
     const twice = new Router('/twice-group')
-      .with(stamping('twice-group', 'x-twice'))
-      .with(stamping('twice-group', 'x-twice'))
+      .with(stamping('twice-group', 'x-first'))
+      .with(stamping('twice-group', 'x-second'))
       .get('/', () => ({ ok: true }))
 
     app = createWebApplication({ adapter: node() }).mount(twice)
+    await app.bootstrap()
 
-    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "twice-group" twice on router/)
+    const res = await app.request('/twice-group')
+    expect([res.headers.get('x-first'), res.headers.get('x-second')]).toEqual(['yes', 'yes'])
   })
 
   it('keeps the plugins of two routers apart, one per group', async () => {

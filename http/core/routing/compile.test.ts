@@ -119,8 +119,8 @@ describe('the access-control mark', () => {
       .with(
         () =>
           new (class extends HTTPPlugin {
-            register({ app }: HTTPSetupContext): void {
-              app.hook('onRoute', route => {
+            register({ server }: HTTPSetupContext): void {
+              server.hook('onRoute', route => {
                 seen.push(route.route.authorization)
               })
             }

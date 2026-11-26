@@ -329,8 +329,10 @@ describe('OAuth2AuthenticationHandler', () => {
     it('takes the path it is told to, and refuses one that is not a path here or is the callback itself', () => {
       expect(new OAuth2AuthenticationHandler(SCHEME, options()).loginPath).toBe('/auth/provider/login')
       expect(new OAuth2AuthenticationHandler(SCHEME, options({ loginPath: '/sign-in' })).loginPath).toBe('/sign-in')
+      // A declared path: a missing leading "/" is added.
+      expect(new OAuth2AuthenticationHandler(SCHEME, options({ loginPath: 'login' })).loginPath).toBe('/login')
 
-      for (const loginPath of ['https://evil.example/login', '//evil.example', 'login', '/auth/provider']) {
+      for (const loginPath of ['https://evil.example/login', '//evil.example', '\\evil.example', '/auth/provider']) {
         expect(() => new OAuth2AuthenticationHandler(SCHEME, options({ loginPath }))).toThrow(/loginPath/)
       }
     })

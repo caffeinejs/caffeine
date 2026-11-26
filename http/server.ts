@@ -20,11 +20,14 @@ export interface ServerAddress {
 }
 
 /**
- * The callback `.server(configure)` takes: resolves the server's settings against the same context a plugin
- * factory gets, so `config` is the resolved tree and the container resolves. `S` is what the application's adapter
- * takes: `ServerSettings` under none, `NodeServerSettings` under `node()`, `BunServerSettings` under `bun()`.
+ * The callback `.server(configure)` takes: resolves the server's settings against the context a plugin factory gets,
+ * less `server`, which these settings describe, so `config` is the resolved tree and the container resolves. `S` is
+ * what the application's adapter takes: `ServerSettings` under none, `NodeServerSettings` under `node()`,
+ * `BunServerSettings` under `bun()`.
  */
-export type ServerConfigurer<S extends object, C = unknown> = (context: HTTPSetupContext<C>) => S | Promise<S>
+export type ServerConfigurer<S extends object, C = unknown> = (
+  context: Omit<HTTPSetupContext<C>, 'server'>,
+) => S | Promise<S>
 
 /** What `.serverCallback(...)` takes: the setup context, then the server the adapter built. */
 export type ServerCustomizer<C = unknown, I = unknown> = (

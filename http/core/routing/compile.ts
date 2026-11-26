@@ -66,7 +66,7 @@ export type RouteGroupCompiler = <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMe
  * The guard cache and the authorization configuration are resolved once here rather than per group, so two
  * sources compiling routes into the same application see one guard instance per key and one set of policies.
  */
-export function createRouteGroupCompiler(context: HTTPSetupContext): RouteGroupCompiler {
+export function createRouteGroupCompiler(context: Omit<HTTPSetupContext, 'server'>): RouteGroupCompiler {
   const container = context.container
   // Absent when the application never installed authorization — no authentication feature and no explicit
   // `Authorization(...)`. A protected route with authorization absent is refused separately, at start-up, by

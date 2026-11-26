@@ -169,9 +169,6 @@ describe('csrf() at the edges', () => {
       const ran: string[] = []
       const app = await ready(
         createWebApplication({ adapter: node() })
-          .server(() => ({
-            router: { ignoreTrailingSlash: true, caseSensitive: false, ignoreDuplicateSlashes: true },
-          }))
           .with(csrf(c => c.exclude('/webhooks')))
           .mount(
             new Router('/echo').post('/', () => (ran.push('echo'), ok())),
@@ -179,12 +176,11 @@ describe('csrf() at the edges', () => {
           ),
       )
 
-      for (const path of ['/echo/', '/ECHO', '//echo', '/%65cho']) {
+      for (const path of ['/echo', '/echo/', '/%65cho']) {
         expect((await post(app, path, CROSS_SITE)).status, path).toBe(403)
       }
-      expect((await post(app, '/WEBHOOKS/x', CROSS_SITE)).status).toBe(200)
       expect((await post(app, '/webhooks/..%2Fecho', CROSS_SITE)).status).toBe(200)
-      expect(ran).toEqual(['webhook', 'webhook'])
+      expect(ran).toEqual(['webhook'])
     })
 
     it('reads an exclusion written with a trailing slash as the same prefix', async () => {

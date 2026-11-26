@@ -9,14 +9,10 @@ import { clientRouteOf, dist, expectNotFoundJSON, fixtures, isolated, NAVIGATION
  * Server-rendered pages at the root, a plain file mount at `/static`, and the application under `/app`.
  *
  * The client routes are written on a prefixed router: `new Router('/app')` with a route at `/` composes to
- * `/app`, so the bare path is covered by the pair every subtree needs anyway. `/app/` needs no route of its
- * own — `/app/*` matches it with an empty wildcard. See `http/_tests/group_root_path.test.ts`.
+ * `/app`. `/app/` is `/app`: a trailing slash never makes another route. See `http/_tests/group_root_path.test.ts`.
  */
-function site(
-  routerOptions: { ignoreTrailingSlash?: boolean } = {},
-): WebApplication<never, never, unknown, NodeAdapter> {
+function site(): WebApplication<never, never, unknown, NodeAdapter> {
   return isolated()
-    .server(() => ({ router: routerOptions }))
     .with(
       staticFiles(s =>
         s
@@ -89,10 +85,10 @@ describe('an application mounted under a prefix', () => {
     await expectNotFoundJSON(await app.request('/settings', { headers: NAVIGATION }))
   })
 
-  // find-my-way matches `/app` and `/app/` as one route under `ignoreTrailingSlash`, so the mount registers each
-  // directory once and the shell's own routes still answer both spellings.
-  it('serves the same files under a router that ignores trailing slashes', async () => {
-    app = site({ ignoreTrailingSlash: true })
+  // A trailing slash never makes another route: the mount registers each directory once, and the shell's own routes
+  // answer both spellings.
+  it('serves the same files whichever spelling of a path a request uses', async () => {
+    app = site()
     await app.bootstrap()
 
     for (const path of ['/app', '/app/', '/app/settings/']) {

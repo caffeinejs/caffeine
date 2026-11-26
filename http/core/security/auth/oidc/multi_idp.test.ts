@@ -2,7 +2,10 @@ import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/applica
 import { describe, it, expect, vi } from 'vitest'
 
 import type { IContext } from '../../../../context.js'
-import type { HTTPSetupContext } from '../../../../plugin.js'
+import { HTTPPlugin, type HTTPSetupContext } from '../../../../plugin.js'
+import { PluginSlot } from '../../../../plugin_slot.js'
+import type { HookBatch } from '../../../lifecycle/batch.js'
+import { findMyWayMatcher } from '../../../matcher/find_my_way.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
@@ -79,7 +82,10 @@ async function configure(build: (b: AuthenticationBuilder) => void): Promise<voi
  * {@link OIDCRoutesRef} are mounted against a setup-context double and the logger's warnings are captured — the
  * same thing an application would see in its log.
  */
-async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => void): Promise<string[]> {
+async function configureAndCollectWarnings(
+  build: (b: AuthenticationBuilder) => void,
+  scope: 'server' | 'router' = 'server',
+): Promise<string[]> {
   const builder = new AuthenticationBuilder()
   build(builder)
   const { kit, bound } = makeKit()
@@ -91,29 +97,34 @@ async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => 
   }
 
   // The warning is decided in `onReady`, once routes have registered, so the double runs those hooks. No route
-  // registers here, which is what leaves a non-default strategy unreachable.
-  const onReady: Array<() => unknown> = []
+  // registers here, which is what leaves a non-default strategy unreachable. A router's slot sits in its server's.
+  const slot = scope === 'server' ? new PluginSlot() : new PluginSlot(undefined, '', new PluginSlot())
+  slot.forServer({ name: undefined, basePath: '', matcher: findMyWayMatcher, address: () => undefined })
   const warn = vi.fn()
-  const context = {
-    app: {
-      hook: (name: string, hook: () => unknown) => {
-        if (name === 'onReady') {
-          onReady.push(hook)
-        }
-      },
-      mount: () => undefined,
-    },
-    logger: { warn, error: vi.fn() },
+  const context = { logger: { warn, error: vi.fn() }, server: slot } as unknown as HTTPSetupContext
+  const meta = ref.meta
+
+  const batches: HookBatch[] = []
+  await slot.during(() =>
+    slot.run(
+      () =>
+        new (class extends HTTPPlugin {
+          register(registering: HTTPSetupContext): void {
+            mountOIDCRoutes(registering, meta)
+          }
+        })(),
+      context,
+      'here',
+      batch => batches.push(batch),
+    ),
+  )
+  for (const batch of batches) {
+    for (const onReady of batch.onReady) {
+      await onReady(batch.kit)
+    }
   }
 
-  mountOIDCRoutes(context as never, ref.meta, '')
-
-  for (const hook of onReady) {
-    await hook()
-  }
-
-  const warnings = warn.mock.calls.map(call => String(call[1]))
-  return warnings
+  return warn.mock.calls.map(call => String(call[1]))
 }
 
 /**
@@ -361,6 +372,18 @@ describe('startup validation', () => {
       addOIDC(b, 'Okta', OKTA)
       b.forward('auth', () => 'Google').default('auth')
     })
+
+    expect(warnings).toEqual([])
+  })
+
+  // A gate on a router sees the routes of that router alone, whatever its path: a route of another names a scheme it
+  // cannot see.
+  it('T-MULTI-07d: leaves the warning to a gate on a server', async () => {
+    const warnings = await configureAndCollectWarnings(b => {
+      addOIDC(b, 'Google', GOOGLE)
+      addOIDC(b, 'Okta', OKTA)
+      b.default('Google')
+    }, 'router')
 
     expect(warnings).toEqual([])
   })

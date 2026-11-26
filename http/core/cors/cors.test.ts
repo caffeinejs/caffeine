@@ -8,6 +8,7 @@ import { node } from '../../platform/node.testkit.js'
 import { version } from '../constraints/route.js'
 import { ErrConfiguration } from '../error/common.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
+import { ErrRouteConflict } from '../matcher/matcher.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { Authentication } from '../security/auth/auth.js'
 import { BaseAuthenticationHandler } from '../security/auth/handler.js'
@@ -118,7 +119,7 @@ describe('corsPolicy() on an actual request', () => {
     expect(res.headers.get('vary')).toBe(null)
   })
 
-  it("lets a route's cors(...) name origins of its own", async () => {
+  it("lets a route's cors(...) name origins of its own for its answers, not its preflight", async () => {
     const wide = new Router('/wide')
       .config(cors({ origins: [PARTNER] }))
       .get('/')
@@ -129,9 +130,8 @@ describe('corsPolicy() on an actual request', () => {
       'access-control-allow-origin': PARTNER,
     })
     expect(corsHeaders(await built.request('/wide', { headers: { origin: A } }))).toEqual({})
-    expect(corsHeaders(await built.request('/wide', preflight(PARTNER, 'GET')))['access-control-allow-origin']).toBe(
-      PARTNER,
-    )
+    const pre = await built.request('/wide', preflight(PARTNER, 'GET'))
+    expect([pre.status, corsHeaders(pre)]).toEqual([404, {}])
   })
 
   it('answers * to any origin under "*", and varies on nothing', async () => {
@@ -267,13 +267,65 @@ describe('corsPolicy() on a preflight', () => {
     expect(res.headers.get('access-control-allow-methods')).toBe('GET')
   })
 
-  it('leaves a preflight for a method no route serves to the 404, with no CORS header', async () => {
+  // No route serves it, so the request it clears would get the 404: granted, the browser sends it and reads that 404,
+  // not a CORS error.
+  it('grants a preflight for a method no route serves from its own settings', async () => {
     const res = await (await serve()).request('/r', preflight(A, 'DELETE'))
 
-    expect(res.status).toBe(404)
-    expect(corsHeaders(res)).toEqual({})
-    // The problem answer's own: the policy adds nothing.
-    expect(res.headers.get('vary')).toBe('Accept')
+    expect([
+      res.status,
+      res.headers.get('access-control-allow-origin'),
+      res.headers.get('access-control-allow-methods'),
+    ]).toEqual([204, A, 'DELETE'])
+  })
+
+  it('grants a preflight to a path no route serves from its own settings', async () => {
+    const res = await (await serve()).request('/nope', preflight(A, 'GET'))
+
+    expect([res.status, res.headers.get('access-control-allow-origin')]).toEqual([204, A])
+  })
+
+  it('leaves a preflight to a path no route serves from an origin it does not list to the 404', async () => {
+    const res = await (await serve()).request('/nope', preflight('https://evil.example', 'GET'))
+
+    expect([res.status, corsHeaders(res)]).toEqual([404, {}])
+  })
+
+  // With a constrained route a preflight to a path no route serves still lands on none, and gets the policy's own.
+  it('grants a preflight to a path no route serves beside a constrained route', async () => {
+    const built = createWebApplication()
+      .with(corsPolicy(c => c.origins(A)))
+      .mount(
+        new Router('/v')
+          .config(version('1.0.0'))
+          .get('/')
+          .handler(() => 'v1'),
+      )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/nope', preflight(A, 'GET'))
+
+    expect([res.status, res.headers.get('access-control-allow-origin')]).toEqual([204, A])
+  })
+
+  // Server policy and router policy: the server's hooks run first, so its own settings answer a path under the
+  // router that no route serves.
+  it('grants a preflight under a router with a policy of its own from the server policy', async () => {
+    const built = createWebApplication()
+      .with(corsPolicy(c => c.origins(A)))
+      .mount(
+        new Router('/s')
+          .with(corsPolicy(c => c.origins('https://b.example')))
+          .get('/x')
+          .handler(() => 's'),
+      )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/s/missing', preflight(A, 'GET'))
+
+    expect([res.status, res.headers.get('access-control-allow-origin')]).toEqual([204, A])
   })
 
   it('leaves a preflight from an origin it does not list to the 404, with no CORS header', async () => {
@@ -296,19 +348,59 @@ describe('corsPolicy() on a preflight', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe(A)
   })
 
-  // A path that cannot be decoded names no route: the preflight goes on to the not-found answer.
-  it('leaves a preflight for a path that cannot be decoded alone', async () => {
-    const res = await (await serve()).request('/%E0%A4%A', preflight(A, 'GET'))
+  // A path that cannot be decoded is refused with a 400 before any hook runs, so a preflight to it gets no CORS header.
+  it.each([
+    ['a method a route serves', 'GET', () => serve()],
+    // Whatever routes the server holds:
+    ['a method no route serves', 'DELETE', () => serve()],
+    // Whatever routes the server holds:
+    [
+      'beside a constrained route',
+      'GET',
+      async () => {
+        const built = createWebApplication()
+          .with(corsPolicy(c => c.origins(A)))
+          .mount(
+            new Router('/v')
+              .config(version('1.0.0'))
+              .get('/')
+              .handler(() => 'v1'),
+          )
+        app = built
+        await built.bootstrap()
+        return built
+      },
+    ],
+  ])('refuses a preflight for a path that cannot be decoded with a 400, %s', async (_, method, build) => {
+    const res = await (await build()).request('/%E0%A4%A', preflight(A, method))
 
-    expect(res.status).toBe(404)
-    expect(corsHeaders(res)).toEqual({})
+    expect([res.status, corsHeaders(res)]).toEqual([400, {}])
   })
 
-  it('leaves the preflight of a route marked cors(false) to the 404', async () => {
-    const res = await (await serve()).request('/off', preflight(A, 'GET'))
+  it('grants the preflight to a route marked cors(false), and leaves its answer without CORS headers', async () => {
+    const built = await serve()
 
-    expect(res.status).toBe(404)
-    expect(corsHeaders(res)).toEqual({})
+    const pre = await built.request('/off', preflight(A, 'GET'))
+    const actual = await built.request('/off', { headers: { origin: A } })
+
+    expect([pre.status, pre.headers.get('access-control-allow-origin')]).toEqual([204, A])
+    expect(corsHeaders(actual)).toEqual({})
+  })
+
+  it('refuses the preflight that lands on an OPTIONS route marked cors(false)', async () => {
+    const built = await serve(
+      undefined,
+      new Router()
+        .options('/admin')
+        .config(cors(false))
+        .handler(() => 'own')
+        .delete('/admin')
+        .handler(() => 'gone'),
+    )
+
+    const res = await built.request('/admin', preflight(A, 'DELETE'))
+
+    expect([res.status, await res.text(), corsHeaders(res)]).toEqual([200, 'own', {}])
   })
 
   // A browser sends no Accept-Version with a preflight: the versions of a path answer it together.
@@ -332,7 +424,7 @@ describe('corsPolicy() on a preflight', () => {
     expect(res.headers.get('access-control-allow-methods')).toBe('GET')
   })
 
-  it('refuses the preflight of a path whose versions disagree, and warns once', async () => {
+  it('answers the preflight of a path whose versions disagree from the policy, and warns nothing', async () => {
     const warn = vi.fn()
     const built = createWebApplication()
       .logger(b => b.use({ ...newNoopLogger(), warn }))
@@ -354,36 +446,8 @@ describe('corsPolicy() on a preflight', () => {
     const first = await built.request('/v', preflight(A, 'GET'))
     await built.request('/v', preflight(A, 'GET'))
 
-    expect(first.status).toBe(404)
-    expect(corsHeaders(first)).toEqual({})
-    expect(
-      warn.mock.calls.filter(
-        call => call[1] === 'Cannot answer a preflight: the routes behind it have different CORS settings',
-      ),
-    ).toEqual([
-      [{ method: 'GET', path: '/v' }, 'Cannot answer a preflight: the routes behind it have different CORS settings'],
-    ])
-  })
-
-  // find-my-way takes the two for one route: a preflight cannot tell which one it is for.
-  it('refuses the preflight of routes the matcher files together under other parameter names', async () => {
-    const built = await serve(
-      undefined,
-      new Router('/v')
-        .config(version('1.0.0'))
-        .get('/:id')
-        .handler(() => 'v1'),
-      new Router('/v')
-        .name('V2')
-        .config(version('2.0.0'), cors(false))
-        .get('/:petId')
-        .handler(() => 'v2'),
-    )
-
-    const res = await built.request('/v/7', preflight(A, 'GET'))
-
-    expect(res.status).toBe(404)
-    expect(corsHeaders(res)).toEqual({})
+    expect([first.status, first.headers.get('access-control-allow-origin')]).toEqual([204, A])
+    expect(warn.mock.calls.filter(call => String(call[1]).includes('preflight'))).toEqual([])
   })
 
   // The plugin answers what it grants before the path's own OPTIONS route runs, and leaves it the rest.
@@ -408,11 +472,10 @@ describe('corsPolicy() on a preflight', () => {
     expect(ran).toBe(1)
   })
 
-  // The preflight table is find-my-way's: with a matcher of the application's own, a preflight for a constrained route
-  // finds nothing and goes unanswered.
-  it('grants no preflight for a constrained route under a matcher of its own', async () => {
+  // Whatever the matcher, a preflight is answered from the route it lands on.
+  it("answers a preflight under a matcher of the application's own as under the default one", async () => {
     const built = createWebApplication()
-      .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
+      .server(() => ({ matcher: strategies => findMyWayMatcher(strategies) }))
       .with(corsPolicy(c => c.origins(A)))
       .mount(
         new Router('/v')
@@ -425,8 +488,7 @@ describe('corsPolicy() on a preflight', () => {
 
     const res = await built.request('/v', preflight(A, 'GET'))
 
-    expect(res.status).toBe(404)
-    expect(corsHeaders(res)).toEqual({})
+    expect([res.status, res.headers.get('access-control-allow-origin')]).toEqual([204, A])
   })
 
   it('answers on the Node application the same way', async () => {
@@ -539,25 +601,299 @@ describe('corsPolicy() refusals at start-up', () => {
     await expect(booting).rejects.toThrow(message)
   })
 
-  // A router's hooks never see a preflight, which matches no route.
-  it('refuses a policy on a router', async () => {
+  // A policy on a server serves no route of its own: the application's `OPTIONS` route stays, and its preflights are
+  // still answered first.
+  it("keeps an application's own OPTIONS route under a server's policy", async () => {
+    const built = createWebApplication()
+      .with(corsPolicy(c => c.origins(A)))
+      .mount(
+        new Router()
+          .options('/')
+          .handler(() => 'own options')
+          .get('/', () => 'root'),
+      )
+    app = built
+    await built.bootstrap()
+
+    const own = await built.request('/', { method: 'OPTIONS' })
+    const pre = await built.request('/', preflight(A, 'GET'))
+
+    expect([own.status, await own.text(), pre.status]).toEqual([200, 'own options', 204])
+  })
+
+  // Two policies are the user's to register: on a server neither serves a route, both start, and the first one answers
+  // a preflight.
+  it('starts two policies on one server, and answers a preflight with the first', async () => {
+    const built = createWebApplication()
+      .with(corsPolicy(c => c.origins(A)))
+      .with(corsPolicy(c => c.origins(PARTNER)))
+      .mount(new Router('/two').get('/', () => 'two'))
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/two', preflight(A, 'GET'))
+
+    expect([res.status, corsHeaders(res)['access-control-allow-origin']]).toEqual([204, A])
+  })
+})
+
+describe('corsPolicy() on a router', () => {
+  async function routed() {
     const built = createWebApplication().mount(
       new Router('/s')
         .with(corsPolicy(c => c.origins(A)))
-        .get('/')
+        .get('/x')
         .handler(() => 's'),
+      new Router('/plain').get('/').handler(() => 'plain'),
+    )
+    app = built
+    await built.bootstrap()
+    return built
+  }
+
+  // Its `OPTIONS` route under the router is what a preflight to the router's routes matches.
+  it("answers a preflight to the router's routes", async () => {
+    const res = await (await routed()).request('/s/x', preflight(A, 'GET'))
+
+    expect(res.status).toBe(204)
+    expect(corsHeaders(res)).toEqual({
+      'access-control-allow-origin': A,
+      'access-control-allow-methods': 'GET',
+    })
+  })
+
+  it("allows an actual request to the router's routes", async () => {
+    const res = await (await routed()).request('/s/x', { headers: { origin: A } })
+
+    expect(res.status).toBe(200)
+    expect(corsHeaders(res)).toEqual({ 'access-control-allow-origin': A })
+  })
+
+  // It covers its scope alone: a sibling's routes stay without CORS.
+  it('leaves the routes outside the router alone', async () => {
+    const built = await routed()
+
+    const actual = await built.request('/plain', { headers: { origin: A } })
+    const pre = await built.request('/plain', preflight(A, 'GET'))
+
+    expect(corsHeaders(actual)).toEqual({})
+    expect([pre.status, corsHeaders(pre)]).toEqual([404, {}])
+  })
+
+  // Its `OPTIONS` route catches every preflight under the router's path, one for a sibling router's route at a longer
+  // path included, and answers it from the policy's settings.
+  it('answers a preflight under its path from its settings, whichever scope serves the route', async () => {
+    const built = createWebApplication().mount(
+      new Router('/api')
+        .with(corsPolicy(c => c.origins(A).credentials(true)))
+        .get('/x')
+        .handler(() => 'x'),
+      new Router('/api/admin').delete('/users/:id').handler(() => 'gone'),
+    )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/api/admin/users/1', preflight(A, 'DELETE'))
+
+    expect([
+      res.status,
+      res.headers.get('access-control-allow-origin'),
+      res.headers.get('access-control-allow-credentials'),
+    ]).toEqual([204, A, 'true'])
+  })
+
+  // Each policy on a router serves `OPTIONS` routes at its path: two at one path hold the same routes.
+  it('refuses two policies on routers at the same path at start-up', async () => {
+    const built = createWebApplication().mount(
+      new Router('/api')
+        .with(corsPolicy(c => c.origins(A)))
+        .get('/a')
+        .handler(() => 'a'),
+      new Router('/api')
+        .with(corsPolicy(c => c.origins(PARTNER)))
+        .get('/b')
+        .handler(() => 'b'),
     )
     app = built
 
-    await expect(built.bootstrap()).rejects.toThrow('Cannot install corsPolicy() on a router or a controller')
+    await expect(built.bootstrap()).rejects.toThrow(ErrRouteConflict)
   })
 
-  it('refuses a second policy on one server', async () => {
+  // The policy's `OPTIONS /*` is a route like any other: under its path it is more specific than a broader one of the
+  // application's, and answers a plain `OPTIONS` request there with the 404 a path no route matches gets.
+  it("answers a plain OPTIONS request under its path before an application's broader OPTIONS route", async () => {
     const built = createWebApplication()
-      .with(corsPolicy(c => c.origins(A)))
-      .with(corsPolicy(c => c.origins(A)))
+      .mount(
+        new Router('/api')
+          .with(corsPolicy(c => c.origins(A)))
+          .get('/data')
+          .handler(() => 'data'),
+      )
+      .mount(new Router().options('/*', () => 'app'))
+    app = built
+    await built.bootstrap()
+
+    const [under, outside] = await Promise.all([
+      built.request('/api/data', { method: 'OPTIONS' }),
+      built.request('/other', { method: 'OPTIONS' }),
+    ])
+
+    expect([under.status, outside.status, await outside.text()]).toEqual([404, 200, 'app'])
+  })
+
+  // A "?" inside a segment is no optional parameter, and a "*" after a parameter is text, not a wildcard: the path keeps
+  // its children.
+  it.each([
+    ['/item-:id?', '/data', ['/item-123/data']],
+    ['/download/:id-file*name', '/child', ['/download/7-file*name/child']],
+  ])('answers preflights under a router at %s', async (path, route, urls) => {
+    const built = createWebApplication().mount(
+      new Router(path)
+        .with(corsPolicy(c => c.origins(A)))
+        .get(route)
+        .handler(() => 'ok'),
+    )
+    app = built
+    await built.bootstrap()
+
+    const statuses = await Promise.all(urls.map(async url => (await built.request(url, preflight(A, 'GET'))).status))
+
+    expect(statuses).toEqual(urls.map(() => 204))
+  })
+
+  // A trailing slash never makes another route: the policy's `OPTIONS` answers a prefixed router's root at both forms.
+  it.each(['/tenants/r', '/tenants/r/'])("answers a preflight to a prefixed router's root at %s", async url => {
+    const built = createWebApplication().mount(
+      new Router()
+        .extend((group: { prefix(prefix: string): unknown }) => {
+          group.prefix('/tenants/:id')
+        })
+        .with(corsPolicy(c => c.origins(A)))
+        .get('/', () => 'root'),
+    )
+    app = built
+    await built.bootstrap()
+
+    const [res, served] = await Promise.all([built.request(url, preflight(A, 'GET')), built.request(url)])
+
+    expect([served.status, res.status, corsHeaders(res)['access-control-allow-origin']]).toEqual([200, 204, A])
+  })
+
+  // An `OPTIONS` route outside the policy's scope answers its own path: the policy's hooks do not run in front of it.
+  it("leaves a preflight to a sibling router's OPTIONS route to that route", async () => {
+    const built = createWebApplication().mount(
+      new Router('/api')
+        .with(corsPolicy(c => c.origins(A)))
+        .get('/task')
+        .handler(() => 'task'),
+      new Router('/api').options('/task', () => 'sibling'),
+    )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/api/task', preflight(A, 'GET'))
+
+    expect([res.status, await res.text(), corsHeaders(res)]).toEqual([200, 'sibling', {}])
+  })
+
+  // The policy's own `OPTIONS` routes carry no constraint: a preflight to a versioned `OPTIONS` route of the
+  // application's at the same path is answered from that route's settings.
+  it("answers a preflight for a versioned OPTIONS route of the application's at the policy's path", async () => {
+    const built = createWebApplication().mount(
+      new Router('/api')
+        .config(version('1.0.0'))
+        .with(corsPolicy(c => c.origins(A)))
+        .options('/', () => 'own'),
+    )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/api', preflight(A, 'OPTIONS'))
+
+    expect([res.status, corsHeaders(res)['access-control-allow-origin']]).toEqual([204, A])
+  })
+
+  // An `OPTIONS` route of the application's at the policy's own path holds the route the policy serves there.
+  it("refuses an unconstrained OPTIONS route of the application's at the policy's path at start-up", async () => {
+    const built = createWebApplication().mount(
+      new Router('/api').with(corsPolicy(c => c.origins(A))).options('/', () => 'own'),
+    )
     app = built
 
-    await expect(built.bootstrap()).rejects.toThrow('Cannot register plugin "caffeine-cors" twice')
+    await expect(built.bootstrap()).rejects.toThrow(ErrRouteConflict)
+  })
+
+  // An `OPTIONS` route of the application's under the policy's path: the policy answers its preflights first, and a
+  // plain `OPTIONS` request reaches it.
+  it("answers the preflights of an OPTIONS route of the application's under its path, and leaves it the rest", async () => {
+    const built = createWebApplication().mount(
+      new Router('/api')
+        .with(corsPolicy(c => c.origins(A)))
+        .options('/task', () => 'own')
+        .get('/task', () => 'task'),
+    )
+    app = built
+    await built.bootstrap()
+
+    const pre = await built.request('/api/task', preflight(A, 'GET'))
+    const plain = await built.request('/api/task', { method: 'OPTIONS' })
+
+    expect([pre.status, corsHeaders(pre)['access-control-allow-origin'], plain.status, await plain.text()]).toEqual([
+      204,
+      A,
+      200,
+      'own',
+    ])
+  })
+
+  // A browser sends no Accept-Version with a preflight: the router's version must not keep it from the policy.
+  it("answers a preflight to a versioned router's routes", async () => {
+    const built = createWebApplication().mount(
+      new Router('/ver')
+        .config(version('1.0.0'))
+        .with(corsPolicy(c => c.origins(A)))
+        .get('/x')
+        .handler(() => 'x'),
+    )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/ver/x', preflight(A, 'GET'))
+
+    expect([res.status, corsHeaders(res)['access-control-allow-origin']]).toEqual([204, A])
+  })
+
+  // The policy's own `OPTIONS` route catches every preflight under its path, one asking for `OPTIONS` included.
+  it.each([
+    ['unconstrained', {}],
+    ['versioned', version('1.0.0')],
+  ])('grants a preflight asking for OPTIONS under its path, %s', async (_, options) => {
+    const built = createWebApplication().mount(
+      new Router('/s')
+        .config(options)
+        .with(corsPolicy(c => c.origins(A)))
+        .get('/x')
+        .handler(() => 's'),
+    )
+    app = built
+    await built.bootstrap()
+
+    const res = await built.request('/s/missing', preflight(A, 'OPTIONS'))
+
+    expect([
+      res.status,
+      res.headers.get('access-control-allow-origin'),
+      res.headers.get('access-control-allow-methods'),
+    ]).toEqual([204, A, 'OPTIONS'])
+  })
+
+  it('grants a preflight under its path for a method no route serves', async () => {
+    const res = await (await routed()).request('/s/x', preflight(A, 'DELETE'))
+
+    expect([
+      res.status,
+      res.headers.get('access-control-allow-origin'),
+      res.headers.get('access-control-allow-methods'),
+    ]).toEqual([204, A, 'DELETE'])
   })
 })

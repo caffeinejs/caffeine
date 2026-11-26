@@ -418,7 +418,7 @@ describe('compression() per route', () => {
   })
 })
 
-describe('two compression() over one route', () => {
+describe('compression() on a router beside one on the server', () => {
   async function nested(api: AnyRouter, ...routers: AnyRouter[]) {
     const built = createWebApplication()
       .with(compression(c => c.encodings('br')))
@@ -428,31 +428,16 @@ describe('two compression() over one route', () => {
     return built
   }
 
-  it("lets the router's, the innermost, choose the coding", async () => {
+  // Two over one route both run, the server's first: it codes the answer, and the router's finds it coded.
+  it("codes a router's route once, by the server's, the one that runs first", async () => {
     const api = new Router('/api').with(compression(c => c.encodings('gzip')))
     api.get('/').handler(() => PETS)
     const built = await nested(api)
 
     const res = await built.request('/api', { headers: { 'accept-encoding': 'gzip, br' } })
 
-    expect(res.headers.get('content-encoding')).toBe('gzip')
-    expect(res.headers.get('vary')).toBe('Accept-Encoding')
+    expect(res.headers.get('content-encoding')).toBe('br')
     expect(await decoded(res)).toBe(PETS_JSON)
-  })
-
-  it("leaves alone what the innermost leaves alone, whatever the server's would do", async () => {
-    const api = new Router('/api').with(compression(c => c.threshold(8 * KiB)))
-    api.get('/').handler(ctx => {
-      ctx.header('content-type', 'text/plain')
-      return 'a'.repeat(4 * KiB)
-    })
-    const built = await nested(api)
-
-    const res = await built.request('/api', { headers: { 'accept-encoding': 'gzip, br' } })
-
-    expect(res.headers.get('content-encoding')).toBe(null)
-    expect(res.headers.get('vary')).toBe(null)
-    expect(await res.text()).toBe('a'.repeat(4 * KiB))
   })
 
   it("keeps the server's for a router without one of its own", async () => {
@@ -463,20 +448,6 @@ describe('two compression() over one route', () => {
     const res = await built.request('/pets', { headers: { 'accept-encoding': 'gzip, br' } })
 
     expect(res.headers.get('content-encoding')).toBe('br')
-  })
-
-  it('refuses a second compression() in one slot', async () => {
-    const built = createWebApplication().with(compression()).with(compression()).mount(pets())
-    apps.push(built)
-    const failure = await built.bootstrap().then(
-      () => undefined,
-      (err: unknown) => err as Error,
-    )
-
-    expect(failure).toBeInstanceOf(ErrConfiguration)
-    expect(failure!.message.split('\n')[0]).toBe(
-      `Cannot register plugin "caffeine-compression" twice on the application's own server`,
-    )
   })
 })
 

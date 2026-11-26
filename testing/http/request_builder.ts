@@ -1,4 +1,4 @@
-import { URLBuilder } from './url_builder.js'
+import { LOCAL_ORIGIN, urlOf } from './url_builder.js'
 
 /**
  * Builds a `RequestInit` fluently. A traditional builder (mirrors `ErrHTTPBuilder`) with two ergonomic
@@ -104,10 +104,7 @@ export class RequestInitBuilder {
     if (this.#path === undefined) {
       throw new Error('Cannot build request: no path set — call path() first')
     }
-    const url = new URLBuilder(this.#path)
-    for (const [name, value] of this.#query) {
-      url.query(name, value)
-    }
-    return new Request(url.build(), this.build())
+    // The path is concrete, never a template: `newReq().path(newURL(...).build())` sends what `newURL` built.
+    return new Request(urlOf(this.#path, LOCAL_ORIGIN, new URLSearchParams(this.#query)), this.build())
   }
 }

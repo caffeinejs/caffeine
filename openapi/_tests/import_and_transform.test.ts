@@ -382,8 +382,8 @@ describe('openapi without authentication', () => {
 function mounting(router: AnyRouter): () => HTTPPlugin {
   return () =>
     new (class extends HTTPPlugin {
-      register({ app }: HTTPSetupContext): void {
-        app.mount(router)
+      register({ server }: HTTPSetupContext): void {
+        server.mount(router)
       }
     })()
 }

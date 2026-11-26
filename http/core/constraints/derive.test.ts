@@ -6,6 +6,7 @@ import { node } from '../../platform/node.testkit.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrRouteConflict } from '../matcher/matcher.js'
+import type { RouteOptions } from '../routing/options.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import type { ConstraintRequest, ConstraintStorage, ConstraintStrategy } from './constraints.js'
 import { constraint, version } from './route.js'
@@ -149,6 +150,54 @@ describe('route constraints on the engine', () => {
     expect((await built.request('/v', { headers: { 'x-flavor': 'y', 'accept-version': '1.x' } })).status).toBe(404)
   })
 
+  // A null drops every constraint the route's groups set, where a Map would only add to them.
+  it("drops a router's version on a route that declares constraints: null", async () => {
+    const built = createWebApplication().mount(
+      new Router('/v')
+        .config(version('1.0.0'))
+        .get('/')
+        .config({ constraints: null })
+        .handler(() => 'ok'),
+    )
+    app = built
+    await built.bootstrap()
+
+    expect((await built.request('/v')).status).toBe(200)
+  })
+
+  // What a route sets after its null is all it selects on, as an object or from a configurer: the null still drops what
+  // its groups set.
+  const toTestHost = (options: Partial<RouteOptions>): void => {
+    options.constraints = constraint('host', 'test.example').constraints
+  }
+  it.each([
+    ['an object', [constraint('host', 'test.example')]],
+    ['a configurer', [toTestHost]],
+    ['a configurer replacing an object', [constraint('host', 'other.example'), toTestHost]],
+    [
+      'two objects, the later replacing the host',
+      [constraint('host', 'other.example'), constraint('host', 'test.example')],
+    ],
+  ])(
+    "keeps a router's version dropped when a route adds a constraint after constraints: null, from %s",
+    async (_, inputs) => {
+      const built = createWebApplication().mount(
+        new Router('/v')
+          .config(version('1.0.0'))
+          .get('/')
+          .config({ constraints: null }, ...inputs)
+          .handler(() => 'ok'),
+      )
+      app = built
+      await built.bootstrap()
+
+      expect([
+        (await built.request('http://test.example/v')).status,
+        (await built.request('http://other.example/v')).status,
+      ]).toEqual([200, 404])
+    },
+  )
+
   it('refuses a constraint no strategy is named after', async () => {
     const built = createWebApplication().mount(
       new Router('/x')
@@ -270,7 +319,7 @@ describe('route constraints on the engine', () => {
         () =>
           new (class extends HTTPPlugin {
             register(context: HTTPSetupContext): void {
-              context.app.mount(
+              context.server.mount(
                 new Router('/late')
                   .config(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
                   .get('/')

@@ -22,6 +22,12 @@ describe('fillPath', () => {
     expect(fillPath('/pets/:petID/orders/:orderID', { petID: 'a b', orderID: 'ø' })).toBe('/pets/a%20b/orders/%C3%B8')
   })
 
+  // A "/" inside a parameter's regex is part of the regex, not a segment boundary: the router reads it so.
+  it('fills a parameter whose regex holds a "/", keeping the text around it', () => {
+    expect(fillPath('/d/:p(a//b|abc)/', { p: 'abc' })).toBe('/d/abc/')
+    expect(fillPath('/d/:p((a|b)/c)/x', { p: 'a' })).toBe('/d/a/x')
+  })
+
   it('places an optional parameter when given and drops it when not', () => {
     expect(fillPath('/pets/:id?', { id: 7 })).toBe('/pets/7')
     expect(fillPath('/pets/:id?', {})).toBe('/pets')
@@ -175,6 +181,13 @@ describe('fillPath', () => {
     expect(fillPath('/x/100%-:id', { id: 7 })).toBe('/x/100%25-7')
     expect(fillPath('/p/x+-:id', { id: 7 })).toBe('/p/x+-7')
     expect(fillPath('/p/v::1-:id', { id: 7 })).toBe('/p/v:1-7')
+  })
+
+  // A `*` before a segment's first parameter starts a wildcard, as the route syntax reads it; after one it is text.
+  it('fills a wildcard written inside a segment', () => {
+    expect(fillPath('/files*', { '*': 'a/b' })).toBe('/filesa/b')
+    expect(fillPath('/a::*', { '*': 'x' })).toBe('/a:x')
+    expect(fillPath('/download/:id-file*name', { id: 7 })).toBe('/download/7-file*name')
   })
 })
 

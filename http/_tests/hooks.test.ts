@@ -72,7 +72,7 @@ describe('lifecycle hooks', () => {
   // then the route's, then what onRoute added.
   it('runs onRequest hooks in the fixed order', async () => {
     const pets = new Router('/pets')
-      .with(plugin(({ app: ops }) => ops.hook('onRequest', () => void trace.push('router plugin'))))
+      .with(plugin(({ server: ops }) => ops.hook('onRequest', () => void trace.push('router plugin'))))
       .guards([TracingGuard])
       .hook('onRequest', () => void trace.push('router'))
       .get('/')
@@ -83,7 +83,7 @@ describe('lifecycle hooks', () => {
       a
         .hook('onRequest', () => void trace.push('app'))
         .with(
-          plugin(({ app: ops }) =>
+          plugin(({ server: ops }) =>
             ops.hook('onRoute', route => route.hook('onRequest', () => void trace.push('onRoute'))),
           ),
         )
@@ -277,13 +277,13 @@ describe('lifecycle hooks', () => {
     const a = await boot(a =>
       a
         .with(
-          plugin(({ app: ops }) =>
+          plugin(({ server: ops }) =>
             ops.hook('onSend', () => {
               throw new Error('send')
             }),
           ),
         )
-        .with(plugin(({ app: ops }) => ops.hook('onSend', ctx => void ctx.header('x-later', 'ran'))))
+        .with(plugin(({ server: ops }) => ops.hook('onSend', ctx => void ctx.header('x-later', 'ran'))))
         .mount(new Router('/x').get('/').handler(() => 'x')),
     )
 
@@ -322,14 +322,14 @@ describe('lifecycle hooks', () => {
     const a = await boot(a =>
       a
         .with(
-          plugin(({ app: ops }) =>
+          plugin(({ server: ops }) =>
             ops.hook('onResponse', () => {
               throw new Error('observer')
             }),
           ),
         )
         .with(
-          plugin(({ app: ops }) =>
+          plugin(({ server: ops }) =>
             ops.hook('onResponse', ctx => {
               trace.push(`onResponse:${ctx.statusCode}`)
               answered()

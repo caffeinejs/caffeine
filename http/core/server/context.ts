@@ -20,11 +20,11 @@ import type { CookieSecret, CookieUnsignResult } from '../cookie/signer.js'
 import type { ProblemEncoder } from '../error/encode.js'
 import type { GlobalErrorHandlerOptions } from '../error/error.js'
 import type { ErrorHandlerProvider } from '../error/handler.js'
+import { ErrHTTPBadRequest } from '../error/http.js'
 import { newProblem } from '../error/problem.js'
 import type { ValidationSlot } from '../error/validation.js'
 import { isThenable, type SendPayload } from '../lifecycle/lifecycle.js'
-import type { RouteDefinition } from '../lifecycle/route_definition.js'
-import { normalizePath, sanitizeURL } from '../middleware/path.js'
+import type { ServedRoute } from '../lifecycle/route_definition.js'
 import { kNoRouteOptions, type RouteOptions } from '../routing/options.js'
 import type { AuthenticationState } from '../security/auth/authentication_state.js'
 import type { Principal } from '../security/identity.js'
@@ -36,9 +36,6 @@ import type { ContextPlatform, ServerPlatform } from './platform.js'
 import { parseQuery } from './query.js'
 import type { RouteStore } from './server.js'
 import type { ResolvedServerSettings } from './settings.js'
-
-/** The engine's preflight lookup on a context: see {@link ServerShared.routeOf}. */
-export const kRouteOf = Symbol('caffeine.http.route-of')
 
 /** The request's {@link BodyDecoder}, on `ContextRequest`: what `decompression()` sets to decode a coded body. */
 export const kDecodeBody = Symbol('caffeine.http.decode-body')
@@ -57,7 +54,7 @@ export const kAppendCookies = Symbol('caffeine.http.cookies.append')
 /** What every context of one server shares. Built once per server by `HTTPServer`. */
 export interface ServerShared extends Pick<
   ResolvedServerSettings,
-  'application' | 'trustProxy' | 'requestIDHeader' | 'router' | 'bodyLimit'
+  'application' | 'trustProxy' | 'requestIDHeader' | 'bodyLimit'
 > {
   readonly store: ConfigStore<unknown>
   readonly logger: Logger
@@ -68,11 +65,6 @@ export interface ServerShared extends Pick<
   readonly encodeProblem: ProblemEncoder
   /** `undefined` when the cookie feature is off. */
   readonly cookies: ServerCookies<Context> | undefined
-  /**
-   * The routes a preflight asks about: every route `method` and `url` match, whatever constraints each declares.
-   * `undefined` for none, and for a URL that cannot be decoded.
-   */
-  readonly routeOf: (method: string, url: string) => readonly RouteDefinition[] | undefined
 }
 
 type Params = Readonly<Record<string, string | undefined>>
@@ -123,6 +115,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   readonly #id: number
   readonly #method: string
   readonly #url: string
+  readonly #path: string
   readonly #basePath: string
   readonly #params: Params
   readonly #query: string
@@ -132,7 +125,6 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   #req?: ContextRequest
   #server?: ServerContext
   #serverFailure?: { reason: unknown }
-  #normalized?: { path: string; error: Error | undefined }
   #context?: ContextPlatform
   #state?: ContextState
   #config?: ConfigSnapshot<Record<never, never>>
@@ -161,6 +153,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     id: number,
     method: string,
     url: string,
+    path: string,
     basePath: string,
     params: Params,
     query: string,
@@ -174,6 +167,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     this.#id = id
     this.#method = method
     this.#url = url
+    this.#path = path
     this.#basePath = basePath
     this.#params = params
     this.#query = query
@@ -189,6 +183,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
       this.#id,
       this.#method,
       this.#url,
+      this.#path,
       this.#basePath,
       this.#params,
       this.#query,
@@ -272,7 +267,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
   }
 
   /** @see {@link IContext.route} */
-  get route(): RouteDefinition | undefined {
+  get route(): ServedRoute | undefined {
     return this.#store.definition
   }
 
@@ -281,19 +276,9 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
     return this.#store.definition?.options ?? kNoRouteOptions
   }
 
-  /** The routes this request's path serves under `method`, as a preflight asks: see {@link ServerShared.routeOf}. */
-  [kRouteOf](method: string): readonly RouteDefinition[] | undefined {
-    return this.#shared.routeOf(method, this.#url)
-  }
-
   /** The route's serializer for an answer of `status`, when its schema declares one. */
   serializerFor(status: number): CompiledSerializer | undefined {
     return this.#store.serializerFor(status)
-  }
-
-  /** The request path as the router matches it, computed once: what a path-scoped middleware is matched against. */
-  normalizedPath(): { path: string; error: Error | undefined } {
-    return (this.#normalized ??= normalizePath(sanitizeURL(this.#url), this.#shared.router))
   }
 
   /** See {@link IContext.signal}. Aborts when the client leaves and when the request's timeout fires. */
@@ -684,6 +669,65 @@ export function withholdValidators(ctx: IContext): () => void {
   return ctx.req.withholdValidators()
 }
 
+/** Where the path of the request target `url` ends: at its first `?` or `#`, else at its end. */
+export function pathEnd(url: string): number {
+  const end = url.search(/[?#]/)
+  return end === -1 ? url.length : end
+}
+
+/**
+ * `ctx.req.path` of the request target `url`, an absolute-form one included: the part before `?` or `#`, decoded
+ * but for the escapes of reserved characters and of `%`.
+ *
+ * @throws ErrHTTPBadRequest for a malformed escape, or an absolute-form target that names no path.
+ */
+export function requestPath(url: string): string {
+  let path = url.slice(0, pathEnd(url))
+
+  if (path.charCodeAt(0) !== 47) {
+    const absolute = pathFromAbsoluteURL(path)
+    if (absolute === null) {
+      throw malformedURL()
+    }
+    path = absolute
+  }
+
+  if (!path.includes('%')) {
+    return path
+  }
+
+  try {
+    // `decodeURI` keeps the escapes of reserved characters; `%25` is held back, so a `%` never decodes.
+    return decodeURI(path.replaceAll('%25', '%2525'))
+  } catch {
+    throw malformedURL()
+  }
+}
+
+function pathFromAbsoluteURL(url: string): string | null {
+  const schemeEnd = url.indexOf('://')
+  if (schemeEnd === -1) {
+    return url
+  }
+
+  const scheme = url.slice(0, schemeEnd).toLowerCase()
+  if (scheme !== 'http' && scheme !== 'https') {
+    return url
+  }
+
+  const authorityStart = schemeEnd + 3
+  const pathStart = url.indexOf('/', authorityStart)
+  if (pathStart === authorityStart || !URL.canParse(url)) {
+    return null
+  }
+
+  return pathStart === -1 ? '/' : url.slice(pathStart)
+}
+
+function malformedURL(): Error {
+  return new ErrHTTPBadRequest('Cannot match the request path: the URL is malformed')
+}
+
 /** What a request handler reads of the request the engine is serving. */
 export class ContextRequest implements IRequest<
   Record<string, string>,
@@ -697,6 +741,7 @@ export class ContextRequest implements IRequest<
   readonly #id: number
   readonly #method: string
   readonly #url: string
+  readonly #path: string
   readonly #basePath: string
   readonly #params: Params
   readonly #query: string
@@ -730,6 +775,7 @@ export class ContextRequest implements IRequest<
     id: number,
     method: string,
     url: string,
+    path: string,
     basePath: string,
     params: Params,
     query: string,
@@ -742,6 +788,7 @@ export class ContextRequest implements IRequest<
     this.#id = id
     this.#method = method
     this.#url = url
+    this.#path = path
     this.#basePath = basePath
     this.#params = params
     this.#query = query
@@ -832,6 +879,10 @@ export class ContextRequest implements IRequest<
 
   get url(): string {
     return this.#url
+  }
+
+  get path(): string {
+    return this.#path
   }
 
   get basePath(): string {

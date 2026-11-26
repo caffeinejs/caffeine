@@ -111,13 +111,13 @@ describe('middleware pipeline', () => {
     const app = createWebApplication({ adapter: nodeAdapter(), container: new CaffeineIoC(), config: conf })
     const seen: string[] = []
 
-    app.useFn('*', ({ config }) => ({
+    app.useFn(({ config }) => ({
       handle(ctx, next) {
         ctx.header('x-tag', config.middleware.tag)
         next()
       },
     }))
-    app.use('*', (ctx, next) => {
+    app.use((ctx, next) => {
       seen.push(`caffeine:${ctx.req.url}`)
       next()
     })
@@ -253,8 +253,8 @@ describe('middleware pipeline', () => {
     class SlowSend extends HTTPPlugin {
       override readonly name = 'slow-send'
 
-      register({ app }: HTTPSetupContext): void {
-        app.hook('onSend', async (_ctx, payload) => {
+      register({ server }: HTTPSetupContext): void {
+        server.hook('onSend', async (_ctx, payload) => {
           runs++
           await sleep(20)
           return payload
@@ -493,11 +493,11 @@ describe('application middleware registration with a path', () => {
       seen.push(`array:${ctx.req.url}`)
       next()
     })
-    server.use('/api/orders/:id', (ctx, next) => {
+    server.use('/api/orders', (ctx, next) => {
       seen.push(`parameter:${ctx.req.url}`)
       next()
     })
-    server.use('*', (ctx, next) => {
+    server.use((ctx, next) => {
       seen.push(`global:${ctx.req.url}`)
       next()
     })
@@ -536,7 +536,7 @@ describe('application middleware registration with a path', () => {
       await barrier.promise
       next()
     }
-    server.use('/tenants/:tenant', tenancy)
+    server.use('/tenants', tenancy)
     server.mount(
       new Router().vars<State>().get('/tenants/:tenant/orders', ctx => ({
         tenant: ctx.state.get('tenant'),
@@ -637,5 +637,25 @@ describe('application middleware registration with a path', () => {
     expect(response.status).toBe(401)
     expect(await response.text()).toBe('blocked')
     expect(reached).toEqual([])
+  })
+
+  // The router, the middleware and the handler read one path, so no spelling of a guarded path reaches its route
+  // without its middleware.
+  it('gives the route, every middleware path and ctx.req.path one path', async () => {
+    const server = newPathApp()
+    server.use('/admin', (ctx, next) => {
+      ctx.header('x-admin', '1')
+      next()
+    })
+    server.mount(new Router().get('/admin/:x', ctx => ctx.req.path))
+    await server.bootstrap()
+
+    const response = await server.request('/%61dmin/b%2Fc')
+
+    expect([response.status, response.headers.get('x-admin'), await response.text()]).toEqual([
+      200,
+      '1',
+      '/admin/b%2Fc',
+    ])
   })
 })

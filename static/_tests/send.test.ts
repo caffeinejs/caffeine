@@ -123,6 +123,21 @@ describe('sendFile', () => {
     expect((await started.request('/missing')).status).toBe(404)
   })
 
+  // Two registrations are the user's to make: a handler reaches the mounts of both, by root.
+  it('finds the mount of either of two staticFiles(...) by its root', async () => {
+    app = createWebApplication({ adapter: node() })
+      .with(staticFiles(s => s.serve(fixtures, { prefix: '/a' })))
+      .with(staticFiles(s => s.serve(other, { prefix: '/b' })))
+      .mount(
+        new Router()
+          .get('/first', ctx => sendFile(ctx, 'hello.txt', fixtures))
+          .get('/second', ctx => sendFile(ctx, 'other.txt', other)),
+      ) as WebApplication<never, never, unknown, NodeAdapter>
+    await app.bootstrap()
+
+    expect([(await app.request('/first')).status, (await app.request('/second')).status]).toEqual([200, 200])
+  })
+
   it('sends a file unrouted keeps off the router', async () => {
     const started = await start(
       s => s.serve(fixtures, { unrouted: ['**'] }),

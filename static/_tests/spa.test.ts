@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { isDocumentRequest } from '../spa.js'
 
 /** A request as `isDocumentRequest` reads one: a URL and whatever headers the client sent. */
-const request = (url: string, headers: Record<string, string> = {}) => ({
-  req: { url, header: (key: string) => headers[key] },
+const request = (path: string, headers: Record<string, string> = {}) => ({
+  req: { path, header: (key: string) => headers[key] },
 })
 
 const NAVIGATION = {
@@ -46,11 +46,6 @@ describe('isDocumentRequest', () => {
 
   it('allows .html through, since /about.html is a plausible client route', () => {
     expect(isDocumentRequest(request('/about.html', NAVIGATION))).toBe(true)
-  })
-
-  it('reads the path without its query', () => {
-    expect(isDocumentRequest(request('/settings?tab=app.js', NAVIGATION))).toBe(true)
-    expect(isDocumentRequest(request('/app.js?v=2', NAVIGATION))).toBe(false)
   })
 
   it('takes a dotfile and a trailing dot for a path, not a file name', () => {

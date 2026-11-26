@@ -65,11 +65,11 @@ describe('staticFiles', () => {
   }
 
   /** A plugin whose `register` runs `setup` on the application's own registrar. */
-  function plugin(setup: (app: HTTPSetupContext['app']) => void): HTTPPluginFactory {
+  function plugin(setup: (server: HTTPSetupContext['server']) => void): HTTPPluginFactory {
     return () =>
       new (class extends HTTPPlugin {
-        register({ app }: HTTPSetupContext) {
-          setup(app)
+        register({ server }: HTTPSetupContext) {
+          setup(server)
         }
       })()
   }
@@ -151,73 +151,23 @@ describe('staticFiles', () => {
     expect(res.headers.get('cache-control')).toBe(null)
   })
 
-  // A router that folds case folds a per-file route's URL; a directory route must answer the same URLs.
-  it('finds a file under a directory by any case, when the router folds it', async () => {
-    const root = await tree('folded', ['assets/App.js'])
-    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ router: { caseSensitive: false } }))
-      .with(staticFiles(s => s.serve(root))) as WebApplication<never, never, unknown, NodeAdapter>
-    await app.bootstrap()
-
-    expect(await (await app.request('/ASSETS/app.JS')).text()).toBe('assets/App.js')
-  })
-
   // A request may name its target in absolute form, authority included: the router matches its path, so the lookup
-  // must read the same path, or a folded name would miss.
-  it('finds a file under a directory from an absolute-form request target, when the router folds case', async () => {
+  // must take the scope's segments off that path, or an escape in a parameter's value would read as part of the file's.
+  it('finds a file under a directory under a router from an absolute-form request target', async () => {
     const root = await tree('absolute', ['assets/App.js'])
     app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({
-        router: { caseSensitive: false },
-        listen: { host: '127.0.0.1', port: 0 },
-      }))
-      .with(staticFiles(s => s.serve(root))) as WebApplication<never, never, unknown, NodeAdapter>
+      .server(() => ({ listen: { host: '127.0.0.1', port: 0 } }))
+      .mount(new Router('/tenants/:id').with(staticFiles(s => s.serve(root)))) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
     const { address } = await app.run()
 
-    const res = await absoluteFormGet(address.origin, '/ASSETS/app.JS?v=1')
+    const res = await absoluteFormGet(address.origin, '/tenants/a%2Bb/assets/App.js?v=1')
 
     expect(res).toEqual({ status: 200, body: 'assets/App.js' })
-  })
-
-  it.each(['i\u0307', '\u0130'])(
-    'keeps the full file name when folding %s changes the directory length',
-    async directory => {
-      const root = await tree('folded', [`${directory}/report.txt`, `${directory}/xreport.txt`])
-      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ router: { caseSensitive: false } }))
-        .with(staticFiles(s => s.serve(root))) as WebApplication<never, never, unknown, NodeAdapter>
-      await app.bootstrap()
-
-      const res = await app.request('/%C4%B0/xreport.txt')
-      expect(res.status).toBe(200)
-      expect(await res.text()).toBe(`${directory}/xreport.txt`)
-    },
-  )
-
-  // Two directories that differ by case are one route to a router that folds case, and each file still its own URL.
-  it('serves files under directories that differ by case as one route, when the router folds it', async () => {
-    const root = await tree('dirs', ['Assets/a.js', 'assets/b.js'])
-    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ router: { caseSensitive: false } }))
-      .with(staticFiles(s => s.serve(root))) as WebApplication<never, never, unknown, NodeAdapter>
-    await app.bootstrap()
-
-    expect(await (await app.request('/assets/a.js')).text()).toBe('Assets/a.js')
-    expect(await (await app.request('/ASSETS/B.JS')).text()).toBe('assets/b.js')
-  })
-
-  it('serves disjoint files from mounts whose directory URLs differ by duplicate slashes', async () => {
-    const one = await tree('one', ['assets/a.txt'])
-    const two = await tree('two', ['assets/b.txt'])
-    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
-      .with(
-        staticFiles(s => s.serve(one, { prefix: '/web//public' }).serve(two, { prefix: '/web/public' })),
-      ) as WebApplication<never, never, unknown, NodeAdapter>
-    await app.bootstrap()
-
-    expect(await (await app.request('/web/public/assets/a.txt')).text()).toBe('assets/a.txt')
-    expect(await (await app.request('/web//public/assets/b.txt')).text()).toBe('assets/b.txt')
   })
 
   // The router keeps "%2F" as one segment's character while matching, then decodes it in the wildcard: read as "/", it
@@ -229,6 +179,17 @@ describe('staticFiles', () => {
     expect((await app!.request('/assets/private/report.txt')).status).toBe(200)
     expect((await app!.request('/assets/private%2Freport.txt')).status).toBe(404)
     expect((await app!.request('/assets/private%2freport.txt')).status).toBe(404)
+  })
+
+  // A "%" in a name is sent as "%25" and stays so in the request path: the file is found by that spelling alone.
+  it('serves a file whose name holds %, requested as %25', async () => {
+    const root = await tree('nested', ['assets/100%.txt'])
+    await start(s => s.serve(root, { anonymous: true })).bootstrap()
+
+    expect([
+      (await app!.request('/assets/100%25.txt')).status,
+      (await app!.request('/assets/100%2525.txt')).status,
+    ]).toEqual([200, 404])
   })
 
   // The router matches these escapes as written and decodes them in the wildcard, as with "%2F": an exact route at
@@ -321,63 +282,6 @@ describe('staticFiles', () => {
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('report.txt')
-  })
-
-  // With the router reading ";" as the start of the query, an escape after it is the query's, not the path's.
-  it('reads the path where the router does, when ";" starts the query', async () => {
-    const root = await tree('nested', ['assets/app.js'])
-    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ router: { useSemicolonDelimiter: true } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<never, never, unknown, NodeAdapter>
-    await app.bootstrap()
-
-    expect((await app.request('/assets/app.js;tag=a%2Bb')).status).toBe(200)
-  })
-
-  // Each flag is read where the router reads it, whichever others are set beside it.
-  it('reads the path where the router does, with ";" set apart from the other router options', async () => {
-    const root = await tree('nested', ['assets/app.js'])
-    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ router: { useSemicolonDelimiter: true, caseSensitive: false } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<never, never, unknown, NodeAdapter>
-    await app.bootstrap()
-
-    expect((await app.request('/assets/app.js;tag=a%2Bb')).status).toBe(200)
-  })
-
-  // No spelling reaches such a file: ";" ends the path, and "%3B" names nothing under a directory.
-  it('fails start-up on a routed file with ";" in its name, when ";" starts the query', async () => {
-    const root = await tree('nested', ['assets/report;final.txt'])
-
-    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ router: { useSemicolonDelimiter: true } }))
-      .with(staticFiles(s => s.serve(root, { anonymous: true }))) as WebApplication<never, never, unknown, NodeAdapter>
-    const err = await app.bootstrap().catch((err: unknown) => err)
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(firstLine(err as Error)).toBe(
-      `Cannot serve "${root}": "assets/report;final.txt" holds ";", which useSemicolonDelimiter reads as the start of the query`,
-    )
-  })
-
-  // The prefix is part of every URL the mount registers: ";" in it ends the path before any file's name.
-  it('fails start-up on a prefix with ";" in it, when ";" starts the query', async () => {
-    const root = await tree('nested', ['report.txt'])
-
-    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ router: { useSemicolonDelimiter: true } }))
-      .with(staticFiles(s => s.serve(root, { prefix: '/site;v1', anonymous: true }))) as WebApplication<
-      never,
-      never,
-      unknown,
-      NodeAdapter
-    >
-    const err = await app.bootstrap().catch((err: unknown) => err)
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(firstLine(err as Error)).toBe(
-      `Cannot serve "${root}": the prefix "/site;v1/" holds ";", which useSemicolonDelimiter reads as the start of the query`,
-    )
   })
 
   // The router reads ":" and "*" in a prefix as a parameter and a wildcard: the files would answer URLs they do not have.
@@ -667,19 +571,6 @@ describe('staticFiles', () => {
       )
     })
 
-    it('refuses a nested mount when the folded prefix consumes the entire wildcard value', async () => {
-      const prefix = `/${'İ'.repeat(24)}`
-      const outer = await tree('outer', ['assets/inner/a.txt'])
-      const inner = await tree('inner', ['inner/b.txt'])
-      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ router: { caseSensitive: false } }))
-        .with(
-          staticFiles(s => s.serve(outer, { prefix }).serve(inner, { prefix: `${prefix}/assets` })),
-        ) as WebApplication<never, never, unknown, NodeAdapter>
-
-      await expect(app.bootstrap()).rejects.toThrow(ErrStaticRouteConflict)
-    })
-
     // One route carries one gate: merging the two would expose the protected files or lock out the public ones.
     it('from two mounts sharing a directory that disagree on anonymous', async () => {
       const open = await tree('open', ['assets/a.js'])
@@ -690,50 +581,6 @@ describe('staticFiles', () => {
       expect(err).toBeInstanceOf(ErrStaticRouteConflict)
       expect(firstLine(err)).toBe(
         `Cannot register "/assets/*": "${name(open, 'assets/a.js')}" and "${name(closed, 'assets/b.js')}" both answer it`,
-      )
-    })
-
-    // A router that folds case reaches both files by one URL; which one answers would be an accident.
-    it('from two files that differ by case, when the router folds it', async () => {
-      const upper = await tree('upper', ['A.txt'])
-      const lower = await tree('lower', ['a.txt'])
-      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ router: { caseSensitive: false } }))
-        .with(staticFiles(s => s.serve(upper).serve(lower))) as WebApplication<never, never, unknown, NodeAdapter>
-
-      const err = await app.bootstrap().catch((err: unknown) => err)
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-    })
-
-    // The mount's wildcard would otherwise answer the file by another spelling, under the mount's gate, not the route's.
-    it('from a route registered before the mount at the URL of a file under a directory', async () => {
-      const root = await tree('nested', ['assets/private/report.txt', 'assets/app.js'])
-      const earlier = plugin(app => {
-        app.mount(new Router().get('/assets/private/report.txt').handler(() => 'protected'))
-      })
-
-      const err = await refusal(s => s.serve(root, { anonymous: true }), [earlier])
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-      expect(firstLine(err)).toBe(
-        `Cannot register "/assets/private/report.txt": "${name(root, 'assets/private/report.txt')}" answers another route at that URL`,
-      )
-    })
-
-    // Compiled routes are registered after every plugin: a gated one at a file's URL would answer the literal
-    // spelling while the anonymous mount answered every other.
-    it('from a route registered after the mount at the URL of a file under a directory', async () => {
-      const root = await tree('nested', ['assets/private/report.txt', 'assets/app.js'])
-      start(s => s.serve(root, { anonymous: true })).mount(
-        new Router().get('/assets/private/report.txt', () => 'protected'),
-      )
-
-      const err = await app!.bootstrap().catch((err: unknown) => err)
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-      expect(firstLine(err as Error)).toBe(
-        `Cannot register "/assets/private/report.txt": "${name(root, 'assets/private/report.txt')}" answers another route at that URL`,
       )
     })
 
@@ -749,157 +596,6 @@ describe('staticFiles', () => {
       expect(await (await app!.request('/assets/private/report.txt')).text()).toBe('assets/private/report.txt')
     })
 
-    // A HEAD of its own answers the file's URL as a GET would: the mount's HEAD would answer every other spelling.
-    it('from a HEAD registered before the mount at the URL of a file under a directory', async () => {
-      const root = await tree('nested', ['assets/report.txt'])
-      const earlier = plugin(app => {
-        app.mount(new Router().head('/assets/report.txt').handler(() => ''))
-      })
-
-      const err = await refusal(s => s.serve(root, { anonymous: true }), [earlier])
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-      expect(firstLine(err)).toBe(
-        `Cannot register "/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
-      )
-    })
-
-    // The router collapses the slashes when it registers the route, so it answers the file's own URL.
-    it('from a route registered after the mount at a spelling of the URL the router folds', async () => {
-      const root = await tree('nested', ['assets/report.txt'])
-      const later = plugin(app => {
-        app.mount(new Router().get('/assets//report.txt').handler(() => 'later'))
-      })
-      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
-        .with(staticFiles(s => s.serve(root, { anonymous: true })))
-        .with(later) as WebApplication<never, never, unknown, NodeAdapter>
-
-      const err = await app.bootstrap().catch((err: unknown) => err)
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-    })
-
-    // The router folds the mount's prefix as it folds the other route's URL: both answer one path.
-    it.each([
-      ['before', true],
-      ['after', false],
-    ])(
-      'from a route registered %s the mount at the folded URL of a file under a prefix the router folds',
-      async (_case, before) => {
-        const root = await tree('nested', ['assets/report.txt'])
-        const other = plugin(app => {
-          app.mount(new Router().get('/web/public/assets/report.txt').handler(() => 'protected'))
-        })
-        const mount = staticFiles(s => s.serve(root, { prefix: '/web//public', anonymous: true }))
-        app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-          .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
-          .with(before ? other : mount)
-          .with(before ? mount : other) as WebApplication<never, never, unknown, NodeAdapter>
-
-        const err = await app.bootstrap().catch((err: unknown) => err)
-
-        expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-        expect(firstLine(err as Error)).toBe(
-          `Cannot register "/web//public/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
-        )
-      },
-    )
-
-    // find-my-way registers the URL without the optional segment too: that route answers the file's own URL.
-    it('from a route with an optional segment registered before the mount, which also answers the URL of a file', async () => {
-      const root = await tree('nested', ['assets/report.txt'])
-      const earlier = plugin(app => {
-        app.mount(new Router().get('/assets/report.txt/:lang?').handler(() => 'protected'))
-      })
-
-      const err = await refusal(s => s.serve(root, { anonymous: true }), [earlier])
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-      expect(firstLine(err)).toBe(
-        `Cannot register "/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
-      )
-    })
-
-    // A parameter ranks above a wildcard: the route would answer every file directly under the directory.
-    it('from a parametric route registered after the mount over a directory of files', async () => {
-      const root = await tree('nested', ['assets/report.txt'])
-      start(s => s.serve(root, { anonymous: true })).mount(new Router().get('/assets/:name', () => 'protected'))
-
-      const err = await app!.bootstrap().catch((err: unknown) => err)
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-      expect(firstLine(err as Error)).toBe(
-        `Cannot register "/assets/report.txt": "${name(root, 'assets/report.txt')}" answers another route at that URL`,
-      )
-    })
-
-    // find-my-way reports a parameter named "*" as the wildcard's value: the check could not tell the two apart.
-    it('from a route with a parameter named * over a directory of files', async () => {
-      const root = await tree('nested', ['assets/report.txt'])
-      start(s => s.serve(root, { anonymous: true })).mount(new Router().get('/assets/:*', () => 'protected'))
-
-      const err = await app!.bootstrap().catch((err: unknown) => err)
-
-      expect(err).toBeInstanceOf(ErrConfiguration)
-      expect(firstLine(err as Error)).toBe(
-        'Cannot register "/assets/:*": a parameter named "*" reads as a wildcard, whose value has that name',
-      )
-    })
-
-    // The router folds the prefixes as it folds any URL, and gives the file to the longer wildcard, which misses it.
-    it('from a mount nested in another under a prefix the router folds', async () => {
-      const outer = await tree('outer', ['assets/private/report.txt'])
-      const inner = await tree('inner', ['private/other.txt'])
-      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-        .server(() => ({ router: { ignoreDuplicateSlashes: true } }))
-        .with(
-          staticFiles(s => s.serve(outer, { prefix: '/web//public' }).serve(inner, { prefix: '/web/public/assets' })),
-        ) as WebApplication<never, never, unknown, NodeAdapter>
-
-      const err = await app.bootstrap().catch((err: unknown) => err)
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-      expect(firstLine(err as Error)).toBe(
-        `Cannot register "/web//public/assets/private/report.txt": "${name(outer, 'assets/private/report.txt')}" and "${name(inner, 'private/other.txt')}" both answer it`,
-      )
-    })
-
-    it('from a route registered before the mount', async () => {
-      const earlier = plugin(app => {
-        app.mount(new Router().get('/hello.txt').handler(() => 'earlier'))
-      })
-
-      const err = await refusal(s => s.serve(fixtures), [earlier])
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-      expect(firstLine(err)).toBe(
-        `Cannot register "/hello.txt": "${name(fixtures, 'hello.txt')}" answers another route at that URL`,
-      )
-    })
-
-    // A prefixed root route also answers its URL with a slash, which the nested index claims.
-    it('refuses a prefixed root route at a nested index URL', async () => {
-      const root = await tree('nested', ['docs/index.html'])
-      const earlier = plugin(app => {
-        app.mount(
-          new Router()
-            .extend((g: { prefix(p: string): unknown }) => {
-              g.prefix('/docs')
-            })
-            .get('/')
-            .handler(() => 'x'),
-        )
-      })
-
-      const err = await refusal(s => s.serve(root), [earlier])
-
-      expect(err).toBeInstanceOf(ErrStaticRouteConflict)
-      expect(firstLine(err)).toBe(
-        `Cannot register "/docs/": "${name(root, 'docs/index.html')}" answers another route at that URL`,
-      )
-    })
-
     // Only the router's duplicate is a conflict: another plugin's refusal of the route must reach the reader as written.
     it('but lets another error from registering a route through as it was thrown', async () => {
       const refused = new Error('refused by policy')
@@ -913,53 +609,108 @@ describe('staticFiles', () => {
     })
   })
 
-  it('refuses a second staticFiles(...) on one server', async () => {
+  // Two are the user's to register: both serve, each at its own prefix.
+  it('serves two staticFiles(...) on one server, each at its prefix', async () => {
     app = start(s => s.serve(fixtures)).with(staticFiles(s => s.serve(spa, { prefix: '/app' }))) as WebApplication<
       never,
       never,
       unknown,
       NodeAdapter
     >
+    await app.bootstrap()
+    const index = await readFile(join(spa, 'index.html'), 'utf8')
 
-    const err = await app.bootstrap().catch((err: unknown) => err)
-
-    expect(firstLine(err as Error)).toBe(
-      'Cannot register plugin "@caffeinejs/static" twice on the application\'s own server',
-    )
+    const hello = await app.request('/hello.txt')
+    const spaIndex = await app.request('/app')
+    expect([hello.status, (await hello.text()).trim(), spaIndex.status, await spaIndex.text()]).toEqual([
+      200,
+      'hello static world',
+      200,
+      index,
+    ])
   })
 
-  it('refuses staticFiles() on a router', async () => {
-    app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) }).mount(
-      new Router().with(staticFiles(s => s.serve(fixtures))),
-    ) as WebApplication<never, never, unknown, NodeAdapter>
+  // A top-level directory's index answers the directory's URL, either spelling, as a route of its own.
+  it("answers a directory's URL with its index", async () => {
+    const root = await tree('docs', ['docs/index.html', 'docs/guide.html'])
+    await start(s => s.serve(root)).bootstrap()
 
-    const err = await app.bootstrap().catch((err: unknown) => err)
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(firstLine(err as Error)).toBe(
-      "Cannot install staticFiles() on a router or a controller: it serves files at the server's own paths",
-    )
+    for (const url of ['/docs', '/docs/']) {
+      expect(await (await app!.request(url)).text(), url).toBe('docs/index.html')
+    }
   })
 
-  it('refuses staticFiles() on a server with a matcher of its own', async () => {
+  // A directory's index answers the directory's own URL as a route of its own: an application route there is a
+  // duplicate.
+  it("refuses an application route at a directory's own URL", async () => {
+    const root = await tree('docs', ['docs/index.html', 'docs/guide.html'])
+    app = start(s => s.serve(root)).mount(new Router().get('/docs', () => 'app')) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
+
+    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_ROUTE_CONFLICT' })
+  })
+
+  describe('on a router', () => {
+    function routed(router: Router<any, any, any, any, any>): WebApplication<never, never, unknown, NodeAdapter> {
+      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) }).mount(
+        router,
+      ) as WebApplication<never, never, unknown, NodeAdapter>
+      return app
+    }
+
+    // A plugin serves where it is registered: under a router, the router's path leads every file URL.
+    it("serves files under the router's path", async () => {
+      await routed(new Router('/r').with(staticFiles(s => s.serve(fixtures)))).bootstrap()
+
+      const res = await app!.request('/r/hello.txt')
+      expect([res.status, (await res.text()).trim()]).toEqual([200, 'hello static world'])
+      expect((await app!.request('/hello.txt')).status).toBe(404)
+    })
+
+    // An index answers at its directory's path, with and without the slash, so the page's relative links resolve. A
+    // mount with no prefix of its own starts at the router's path, which answers the same way.
+    it.each([
+      ['/app', '/r/app'],
+      [undefined, '/r'],
+    ])("answers a mount's index at its prefix %j under the router, with and without the slash", async (prefix, at) => {
+      await routed(new Router('/r').with(staticFiles(s => s.serve(spa, { prefix })))).bootstrap()
+      const index = await readFile(join(spa, 'index.html'), 'utf8')
+
+      const bare = await app!.request(at)
+      const slashed = await app!.request(`${at}/`)
+      expect([bare.status, await bare.text(), slashed.status, await slashed.text()]).toEqual([200, index, 200, index])
+    })
+
+    // What the router's path matched is the router's: an escape in a parameter's value is no part of the file's URL,
+    // and a "/" inside a parameter's pattern is no segment of it.
+    it.each([
+      ['/tenants/:id', 'escaped', '/tenants/a%2Bb/assets/App.js'],
+      ['/tenants/:id([^/]+)', 'regex', '/tenants/42/assets/App.js'],
+      ['/release(v1/files)', 'parenthesis', '/release(v1/files)/assets/App.js'],
+    ])('finds a file under a directory under %s', async (path, name, url) => {
+      const root = await tree(`scoped-${name}`, ['assets/App.js'])
+      app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) }).mount(
+        new Router(path).with(staticFiles(s => s.serve(root))),
+      ) as WebApplication<never, never, unknown, NodeAdapter>
+      await app.bootstrap()
+
+      const res = await app.request(url)
+      expect([res.status, await res.text()]).toEqual([200, 'assets/App.js'])
+    })
+  })
+
+  it("serves files under a matcher of the application's own", async () => {
     app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
-      .with(staticFiles(s => s.serve(fixtures))) as WebApplication<never, never, unknown, NodeAdapter>
+      .server(() => ({ matcher: strategies => findMyWayMatcher(strategies) }))
+      .with(staticFiles(s => s.serve(spa))) as WebApplication<never, never, unknown, NodeAdapter>
+    await app.bootstrap()
 
-    const err = await app.bootstrap().catch((err: unknown) => err)
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(firstLine(err as Error)).toBe(
-      'Cannot install staticFiles(): the server matches routes with a matcher of its own, and static routes are matched by find-my-way',
-    )
-  })
-
-  it('refuses a prefix with an empty segment', async () => {
-    const err = await refusal(s => s.serve(fixtures, { prefix: '/a//b' }))
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(firstLine(err)).toBe(
-      `Cannot serve "${fixtures}": the prefix "/a//b/" holds an empty segment, which a route path cannot keep`,
+    expect([(await app.request('/favicon.svg')).status, (await app.request('/assets/app-eZr2sdaR.js')).status]).toEqual(
+      [200, 200],
     )
   })
 })

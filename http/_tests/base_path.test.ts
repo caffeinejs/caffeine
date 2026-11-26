@@ -60,8 +60,8 @@ function echo(path = '/pets') {
 class LateRoute extends HTTPPlugin {
   override readonly name = 'late-route'
 
-  register({ app }: HTTPSetupContext): void {
-    app.mount(new Router('/late').get('/hello', () => ({ source: 'late' })))
+  register({ server }: HTTPSetupContext): void {
+    server.mount(new Router('/late').get('/hello', () => ({ source: 'late' })))
   }
 }
 
@@ -103,7 +103,7 @@ describe('an application under a base path', () => {
 
       app = createWebApplication({ adapter: node() })
         .with(context => {
-          seen = context.app.server?.basePath
+          seen = context.server.basePath
           return new NoopPlugin()
         })
         .basePath(value)
@@ -123,7 +123,9 @@ describe('an application under a base path', () => {
       expect(await get(app, '/api/pets')).toMatchObject({ status: 200, body: { basePath: '/api' } })
     })
 
-    it('hands a callback the context a plugin factory gets, typed by the configuration', async () => {
+    // The base path describes the server, so its callback runs before the server exists: what a plugin factory gets,
+    // less the server.
+    it('hands a callback the context a plugin factory gets but the server, typed by the configuration', async () => {
       const conf = newConfiguration(schema).build().config
       let factoryContext: unknown
       let basePathContext: unknown
@@ -141,14 +143,17 @@ describe('an application under a base path', () => {
         .mount(echo()) as WebApplication
       await app.bootstrap()
 
-      expect(basePathContext).toBe(factoryContext)
+      const { server, ...shared } = factoryContext as { server: unknown }
+      expect(server).not.toBe(undefined)
+      expect(basePathContext).toEqual(shared)
+      expect('server' in (basePathContext as object)).toBe(false)
       expect(await get(app, '/gateway/pets')).toMatchObject({ status: 200, body: { basePath: '/gateway' } })
     })
 
     it.each([
-      ['api', 'does not start with "/"'],
       ['/api?x', 'contains "?"'],
       ['/api#x', 'contains "#"'],
+      ['//evil.example', 'starts with "//"'],
     ])('fails start-up on %s, given directly or by a callback', async (value, reason) => {
       for (const basePath of [value, () => value]) {
         const ready = createWebApplication({ adapter: node() }).basePath(basePath).bootstrap()
@@ -281,11 +286,8 @@ describe('an application under a base path', () => {
       })
     })
 
-    it("applies the server's router options to the path left once the base is off", async () => {
-      app = createWebApplication({ adapter: node() })
-        .basePath('/api')
-        .server(() => ({ router: { ignoreTrailingSlash: true } }))
-        .mount(echo()) as WebApplication
+    it('ignores a trailing slash in the path left once the base is off', async () => {
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect((await get(app, '/api/pets/')).status).toBe(200)

@@ -17,11 +17,14 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
     return path
   }
 
-  return path
-    .split('/')
+  return segmentsOf(path)
     .map(segment => {
-      if (segment === '*') {
-        return fillParams(path, ['*'], params, false)?.[0]
+      // A `*` in the text before the segment's first parameter starts a wildcard; after one it is text, as the route
+      // syntax reads it.
+      const lead = segment.includes('*') ? readSegment(segment)[0] : undefined
+      if (typeof lead === 'string' && lead.includes('*')) {
+        const value = fillParams(path, ['*'], params, false)?.[0]
+        return value === undefined ? undefined : escapeText(lead.slice(0, lead.indexOf('*')), true) + value
       }
 
       if (!segment.includes(':')) {
@@ -53,6 +56,34 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
     })
     .filter(segment => segment !== undefined)
     .join('/')
+}
+
+// The path's segments, split at each "/" outside a parameter's regex: a "/" a regex holds is part of it, as the router
+// reads it.
+function segmentsOf(path: string): string[] {
+  const segments: string[] = []
+  let start = 0
+  let i = 0
+
+  while (i < path.length) {
+    if (path[i] === '/') {
+      segments.push(path.slice(start, i))
+      start = ++i
+    } else if (path[i] === ':' && path[i + 1] === ':') {
+      i += 2
+    } else if (path[i] === ':') {
+      let end = i + 1
+      while (end < path.length && !'(-./'.includes(path[end]!)) {
+        end++
+      }
+      i = path[end] === '(' ? afterConstraint(path, end) : end
+    } else {
+      i++
+    }
+  }
+
+  segments.push(path.slice(start))
+  return segments
 }
 
 // Text beside a parameter, written the way find-my-way 9.9.0 matches it. Before the segment's first parameter it is a
@@ -88,7 +119,7 @@ function fillParams(
 }
 
 /**
- * One segment as find-my-way reads it: text, and the parameters within it.
+ * One segment as the route syntax reads it: text, and the parameters within it.
  *
  * A single `:` starts a parameter, whose name ends at `(`, `-` or `.`. A `(` opens a constraint, which runs to its
  * balancing `)`, nested ones counted and a `\` escaping the character after it, or to the end of the segment when

@@ -82,7 +82,7 @@ function allowedHosts(names: readonly string[]): MiddlewareFn {
     const host = ctx.req.host
     const name = hostname(host)
 
-    if (!isLoopback(name) && !allowed.has(name) && !PROBES.has(ctx.req.url.split('?', 1)[0]!)) {
+    if (!isLoopback(name) && !allowed.has(name) && !PROBES.has(ctx.req.path)) {
       throw new ErrHTTPMisdirectedRequest(
         `Cannot answer for host "${host}": this UI answers loopback names and those ${ALLOWED_HOSTS_VARIABLE} lists alone`,
       )

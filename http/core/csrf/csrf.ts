@@ -1,16 +1,16 @@
 import { HTTPPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory, type HTTPSetupContext } from '../../plugin.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
+import type { LiteralPrefix } from '../routing/paths.js'
 import { ErrCSRFCrossOrigin } from './errors.js'
 import {
   isExcluded,
   resolveCSRFOptions,
   type CSRFConfig,
   type CSRFOptions,
-  type ExcludedPath,
   type OriginPredicate,
   type SecFetchSitePredicate,
 } from './options.js'
-import { checkOrigin, pathOf, questionsOf, SAFE_METHODS, type OriginCheckInput } from './origin.js'
+import { checkOrigin, questionsOf, SAFE_METHODS, type OriginCheckInput } from './origin.js'
 
 export const kBuild = Symbol('caffeine.http.csrf.build')
 
@@ -66,7 +66,9 @@ export class CSRFBuilder {
    * requested. For a route the application cannot mark itself; its own are marked with `@CSRFExempt()` or
    * `csrfExempt()`, and a route's own mark wins: `csrfExempt(false)` keeps it protected under an excluded prefix.
    *
-   * @throws ErrCSRFConfiguration at start-up when one does not start with `/`, or is `/` itself.
+   * A missing leading `/` is added.
+   *
+   * @throws ErrCSRFConfiguration at start-up when one is `/` itself, or starts with `~/`.
    */
   exclude(...prefixes: string[]): this {
     this.#exclude = [...(this.#exclude ?? []), ...prefixes]
@@ -107,10 +109,7 @@ export class CSRFBuilder {
     return this
   }
 
-  /**
-   * Names this plugin: `caffeine-csrf` for the default, `caffeine-csrf:<label>` otherwise. A second one under one
-   * label in one slot is refused at start-up.
-   */
+  /** Names this plugin: `caffeine-csrf` for the default, `caffeine-csrf:<label>` otherwise. */
   name(label: string): this {
     this.#label = label
     return this
@@ -153,8 +152,8 @@ export class CSRFBuilder {
  * path is under `.exclude(...)`. A URL no route matched is the not-found answer's. A listener is covered by its own
  * `.listener(name, l => l.with(csrf()))`, a route group by `router.with(csrf())`.
  *
- * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path not starting
- * with `/` or that is `/` itself.
+ * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path that is `/`
+ * itself or starts with `~/`.
  */
 export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, C>): HTTPPluginFactory<C> {
   return context => {
@@ -168,12 +167,19 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
   }
 }
 
-// The `exclude(...)` list of every enabled `csrf()` covering a route, outermost first, for the route inventory.
-const COVERS = new WeakMap<RouteDefinition, Array<readonly ExcludedPath[]>>()
+/** Where a route keeps the `exclude(...)` list of every enabled `csrf()` covering it, outermost first. */
+const kCSRFCovers: unique symbol = Symbol('caffeine.http.csrf.covers')
+
+declare module '../routing/options.js' {
+  interface RouteOptions {
+    /** Written by every enabled `csrf()` covering the route in `onRoute`, for the route inventory. */
+    [kCSRFCovers]?: ReadonlyArray<readonly LiteralPrefix[]>
+  }
+}
 
 /** The `exclude(...)` list of every enabled `csrf()` covering `route`, outermost first; empty when none does. */
-export function csrfCoversOf(route: RouteDefinition): ReadonlyArray<readonly ExcludedPath[]> {
-  return COVERS.get(route) ?? []
+export function csrfCoversOf(route: RouteDefinition): ReadonlyArray<readonly LiteralPrefix[]> {
+  return route.options[kCSRFCovers] ?? []
 }
 
 class CSRFProtection extends HTTPPlugin {
@@ -196,10 +202,8 @@ class CSRFProtection extends HTTPPlugin {
     const asks = options.originChecks.length > 0 || options.siteChecks.length > 0
     const exempt = new WeakSet<RouteDefinition>()
 
-    context.app.hook('onRoute', route => {
-      const covers = COVERS.get(route) ?? []
-      covers.push(options.exclude)
-      COVERS.set(route, covers)
+    context.server.hook('onRoute', route => {
+      route.options[kCSRFCovers] = [...(route.options[kCSRFCovers] ?? []), options.exclude]
 
       // A route's own mark is the more specific word: `csrfExempt(false)` keeps it under an excluded prefix.
       const mark = route.options.csrf?.exempt
@@ -208,7 +212,7 @@ class CSRFProtection extends HTTPPlugin {
       }
     })
 
-    context.app.hook('onRequest', ctx => {
+    context.server.hook('onRequest', ctx => {
       const route = ctx.route
       if (SAFE_METHODS.has(ctx.req.method) || route === undefined || exempt.has(route)) {
         return
@@ -232,7 +236,7 @@ class CSRFProtection extends HTTPPlugin {
             reqId: ctx.req.id,
             reason,
             method: input.method,
-            path: pathOf(ctx.req.url),
+            path: ctx.req.path,
             host: input.host,
             origin: input.origin,
             secFetchSite: input.secFetchSite,
