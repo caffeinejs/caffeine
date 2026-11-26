@@ -64,6 +64,10 @@ describe('openapi', () => {
     ['an escaped ":"', '/service::name', '/service:name/docs', '/service:name'],
     ['a parameter named wildcard', '/w/:wildcard', '/w/x/docs', '/w/x'],
     ['a parameter name with "$"', '/teams/:$team', '/teams/red/docs', '/teams/red'],
+    // A trailing slash never makes another route, so the page answers there too and its links climb out of it.
+    ['a trailing "/" after the page', '/tenants/:id', '/tenants/42/docs/', '/tenants/42'],
+    // The query is not part of the path the links are relative to, though it holds a "/".
+    ['a query after the page', '/tenants/:id', '/tenants/42/docs?next=/a/', '/tenants/42'],
   ])('links the docs page under %s to where it was opened', async (_, path, url, root) => {
     await expectLinks(path, url, root, o => o.public())
   })

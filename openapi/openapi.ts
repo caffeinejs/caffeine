@@ -345,9 +345,13 @@ function resolvePaths(options: OpenAPIOptions): EndpointPaths {
     json: routed(routes.json),
     yaml: routed(routes.yaml),
     docs,
-    // Trimmed first: a page at `/` would otherwise put its bundle at `//_scalar.js`, which a browser reads as a host.
-    asset: docs === undefined ? undefined : docs.replace(/\/+$/, '') + ASSET_SEGMENT,
+    asset: docs === undefined ? undefined : assetOf(docs),
   }
+}
+
+// Beside the page. A page at "/" puts it at the root, never at "//_scalar.js", which a browser reads as a host.
+function assetOf(docs: string): string {
+  return docs === '/' ? ASSET_SEGMENT : docs + ASSET_SEGMENT
 }
 
 /** A route path as the router routes it: rooted, without a trailing `/`. */

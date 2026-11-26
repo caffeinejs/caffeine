@@ -174,6 +174,10 @@ describe('route constraints on the engine', () => {
     ['an object', [constraint('host', 'test.example')]],
     ['a configurer', [toTestHost]],
     ['a configurer replacing an object', [constraint('host', 'other.example'), toTestHost]],
+    [
+      'two objects, the later replacing the host',
+      [constraint('host', 'other.example'), constraint('host', 'test.example')],
+    ],
   ])(
     "keeps a router's version dropped when a route adds a constraint after constraints: null, from %s",
     async (_, inputs) => {

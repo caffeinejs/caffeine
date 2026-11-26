@@ -14,7 +14,7 @@ export function mergeValue(existing: unknown, incoming: unknown): unknown {
   }
 
   if (incoming instanceof Map && existing instanceof Map) {
-    const result = existing instanceof ReplacingMap ? new ReplacingMap(existing) : new Map(existing)
+    const result = new Map(existing)
     for (const [k, v] of incoming) {
       result.set(k, v)
     }

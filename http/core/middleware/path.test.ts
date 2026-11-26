@@ -75,4 +75,23 @@ describe('placeMiddlewares', () => {
   ])('matches a path under %s after its segments', (base, served, unserved) => {
     expect([matches(base, '/jobs', served), matches(base, '/jobs', unserved)]).toEqual([true, false])
   })
+
+  // A middleware at "/" covers the scope's routes, the scope's own path among them; one at a sub-path does not reach
+  // it.
+  it("covers the scope's own path with a middleware at its root", () => {
+    expect([
+      matches('/admin', '/', '/admin'),
+      matches('/admin', '/', '/admin/'),
+      matches('/admin', '/jobs', '/admin'),
+    ]).toEqual([true, true, false])
+  })
+
+  // A router at the root spans no segment: its middleware paths match the whole request path, still on whole segments.
+  it('matches a path-scoped middleware of a root router against the whole path', () => {
+    expect([
+      matches('', '/admin', '/admin/users'),
+      matches('', '/admin', '/admin'),
+      matches('', '/admin', '/adminx'),
+    ]).toEqual([true, true, false])
+  })
 })

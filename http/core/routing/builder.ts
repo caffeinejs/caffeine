@@ -173,6 +173,10 @@ export class RouteGroupBuilder {
   }
 
   toRouteGroup<R>(): RouteGroupSpec<R> {
+    if (this.#options !== undefined) {
+      this.#levels ??= [{ inputs: this.#options }]
+    }
+
     return {
       path: normalizeGroupPath(this.#path ?? ''),
       prefix: this.#prefix === undefined ? undefined : normalizeGroupPath(this.#prefix),
@@ -183,7 +187,7 @@ export class RouteGroupBuilder {
       bodyLimit: this.#bodyLimit,
       timeout: this.#timeout,
       authz: this.#authorize,
-      options: this.#options === undefined ? undefined : (this.#levels ??= [{ inputs: this.#options }]),
+      options: this.#levels,
       detail: this.#detail,
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,

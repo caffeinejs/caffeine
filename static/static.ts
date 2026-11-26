@@ -683,11 +683,12 @@ function directoryHandler(
 
 /**
  * How many segments of a request path the scope's path spans, where the file URLs under it begin: a parameter is one
- * segment whatever its value.
+ * segment whatever its value. The scope's path holds literal segments and parameters only: `normalizeGroupPath` refuses
+ * a wildcard or an optional segment in it.
  */
 function segmentsOf(prefix: string): number {
   const joined = `${parseRoutePattern(prefix)
-    .map(part => (part.kind === 'text' ? part.text : part.kind === 'optional' ? '' : 'p'))
+    .map(part => (part.kind === 'text' ? part.text : 'p'))
     .join('')}/x`
   return joined.split('/').length - 2
 }

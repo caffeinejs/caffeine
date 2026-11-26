@@ -6,7 +6,7 @@ import { ErrConfiguration } from '../../error/index.js'
 import type { RouteGroupMeta } from '../compile.js'
 import { inheritGroupSpec } from '../inherit.js'
 import type { RouteOptionsLevel } from '../options.js'
-import { normalizeGroupPath, normalizeRoutePath, parseRoutePattern } from '../paths.js'
+import { normalizeGroupPath, normalizeRoutePath, parseRoutePattern, type RoutePatternPart } from '../paths.js'
 import { $p } from '../picker.js'
 import type { RouteGroupScope } from '../route.js'
 import type { ScopeChains } from '../scope_chain.js'
@@ -286,11 +286,22 @@ function defaultGroupName(path: string): string {
 // in what they call a parameter are the same route to a reader. A parameter is left as its name, a wildcard as `all`.
 function pathSegments(path: string): string[] {
   return parseRoutePattern(path)
-    .map(part =>
-      part.kind === 'text' ? part.text : part.kind === 'param' ? part.name : part.kind === 'wildcard' ? 'all' : '',
-    )
+    .map(nameOf)
     .join('')
     .split('/')
     .map(segment => segment.replace(/\?$/, ''))
     .filter(segment => segment.length > 0)
+}
+
+function nameOf(part: RoutePatternPart): string {
+  switch (part.kind) {
+    case 'text':
+      return part.text
+    case 'param':
+      return part.name
+    case 'wildcard':
+      return 'all'
+    case 'optional':
+      return ''
+  }
 }

@@ -92,6 +92,17 @@ export interface HTTPServerInput {
 
 const EMPTY_PARAMS: Readonly<Record<string, string | undefined>> = Object.freeze({})
 
+// A wildcard route's bare parent reads its `*` as empty.
+function paramsOf(
+  match: RouteMatch<RouteStore> | null,
+  store: RouteStore,
+): Readonly<Record<string, string | undefined>> {
+  if (match === null) {
+    return EMPTY_PARAMS
+  }
+  return store.bare ? { ...match.params, '*': '' } : match.params
+}
+
 // The engine's cookie writer, one for every server: a context appends its own lines.
 const writeCookies: CookieWriter<Context> = (ctx, lines) => ctx[kAppendCookies](lines)
 
@@ -291,7 +302,7 @@ export class HTTPServer {
         method,
         url,
         seenBase,
-        match === null ? EMPTY_PARAMS : store.bare ? { ...match.params, '*': '' } : match.params,
+        paramsOf(match, store),
         match?.query ?? queryAfter(url),
         store,
         !this.#closing,

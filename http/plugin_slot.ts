@@ -181,7 +181,7 @@ export class PluginSlot implements ScopedServer<any> {
   }
 
   hasPlugin(name: string): boolean {
-    this.#assertOpen('hasPlugin')
+    assertOpen(this.#open, 'hasPlugin')
     return this.#has(name)
   }
 
@@ -191,29 +191,23 @@ export class PluginSlot implements ScopedServer<any> {
   }
 
   mount(...routers: AnyRouter[]): this {
-    this.#assertOpen('mount')
+    assertOpen(this.#open, 'mount')
     this.mounted.push(...routers)
     return this
   }
 
   use(...args: unknown[]): this {
-    this.#assertOpen('use')
+    assertOpen(this.#open, 'use')
     const parsed = parseUse<unknown>(args[0] as never, args[1] as never, args[2] as never, args.length)
     this.#middlewares.add(parsed.path, parsed.target, parsed.hook)
     return this
   }
 
   useFn(...args: unknown[]): this {
-    this.#assertOpen('useFn')
+    assertOpen(this.#open, 'useFn')
     const parsed = parseUse<unknown>(args[0] as never, args[1] as never, args[2] as never, args.length)
     this.#middlewares.addFactory(parsed.path, parsed.target, parsed.hook)
     return this
-  }
-
-  #assertOpen(operation: Operation): void {
-    if (!this.#open) {
-      throw slotClosed(operation)
-    }
   }
 }
 
@@ -264,38 +258,32 @@ class EntryServer implements ScopedServer<any> {
   }
 
   hook<K extends HookName>(name: K, fn: HookFn<K, any>): this {
-    this.#assertOpen('hook')
+    assertOpen(this.#open, 'hook')
     this.#slot.hook(name, fn)
     return this
   }
 
   hasPlugin(name: string): boolean {
-    this.#assertOpen('hasPlugin')
+    assertOpen(this.#open, 'hasPlugin')
     return this.#slot.hasPlugin(name)
   }
 
   mount(...routers: AnyRouter[]): this {
-    this.#assertOpen('mount')
+    assertOpen(this.#open, 'mount')
     this.#slot.mount(...routers)
     return this
   }
 
   use(...args: unknown[]): this {
-    this.#assertOpen('use')
+    assertOpen(this.#open, 'use')
     this.#slot.use(...args)
     return this
   }
 
   useFn(...args: unknown[]): this {
-    this.#assertOpen('useFn')
+    assertOpen(this.#open, 'useFn')
     this.#slot.useFn(...args)
     return this
-  }
-
-  #assertOpen(operation: Operation): void {
-    if (!this.#open) {
-      throw slotClosed(operation)
-    }
   }
 }
 
@@ -307,4 +295,10 @@ function slotClosed(operation: Operation): ErrConfiguration {
   )
 
   return new ErrConfiguration(message.reference('@caffeinejs/http', ErrConfiguration).build())
+}
+
+function assertOpen(open: boolean, operation: Operation): void {
+  if (!open) {
+    throw slotClosed(operation)
+  }
 }

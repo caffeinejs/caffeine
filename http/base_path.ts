@@ -33,7 +33,7 @@ export function normalizeBasePath(value: string | undefined): string | undefined
     return undefined
   }
 
-  const base = value.charCodeAt(0) === SLASH ? value : `/${value}`
+  const base = value.startsWith('/') ? value : `/${value}`
 
   // A browser reads a URL starting with `//` or `/\` as naming another host, and drops tabs and line breaks before it
   // reads one, so a control character can smuggle the same start past the check.

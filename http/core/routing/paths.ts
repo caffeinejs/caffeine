@@ -69,31 +69,34 @@ function scan(pattern: string): RoutePatternPart[] {
     }
   }
 
-  for (let i = 0; i < pattern.length; i++) {
+  let i = 0
+  while (i < pattern.length) {
     const char = pattern[i]!
 
     if (char === ':' && pattern[i + 1] === ':') {
       text += ':'
-      i++
+      i += 2
     } else if (char === ':') {
       flush()
       const name = /^[^(\-./]*/.exec(pattern.slice(i + 1))![0]
-      i += name.length
+      i += 1 + name.length
       let regex: string | undefined
-      if (pattern[i + 1] === '(') {
+      if (pattern[i] === '(') {
         // An unclosed regex runs to the end of the path: the router refuses it when the route registers.
-        const end = endOfRegex(pattern, i + 1)
-        regex = pattern.slice(i + 2, end)
-        i = end
+        const end = endOfRegex(pattern, i)
+        regex = pattern.slice(i + 1, end)
+        i = end + 1
       }
       parts.push({ kind: 'param', name, regex })
       afterParam = true
     } else if (char === '*' && !afterParam) {
       flush()
       parts.push({ kind: 'wildcard' })
+      i++
     } else {
       text += char
       afterParam &&= char !== '/'
+      i++
     }
   }
 
@@ -155,7 +158,7 @@ export function underPrefix(path: string, prefix: LiteralPrefix): boolean {
 // A leading run of "/" is one: a path starting "//" names another host to a browser.
 function rooted(path: string): string {
   let start = 0
-  while (path.charCodeAt(start) === 47) {
+  while (path[start] === '/') {
     start++
   }
 

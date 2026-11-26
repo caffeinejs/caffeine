@@ -178,6 +178,16 @@ describe('preflightTable', () => {
     expect(table.match('GET', '/users')).toEqual(['a', 'b'])
   })
 
+  // An optional parameter at the root has "/" as its shorter form: a preflight to "/" finds the route declared there
+  // too.
+  it('files a root optional route with the root route', () => {
+    const table = preflightTable<string>()
+    table.add('GET', '/', 'a')
+    table.add('GET', '/:lang?', 'b')
+
+    expect([table.match('GET', '/'), table.match('GET', '/en')]).toEqual([['a', 'b'], ['b']])
+  })
+
   it('finds nothing for a method no route of the path serves', () => {
     const table = preflightTable<string>()
     table.add('GET', '/pets/:id', 'a')
