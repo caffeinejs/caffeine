@@ -71,7 +71,7 @@ describe('resolveBunServerSettings', () => {
       'Pass adapter: node() from "@caffeinejs/http-node" to createWebApplication() to serve on a Node server',
     )
     expect(message).toContain(
-      'Return only handlerTimeout, router, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler, listen, https from ".server(...)"',
+      'Return only handlerTimeout, matcher, constraints, trustProxy, requestIDHeader, bodyLimit, schemaCompiler, listen, https from ".server(...)"',
     )
   })
 

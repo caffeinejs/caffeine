@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createWebApplication } from '../application.js'
+import { version } from '../core/constraints/route.js'
 import {
   Controller,
   Get,
@@ -17,11 +18,10 @@ import { node } from '../platform/node.testkit.js'
  *
  * Load-bearing for every prefixed application, and it was asserted only in prose until this file: the
  * documentation claimed `new Router('/app')` with a route at `/` produced `/app/` and therefore did not answer
- * `GET /app`. It produces `/app`, the group's own path, and the server answers it at `/app/` too, as every group
- * root is answered at both forms.
+ * `GET /app`. It produces `/app`, the group's own path, and the server answers it at `/app/` too: a trailing slash
+ * never makes another route.
  *
- * The consequence that survives is the wildcard's: `/dash/*` does not match the bare `/dash`, which is why a
- * gated subtree still needs two routes.
+ * A wildcard answers its bare parent too: `/dash/*` matches `/dash`, unless a route is declared at exactly that path.
  */
 
 /**
@@ -65,7 +65,7 @@ describe('a group prefix and a route at "/"', () => {
 
     try {
       expect((await app.request('/app')).status).toBe(200)
-      // A group root answers at both forms, with `ignoreTrailingSlash` left at its default.
+      // A trailing slash never makes another route.
       expect((await app.request('/app/')).status).toBe(200)
     } finally {
       await app.close()
@@ -107,17 +107,66 @@ describe('a group prefix and a route at "/"', () => {
     }
   })
 
-  // The half of the documented papercut that is real: a wildcard covers the empty match but not the bare path.
-  it('does not match a bare path against a sibling wildcard', async () => {
+  // A gated subtree needs one route: the wildcard answers the bare path with an empty `*`, so a handler that reads it
+  // works there too, its automatic HEAD included.
+  it('answers the bare parent of a wildcard with an empty wildcard', async () => {
     const app = createWebApplication({ adapter: node() }).mount(
-      new Router().get('/dash/*', () => ({ ok: true })),
+      new Router().get('/dash/*', ctx => `[${(ctx.req.param('*') ?? 'missing').split('/').join(',')}]`),
+    ) as WebApplication
+    await app.bootstrap()
+
+    try {
+      const bodies = []
+      for (const url of ['/dash', '/dash/', '/dash/a/b']) {
+        const res = await app.request(url)
+        bodies.push([res.status, await res.text()])
+      }
+
+      expect(bodies).toEqual([
+        [200, '[]'],
+        [200, '[]'],
+        [200, '[a,b]'],
+      ])
+      expect((await app.request('/dash', { method: 'HEAD' })).status).toBe(200)
+    } finally {
+      await app.close()
+    }
+  })
+
+  // Declared after the wildcard, the route at the parent still answers it, its HEAD included.
+  it('leaves the bare parent to a route declared there', async () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router()
+        .get('/dash/*', () => 'wildcard')
+        .get('/dash', ctx => {
+          ctx.header('x-route', 'parent')
+          return 'parent'
+        }),
+    ) as WebApplication
+    await app.bootstrap()
+
+    try {
+      const get = await app.request('/dash')
+      const head = await app.request('/dash', { method: 'HEAD' })
+
+      expect([await get.text(), head.status, head.headers.get('x-route')]).toEqual(['parent', 200, 'parent'])
+    } finally {
+      await app.close()
+    }
+  })
+
+  // find-my-way tells routes apart by their constraints too: the bare parent gives way to a declared route whatever
+  // its constraints, so a request the declared route does not take is not handed to the wildcard instead.
+  it('leaves the bare parent to a constrained route declared there', async () => {
+    const app = createWebApplication({ adapter: node() }).mount(
+      new Router().get('/dash/*', () => 'wildcard'),
+      new Router().config(version('1.0.0')).get('/dash', () => 'parent'),
     ) as WebApplication
     await app.bootstrap()
 
     try {
       expect((await app.request('/dash')).status).toBe(404)
-      expect((await app.request('/dash/')).status).toBe(200)
-      expect((await app.request('/dash/deep')).status).toBe(200)
+      expect(await (await app.request('/dash', { headers: { 'accept-version': '1.0.0' } })).text()).toBe('parent')
     } finally {
       await app.close()
     }

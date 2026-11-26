@@ -21,22 +21,14 @@ function refusal(path: MiddlewarePath): string {
 describe('MiddlewarePipeline', () => {
   // A middleware path is a literal prefix: route syntax in it could never match, and the middleware would be skipped
   // without a word, a guard included.
-  it.each(['*', '/a/:x', '/a/*', '/a(b)'])('refuses %j, which is not a literal prefix', path => {
+  // A request path never holds "?" or "#" once its query and fragment are off: such a prefix could never match either.
+  it.each(['*', '/a/:x', '/a/*', '/a(b)', '/a?b', '/a#b'])('refuses %j, which is not a literal prefix', path => {
     expect(refusal(path)).toBe(`Cannot add middleware at "${path}": a middleware path is a literal prefix`)
-  })
-
-  // A request path never holds "?" or "#" once its query and fragment are off: such a prefix could never match.
-  it.each(['/a?b', '/a#b'])('refuses %j, which holds a query or a fragment', path => {
-    expect(refusal(path)).toBe(`Cannot add middleware at "${path}": a request path holds no "?" or "#"`)
   })
 
   // An empty list covers no request: refused rather than a middleware that never runs.
   it('refuses an empty list of paths', () => {
     expect(refusal([])).toBe('Cannot add middleware at []: the list of paths is empty')
-  })
-
-  it('refuses a path holding an empty segment', () => {
-    expect(refusal('/a//b')).toBe('Cannot use the path "/a//b": it holds an empty segment, "//"')
   })
 
   // The paths are checked at the call: a list the caller empties afterwards must not slip past that check.

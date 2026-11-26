@@ -619,6 +619,35 @@ describe('staticFiles', () => {
     ])
   })
 
+  // A directory's index answers the directory's URL, either spelling, as the bare parent of the directory's route.
+  it("answers a directory's URL with its index", async () => {
+    const root = await tree('docs', ['docs/index.html', 'docs/guide.html'])
+    await start(s => s.serve(root)).bootstrap()
+
+    for (const url of ['/docs', '/docs/']) {
+      expect(await (await app!.request(url)).text(), url).toBe('docs/index.html')
+    }
+  })
+
+  // An application route at a directory's URL is the application's: the directory's index gives way, and its files
+  // stay served.
+  it("leaves a directory's URL to an application route there", async () => {
+    const root = await tree('docs', ['docs/index.html', 'docs/guide.html'])
+    app = start(s => s.serve(root)).mount(new Router().get('/docs', () => 'app')) as WebApplication<
+      never,
+      never,
+      unknown,
+      NodeAdapter
+    >
+    await app.bootstrap()
+
+    expect([
+      await (await app.request('/docs')).text(),
+      await (await app.request('/docs/')).text(),
+      await (await app.request('/docs/guide.html')).text(),
+    ]).toEqual(['app', 'app', 'docs/guide.html'])
+  })
+
   describe('on a router', () => {
     function routed(router: Router<any, any, any, any, any>): WebApplication<never, never, unknown, NodeAdapter> {
       app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) }).mount(
@@ -670,7 +699,7 @@ describe('staticFiles', () => {
 
   it('refuses staticFiles() on a server with a matcher of its own', async () => {
     app = createWebApplication({ adapter: node(), container: new CaffeineIoC({ decorators: false }) })
-      .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
+      .server(() => ({ matcher: strategies => findMyWayMatcher(strategies) }))
       .with(staticFiles(s => s.serve(fixtures))) as WebApplication<never, never, unknown, NodeAdapter>
 
     const err = await app.bootstrap().catch((err: unknown) => err)
@@ -679,13 +708,6 @@ describe('staticFiles', () => {
     expect(firstLine(err as Error)).toBe(
       'Cannot install staticFiles(): the server matches routes with a matcher of its own, and static routes are matched by find-my-way',
     )
-  })
-
-  it('refuses a prefix with an empty segment', async () => {
-    const err = await refusal(s => s.serve(fixtures, { prefix: '/a//b' }))
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(firstLine(err)).toBe(`Cannot use the path "/a//b": it holds an empty segment, "//"`)
   })
 })
 

@@ -142,10 +142,11 @@ describe('controllerClient()', () => {
     expect(() => controllerClient(NoRouteController, baseURL)).toThrow(ErrNoRoutesForController)
   })
 
-  it('calls a controller route declared with a trailing slash at that URL', async () => {
+  // A trailing slash never makes another route: the route is called where the server serves it.
+  it('calls a controller route declared with a trailing slash where it is served', async () => {
     const res = await controllerClient(SlashController, baseURL).x()
 
-    expect([res.status, new URL(res.url).pathname, await res.text()]).toEqual([200, '/slash/x/', 'slash'])
+    expect([res.status, new URL(res.url).pathname, await res.text()]).toEqual([200, '/slash/x', 'slash'])
   })
 
   it('returns independent clients for same controller with different targets', async () => {

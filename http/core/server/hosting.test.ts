@@ -478,32 +478,30 @@ describe("a router plugin's path-scoped middleware", () => {
   const nine = Array.from({ length: 9 }, (_, i) => `/:p${i}`).join('')
 
   it.each([
-    ['/tenants/:id', undefined, {}, '/tenants//jobs'],
-    [nine, undefined, {}, '/1/2/3/4/5/6/7/8/9/jobs'],
-  ])('under %j prefixed %j with %j runs for %s', async (path, prefix, router, url) => {
-    const a = createWebApplication()
-      .server(() => ({ router }))
-      .mount(
-        new Router(path)
-          .extend((group: { prefix(prefix: string): unknown }) => {
-            if (prefix !== undefined) {
-              group.prefix(prefix)
-            }
-          })
-          .with(
-            () =>
-              new (class extends HTTPPlugin {
-                register({ server }: HTTPSetupContext): void {
-                  server.use('/jobs', (ctx, next) => {
-                    ctx.header('x-guard', 'ran')
-                    return next()
-                  })
-                }
-              })(),
-          )
-          .get('/jobs')
-          .handler(() => 'jobs'),
-      )
+    ['/tenants/:id', undefined, '/tenants//jobs'],
+    [nine, undefined, '/1/2/3/4/5/6/7/8/9/jobs'],
+  ])('under %j prefixed %j runs for %s', async (path, prefix, url) => {
+    const a = createWebApplication().mount(
+      new Router(path)
+        .extend((group: { prefix(prefix: string): unknown }) => {
+          if (prefix !== undefined) {
+            group.prefix(prefix)
+          }
+        })
+        .with(
+          () =>
+            new (class extends HTTPPlugin {
+              register({ server }: HTTPSetupContext): void {
+                server.use('/jobs', (ctx, next) => {
+                  ctx.header('x-guard', 'ran')
+                  return next()
+                })
+              }
+            })(),
+        )
+        .get('/jobs')
+        .handler(() => 'jobs'),
+    )
     app = a
     await a.bootstrap()
 

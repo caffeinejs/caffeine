@@ -31,9 +31,9 @@ const app = createWebApplication({ adapter: node() }).server(({ config }) => ({ 
 const { address } = await app.run() // or app.run({ port: 3000 }); address.origin is the URL it serves
 ```
 
-`.server(configure)` configures the server it builds. `bodyLimit`, `handlerTimeout`, `trustProxy`, `router`,
+`.server(configure)` configures the server it builds. `bodyLimit`, `handlerTimeout`, `trustProxy`,
 `requestIDHeader` and `schemaCompiler` are the engine's, under every adapter; the adapter adds its own.
-`router: { ignoreTrailingSlash }` is the only router flag; paths are case-sensitive. Under `node()`, `listen` takes
+A trailing `/` never makes another route, and paths are case-sensitive. Under `node()`, `listen` takes
 node:net's listen options and `http`, `https` and `http2` the node server's own; `run(options)` takes node:net's
 `ListenOptions`, merged over `listen` key by key. `app.instance` is the node:http, node:https or node:http2
 server, and `.serverCallback(callback)` gets the setup context, with the configuration, and that server before it
@@ -441,9 +441,10 @@ pets.group('/:petID/orders', r =>
 app.mount(pets) // before app.bootstrap()
 ```
 
-- A route path keeps a trailing `/`: `/x` and `/x/` are different routes. Group paths drop theirs and get a missing
-  leading `/`, and a path holding `//` is refused. A group's root route answers at both forms, `/pets` and `/pets/`.
-  `staticFiles()` does not check application routes against its files: one at exactly a file's URL fails start-up as a
+- Paths drop a trailing `/` and get a missing leading `/`: `/x` and `/x/` are one route. A wildcard route answers its
+  bare parent too (`/files/*` answers `/files`, with an empty `*`) unless a route is declared at exactly that path. A router,
+  group, controller or mount path holds literal segments and parameters only: a wildcard or an optional segment there
+  is refused at start-up. `staticFiles()` does not check application routes against its files: one at exactly a file's URL fails start-up as a
   duplicate route, and one under a directory of files wins. Middleware paths match case-sensitively, so a guard on
   `/admin` does not run for `/ADMIN`.
 - A verb takes `(path)`, `(path, handler)` or `(path, schema, handler)`. With a handler the route is closed there
@@ -666,7 +667,7 @@ app.with(decompression(d => d.encodings('gzip', 'br')))
 A `.with(...)` factory returns an `HTTPPlugin`: a class whose `register(context)` does the work, handed the same
 context the factory got. `context.server` is the server the plugin is registered on, scoped to where it is
 registered: its `name` (a listener's, `undefined` for the application's own), `basePath`, `prefix` (where the scope's
-routes start), router flags and `address` once it listens, and what the plugin may do there: `mount(...routers)`,
+routes start), `matcher` and `address` once it listens, and what the plugin may do there: `mount(...routers)`,
 `use(...)`, `useFn(...)` and `hook(name, fn)`, taking what `app.mount`, `app.use`, `app.useFn` and `app.hook` take.
 
 ```ts
@@ -699,8 +700,7 @@ middleware cover its routes and the scopes nested in it, never a sibling's.
   nests under the router, starting from its path, guards and plugins. Its middleware runs in front of the router's
   routes alone, nested groups included, and a middleware path is a literal prefix on whole segments: `use('/jobs', mw)`
   on a router at `/admin` covers `/admin/jobs` and below. A parameter, `*`, a regex, `?` or `#` is refused; use the
-  literal parent prefix. A relative path under a router whose path holds a wildcard or an optional parameter is
-  refused at start-up.
+  literal parent prefix.
 - **On a controller** (`@Use(...)`): it registers on the server serving the controller, after the routers'. Its
   middleware runs in front of the controller's routes alone, a path relative to the controller and its `@Prefix`, and
   what it mounts nests under the controller, starting from its declarations.

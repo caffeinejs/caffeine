@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { ErrConfiguration } from '../error/common.js'
 import {
   literalPrefix,
+  joinRoutePath,
   normalizeGroupPath,
   normalizeLiteralPath,
   normalizeRoutePath,
   parseRoutePattern,
-  pathsOf,
   routePathSegments,
   routeURL,
   underPrefix,
@@ -50,24 +50,9 @@ describe('parseRoutePattern', () => {
     expect(parseRoutePattern(pattern)).toEqual(parts)
   })
 
-  // A matcher for another router reads the parts alone: a path the route syntax cannot read is refused, never repaired.
-  it.each(['/items/:id([0-9]+', '/x/:a((b)'])('refuses %s, whose regex is not closed', pattern => {
-    expect(() => parseRoutePattern(pattern)).toThrow(ErrConfiguration)
-  })
-
-  // find-my-way refuses a wildcard that is not last: refused here too, as a matcher for another router reads the same
-  // text.
-  it.each(['/a/*/b', '/a/*/', '/a/*/:id?'])('refuses %s, where a wildcard does not end the path', pattern => {
-    expect(firstLine(() => parseRoutePattern(pattern))).toBe(
-      `Cannot read the route path "${pattern}": a wildcard "*" must end the path`,
-    )
-  })
-
-  it('refuses an unclosed regex in time linear in the path', () => {
-    const started = performance.now()
-
-    expect(() => parseRoutePattern('/' + ':id(('.repeat(20_000))).toThrow(ErrConfiguration)
-    expect(performance.now() - started).toBeLessThan(1000)
+  // An unclosed regex runs to the end of the path: the router refuses it when the route registers.
+  it('reads an unclosed regex to the end of the path', () => {
+    expect(parseRoutePattern('/a/:id(\\d+')).toEqual([text('/a/'), param('id', '\\d+')])
   })
 })
 
@@ -92,47 +77,41 @@ describe('normalizeGroupPath', () => {
     ['/api/', '/api'],
     ['/', ''],
     ['', ''],
-    ['/files/*/', '/files/*'],
+    ['//catalog', '/catalog'],
+    ['/t/:id(\\d+)', '/t/:id(\\d+)'],
   ])('reads %j as %j', (path, expected) => {
     expect(normalizeGroupPath(path)).toBe(expected)
+  })
+
+  // A router, group, controller or mount path is simple: what a wildcard or an optional segment would leave below it
+  // is not a path a route or a middleware can start from.
+  it.each(['/files/*', '/pets/:id?'])('refuses %j, which holds a wildcard or an optional segment', path => {
+    expect(firstLine(() => normalizeGroupPath(path))).toBe(
+      `Cannot use "${path}" as a router path: it holds a wildcard or an optional segment`,
+    )
   })
 })
 
 describe('normalizeRoutePath', () => {
-  // A route's trailing slash is part of the route: "/x/" and "/x" are different routes.
+  // A trailing slash never makes another route: "/x/" and "/x" are one route.
   it.each([
-    ['x/', '/x/'],
+    ['x/', '/x'],
+    ['/pets/', '/pets'],
     ['', '/'],
+    ['/', '/'],
   ])('reads %j as %j', (path, expected) => {
     expect(normalizeRoutePath(path)).toBe(expected)
   })
 })
 
-describe.each([
-  ['normalizeGroupPath', normalizeGroupPath],
-  ['normalizeRoutePath', normalizeRoutePath],
-])('%s', (_, normalize) => {
-  // An empty segment is refused, never collapsed or kept: either would serve a route somewhere it was not written.
-  it.each(['/a//b', '/api//', '//', '/a//:id?'])('refuses %j, which holds an empty segment', path => {
-    expect(firstLine(() => normalize(path))).toBe(`Cannot use the path "${path}": it holds an empty segment, "//"`)
-  })
-
-  // A "//" inside a parameter's regex is part of the regex, not a segment boundary.
-  it('accepts a "//" inside a parameter\'s regex', () => {
-    expect(normalize('/d/:p(a//b)')).toBe('/d/:p(a//b)')
-  })
-})
-
 describe('normalizeLiteralPath', () => {
-  // A literal path is compared as text, so route syntax means nothing in it: a "//" is refused wherever it stands.
-  it('refuses a "//" even where route syntax would read a regex', () => {
-    expect(firstLine(() => normalizeLiteralPath('/a:x(//)'))).toBe(
-      'Cannot use the path "/a:x(//)": it holds an empty segment, "//"',
-    )
-  })
-
-  it('keeps a "*" as text', () => {
-    expect(normalizeLiteralPath('/v*/x')).toBe('/v*/x')
+  // A leading "//" names another host to a browser: a run of leading slashes is read as one.
+  it.each([
+    ['//catalog', '/catalog'],
+    ['///a/', '/a'],
+    ['/v*/x', '/v*/x'],
+  ])('reads %j as %j', (path, expected) => {
+    expect(normalizeLiteralPath(path)).toBe(expected)
   })
 })
 
@@ -156,18 +135,14 @@ describe('underPrefix', () => {
   })
 })
 
-describe('pathsOf', () => {
-  // A route at "/" is its group's own path, answered with and without the trailing slash; any other keeps its own.
+describe('joinRoutePath', () => {
+  // A route at "/" is its group's own path.
   it.each([
-    ['', '/', false, ['/']],
-    ['/r', '/', false, ['/r', '/r/']],
-    ['/r', '/', true, ['/r']],
-    ['/files/*', '/', false, ['/files/*']],
-    ['/:id?', '/', false, ['/:id?']],
-    ['/pets/:id?', '/', false, ['/pets/:id?', '/pets/:id?/']],
-    ['/r', '/x/', false, ['/r/x/']],
-  ])('registers %j with %j, ignoring trailing slashes %j, at %j', (base, routePath, ignore, expected) => {
-    expect(pathsOf(base, routePath, ignore)).toEqual(expected)
+    ['', '/', '/'],
+    ['/r', '/', '/r'],
+    ['/r', '/x', '/r/x'],
+  ])('joins %j and %j as %j', (base, routePath, expected) => {
+    expect(joinRoutePath(base, routePath)).toBe(expected)
   })
 })
 
@@ -176,7 +151,7 @@ describe('routeURL', () => {
   it.each([
     [undefined, '/', '/openapi.json', '/openapi.json'],
     ['/v1/', 'pets', '/', '/v1/pets'],
-    [undefined, '/v1/', 'x/', '/v1/x/'],
+    [undefined, '/v1/', 'x/', '/v1/x'],
   ])('joins %j, %j and %j as %j', (prefix, groupPath, routePath, expected) => {
     expect(routeURL(prefix, groupPath, routePath)).toBe(expected)
   })

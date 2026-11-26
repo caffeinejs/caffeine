@@ -3,7 +3,7 @@ import { errMessage } from '@caffeinejs/std/err'
 import { ErrConfiguration } from './core/error/common.js'
 import { HookBatch } from './core/lifecycle/batch.js'
 import { assertHookName, HOOK_NAMES, type HookFn, type HookName } from './core/lifecycle/lifecycle.js'
-import type { RouterFlags } from './core/matcher/matcher.js'
+import type { RouteMatcherFactory } from './core/matcher/matcher.js'
 import { parseUse } from './core/middleware/middleware.js'
 import { MiddlewarePipeline } from './core/middleware/pipeline.js'
 import type { AnyRouter } from './core/routing/programmatic/programmatic.js'
@@ -17,7 +17,7 @@ type Operation = 'mount' | 'use' | 'useFn' | 'hook' | 'hasPlugin'
 export interface SlotIdentity {
   readonly name: string | undefined
   readonly basePath: string
-  readonly router: RouterFlags | undefined
+  readonly matcher: RouteMatcherFactory
   /** Reads where the server listens, each time it is asked. */
   readonly address: () => ServerAddress | undefined
 }
@@ -65,8 +65,8 @@ export class PluginSlot implements ScopedServer<any> {
     return this.#prefix
   }
 
-  get router(): RouterFlags | undefined {
-    return this.#server().router
+  get matcher(): RouteMatcherFactory {
+    return this.#server().matcher
   }
 
   get address(): ServerAddress | undefined {
@@ -251,8 +251,8 @@ class EntryServer implements ScopedServer<any> {
     return this.#slot.prefix
   }
 
-  get router(): RouterFlags | undefined {
-    return this.#slot.router
+  get matcher(): RouteMatcherFactory {
+    return this.#slot.matcher
   }
 
   get address(): ServerAddress | undefined {

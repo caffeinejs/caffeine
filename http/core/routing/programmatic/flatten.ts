@@ -108,7 +108,7 @@ function walk<R>(
   const own = state.builder.toRouteGroup<R>()
 
   // A group prefix comes after the parent's path, and the group's own path is relative to it: the server serves the
-  // group's root at its whole path with and without the trailing slash.
+  // group's root at its whole path.
   const { at, own: ownPath } = placeOf(state)
   const lead = parentPath + normalizeGroupPath(at)
   const prefix = own.prefix === undefined ? undefined : lead + own.prefix

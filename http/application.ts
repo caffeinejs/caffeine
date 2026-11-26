@@ -486,8 +486,8 @@ export class WebApplication<ROUTES = never, DEPS = never, C = unknown, A extends
    * ```
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
-   * @throws ErrConfiguration from {@link ready}, when the base path starts with "//" or "/\" once rooted, or holds
-   *   "//", "?", "#" or a control character.
+   * @throws ErrConfiguration from {@link ready}, when the base path starts with "//" or "/\" once rooted, or holds a
+   *   control character.
    */
   basePath(basePath: string | BasePathConfigurer<C>): this {
     this.assertConfigurable()

@@ -57,21 +57,8 @@ describe('normalizeBasePath', () => {
     expect(normalizeBasePath('api/')).toBe('/api')
   })
 
-  it('refuses a base path holding an empty segment', () => {
-    const err = captureError(() => normalizeBasePath('/api//'))
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(err.message.split('\n')[0]).toBe('Cannot use the path "/api//": it holds an empty segment, "//"')
-  })
-
-  it.each([
-    ['/api?x', '?'],
-    ['/api#x', '#'],
-  ])('refuses %s, which no request path could ever start with', (value, char) => {
-    const err = captureError(() => normalizeBasePath(value))
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect(err.message).toContain(`"${value}" contains "${char}"`)
+  it('drops the trailing slashes of a base path', () => {
+    expect(normalizeBasePath('/api//')).toBe('/api')
   })
 
   // The base goes in front of every redirect the framework builds, so it must never be one a browser reads as naming

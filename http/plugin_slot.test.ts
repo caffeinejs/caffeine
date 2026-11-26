@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { ErrConfiguration } from './core/error/common.js'
 import { HookRegistration, type HookBatch } from './core/lifecycle/batch.js'
+import { findMyWayMatcher } from './core/matcher/find_my_way.js'
 import { HTTPPlugin, type HTTPSetupContext } from './plugin.js'
 import { PluginSlot } from './plugin_slot.js'
 
@@ -126,7 +127,7 @@ describe('PluginSlot', () => {
   // The identity is the server's, set before the slot opens; the prefix is the slot's own.
   it("reports its server's identity and its own prefix", () => {
     const slot = new PluginSlot(undefined, '/r')
-    slot.forServer({ name: 'admin', basePath: '/api', router: undefined, address: () => undefined })
+    slot.forServer({ name: 'admin', basePath: '/api', matcher: findMyWayMatcher, address: () => undefined })
 
     expect({ name: slot.name, basePath: slot.basePath, prefix: slot.prefix, address: slot.address }).toEqual({
       name: 'admin',

@@ -295,9 +295,8 @@ capabilities. The following are **not** implemented:
 
 Notes:
 
-- `GET /pets/` lists pets as `GET /pets` does: a controller's root route answers with and without the trailing
-  slash. Any other trailing slash is **not** ignored: `/pets/1/` is not `/pets/1`. That is the router's default, and
-  this example does not override it with `router: { ignoreTrailingSlash: true }` in `.server(...)`.
+- `GET /pets/` lists pets as `GET /pets` does, and `/pets/1/` is `/pets/1`: a trailing slash never makes another
+  route.
 - Passwords are stored in clear text to keep the example small — **never** do this in production; hash with
   argon2/bcrypt.
 - The Order model follows the specification's `#/components/schemas/Order` (id, petId, userId, status,

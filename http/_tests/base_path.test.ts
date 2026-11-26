@@ -150,17 +150,17 @@ describe('an application under a base path', () => {
       expect(await get(app, '/gateway/pets')).toMatchObject({ status: 200, body: { basePath: '/gateway' } })
     })
 
-    it.each([
-      ['/api?x', 'contains "?"'],
-      ['/api#x', 'contains "#"'],
-    ])('fails start-up on %s, given directly or by a callback', async (value, reason) => {
-      for (const basePath of [value, () => value]) {
-        const ready = createWebApplication({ adapter: node() }).basePath(basePath).bootstrap()
+    it.each([['//evil.example', 'starts with "//"']])(
+      'fails start-up on %s, given directly or by a callback',
+      async (value, reason) => {
+        for (const basePath of [value, () => value]) {
+          const ready = createWebApplication({ adapter: node() }).basePath(basePath).bootstrap()
 
-        await expect(ready).rejects.toThrow(ErrConfiguration)
-        await expect(ready).rejects.toThrow(reason)
-      }
-    })
+          await expect(ready).rejects.toThrow(ErrConfiguration)
+          await expect(ready).rejects.toThrow(reason)
+        }
+      },
+    )
 
     it('fails start-up with what the callback threw, before any plugin factory has run', async () => {
       const boom = new Error('no base path today')
@@ -285,11 +285,8 @@ describe('an application under a base path', () => {
       })
     })
 
-    it("applies the server's router options to the path left once the base is off", async () => {
-      app = createWebApplication({ adapter: node() })
-        .basePath('/api')
-        .server(() => ({ router: { ignoreTrailingSlash: true } }))
-        .mount(echo()) as WebApplication
+    it('ignores a trailing slash in the path left once the base is off', async () => {
+      app = createWebApplication({ adapter: node() }).basePath('/api').mount(echo()) as WebApplication
       await app.bootstrap()
 
       expect((await get(app, '/api/pets/')).status).toBe(200)

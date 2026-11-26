@@ -5,5 +5,4 @@ export {
   type RouteMatch,
   type RouteMatcher,
   type RouteMatcherFactory,
-  type RouterFlags,
 } from './matcher.js'

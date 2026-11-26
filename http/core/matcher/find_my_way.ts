@@ -4,8 +4,7 @@ import FindMyWay from 'find-my-way'
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
-import { parseRoutePattern } from '../routing/paths.js'
-import { ErrRouteConflict, type DerivedConstraints, type RouteMatcherFactory, type RouterFlags } from './matcher.js'
+import { ErrRouteConflict, type DerivedConstraints, type RouteMatcherFactory } from './matcher.js'
 
 // find-my-way calls a handler per match from `lookup` only; the engine reads the store `find` hands back.
 const NOOP = (): undefined => undefined
@@ -13,13 +12,9 @@ const NOOP = (): undefined => undefined
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/
 
 /**
- * The default matcher: find-my-way, built with the server's router flags. It generates code with `new Function`, so
- * it runs where a runtime allows that.
+ * The default matcher: find-my-way. It generates code with `new Function`, so it runs where a runtime allows that.
  */
-export const findMyWayMatcher: RouteMatcherFactory = <S>(
-  flags: Parameters<RouteMatcherFactory>[0],
-  strategies: Parameters<RouteMatcherFactory>[1],
-) => {
+export const findMyWayMatcher: RouteMatcherFactory = <S>(strategies: Parameters<RouteMatcherFactory>[0]) => {
   for (const strategy of strategies) {
     // find-my-way writes the name into the code it generates.
     if (!IDENTIFIER.test(strategy.name)) {
@@ -32,15 +27,10 @@ export const findMyWayMatcher: RouteMatcherFactory = <S>(
     }
   }
 
-  const router = routerOf(flags, strategies)
+  const router = routerOf(strategies)
 
   return {
     add(method, path, constraints, store) {
-      const refused = starParameterRefusal(path)
-      if (refused !== undefined) {
-        throw refused
-      }
-
       try {
         router.on(
           method as FindMyWay.HTTPMethod,
@@ -74,14 +64,11 @@ export const findMyWayMatcher: RouteMatcherFactory = <S>(
   }
 }
 
-// One server's find-my-way, built with its router flags and the custom strategies.
-function routerOf(
-  flags: RouterFlags,
-  strategies: readonly ConstraintStrategy<unknown>[],
-): FindMyWay.Instance<FindMyWay.HTTPVersion.V1> {
+// One server's find-my-way, built with the custom strategies.
+function routerOf(strategies: readonly ConstraintStrategy<unknown>[]): FindMyWay.Instance<FindMyWay.HTTPVersion.V1> {
   return FindMyWay({
-    // The one flag the router takes: find-my-way's other options keep their defaults, whatever `flags` carries.
-    ignoreTrailingSlash: flags.ignoreTrailingSlash,
+    // A trailing slash never makes another route.
+    ignoreTrailingSlash: true,
     constraints: Object.fromEntries(strategies.map(strategy => [strategy.name, findMyWayStrategy(strategy, NOOP)])),
     // The query is parsed on first read, not on every match.
     querystringParser: (query: string) => query as unknown as Record<string, string>,
@@ -91,21 +78,16 @@ function routerOf(
 }
 
 // find-my-way's own: a path ending in an optional parameter registers twice, with it and without it.
-const OPTIONAL_PARAMETER = /(\/:[^/()]*?)\?(\/?)/
+const OPTIONAL_PARAMETER = /(\/:[^/()]*?)\?/
 
 /**
  * The paths `on` registers `path` as, rewritten as it rewrites them: `findRoute` reads a path as written, so the table
  * rewrites it first.
  */
-function formsOf(path: string, flags: RouterFlags): string[] {
-  if (OPTIONAL_PARAMETER.test(path)) {
-    return [
-      ...formsOf(path.replace(OPTIONAL_PARAMETER, '$1$2'), flags),
-      ...formsOf(path.replace(OPTIONAL_PARAMETER, '$2') || '/', flags),
-    ]
-  }
-
-  return [flags.ignoreTrailingSlash ? FindMyWay.trimLastSlash(path) : path]
+function formsOf(path: string): string[] {
+  return OPTIONAL_PARAMETER.test(path)
+    ? [path.replace(OPTIONAL_PARAMETER, '$1'), path.replace(OPTIONAL_PARAMETER, '') || '/']
+    : [path]
 }
 
 /** Routes by method and path alone: those find-my-way takes for one route, filed together. */
@@ -116,15 +98,15 @@ export interface PreflightTable<S> {
 }
 
 /**
- * The table a preflight is looked up in, built with the server's router flags. `findRoute` finds the route a path is
- * filed under as find-my-way's own conflict check does: parameter names erased.
+ * The table a preflight is looked up in. `findRoute` finds the route a path is filed under as find-my-way's own
+ * conflict check does: parameter names erased.
  */
-export function preflightTable<S>(flags: RouterFlags): PreflightTable<S> {
-  const router = routerOf(flags, [])
+export function preflightTable<S>(): PreflightTable<S> {
+  const router = routerOf([])
 
   return {
     add(method, path, store) {
-      for (const form of formsOf(path, flags)) {
+      for (const form of formsOf(path)) {
         const found = router.findRoute(method as FindMyWay.HTTPMethod, form)
         if (found === null) {
           router.on(method as FindMyWay.HTTPMethod, form, NOOP, [store])
@@ -199,23 +181,4 @@ function spelled(value: unknown): string {
   return typeof value === 'object' && value !== null && !(value instanceof RegExp)
     ? JSON.stringify(value)
     : String(value)
-}
-
-/**
- * Why the route `url` cannot register, when it declares a parameter named `*`: find-my-way gives the wildcard's value
- * that name, so whoever reads `params['*']` could not tell the two apart.
- *
- * @throws ErrConfiguration when the route path cannot be read.
- */
-export function starParameterRefusal(url: string): ErrConfiguration | undefined {
-  if (!parseRoutePattern(url).some(part => part.kind === 'param' && part.name === '*')) {
-    return undefined
-  }
-
-  return new ErrConfiguration(
-    errMessage(`Cannot register "${url}": a parameter named "*" reads as a wildcard, whose value has that name`)
-      .solutions('Name the parameter, such as ":name"', 'Write a wildcard as "*", without ":"')
-      .reference('@caffeinejs/http', ErrConfiguration)
-      .build(),
-  )
 }

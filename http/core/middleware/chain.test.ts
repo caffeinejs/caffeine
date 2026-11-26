@@ -19,7 +19,7 @@ class Target implements ChainTarget {
   }
 
   normalizedPath(): { path: string; error: Error | undefined } {
-    return normalizePath(sanitizeURL(this.#url), {})
+    return normalizePath(sanitizeURL(this.#url))
   }
 }
 

@@ -1,16 +1,6 @@
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { ErrCaffeineWebApplication } from '../error/common.js'
 
-/** How a server's router matches a request's path. */
-export interface RouterFlags {
-  readonly ignoreTrailingSlash: boolean
-}
-
-// find-my-way's own defaults, which Fastify keeps.
-export const DEFAULT_ROUTER_FLAGS: RouterFlags = {
-  ignoreTrailingSlash: false,
-}
-
 /** Constraint values derived from the request, matched against a route's own. */
 export type DerivedConstraints = Readonly<Record<string, unknown>>
 
@@ -26,8 +16,8 @@ export interface RouteMatch<S> {
 /** Finds the route a request names. The engine registers every route before the first match. */
 export interface RouteMatcher<S> {
   /**
-   * Registers a route. `path` is written in Caffeine's route syntax, as `parseRoutePattern` reads it, and holds no
-   * empty segment: a matcher for another router translates it to that router's own.
+   * Registers a route. `path` is written in Caffeine's route syntax, as `parseRoutePattern` reads it, and ends in no
+   * `/` but the root `/`: a matcher for another router translates it to that router's own.
    *
    * @throws ErrRouteConflict when a route of `method` already matches `path` under these constraints.
    * @throws ErrConfiguration when `path` or `method` is not one the matcher can register.
@@ -35,7 +25,7 @@ export interface RouteMatcher<S> {
   add(method: string, path: string, constraints: DerivedConstraints | undefined, store: S): void
 
   /**
-   * `null` when no route matches.
+   * `null` when no route matches. A path with a trailing `/` matches as the path without it.
    *
    * @throws ErrHTTPBadRequest for a path that cannot be decoded.
    */
@@ -43,13 +33,10 @@ export interface RouteMatcher<S> {
 }
 
 /**
- * Builds the matcher of one server from its router flags and its custom constraint strategies. `version` and `host`
- * are the matcher's own; a strategy of either name replaces it.
+ * Builds the matcher of one server from its custom constraint strategies. `version` and `host` are the matcher's own;
+ * a strategy of either name replaces it.
  */
-export type RouteMatcherFactory = <S>(
-  flags: RouterFlags,
-  strategies: readonly ConstraintStrategy<unknown>[],
-) => RouteMatcher<S>
+export type RouteMatcherFactory = <S>(strategies: readonly ConstraintStrategy<unknown>[]) => RouteMatcher<S>
 
 /**
  * A route of that method already matches that path. What a second registration of a route meets, and what a GET's

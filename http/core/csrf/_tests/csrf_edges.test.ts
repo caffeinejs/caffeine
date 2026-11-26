@@ -169,7 +169,6 @@ describe('csrf() at the edges', () => {
       const ran: string[] = []
       const app = await ready(
         createWebApplication({ adapter: node() })
-          .server(() => ({ router: { ignoreTrailingSlash: true } }))
           .with(csrf(c => c.exclude('/webhooks')))
           .mount(
             new Router('/echo').post('/', () => (ran.push('echo'), ok())),

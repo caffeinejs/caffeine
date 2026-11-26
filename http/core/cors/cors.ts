@@ -9,7 +9,6 @@ import type { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPNotFound } from '../error/http.js'
 import type { RouteDefinition } from '../lifecycle/route_definition.js'
 import type { RouteOptions } from '../routing/options.js'
-import { parseRoutePattern } from '../routing/paths.js'
 import { Router } from '../routing/programmatic/programmatic.js'
 import { accessControlExempt } from '../security/exempt.js'
 import { kRouteOf, type Context } from '../server/context.js'
@@ -188,18 +187,14 @@ class CORSPolicy extends HTTPPlugin {
     // A request no route matches runs the server's own hooks, so a policy there sees every preflight. A router's or a
     // controller's sees those to its routes alone: it serves `OPTIONS` routes at its path and below for preflights to
     // match, answered in `onRequest` before their handler runs, which gives one it does not grant a path's 404. They
-    // select on no constraint: a browser sends none with a preflight. The scope's root is served at both forms, as
-    // every group root is. A path ending in a wildcard or an optional parameter has nothing below it.
+    // select on no constraint: a browser sends none with a preflight.
     if (!isServerScope(context.server)) {
-      const parts = parseRoutePattern(context.server.prefix)
-      const preflights = new Router()
-        .detail('http', { internal: true })
-        .config(accessControlExempt(), { [kPreflightRoute]: true, constraints: null })
-        .options('/', notFound)
       context.server.mount(
-        parts.some(part => part.kind === 'wildcard' || part.kind === 'optional')
-          ? preflights
-          : preflights.options('/*', notFound),
+        new Router()
+          .detail('http', { internal: true })
+          .config(accessControlExempt(), { [kPreflightRoute]: true, constraints: null })
+          .options('/', notFound)
+          .options('/*', notFound),
       )
     }
 

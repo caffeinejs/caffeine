@@ -1,4 +1,4 @@
-import { ErrConfiguration, Router, createWebApplication } from '@caffeinejs/http'
+import { Router, createWebApplication } from '@caffeinejs/http'
 import { node } from '@caffeinejs/http-node'
 import { describe, expect, it } from 'vitest'
 
@@ -58,17 +58,17 @@ describe('openapi', () => {
   // A browser follows the page's links from where it opened the page: they resolve on the page's own origin, under the
   // path it was opened at, whatever the request path spelled, and both answer.
   it.each([
-    ['a parameter', '/tenants/:id', {}, '/tenants/42/docs', '/tenants/42'],
-    ['an encoded "/" in a value', '/tenants/:id', {}, '/tenants/a%2Fb/docs', '/tenants/a%2Fb'],
-    ['a value holding a quote and "<"', '/api/v:version', {}, '/api/v1%22%3E%3Cx/docs', '/api/v1%22%3E%3Cx'],
-    ['an escaped ":"', '/service::name', {}, '/service:name/docs', '/service:name'],
-    ['a parameter named wildcard', '/w/:wildcard', {}, '/w/x/docs', '/w/x'],
-    ['a parameter name with "$"', '/teams/:$team', {}, '/teams/red/docs', '/teams/red'],
-  ])('links the docs page under %s to where it was opened', async (_, path, router, url, root) => {
-    await expectLinks(path, router, url, root, o => o.public())
+    ['a parameter', '/tenants/:id', '/tenants/42/docs', '/tenants/42'],
+    ['an encoded "/" in a value', '/tenants/:id', '/tenants/a%2Fb/docs', '/tenants/a%2Fb'],
+    ['a value holding a quote and "<"', '/api/v:version', '/api/v1%22%3E%3Cx/docs', '/api/v1%22%3E%3Cx'],
+    ['an escaped ":"', '/service::name', '/service:name/docs', '/service:name'],
+    ['a parameter named wildcard', '/w/:wildcard', '/w/x/docs', '/w/x'],
+    ['a parameter name with "$"', '/teams/:$team', '/teams/red/docs', '/teams/red'],
+  ])('links the docs page under %s to where it was opened', async (_, path, url, root) => {
+    await expectLinks(path, url, root, o => o.public())
   })
 
-  // A route path is routed with a leading "/" and a trailing one kept: the links name it where it is served.
+  // A route path is routed with a leading "/" and without a trailing one: the links name it where it is served.
   it.each([
     ['without a leading slash', 'spec.json', 'docs', '/api/docs', ['/api/spec.json', '/api/docs/_scalar.js']],
     ['with a trailing slash', '/openapi.json', '/docs/', '/api/docs/', ['/api/openapi.json', '/api/docs/_scalar.js']],
@@ -96,56 +96,40 @@ describe('openapi', () => {
 
   // A base written with a trailing slash is routed without it: the links name the endpoints where they are served.
   it('links a docs page under a base with a trailing slash to where it was opened', async () => {
-    await expectLinks('/api', {}, '/api/v1/docs', '/api/v1', o => o.public().base('/v1/'))
+    await expectLinks('/api', '/api/v1/docs', '/api/v1', o => o.public().base('/v1/'))
   })
 
   // The plugin's own base is a path pattern too: the links keep the values it matched.
   it('links a docs page under a base with a parameter to where it was opened', async () => {
-    await expectLinks('/tenants/:tenant', {}, '/tenants/acme/versions/2/docs', '/tenants/acme/versions/2', o =>
+    await expectLinks('/tenants/:tenant', '/tenants/acme/versions/2/docs', '/tenants/acme/versions/2', o =>
       o.public().base('/versions/:version([0-9]+)'),
     )
   })
 
-  // A page served at the scope's own path is opened with the scope's last value as its last segment; the scope's root
-  // answers at both forms, so a trailing slash lies past the page.
+  // A page served at the scope's own path is opened with the scope's last value as its last segment; a trailing slash
+  // never makes another route, so it lies past the page.
   it.each([
-    [{}, '/tenants/42', '/tenants/42'],
-    [{}, '/tenants/42/', '/tenants/42'],
-    [{ ignoreTrailingSlash: true }, '/tenants/42/', '/tenants/42'],
-  ])('links a docs page served at the scope path to the scope, under %j at %s', async (router, url, root) => {
-    await expectLinks('/tenants/:id', router, url, root, o => o.public().docs('/'), '')
+    ['/tenants/42', '/tenants/42'],
+    ['/tenants/42/', '/tenants/42'],
+  ])('links a docs page served at the scope path to the scope, at %s', async (url, root) => {
+    await expectLinks('/tenants/:id', url, root, o => o.public().docs('/'), '')
   })
 
-  // A browser reads a link starting with "//" as naming another host: a base spelled that way is refused at start-up.
+  // A browser reads a link starting with "//" as naming another host: a base spelled that way is read as "/catalog".
   it('never links the docs page to another host', async () => {
-    const app = createWebApplication({ adapter: node() })
-      .install(OpenAPI())
-      .mount(new Router('').with(openapi(o => o.public().base('//catalog'))).get('/pets', () => 'pets'))
-
-    try {
-      const err = await app.bootstrap().catch((err: unknown) => err)
-
-      expect(err).toBeInstanceOf(ErrConfiguration)
-      expect((err as Error).message.split('\n')[0]).toBe(
-        'Cannot use the path "//catalog": it holds an empty segment, "//"',
-      )
-    } finally {
-      await app.close()
-    }
+    await expectLinks('', '/catalog/docs', '/catalog', o => o.public().base('//catalog'))
   })
 })
 
 /** Opens the docs page at `url` and follows its links: both resolve on its origin under `root`, and both answer. */
 async function expectLinks(
   path: string,
-  router: object,
   url: string,
   root: string,
   configure: OpenAPIConfigurer,
   docs = '/docs',
 ): Promise<void> {
   const app = createWebApplication({ adapter: node() })
-    .server(() => ({ router }))
     .install(OpenAPI())
     .mount(
       new Router(path)

@@ -1,4 +1,3 @@
-import { ErrConfiguration } from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { templateParameters, translatePath } from '../generate/paths.js'
@@ -18,11 +17,11 @@ describe('translatePath', () => {
     })
   })
 
-  // A path the router cannot register is not documented as some other path: it is refused, in time linear in it.
-  it('refuses an unclosed constraint in time linear in the path', () => {
+  // The router refuses an unclosed constraint when the route registers: reading one here takes time linear in it.
+  it('reads an unclosed constraint in time linear in the path', () => {
     const path = '/' + ':id(('.repeat(20_000)
     const started = performance.now()
-    expect(() => translatePath(path)).toThrow(ErrConfiguration)
+    expect(translatePath(path).parameters).toHaveLength(1)
     expect(performance.now() - started).toBeLessThan(1000)
   })
 

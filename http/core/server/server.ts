@@ -32,7 +32,7 @@ import { callOnRoute, openDefinition, type RouteDefinition } from '../lifecycle/
 import { findMyWayMatcher, preflightTable, type PreflightTable } from '../matcher/find_my_way.js'
 import { ErrRouteConflict, type DerivedConstraints, type RouteMatch, type RouteMatcher } from '../matcher/matcher.js'
 import { routeRecord, type RouteRecord } from '../routing/inventory.js'
-import { pathsOf } from '../routing/paths.js'
+import { joinRoutePath } from '../routing/paths.js'
 import type { IRoute, IRouteGroup, RouteGroupScope } from '../routing/route.js'
 import { ScopeChains } from '../routing/scope_chain.js'
 import { assertGated, gateOf } from '../security/gate.js'
@@ -62,6 +62,8 @@ export interface RouteStore {
   readonly timeout: Duration | undefined
   /** The automatic HEAD route of a GET, which replaces `content-length` as Fastify's does. */
   readonly twin: boolean
+  /** A wildcard route at its bare parent, `/dash` for `/dash/*`, where the wildcard reads empty. */
+  readonly bare: boolean
   /** How the route reads its body and validates its request; `undefined` for a miss, which reads neither. */
   readonly input: RouteInput | undefined
   /** The serializer an answer of a status is written with, when the route's response schema declares one. */
@@ -158,7 +160,6 @@ export class HTTPServer {
       application: settings.application,
       trustProxy: settings.trustProxy,
       requestIDHeader: settings.requestIDHeader,
-      router: settings.router,
       bodyLimit: settings.bodyLimit,
       cookies: cookieSettings.enabled ? ServerCookies.resolve(cookieSettings, container, writeCookies) : undefined,
       routeOf: (method, url) => {
@@ -189,9 +190,8 @@ export class HTTPServer {
     // Without a constrained route a preflight finds its route in the matcher itself. The table is find-my-way's: under
     // a matcher of the application's own, a preflight finds only unconstrained routes, and a constrained one goes
     // unanswered.
-    this.#preflight =
-      this.#constraints.derives && settings.matcher === findMyWayMatcher ? preflightTable(settings.router) : undefined
-    this.#matcher = settings.matcher<RouteStore>(settings.router, settings.constraints)
+    this.#preflight = this.#constraints.derives && settings.matcher === findMyWayMatcher ? preflightTable() : undefined
+    this.#matcher = settings.matcher<RouteStore>(settings.constraints)
     const root = compileLevel(input.levels.root, settings)
     const vary = this.#constraints.vary
     this.#root = vary === undefined ? root : { ...root, onSend: [vary, ...root.onSend] }
@@ -211,6 +211,7 @@ export class HTTPServer {
       status: undefined,
       timeout: undefined,
       twin: false,
+      bare: false,
       input: undefined,
       serializerFor: NO_SERIALIZER,
     }
@@ -290,7 +291,7 @@ export class HTTPServer {
         method,
         url,
         seenBase,
-        match?.params ?? EMPTY_PARAMS,
+        match === null ? EMPTY_PARAMS : store.bare ? { ...match.params, '*': '' } : match.params,
         match?.query ?? queryAfter(url),
         store,
         !this.#closing,
@@ -491,6 +492,20 @@ export class HTTPServer {
     }
   }
 
+  /** Registers a route that gives way to one already at its method and path: whether it registered. */
+  #yielding(method: string, path: string, declared: DerivedConstraints | undefined, store: RouteStore): boolean {
+    try {
+      this.#matcher.add(method, path, declared, store)
+      this.#preflight?.add(method, path, store.definition!)
+      return true
+    } catch (err) {
+      if (!(err instanceof ErrRouteConflict)) {
+        throw err
+      }
+      return false
+    }
+  }
+
   #register(groups: readonly IRouteGroup<Context>[], settings: ResolvedServerSettings): RouteRecord[] {
     const registered: Array<{
       readonly route: IRoute<Context>
@@ -499,56 +514,69 @@ export class HTTPServer {
       readonly methods: string[]
       readonly url: string
     }> = []
-    const twins: Array<{
+    // A route registered after every explicit one, giving way to what is there.
+    type Later = {
       readonly store: RouteStore
-      readonly paths: readonly string[]
+      readonly path: string
       readonly methods: string[]
       readonly declared: DerivedConstraints | undefined
-    }> = []
+    }
+    const twins: Later[] = []
+    // A wildcard route's bare parent: `/dash/*` answers `/dash` too, with an empty `*`.
+    const bares: Later[] = []
+    // Every method and path a route was declared at, whatever its constraints: find-my-way reports a conflict only
+    // when the constraints match too, and a bare parent gives way to a declared route either way.
+    const declaredAt = new Set<string>()
 
     for (const group of groups) {
       for (const route of group.routes) {
         const methods = [...new Set(route.method.map(method => method.toUpperCase()))]
-        const paths = pathsOf((group.prefix ?? '') + group.path, route.path, settings.router.ignoreTrailingSlash)
+        const path = joinRoutePath((group.prefix ?? '') + group.path, route.path)
 
-        assertServable(route, methods, paths[0])
-        const declared = this.#constraints.of(route, methods, paths[0])
+        assertServable(route, methods, path)
+        const declared = this.#constraints.of(route, methods, path)
 
-        const store = this.#storeOf(group, route, methods, paths[0], settings)
+        const store = this.#storeOf(group, route, methods, path, settings)
 
         for (const method of methods) {
-          for (const path of paths) {
-            this.#matcher.add(method, path, declared, store)
-            this.#preflight?.add(method, path, store.definition!)
-          }
+          this.#matcher.add(method, path, declared, store)
+          this.#preflight?.add(method, path, store.definition!)
+          declaredAt.add(`${method} ${path}`)
         }
 
-        registered.push({ route, group, definition: store.definition!, methods, url: paths[0] })
+        registered.push({ route, group, definition: store.definition!, methods, url: path })
 
         if (methods.includes('GET')) {
-          twins.push({ store: { ...store, twin: true }, paths, methods, declared })
+          twins.push({ store: { ...store, twin: true }, path, methods, declared })
+        }
+
+        // The methods as declared: the HEAD twin pass adds to `methods`, and a bare parent takes its own HEAD twin.
+        if (path.endsWith('/*') && path !== '/*') {
+          bares.push({ store: { ...store, bare: true }, path: path.slice(0, -2), methods: [...methods], declared })
         }
       }
     }
 
     // After every explicit route, so an explicit HEAD route wins whichever was declared first.
     for (const twin of twins) {
-      let served = false
+      if (this.#yielding('HEAD', twin.path, twin.declared, twin.store) && !twin.methods.includes('HEAD')) {
+        twin.methods.push('HEAD')
+      }
+    }
 
-      for (const path of twin.paths) {
-        try {
-          this.#matcher.add('HEAD', path, twin.declared, twin.store)
-          this.#preflight?.add('HEAD', path, twin.store.definition!)
-          served = true
-        } catch (err) {
-          if (!(err instanceof ErrRouteConflict)) {
-            throw err
-          }
+    // After every explicit route and HEAD twin, so a route at a wildcard's parent keeps its GET and its HEAD.
+    for (const bare of bares) {
+      let get = false
+
+      for (const method of bare.methods) {
+        if (!declaredAt.has(`${method} ${bare.path}`)) {
+          const added = this.#yielding(method, bare.path, bare.declared, bare.store)
+          get ||= added && method === 'GET'
         }
       }
 
-      if (served && !twin.methods.includes('HEAD')) {
-        twin.methods.push('HEAD')
+      if (get && !bare.methods.includes('HEAD') && !declaredAt.has(`HEAD ${bare.path}`)) {
+        this.#yielding('HEAD', bare.path, bare.declared, { ...bare.store, twin: true })
       }
     }
 
@@ -616,6 +644,7 @@ export class HTTPServer {
       }),
       definition: open.definition as RouteDefinition,
       twin: false,
+      bare: false,
     }
   }
 

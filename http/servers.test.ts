@@ -1,11 +1,14 @@
+import type { Server as HTTPServer } from 'node:http'
+
 import { kFeatureConfigure, kFeatureName, type Feature } from '@caffeinejs/application'
 import { newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { Byte } from '@caffeinejs/std/bytes'
+import { Second } from '@caffeinejs/std/duration'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication, type WebApplication } from './application.js'
 import { findMyWayMatcher } from './core/matcher/find_my_way.js'
-import { DEFAULT_ROUTER_FLAGS } from './core/matcher/matcher.js'
+import type { RouteMatcherFactory } from './core/matcher/matcher.js'
 import { Router } from './core/routing/programmatic/programmatic.js'
 import { node } from './platform/node.testkit.js'
 import { HTTPPlugin, type HTTPSetupContext } from './plugin.js'
@@ -91,14 +94,14 @@ describe('ServerSet', () => {
     }
   })
 
-  // Only `undefined` leaves an earlier section in place: `null` is a value like any other, and the router refuses it.
+  // Only `undefined` leaves an earlier section in place: `null` is a value like any other, and the setting refuses it.
   it('takes null as a section that replaces the one before it', async () => {
     const app = createWebApplication({ adapter: node() })
-      .server(() => ({ router: { ignoreTrailingSlash: true } }))
-      .server(() => ({ router: null }) as never)
+      .server(() => ({ handlerTimeout: 5 * Second }))
+      .server(() => ({ handlerTimeout: null }) as never)
 
     try {
-      await expect(app.bootstrap()).rejects.toThrow('Cannot set router to "null"')
+      await expect(app.bootstrap()).rejects.toThrow('Cannot set handlerTimeout to "null"')
     } finally {
       await app.close()
     }
@@ -234,7 +237,7 @@ describe('context.server', () => {
     return () =>
       new (class extends HTTPPlugin {
         register({ server }: HTTPSetupContext): void {
-          seen.push({ basePath: server.basePath, router: server.router })
+          seen.push({ basePath: server.basePath, matcher: server.matcher })
         }
       })()
   }
@@ -264,7 +267,7 @@ describe('context.server', () => {
 
   it("reports the base path on the application's own slot", async () => {
     expect(await serverSeen(seen => createWebApplication().basePath('/api').with(recorder(seen)))).toEqual([
-      { basePath: '/api', router: DEFAULT_ROUTER_FLAGS },
+      { basePath: '/api', matcher: findMyWayMatcher },
     ])
   })
 
@@ -273,24 +276,28 @@ describe('context.server', () => {
     ['/', ''],
   ])('normalizes the base path %s to %s', async (given, expected) => {
     expect(await serverSeen(seen => createWebApplication().basePath(given).with(recorder(seen)))).toEqual([
-      { basePath: expected, router: DEFAULT_ROUTER_FLAGS },
+      { basePath: expected, matcher: findMyWayMatcher },
     ])
   })
 
   it('merges an object section over the one before it', async () => {
-    expect(
-      await serverSeen(seen =>
-        createWebApplication({ adapter: node() })
-          .server(() => ({ router: { ignoreTrailingSlash: true } }))
-          .server(() => ({ router: {} }))
-          .with(recorder(seen)),
-      ),
-    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, ignoreTrailingSlash: true } }])
+    const app = createWebApplication({ adapter: node() })
+      .server(() => ({ http: { keepAliveTimeout: 1234 } }))
+      .server(() => ({ http: { headersTimeout: 5678 } }))
+
+    try {
+      await app.bootstrap()
+
+      const server = app.instance as HTTPServer
+      expect([server.keepAliveTimeout, server.headersTimeout]).toEqual([1234, 5678])
+    } finally {
+      await app.close()
+    }
   })
 
   it('reports an empty base path when the application set none', async () => {
     expect(await serverSeen(seen => createWebApplication().with(recorder(seen)))).toEqual([
-      { basePath: '', router: DEFAULT_ROUTER_FLAGS },
+      { basePath: '', matcher: findMyWayMatcher },
     ])
   })
 
@@ -305,7 +312,7 @@ describe('context.server', () => {
             .handler(() => 'ok'),
         ),
       ),
-    ).toEqual([{ basePath: '', router: DEFAULT_ROUTER_FLAGS }])
+    ).toEqual([{ basePath: '', matcher: findMyWayMatcher }])
   })
 
   // What a plugin builds URLs from: the server it is on, and where its scope starts on that server.
@@ -361,38 +368,20 @@ describe('context.server', () => {
           .basePath('/api')
           .listener('admin', l => l.with(recorder(seen))),
       ),
-    ).toEqual([{ basePath: '', router: DEFAULT_ROUTER_FLAGS }])
+    ).toEqual([{ basePath: '', matcher: findMyWayMatcher }])
   })
 
-  it('reports the router flags .server(...) set', async () => {
+  // A plugin that keys on the router, as staticFiles() does, tells a matcher of the server's own from the default.
+  it("reports the server's own matcher", async () => {
+    const matcher: RouteMatcherFactory = strategies => findMyWayMatcher(strategies)
+
     expect(
       await serverSeen(seen =>
         createWebApplication()
-          .server(() => ({ router: { ignoreTrailingSlash: true } }))
+          .server(() => ({ matcher }))
           .with(recorder(seen)),
       ),
-    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, ignoreTrailingSlash: true } }])
-  })
-
-  // Under a matcher of its own the flags say nothing of how a path is matched, so a plugin that keys on them refuses.
-  it("reports no router flags under a matcher of the server's own", async () => {
-    expect(
-      await serverSeen(seen =>
-        createWebApplication()
-          .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
-          .with(recorder(seen)),
-      ),
-    ).toEqual([{ basePath: '', router: undefined }])
-  })
-
-  it("reports the Node application's router flags", async () => {
-    expect(
-      await serverSeen(seen =>
-        createWebApplication({ adapter: node() })
-          .server(() => ({ router: { ignoreTrailingSlash: true } }))
-          .with(recorder(seen)),
-      ),
-    ).toEqual([{ basePath: '', router: { ...DEFAULT_ROUTER_FLAGS, ignoreTrailingSlash: true } }])
+    ).toEqual([{ basePath: '', matcher }])
   })
 
   // Read on each access: a plugin holding its server sees where it listens once it does, and nothing before.

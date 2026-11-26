@@ -251,31 +251,18 @@ describe('HTTPServer', () => {
     expect(await (await fetchOn(served, '/v1/')).text()).toBe('root')
   })
 
-  // Every group root answers at both forms, as Fastify's prefixTrailingSlash: 'both' serves a prefixed one.
+  // A trailing slash never makes another route, a group root's included.
   it("answers a router's root at its path with and without the slash", async () => {
     const served = await serve(new Router('/r').get('/', () => 'root'))
 
     expect([(await fetchOn(served, '/r')).status, (await fetchOn(served, '/r/')).status]).toEqual([200, 200])
   })
 
-  // A route's trailing slash is part of the route: "/x/" and "/x" differ unless the router ignores the slash.
-  it.each([
-    [false, [200, 404]],
-    [true, [200, 200]],
-  ])("keeps a route path's trailing slash, ignoring trailing slashes %j", async (ignoreTrailingSlash, statuses) => {
-    const served = await serve(
-      new Router('/r').get('/x/', () => 'x'),
-      a => a.server(() => ({ router: { ignoreTrailingSlash } })),
-    )
+  // A trailing slash never makes another route: a route declared with one answers both forms.
+  it('answers a route declared with a trailing slash at both forms', async () => {
+    const served = await serve(new Router('/r').get('/x/', () => 'x'))
 
-    expect([(await fetchOn(served, '/r/x/')).status, (await fetchOn(served, '/r/x')).status]).toEqual(statuses)
-  })
-
-  // Nothing follows a wildcard, so its root has one form: two would register one path twice.
-  it('starts a router at a wildcard path with a root route', async () => {
-    const served = await serve(new Router('/files/*').get('/', () => 'file'))
-
-    expect((await fetchOn(served, '/files/a/b')).status).toBe(200)
+    expect([(await fetchOn(served, '/r/x/')).status, (await fetchOn(served, '/r/x')).status]).toEqual([200, 200])
   })
 
   it('strips the base path, and routes a request without it as it came', async () => {

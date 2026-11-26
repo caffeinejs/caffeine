@@ -2,7 +2,7 @@ import type { BootstrapKit } from '@caffeinejs/application'
 import type { Container } from '@caffeinejs/di'
 
 import type { HookFn, HookName } from './core/lifecycle/lifecycle.js'
-import type { RouterFlags } from './core/matcher/matcher.js'
+import type { RouteMatcherFactory } from './core/matcher/matcher.js'
 import type {
   MiddlewareFactory,
   MiddlewareFn,
@@ -36,11 +36,8 @@ export interface ScopedServer<C = unknown> {
    */
   readonly prefix: string
 
-  /**
-   * The flags the server's router matches paths with, as `.server(...)` set them, when it matches with find-my-way;
-   * `undefined` under a matcher of its own.
-   */
-  readonly router: RouterFlags | undefined
+  /** The factory the server matches routes with: `findMyWayMatcher` unless `.server(...)` replaced it. */
+  readonly matcher: RouteMatcherFactory
 
   /** Where the server listens; `undefined` until it does, and once it has closed. */
   readonly address: ServerAddress | undefined
@@ -65,8 +62,6 @@ export interface ScopedServer<C = unknown> {
    * relative to it: `use('/jobs', mw)` on a router at `/admin` covers `/admin/jobs`.
    *
    * @throws ErrConfiguration when a path is not a literal prefix.
-   * @throws ErrConfiguration from start-up, for a relative path under a router whose path holds a wildcard or an
-   *   optional parameter: neither has a prefix to start from.
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,

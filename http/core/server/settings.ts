@@ -4,7 +4,7 @@ import { formatDuration, type Duration } from '@caffeinejs/std/duration'
 import type { ServerContext } from '../../context.js'
 import type { ConstraintStrategy } from '../constraints/constraints.js'
 import { findMyWayMatcher } from '../matcher/find_my_way.js'
-import { DEFAULT_ROUTER_FLAGS, type RouteMatcherFactory, type RouterFlags } from '../matcher/matcher.js'
+import type { RouteMatcherFactory } from '../matcher/matcher.js'
 import { typeBoxSchemaCompiler } from '../validation/typebox.js'
 import type { SchemaCompiler } from '../validation/validation.js'
 import { DEFAULT_BODY_LIMIT, isBodyLimit } from './body.js'
@@ -18,8 +18,6 @@ export interface ServerSettings {
    * wins.
    */
   handlerTimeout?: Duration
-  /** How the router matches a path. Unset flags keep find-my-way's defaults. */
-  router?: Partial<RouterFlags>
   /** The matcher routes are registered in. Defaults to {@link findMyWayMatcher}. */
   matcher?: RouteMatcherFactory
   /**
@@ -69,7 +67,6 @@ export interface ListeningServerSettings extends Omit<ServerSettings, 'trustProx
 /** The settings shared by all server engines, with every default filled in. */
 export interface ResolvedServerSettings {
   readonly handlerTimeout: Duration | undefined
-  readonly router: RouterFlags
   readonly matcher: RouteMatcherFactory
   readonly constraints: readonly ConstraintStrategy<unknown>[]
   readonly trustProxy: TrustProxy | undefined
@@ -104,7 +101,6 @@ export function isTimeout(value: unknown): value is Duration {
 
 const SETTINGS = [
   'handlerTimeout',
-  'router',
   'matcher',
   'constraints',
   'trustProxy',
@@ -151,10 +147,10 @@ export const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
  * What `.server(...)` resolved to, checked and with its defaults. The sections only `application` takes are left to
  * its caller.
  *
- * @throws ErrConfiguration for a section that is not a setting, a `handlerTimeout` not above 0, a `router` that is
- *   not an object of boolean router flags, a `matcher` that is not a function, a `constraints` setting that is not an
- *   array of strategies or names one twice, a `trustProxy` the application cannot apply, a `requestIDHeader` that
- *   is not a header name, or a `fetchWaitUntil` that is not a function.
+ * @throws ErrConfiguration for a section that is not a setting, a `handlerTimeout` not above 0, a `matcher` that is
+ *   not a function, a `constraints` setting that is not an array of strategies or names one twice, a `trustProxy` the
+ *   application cannot apply, a `requestIDHeader` that is not a header name, or a `fetchWaitUntil` that is not a
+ *   function.
  */
 export function resolveServerSettings(
   settings: object,
@@ -177,7 +173,6 @@ export function resolveServerSettings(
   // `trustProxy` and `requestIDHeader` are read as given: an adapter that listens takes a wider `trustProxy`.
   const {
     handlerTimeout,
-    router,
     matcher,
     constraints,
     trustProxy,
@@ -264,7 +259,6 @@ export function resolveServerSettings(
 
   return {
     handlerTimeout,
-    router: routerFlags(router),
     matcher: matcher ?? findMyWayMatcher,
     constraints: strategies,
     trustProxy: compileTrustProxy(trustProxy, application),
@@ -293,39 +287,4 @@ function isSchemaCompiler(value: unknown): value is SchemaCompiler {
 
   const { validator, serializer } = value as Partial<Record<keyof SchemaCompiler, unknown>>
   return typeof validator === 'function' && typeof serializer === 'function'
-}
-
-function routerFlags(router: unknown): RouterFlags {
-  if (router === undefined) {
-    return DEFAULT_ROUTER_FLAGS
-  }
-
-  if (typeof router !== 'object' || router === null || Array.isArray(router)) {
-    throw configurationError(
-      `Cannot set router to "${String(router)}": it must be an object of router flags`,
-      'Return router as an object, such as { ignoreTrailingSlash: true }',
-    )
-  }
-
-  // A flag written as `undefined` keeps its default rather than unsetting it.
-  const given: Record<string, boolean> = {}
-
-  for (const [key, value] of Object.entries(router)) {
-    if (!Object.hasOwn(DEFAULT_ROUTER_FLAGS, key)) {
-      throw configurationError(`Cannot set router "${key}": it is not a router flag`, 'Use ignoreTrailingSlash')
-    }
-
-    if (value !== undefined && typeof value !== 'boolean') {
-      throw configurationError(
-        `Cannot set router.${key} to "${String(value)}": a router flag is true or false`,
-        `Write router.${key} as true or false`,
-      )
-    }
-
-    if (value !== undefined) {
-      given[key] = value
-    }
-  }
-
-  return { ...DEFAULT_ROUTER_FLAGS, ...given }
 }

@@ -6,8 +6,6 @@ import { Second, type Duration } from '@caffeinejs/std/duration'
 import type { HTTPSetupContext } from '../../plugin.js'
 import type { IServer, ServerAddress } from '../../server.js'
 import type { HookBatch } from '../lifecycle/batch.js'
-import { findMyWayMatcher } from '../matcher/find_my_way.js'
-import type { RouterFlags } from '../matcher/matcher.js'
 import { placeMiddlewares } from '../middleware/path.js'
 import type { MiddlewarePipeline, ResolvedMiddleware } from '../middleware/pipeline.js'
 import type { RouteRecord } from '../routing/inventory.js'
@@ -177,11 +175,6 @@ export interface EngineInput {
   readonly basePath: string | undefined
   readonly settings: ResolvedServerSettings
   recordRoutes(routes: readonly RouteRecord[]): void
-}
-
-/** The router flags of an engine whose settings are `settings`, when it matches with find-my-way. */
-export function findMyWayFlags(settings: ResolvedServerSettings): RouterFlags | undefined {
-  return settings.matcher === findMyWayMatcher ? settings.router : undefined
 }
 
 /**

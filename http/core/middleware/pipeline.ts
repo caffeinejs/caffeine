@@ -4,7 +4,6 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { HTTPSetupContext } from '../../plugin.js'
 import { ErrConfiguration } from '../error/common.js'
 import type { RequestHookName } from '../lifecycle/lifecycle.js'
-import { literalPrefix } from '../routing/paths.js'
 import { ErrPipelineSealed } from './errors.js'
 import {
   type Middleware,
@@ -108,28 +107,18 @@ function assertLiteralPrefixes(path: MiddlewarePath): void {
   }
 
   for (const entry of typeof path === 'string' ? [path] : path) {
-    if (/[:*(]/.test(entry)) {
+    if (/[:*(?#]/.test(entry)) {
       throw new ErrConfiguration(
         errMessage(`Cannot add middleware at "${entry}": a middleware path is a literal prefix`)
           .solutions(
             'Use the literal prefix before the parameter, such as "/tenants", and read the value in the middleware',
             "Or add it from a plugin on a Router at that path: it then covers that router's routes only",
+            'Leave the query and fragment out of the path',
           )
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
       )
     }
-
-    if (/[?#]/.test(entry)) {
-      throw new ErrConfiguration(
-        errMessage(`Cannot add middleware at "${entry}": a request path holds no "?" or "#"`)
-          .solutions('Leave the query and fragment out of the path')
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
-    }
-
-    literalPrefix(entry)
   }
 }
 

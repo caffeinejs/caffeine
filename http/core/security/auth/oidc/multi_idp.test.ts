@@ -5,6 +5,7 @@ import type { IContext } from '../../../../context.js'
 import { HTTPPlugin, type HTTPSetupContext } from '../../../../plugin.js'
 import { PluginSlot } from '../../../../plugin_slot.js'
 import type { HookBatch } from '../../../lifecycle/batch.js'
+import { findMyWayMatcher } from '../../../matcher/find_my_way.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
@@ -98,7 +99,7 @@ async function configureAndCollectWarnings(
   // The warning is decided in `onReady`, once routes have registered, so the double runs those hooks. No route
   // registers here, which is what leaves a non-default strategy unreachable. A router's slot sits in its server's.
   const slot = scope === 'server' ? new PluginSlot() : new PluginSlot(undefined, '', new PluginSlot())
-  slot.forServer({ name: undefined, basePath: '', router: undefined, address: () => undefined })
+  slot.forServer({ name: undefined, basePath: '', matcher: findMyWayMatcher, address: () => undefined })
   const warn = vi.fn()
   const context = { logger: { warn, error: vi.fn() }, server: slot } as unknown as HTTPSetupContext
   const meta = ref.meta

@@ -44,7 +44,6 @@ export interface CSRFOptions {
  * Folds a block onto the defaults. The checks are code, never configuration, and come in beside it.
  *
  * @throws ErrCSRFConfiguration for a trusted origin that is not one, or an excluded path that is `/` itself.
- * @throws ErrConfiguration for an excluded path holding `//`.
  */
 export function resolveCSRFOptions(
   config: CSRFConfig,
@@ -66,17 +65,6 @@ export function isExcluded(path: string, excluded: readonly LiteralPrefix[]): bo
 // A prefix is a run of whole segments, written with or without its trailing slash: the path itself, and what is under
 // it. Compared as plain text, `/webhooks` would open `/webhooks-old` as well.
 function excludedPath(path: string): LiteralPrefix {
-  if (path.startsWith('~/')) {
-    throw new ErrCSRFConfiguration(
-      errMessage(
-        `Cannot exclude "${path}" from cross-origin protection: a path is matched after the base path is taken off`,
-      )
-        .solutions(`Write it as "${path.slice(1)}"`)
-        .reference('@caffeinejs/http', ErrCSRFConfiguration)
-        .build(),
-    )
-  }
-
   const prefix = literalPrefix(path)
 
   // Every route sits under `/`: excluding it would turn the check off without saying so.

@@ -40,7 +40,7 @@ export const publicPages = new Router()
  * Pages that need a session. An anonymous navigation here is redirected to `/login?returnUrl=…` by the cookie
  * scheme *before the page loads*, while an anonymous `fetch` gets 401 — one scheme, two right answers.
  *
- * Two routes per subtree: find-my-way does not match `/dashboard` against `/dashboard/*`.
+ * `/dashboard/*` answers `/dashboard` too; the route declared at exactly `/dashboard` wins there and serves the shell.
  */
 export const memberPages = new Router()
   .detail('http', { internal: true })

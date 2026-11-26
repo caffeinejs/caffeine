@@ -413,7 +413,7 @@ describe('corsPolicy() on a preflight', () => {
   // finds nothing and goes unanswered.
   it('grants no preflight for a constrained route under a matcher of its own', async () => {
     const built = createWebApplication()
-      .server(() => ({ matcher: (flags, strategies) => findMyWayMatcher(flags, strategies) }))
+      .server(() => ({ matcher: strategies => findMyWayMatcher(strategies) }))
       .with(corsPolicy(c => c.origins(A)))
       .mount(
         new Router('/v')
@@ -676,15 +676,10 @@ describe('corsPolicy() on a router', () => {
     expect([under.status, outside.status, await outside.text()]).toEqual([404, 200, 'app'])
   })
 
-  // A path that ends in an optional parameter or a wildcard has no children: the policy serves its `OPTIONS` route there
-  // alone, and the router starts. A "?" inside a segment is no optional parameter: the path keeps its children.
+  // A "?" inside a segment is no optional parameter, and a "*" after a parameter is text, not a wildcard: the path keeps
+  // its children.
   it.each([
-    ['/pets/:id?', '/', ['/pets', '/pets/1']],
-    ['/:id?', '/', ['/', '/42']],
-    ['/files/*', '/', ['/files/a/b']],
     ['/item-:id?', '/data', ['/item-123/data']],
-    // The whole last segment is optional, its text included; and a "*" after a parameter is text, not a wildcard.
-    ['/reports/:id.json?', '/', ['/reports', '/reports/42.json']],
     ['/download/:id-file*name', '/child', ['/download/7-file*name/child']],
   ])('answers preflights under a router at %s', async (path, route, urls) => {
     const built = createWebApplication().mount(
@@ -701,12 +696,12 @@ describe('corsPolicy() on a router', () => {
     expect(statuses).toEqual(urls.map(() => 204))
   })
 
-  // A router with a group prefix serves its root with and without the trailing slash: so does the policy's `OPTIONS`.
+  // A trailing slash never makes another route: the policy's `OPTIONS` answers a prefixed router's root at both forms.
   it.each(['/tenants/r', '/tenants/r/'])("answers a preflight to a prefixed router's root at %s", async url => {
     const built = createWebApplication().mount(
       new Router()
         .extend((group: { prefix(prefix: string): unknown }) => {
-          group.prefix('/tenants/:id?')
+          group.prefix('/tenants/:id')
         })
         .with(corsPolicy(c => c.origins(A)))
         .get('/', () => 'root'),

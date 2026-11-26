@@ -69,7 +69,6 @@ export class CSRFBuilder {
    * A missing leading `/` is added.
    *
    * @throws ErrCSRFConfiguration at start-up when one is `/` itself.
-   * @throws ErrConfiguration at start-up when one holds `//`.
    */
   exclude(...prefixes: string[]): this {
     this.#exclude = [...(this.#exclude ?? []), ...prefixes]
@@ -155,7 +154,6 @@ export class CSRFBuilder {
  *
  * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path that is `/`
  * itself.
- * @throws ErrConfiguration at start-up for an excluded path holding `//`.
  */
 export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, C>): HTTPPluginFactory<C> {
   return context => {

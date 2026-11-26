@@ -1,19 +1,19 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { ErrConfiguration } from '../../error/common.js'
 import { flattenRouter } from './flatten.js'
 import { Router } from './programmatic.js'
 import { stateOf, type RouterState } from './state.js'
 
 describe('default route names', () => {
-  // A path the router cannot register gets no name: it is refused, without retrying at every parenthesis.
+  // A path the router cannot register is refused when it registers: naming it reads the path once, without retrying
+  // at every parenthesis.
   it.each([['/:id' + '('.repeat(100_000) + '\nx'], ['/:a(' + '('.repeat(100_000) + '-:b']])(
-    'refuses a long unclosed constraint in time linear in the path',
+    'names a long unclosed constraint in time linear in the path',
     path => {
       const router = new Router('/pets').get(path, () => undefined)
       const started = performance.now()
-      expect(() => flattenRouter(stateOf(router)!, new CaffeineIoC())).toThrow(ErrConfiguration)
+      expect(flattenRouter(stateOf(router)!, new CaffeineIoC())[0]!.spec.routes.length).toBe(1)
       expect(performance.now() - started).toBeLessThan(1000)
     },
   )
@@ -182,19 +182,6 @@ describe('route names', () => {
 
 describe('group paths', () => {
   const flatten = (router: object) => flattenRouter(stateOf(router)!, new CaffeineIoC())
-
-  // An empty segment is refused, never kept: kept, the router would serve under a path nobody can type.
-  it('refuses a router path holding // when flattened', () => {
-    let err: unknown
-    try {
-      flatten(new Router('/a//b').get('/', () => undefined))
-    } catch (caught) {
-      err = caught
-    }
-
-    expect(err).toBeInstanceOf(ErrConfiguration)
-    expect((err as Error).message.split('\n')[0]).toBe('Cannot use the path "/a//b": it holds an empty segment, "//"')
-  })
 
   // Each layer is normalized on its own and joined by concatenation: no slash is doubled or lost between them.
   it('composes a mount path and a router path without a prefix', () => {

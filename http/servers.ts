@@ -15,13 +15,7 @@ import { FluentRouteSource, type FluentRouteOptions } from './core/routing/progr
 import type { IRouteGroup, RouteGroupScope } from './core/routing/route.js'
 import type { Routing } from './core/routing/routing.js'
 import type { Context } from './core/server/context.js'
-import {
-  buildEngine,
-  findMyWayFlags,
-  type AnyServerAdapter,
-  type HostedServer,
-  type kHosting,
-} from './core/server/hosting.js'
+import { buildEngine, type AnyServerAdapter, type HostedServer, type kHosting } from './core/server/hosting.js'
 import type { HTTPServer } from './core/server/server.js'
 import { getRouteGroup } from './decorators/registrar/registrar.js'
 import type { HTTPPluginFactory, HTTPSetupContext } from './plugin.js'
@@ -132,7 +126,7 @@ export class ServerSet {
     const identity: SlotIdentity = {
       name: definition.name,
       basePath: basePath ?? '',
-      router: findMyWayFlags(hosting.settings),
+      matcher: hosting.settings.matcher,
       address: () => entry.server?.address,
     }
     slot.forServer(identity)

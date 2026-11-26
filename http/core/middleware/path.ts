@@ -1,17 +1,10 @@
-import { errMessage } from '@caffeinejs/std/err'
-
-import { ErrConfiguration } from '../error/common.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
-import type { RouterFlags } from '../matcher/matcher.js'
-import { literalPrefix, parseRoutePattern, routePathSegments, underPrefix } from '../routing/paths.js'
+import { literalPrefix, routePathSegments, underPrefix } from '../routing/paths.js'
 import type { MiddlewarePath } from './middleware.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
 // Path matching for middleware registered under a path. It normalizes the URL the way the router does, so a path-scoped
 // middleware cannot be skipped by a request the router still sends to the guarded route.
-
-/** The router flags path matching follows. */
-export type PathFlags = Partial<Pick<RouterFlags, 'ignoreTrailingSlash'>>
 
 // Encoded characters where decodeURIComponent(x) !== decodeURI(x): % # $ & + , / : ; = ? @
 const RESERVED_ENCODINGS = new Set(['25', '23', '24', '26', '2B', '2C', '2F', '3A', '3B', '3D', '3F', '40'])
@@ -40,7 +33,7 @@ export function sanitizeURL(url: string): string {
  * The path of `url` as the router matches it, or the `ErrHTTPBadRequest` a malformed one fails with. `url` is a path
  * without its query: see {@link sanitizeURL}.
  */
-export function normalizePath(url: string, flags: PathFlags): { path: string; error: Error | undefined } {
+export function normalizePath(url: string): { path: string; error: Error | undefined } {
   let path = url
 
   if (path.charCodeAt(0) !== 47) {
@@ -59,10 +52,6 @@ export function normalizePath(url: string, flags: PathFlags): { path: string; er
 
   // The router keeps encoded slashes, but a literal `%` can still introduce one more encoded byte.
   path = path.replace(/%25([0-9A-Fa-f]{2})/g, '%$1')
-
-  if (flags.ignoreTrailingSlash) {
-    path = trimLastSlash(path)
-  }
 
   return { path, error: undefined }
 }
@@ -83,30 +72,10 @@ export interface PlacedMiddleware extends ResolvedMiddleware {
  *
  * It runs only for the scope's routes, whose paths the router matched from `base`: the path is matched after as many
  * segments as `base` spans, whatever its parameters hold.
- *
- * @throws ErrConfiguration when a path would be placed under a wildcard or an optional parameter: neither spans a
- *   fixed number of segments.
  */
 export function placeMiddlewares(base: string, middlewares: readonly ResolvedMiddleware[]): PlacedMiddleware[] {
-  const relative = middlewares.filter(middleware => middleware.path !== undefined)
-  if (relative.length === 0) {
+  if (!middlewares.some(middleware => middleware.path !== undefined)) {
     return [...middlewares]
-  }
-
-  const parts = parseRoutePattern(base)
-  if (parts.some(part => part.kind === 'wildcard' || part.kind === 'optional')) {
-    throw new ErrConfiguration(
-      errMessage(
-        `Cannot add middleware "${String(relative[0]!.path)}" under "${base}": a relative path cannot start from a ` +
-          'wildcard or an optional parameter',
-      )
-        .solutions(
-          'Leave the path out, so the middleware covers every route of the router',
-          'Or register it on the application with an absolute path, ".use(path, ...)"',
-        )
-        .reference('@caffeinejs/http', ErrConfiguration)
-        .build(),
-    )
   }
 
   const skip = routePathSegments(base)
@@ -176,10 +145,6 @@ function safeDecodeURI(path: string): string {
   }
 
   return shouldDecode ? decodeURI(path) : path
-}
-
-function trimLastSlash(path: string): string {
-  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path
 }
 
 function malformedURL(): Error {

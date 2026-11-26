@@ -128,8 +128,8 @@ ordinary routes. Keep the sign-in page anonymous or the redirect loops.
 The bundle stays public here: one bundle serves the public and the protected routes alike, and `/login` needs
 it. The data is protected by the API.
 
-**Two routes per gated subtree** — `/dashboard` and `/dashboard/*`. find-my-way does not match `/dashboard`
-against `/dashboard/*`; the wildcard covers `/dashboard/` with an empty match, but not the bare path.
+**One wildcard per gated subtree** — `/dashboard/*` answers the bare `/dashboard` too, with an empty `*`. A route
+declared at exactly `/dashboard` wins: declare one when the bare path serves something else, such as the shell.
 
 A prefixed router needs no special handling for the bare path: `new Router('/app')` with a route at `/`
 composes to `/app`, so the prefixed router declares the pair as follows.

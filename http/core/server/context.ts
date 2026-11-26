@@ -57,7 +57,7 @@ export const kAppendCookies = Symbol('caffeine.http.cookies.append')
 /** What every context of one server shares. Built once per server by `HTTPServer`. */
 export interface ServerShared extends Pick<
   ResolvedServerSettings,
-  'application' | 'trustProxy' | 'requestIDHeader' | 'router' | 'bodyLimit'
+  'application' | 'trustProxy' | 'requestIDHeader' | 'bodyLimit'
 > {
   readonly store: ConfigStore<unknown>
   readonly logger: Logger
@@ -293,7 +293,7 @@ export class Context implements IContext<Record<never, never>, Record<never, nev
 
   /** The request path as the router matches it, computed once: what a path-scoped middleware is matched against. */
   normalizedPath(): { path: string; error: Error | undefined } {
-    return (this.#normalized ??= normalizePath(sanitizeURL(this.#url), this.#shared.router))
+    return (this.#normalized ??= normalizePath(sanitizeURL(this.#url)))
   }
 
   /** See {@link IContext.signal}. Aborts when the client leaves and when the request's timeout fires. */

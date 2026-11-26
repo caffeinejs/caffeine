@@ -338,7 +338,7 @@ function endpoint(router: Router, path: string, contentType: string, authz: Rout
  */
 function resolvePaths(options: OpenAPIOptions): EndpointPaths {
   const { routes } = options
-  // As the router routes them: the links name them as they are served, a trailing "/" kept.
+  // As the router routes them: the links name them as they are served, without a trailing "/".
   const docs = routed(routes.docs)
 
   return {
@@ -350,7 +350,7 @@ function resolvePaths(options: OpenAPIOptions): EndpointPaths {
   }
 }
 
-/** A route path as the router routes it: rooted, a trailing `/` kept. */
+/** A route path as the router routes it: rooted, without a trailing `/`. */
 function routed(path: string | undefined): string | undefined {
   return path === undefined ? undefined : normalizeRoutePath(path)
 }

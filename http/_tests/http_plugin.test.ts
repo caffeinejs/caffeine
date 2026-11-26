@@ -520,15 +520,6 @@ describe('HTTPPlugin', () => {
       expect((await app.request('/num/7/x')).headers.get('x-num')).toBe('yes')
     })
 
-    it('refuses a relative path under an optional parameter, which has no prefix', async () => {
-      const optional = new Router('/opt/:id?').with(() => new Stamping('x-opt', '/x')).get('/', () => ({}))
-
-      app = createWebApplication({ adapter: node() }).mount(optional) as WebApplication
-
-      await expect(app.bootstrap()).rejects.toThrow(/^Cannot add middleware "\/x" under "\/opt\/:id\?"/)
-      app = undefined
-    })
-
     it("builds a router's useFn middleware once, outside the slot", async () => {
       const building = new Building()
       const built = new Router('/built')

@@ -5,12 +5,13 @@ import { describe, expect, it } from 'vitest'
 import { HTTPPlugin, type HTTPSetupContext } from '../../../plugin.js'
 import { PluginSlot, type SlotIdentity } from '../../../plugin_slot.js'
 import { HookBatch } from '../../lifecycle/batch.js'
+import { findMyWayMatcher } from '../../matcher/find_my_way.js'
 import { Router } from './programmatic.js'
 import { ScopedPlugins } from './scoped_plugins.js'
 import { stateOf } from './state.js'
 
 /** The server every scope belongs to. */
-const identity: SlotIdentity = { name: undefined, basePath: '', router: undefined, address: () => undefined }
+const identity: SlotIdentity = { name: undefined, basePath: '', matcher: findMyWayMatcher, address: () => undefined }
 
 const server = new PluginSlot()
 server.forServer(identity)
